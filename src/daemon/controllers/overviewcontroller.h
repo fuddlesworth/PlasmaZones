@@ -7,12 +7,16 @@
 
 #include "core/interfaces/ioverviewpolicy.h"
 
+#include <PhosphorEngine/HandoffIntent.h>
+
 #include <functional>
 
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QTimer>
+#include <QVariantList>
+#include <QVariantMap>
 
 namespace PhosphorEngine {
 class IOverviewModelSource;
@@ -20,6 +24,9 @@ class WindowRegistry;
 }
 namespace PhosphorScreens {
 class ScreenManager;
+}
+namespace PhosphorScrollEngine {
+class ScrollEngine;
 }
 namespace PhosphorWorkspaces {
 class ActivityManager;
@@ -70,6 +77,37 @@ public:
     void setWindowStickyPredicate(std::function<bool(const QString& windowId)> predicate);
     /// Inject the current-activity source. Unset means the empty activity.
     void setActivityManager(PhosphorWorkspaces::ActivityManager* activities);
+    /// The scroll engine, for the strip pan verb (the model source alone
+    /// cannot pan). Null leaves panStrip a no-op.
+    void setScrollEngine(PhosphorScrollEngine::ScrollEngine* engine);
+    /// Read / write access to the Workspaces.Named declarations. The pin,
+    /// rename, reorder and transfer verbs rewrite declarations through it
+    /// rather than calling the controller's apply directly, so the
+    /// declaration list stays the single source of truth and the ordinary
+    /// change signal re-applies it.
+    struct NamedEntriesAccess
+    {
+        std::function<QVariantList()> get;
+        std::function<void(const QVariantList&)> set;
+    };
+    void setNamedEntriesAccess(NamedEntriesAccess access);
+
+    // ── IOverviewPolicy verbs (overviewcontroller_verbs.cpp) ────────────────
+    void focusWorkspace(const QString& screenId, const QString& desktopId) override;
+    void moveWindowToWorkspace(const QString& windowId, const QString& screenId, const QString& desktopId, int dropX,
+                               int dropY) override;
+    void moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex, int dropX,
+                                  int dropY) override;
+    void reorderWorkspace(const QString& screenId, const QString& desktopId, int newSliceIndex) override;
+    void moveWorkspaceToScreen(const QString& desktopId, const QString& targetScreenId, int sliceIndex) override;
+    void renameWorkspace(const QString& desktopId, const QString& name) override;
+    void pinWorkspace(const QString& desktopId, bool pinned) override;
+    void panStrip(const QString& screenId, const QString& desktopId, int deltaPx) override;
+    /// The drop intent for a move onto (screenId, desktopId) at a
+    /// workspace-local point: global drop point, plus the scrolling slot
+    /// resolved against the target strip. Public for the daemon test.
+    PhosphorEngine::HandoffIntent intentFor(const QString& screenId, const QString& desktopId, int dropX,
+                                            int dropY) const;
 
     /// The streaming gate. Opening builds and publishes immediately (the
     /// adaptor's replay reads the result); closing stops the stream and
@@ -110,6 +148,10 @@ Q_SIGNALS:
 private:
     void rebuildNow();
     QString currentActivity() const;
+    QPoint toGlobal(const QString& screenId, int x, int y) const;
+    /// Apply @p mutate to the declaration named @p name and write the list
+    /// back; a no-op when no declaration carries that name.
+    void rewriteDeclaration(const QString& name, const std::function<void(QVariantMap&)>& mutate);
 
     WorkspaceController* m_workspaces;
     PhosphorWorkspaces::VirtualDesktopManager* m_vdm;
@@ -118,6 +160,8 @@ private:
     ISettings* m_settings;
     PhosphorEngine::WindowRegistry* m_registry;
     PhosphorWorkspaces::ActivityManager* m_activities = nullptr;
+    PhosphorScrollEngine::ScrollEngine* m_scrollEngine = nullptr;
+    NamedEntriesAccess m_namedEntries;
     Sources m_sources;
     std::function<QString(const QString&)> m_windowScreenResolver;
     std::function<bool(const QString&)> m_windowStickyPredicate;

@@ -134,6 +134,11 @@ pse_add_test(test_scrollstrip_height test_scrollstrip_height.cpp)
 # one concern: what a flagged column resolves to, and what turns it back off.
 pse_add_test(test_scrollstrip_maximize test_scrollstrip_maximize.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
+# handoffReceive's join-a-column arm (HandoffContext::insertTileIndex, the
+# workspace overview's drop onto an existing tile). A sibling of the smoke
+# suite, which owns the release and floating-arrival halves of the handoff
+# and has no headroom left.
+pse_add_test(test_scrollengine_handoff test_scrollengine_handoff.cpp)
 pse_add_test(test_scrollengine_stripcontext test_scrollengine_stripcontext.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)

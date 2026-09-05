@@ -46,5 +46,61 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="open" type="b" direction="in"/>
         </method>
 
+        <method name="focusWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Switch one screen to one of its own workspaces by desktop id. Refused when the desktop is not in that screen&apos;s slice. Deferred behind the reconciler&apos;s ledger like the delta verbs."/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+        </method>
+
+        <method name="moveWindowToWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a window to an existing workspace, handing it to the target context&apos;s placement engine through the cross-mode handoff with a drop intent. dropX/dropY are workspace-local logical pixels, unzoomed. In a scrolling target the drop point decides new column versus join column (stacked or tabbed); in a snapping target it decides the zone (no zone leaves the window free at its live frame); in a tiling target it decides the insert slot. Refused for sticky windows, unknown windows, and desktops not owned by the named screen. A window floating in the source arrives non-floating in the target; the overview never carries a float bit."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="dropX" type="i" direction="in"/>
+            <arg name="dropY" type="i" direction="in"/>
+        </method>
+
+        <method name="moveWindowToNewWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a window into a NEW workspace on a screen. sliceIndex is the 0-based gap index (0 = above the first workspace, sliceSize = below the trailing empty one). A gap at or past the trailing empty workspace reuses that workspace instead of inserting (niri&apos;s rule); a smaller index inserts a workspace there, reserved against the destroy debounce until the window arrives. dropX/dropY as in moveWindowToWorkspace; a new scrolling workspace always receives the window as its first column."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="sliceIndex" type="i" direction="in"/>
+            <arg name="dropX" type="i" direction="in"/>
+            <arg name="dropY" type="i" direction="in"/>
+        </method>
+
+        <method name="reorderWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a workspace to a new 0-based position inside its own screen&apos;s slice. A named workspace also rewrites its declaration position so the next re-apply agrees. Refused when the desktop is not owned by the screen or the index is out of range."/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="newSliceIndex" type="i" direction="in"/>
+        </method>
+
+        <method name="moveWorkspaceToScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-own a workspace to another screen at a 0-based slice index, windows riding along. Refused when the source slice would drop to zero, when the target screen is unknown to the map, or when the desktop is unowned. A pinned workspace rewrites its declaration output."/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="targetScreenId" type="s" direction="in"/>
+            <arg name="sliceIndex" type="i" direction="in"/>
+        </method>
+
+        <method name="renameWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Rename a workspace. Capped at the workspace name length limit. A named workspace rewrites its declaration; a dynamic one pushes the name to KWin through the reconciler&apos;s name ledger."/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="name" type="s" direction="in"/>
+        </method>
+
+        <method name="pinWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Pin (declare as a named workspace, so it survives being emptied) or unpin (remove the declaration) a workspace. Pinning appends a Workspaces.Named declaration built from the workspace&apos;s current KWin name (or a generated one), its owner screen and its slice index; unpinning removes the declaration whose name the workspace carries. Both go through the daemon&apos;s settings so the declaration list stays the single source of truth."/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="pinned" type="b" direction="in"/>
+        </method>
+
+        <method name="panStrip">
+            <annotation name="org.gtk.GDBus.DocString" value="Pan a scrolling workspace&apos;s strip by a pixel delta along the strip. The screen&apos;s current workspace pans live; any other workspace pans its stored view, which shows the next time that workspace is focused. Ignored for non-scrolling workspaces."/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="deltaPx" type="i" direction="in"/>
+        </method>
     </interface>
 </node>

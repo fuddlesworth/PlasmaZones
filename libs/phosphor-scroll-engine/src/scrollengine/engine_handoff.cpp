@@ -238,8 +238,28 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // the strip's left edge), and -1 appends at the right end. This
     // function has no direction of its own to derive an edge from.
     const int columnIdx = (ctx.insertIndex >= 0) ? ctx.insertIndex : state->strip().columnCount();
-    if (state->strip().insertWindowAt(columnIdx, windowId, width, effectiveDefaultColumnDisplay(ctx.toScreenId),
-                                      params)) {
+    // A tile position joins an EXISTING column instead of opening one: the
+    // workspace overview drops a window onto a tile of a scrolling workspace
+    // and names both the column and the slot. insertWindowIntoColumnAt clamps
+    // the slot into the column's stack, so a tabbed column simply gains a tab.
+    // Only an insertIndex naming a live column qualifies; anything else
+    // (including -1 and a count-sized index) takes the new-column path
+    // exactly as before.
+    const bool joinColumn =
+        ctx.insertTileIndex >= 0 && ctx.insertIndex >= 0 && ctx.insertIndex < state->strip().columnCount();
+    bool inserted = false;
+    if (joinColumn) {
+        // Resolved against the LIVE column count: no column is created, so
+        // the post-insert count the new-column params predict would misjudge
+        // the smart-gaps regime here.
+        const ScrollLayoutParams joinParams = layoutParamsForScreen(ctx.toScreenId);
+        inserted = state->strip().insertWindowIntoColumnAt(ctx.insertIndex, ctx.insertTileIndex, windowId, joinParams);
+    }
+    if (!inserted) {
+        inserted = state->strip().insertWindowAt(columnIdx, windowId, width,
+                                                 effectiveDefaultColumnDisplay(ctx.toScreenId), params);
+    }
+    if (inserted) {
         // Seed the source engine's last-known min size so the first relayout
         // clamps correctly instead of waiting a refuse/re-discover round-trip.
         // Clamped per axis rather than OR-gated through: a mixed pair like
@@ -250,12 +270,14 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
             state->strip().setWindowMinimumSize(windowId, handoffMinW, handoffMinH);
         }
         // Re-apply the migrated flags, mirroring windowOpened's migration. The
-        // maximize-to-edges arm needs no lone-tile check on this side:
-        // insertWindowAt always opens a column the arrival has to itself.
+        // maximize-to-edges arm needs no lone-tile check when insertWindowAt
+        // opened a column the arrival has to itself. A JOINED column keeps
+        // its own flag (floatWindowInternal's shared-column rule), so the
+        // migrated flag is dropped there rather than stamped over the hosts.
         if (migratedWindowedFs) {
             state->strip().setWindowedFullscreen(windowId, true);
         }
-        if (migratedMaximizedToEdges) {
+        if (migratedMaximizedToEdges && !joinColumn) {
             state->strip().setMaximizedToEdgesForWindow(windowId, true);
         }
         m_states.setKeyForWindow(windowId, key);

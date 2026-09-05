@@ -71,6 +71,18 @@ public Q_SLOTS:
     void setOverviewOpen(bool open);
     QString overviewModel() const;
     void reportOverviewState(bool open);
+    // Verbs. Every screen id passes WorkspaceController::canonicalScreenId
+    // on entry; every refusal is a debug log and no change.
+    void focusWorkspace(const QString& screenId, const QString& desktopId);
+    void moveWindowToWorkspace(const QString& windowId, const QString& screenId, const QString& desktopId, int dropX,
+                               int dropY);
+    void moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex, int dropX,
+                                  int dropY);
+    void reorderWorkspace(const QString& screenId, const QString& desktopId, int newSliceIndex);
+    void moveWorkspaceToScreen(const QString& desktopId, const QString& targetScreenId, int sliceIndex);
+    void renameWorkspace(const QString& desktopId, const QString& name);
+    void pinWorkspace(const QString& desktopId, bool pinned);
+    void panStrip(const QString& screenId, const QString& desktopId, int deltaPx);
 
 Q_SIGNALS:
     void overviewModelChanged(const QString& modelJson);
@@ -80,6 +92,9 @@ Q_SIGNALS:
 
 private:
     bool authenticate();
+    /// The policy to route a verb to, or null (unauthenticated sender, or the
+    /// feature is off), with the refusal logged.
+    IOverviewPolicy* verbTarget(const char* verb);
     /// Apply an open-state change: gate, controller, watcher, signal.
     void applyOpen(bool open, const QString& owner);
     void onControllerModel(const QString& modelJson);

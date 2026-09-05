@@ -9,6 +9,7 @@
 
 #include <PhosphorTiles/TilingState.h>
 
+#include <QPoint>
 #include <QSet>
 
 #include <algorithm>
@@ -73,6 +74,34 @@ AutotileEngine::overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key)
     }
 
     return entries;
+}
+
+int AutotileEngine::insertIndexForPoint(const PhosphorEngine::PlacementStateKey& key, const QPoint& pos) const
+{
+    const auto it = m_states.states().constFind(key);
+    if (it == m_states.states().constEnd() || !it.value()) {
+        return 0;
+    }
+    const PhosphorTiles::TilingState* state = it.value();
+    const QStringList tiled = state->tiledWindows();
+    const QVector<QRect> zones = state->calculatedZones();
+    const QStringList order = state->windowOrder();
+
+    // Same walk as computeDragInsertIndexAtPoint: the first zone containing
+    // the point wins, and windows past the layout cap have no zone to hit.
+    // The hit is a tiled index; the caller's unit is the window-order index,
+    // so it is mapped through the window's order position.
+    const int limit = static_cast<int>(std::min(zones.size(), tiled.size()));
+    for (int i = 0; i < limit; ++i) {
+        if (zones.at(i).contains(pos)) {
+            const int orderIndex = static_cast<int>(order.indexOf(tiled.at(i)));
+            return orderIndex >= 0 ? orderIndex : static_cast<int>(order.size());
+        }
+    }
+    // No zone hit: append. The end of the order keeps the arrival after every
+    // tiled window even when floats sit at the tail, and addWindow treats any
+    // position at or past the size as an append.
+    return static_cast<int>(order.size());
 }
 
 } // namespace PhosphorTileEngine

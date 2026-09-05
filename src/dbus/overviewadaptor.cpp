@@ -10,7 +10,21 @@
 #include <QDBusMessage>
 #include <QDBusServiceWatcher>
 
+#include <PhosphorScreens/ScreenIdentity.h>
+
 namespace PlasmaZones {
+
+namespace {
+/// The same rule as WorkspaceController::canonicalScreenId: the map, the
+/// census and the reconciler key screens by the id the KWin effect reports,
+/// and a connector name resolves to it. Spelled here because this adaptor
+/// lives in the core library, below the daemon's controllers.
+QString canonicalScreenId(const QString& connectorOrId)
+{
+    const QString id = PhosphorScreens::ScreenIdentity::idForName(connectorOrId);
+    return id.isEmpty() ? connectorOrId : id;
+}
+} // namespace
 
 OverviewAdaptor::OverviewAdaptor(QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -160,6 +174,76 @@ void OverviewAdaptor::reportOverviewState(bool open)
     // through setOverviewOpen, which the effect calls first.
     if (!open && m_open && sender == m_owner) {
         applyOpen(false, QString());
+    }
+}
+
+IOverviewPolicy* OverviewAdaptor::verbTarget(const char* verb)
+{
+    if (!authenticate()) {
+        return nullptr;
+    }
+    if (!m_controller) {
+        qCDebug(lcDbus) << "overview:" << verb << "ignored, workspaces feature is off";
+        return nullptr;
+    }
+    return m_controller;
+}
+
+void OverviewAdaptor::focusWorkspace(const QString& screenId, const QString& desktopId)
+{
+    if (IOverviewPolicy* target = verbTarget("focusWorkspace")) {
+        target->focusWorkspace(canonicalScreenId(screenId), desktopId);
+    }
+}
+
+void OverviewAdaptor::moveWindowToWorkspace(const QString& windowId, const QString& screenId, const QString& desktopId,
+                                            int dropX, int dropY)
+{
+    if (IOverviewPolicy* target = verbTarget("moveWindowToWorkspace")) {
+        target->moveWindowToWorkspace(windowId, canonicalScreenId(screenId), desktopId, dropX, dropY);
+    }
+}
+
+void OverviewAdaptor::moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex,
+                                               int dropX, int dropY)
+{
+    if (IOverviewPolicy* target = verbTarget("moveWindowToNewWorkspace")) {
+        target->moveWindowToNewWorkspace(windowId, canonicalScreenId(screenId), sliceIndex, dropX, dropY);
+    }
+}
+
+void OverviewAdaptor::reorderWorkspace(const QString& screenId, const QString& desktopId, int newSliceIndex)
+{
+    if (IOverviewPolicy* target = verbTarget("reorderWorkspace")) {
+        target->reorderWorkspace(canonicalScreenId(screenId), desktopId, newSliceIndex);
+    }
+}
+
+void OverviewAdaptor::moveWorkspaceToScreen(const QString& desktopId, const QString& targetScreenId, int sliceIndex)
+{
+    if (IOverviewPolicy* target = verbTarget("moveWorkspaceToScreen")) {
+        target->moveWorkspaceToScreen(desktopId, canonicalScreenId(targetScreenId), sliceIndex);
+    }
+}
+
+void OverviewAdaptor::renameWorkspace(const QString& desktopId, const QString& name)
+{
+    if (IOverviewPolicy* target = verbTarget("renameWorkspace")) {
+        target->renameWorkspace(desktopId, name);
+    }
+}
+
+void OverviewAdaptor::pinWorkspace(const QString& desktopId, bool pinned)
+{
+    if (IOverviewPolicy* target = verbTarget("pinWorkspace")) {
+        target->pinWorkspace(desktopId, pinned);
+    }
+}
+
+void OverviewAdaptor::panStrip(const QString& screenId, const QString& desktopId, int deltaPx)
+{
+    if (IOverviewPolicy* target = verbTarget("panStrip")) {
+        target->panStrip(canonicalScreenId(screenId), desktopId, deltaPx);
     }
 }
 

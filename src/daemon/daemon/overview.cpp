@@ -21,6 +21,7 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
@@ -118,6 +119,29 @@ void Daemon::initializeOverview()
         return isTrackedWindowSticky(windowId);
     });
     m_overviewController->setActivityManager(m_activityManager.get());
+    m_overviewController->setScrollEngine(qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get()));
+    // The named declarations live in Settings; the overview rewrites them
+    // there and the ordinary workspacesNamedEntriesChanged path re-applies.
+    m_overviewController->setNamedEntriesAccess({[this]() {
+                                                     return m_settings ? m_settings->workspacesNamedEntries()
+                                                                       : QVariantList();
+                                                 },
+                                                 [this](const QVariantList& entries) {
+                                                     if (m_settings) {
+                                                         m_settings->setWorkspacesNamedEntries(entries);
+                                                     }
+                                                 }});
+    // The overview's window move rides the same cross-mode handoff as the
+    // directional verbs, plus the drop intent.
+    connect(m_workspaceController.get(), &WorkspaceController::windowWorkspaceMoveWithIntentRequested,
+            m_overviewController.get(),
+            [this](const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                   const QString& targetDesktopId, const PhosphorEngine::HandoffIntent& intent) {
+                if (m_windowTrackingAdaptor) {
+                    m_windowTrackingAdaptor->moveWindowToWorkspaceWithIntent(windowId, targetScreenId, targetDesktop,
+                                                                             targetDesktopId, intent);
+                }
+            });
 
     // Rebuild triggers. Every one is a coalesced 0 ms request that the
     // controller drops while closed, so this wiring costs nothing until the

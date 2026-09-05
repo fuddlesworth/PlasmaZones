@@ -31,6 +31,18 @@ public:
     /// The last published model, empty while closed.
     virtual QString modelJson() const = 0;
 
+    // ── Verbs (org.plasmazones.Overview methods; ids arrive canonical) ──────
+    virtual void focusWorkspace(const QString& screenId, const QString& desktopId) = 0;
+    virtual void moveWindowToWorkspace(const QString& windowId, const QString& screenId, const QString& desktopId,
+                                       int dropX, int dropY) = 0;
+    virtual void moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex, int dropX,
+                                          int dropY) = 0;
+    virtual void reorderWorkspace(const QString& screenId, const QString& desktopId, int newSliceIndex) = 0;
+    virtual void moveWorkspaceToScreen(const QString& desktopId, const QString& targetScreenId, int sliceIndex) = 0;
+    virtual void renameWorkspace(const QString& desktopId, const QString& name) = 0;
+    virtual void pinWorkspace(const QString& desktopId, bool pinned) = 0;
+    virtual void panStrip(const QString& screenId, const QString& desktopId, int deltaPx) = 0;
+
 Q_SIGNALS:
     /// A new model payload (already generation-stamped). Never emitted while
     /// closed.

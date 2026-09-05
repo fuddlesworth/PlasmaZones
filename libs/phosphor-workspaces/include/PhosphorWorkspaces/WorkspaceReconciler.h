@@ -171,6 +171,38 @@ public:
     /// desktop id (empty on failure).
     QString transferCurrentWorkspace(const QString& screenId, const QString& targetScreenId);
 
+    // ── By-id verbs (the workspace overview) ────────────────────────────────
+    /// Move @p desktopId to @p newSliceIndex inside its own slice. Map order
+    /// only, like reorderCurrentWorkspace: KWin's global order self-repairs.
+    bool reorderWorkspace(const QString& desktopId, int newSliceIndex);
+    /// Re-own @p desktopId to @p targetScreenId at @p sliceIndex (clamped to
+    /// the slice, and never after that screen's trailing empty). Refused when
+    /// the source slice would drop to zero, the target is unknown, or the
+    /// desktop is unowned. Returns the moved id, empty on refusal. Window
+    /// relocation is the controller's job, as for transferCurrentWorkspace.
+    QString transferWorkspace(const QString& desktopId, const QString& targetScreenId, int sliceIndex);
+    /// Ledger a Create at @p sliceIndex of @p screenId (0 = before the first
+    /// entry, sliceSize = after the last) and tag the settled desktop
+    /// RESERVED: the destroy debounce and the surplus-empties sweep skip a
+    /// reserved desktop until its first population report, so a workspace
+    /// created for a drop survives the moment before its window arrives.
+    /// Refused (false) under the create budget / cap rules of maintenance.
+    bool requestInsertWorkspace(const QString& screenId, int sliceIndex);
+    /// Drop the reservation of @p desktopId (the drop that created it never
+    /// delivered its window); the next maintenance pass treats it as any
+    /// other empty dynamic desktop.
+    void releaseReservation(const QString& desktopId);
+    bool isReserved(const QString& desktopId) const
+    {
+        return m_reservedDesktops.contains(desktopId);
+    }
+    /// Push a KWin name for a DYNAMIC workspace through the name ledger (the
+    /// named-declaration path pushes its own). Refused for a desktop the map
+    /// does not own.
+    bool requestRename(const QString& desktopId, const QString& name);
+    /// The screen's trailing empty dynamic desktop, or empty.
+    QString trailingEmptyOf(const QString& screenId) const;
+
 Q_SIGNALS:
     // Outputs → KWin (via VirtualDesktopManager), ledgered before emit.
     void requestCreateDesktop(uint position, const QString& name);
@@ -222,6 +254,7 @@ private:
         int globalPosition = 0;
         QString name; ///< Create name (named workspaces)
         qint64 deadline = 0;
+        bool reserved = false; ///< Create: tag the settled desktop reserved (see requestInsertWorkspace)
     };
 
     void ledgerAdd(PendingOp op);
@@ -258,10 +291,8 @@ private:
     void maintainInvariants();
     void maintainScreen(const QString& screenId);
     void scheduleDestroyCheck(const QString& desktopId);
-    void requestCreateAt(const QString& screenId, int sliceIndex, const QString& name);
+    void requestCreateAt(const QString& screenId, int sliceIndex, const QString& name, bool reserved = false);
     bool isDesktopEmpty(const QString& desktopId) const;
-    /// The trailing entry of a slice iff it is an empty dynamic desktop.
-    QString trailingEmptyOf(const QString& screenId) const;
     /// The slot a new entry takes so it lands BEFORE the screen's trailing
     /// empty: the slice size, or one less when a trailing empty exists.
     int insertIndexBeforeTrailingEmpty(const QString& screenId) const;
@@ -292,6 +323,9 @@ private:
     QList<PendingOp> m_ledger;
     QTimer m_ledgerTimer;
     QHash<QString, QTimer*> m_destroyTimers; ///< desktopId → debounce
+    /// Desktops created for a drop whose window has not arrived yet (see
+    /// requestInsertWorkspace); exempt from destruction until then.
+    QSet<QString> m_reservedDesktops;
     /// Desktops already reported through removalRaceDetected while their
     /// Remove is open — the signal is an edge, not a level, so every further
     /// population increment on the same doomed desktop must stay quiet.

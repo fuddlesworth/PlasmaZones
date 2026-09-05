@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngine/HandoffIntent.h>
 #include <PhosphorWorkspaces/WorkspaceReconciler.h>
 
 #include <functional>
@@ -101,6 +102,34 @@ public:
     /// ("left"/"right"), windows riding along; focuses it there.
     void moveWorkspaceToOutput(const QString& screenId, const QString& direction);
 
+    // ── By-id verbs (the workspace overview; workspacecontroller_overview.cpp).
+    // Every screen id arrives canonical; every refusal is a debug log and no
+    // change. All defer behind the reconciler's ledger like the delta verbs. ──
+    /// Switch @p screenId to @p desktopId, which must be in its own slice.
+    void focusWorkspaceById(const QString& screenId, const QString& desktopId);
+    /// Move @p windowId to @p desktopId (owned by @p screenId) with a drop
+    /// intent for the target engine's handoffReceive. Refused for sticky
+    /// windows and for desktops the screen does not own.
+    void moveWindowToWorkspaceById(const QString& windowId, const QString& screenId, const QString& desktopId,
+                                   const PhosphorEngine::HandoffIntent& intent);
+    /// Move @p windowId into a NEW workspace of @p screenId at gap
+    /// @p sliceIndex (0 = above the first, sliceSize = below the last). A gap
+    /// at or past the trailing empty reuses that workspace (niri); a smaller
+    /// index inserts a reserved workspace and moves the window once the
+    /// create settles.
+    void moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex,
+                                  const PhosphorEngine::HandoffIntent& intent);
+    /// Reorder @p desktopId to @p newSliceIndex inside @p screenId's slice.
+    bool reorderWorkspaceById(const QString& screenId, const QString& desktopId, int newSliceIndex);
+    /// Re-own @p desktopId to @p targetScreenId at @p sliceIndex, its windows
+    /// riding along, and show it there.
+    bool moveWorkspaceToScreenById(const QString& desktopId, const QString& targetScreenId, int sliceIndex);
+    /// Push a KWin name for a DYNAMIC workspace (a named one rewrites its
+    /// declaration instead; the overview controller owns that split).
+    bool renameDynamicWorkspace(const QString& desktopId, const QString& name);
+    /// The windows the census counts on @p desktopId.
+    QStringList windowsOnWorkspace(const QString& desktopId) const;
+
     // ── Named workspaces (Phase 3) ──────────────────────────────────────────
     /// Apply the config declarations (QVariantMaps: name/output/position).
     /// Deferred until adoption; re-run on every declaration change.
@@ -168,6 +197,11 @@ Q_SIGNALS:
     /// whose whole premise is an identity that outlives renumbering.
     void windowWorkspaceMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                                       const QString& targetDesktopId, const QString& direction, bool moveOutput);
+    /// The overview's window move: same relay as windowWorkspaceMoveRequested
+    /// plus the drop intent the target engine places by.
+    void windowWorkspaceMoveWithIntentRequested(const QString& windowId, const QString& targetScreenId,
+                                                int targetDesktop, const QString& targetDesktopId,
+                                                const PhosphorEngine::HandoffIntent& intent);
     /// Owner-wins snap-back fired for this screen (OSD hint hook; gated by
     /// the snapBackOsdHint setting daemon-side).
     void snapBackOccurred(const QString& screenId);
@@ -268,6 +302,11 @@ private:
     void drainParkedNamedRoutes();
     /// Map entry id for a declared name, or empty.
     QString desktopIdForName(const QString& name) const;
+    /// Move every rider of @p desktopId to it on @p targetScreen (the window
+    /// half of a workspace transfer), then show the workspace there. Shared
+    /// by the directional and the by-id transfer.
+    void relocateRidersAndShow(const QStringList& riders, const QString& desktopId, const QString& targetScreen,
+                               const QString& direction);
 
     // ── Move-verb watchdog (plan §4.2) ──────────────────────────────────────
     /// windowWorkspaceMoveRequested is fire-and-forget over D-Bus; with no

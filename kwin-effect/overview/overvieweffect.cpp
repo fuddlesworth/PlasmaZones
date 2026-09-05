@@ -266,9 +266,58 @@ void OverviewEffect::closeWindow(const QString& windowId)
     }
 }
 
+void OverviewEffect::activateWindow(const QString& windowId)
+{
+    if (KWin::EffectWindow* w = windowFor(windowId)) {
+        KWin::effects->activateWindow(w);
+    }
+}
+
 QPointF OverviewEffect::desktopOffsetForScreen(KWin::LogicalOutput* screen) const
 {
     return m_screenDesktopOffsets.value(screen, QPointF(0, 0));
+}
+
+void OverviewEffect::focusWorkspace(const QString& screenId, const QString& desktopId)
+{
+    m_daemon->callOverview(QStringLiteral("focusWorkspace"), {screenId, desktopId});
+}
+
+void OverviewEffect::moveWindowToWorkspace(const QString& windowId, const QString& screenId, const QString& desktopId,
+                                           int dropX, int dropY)
+{
+    m_daemon->callOverview(QStringLiteral("moveWindowToWorkspace"), {windowId, screenId, desktopId, dropX, dropY});
+}
+
+void OverviewEffect::moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex,
+                                              int dropX, int dropY)
+{
+    m_daemon->callOverview(QStringLiteral("moveWindowToNewWorkspace"), {windowId, screenId, sliceIndex, dropX, dropY});
+}
+
+void OverviewEffect::reorderWorkspace(const QString& screenId, const QString& desktopId, int newSliceIndex)
+{
+    m_daemon->callOverview(QStringLiteral("reorderWorkspace"), {screenId, desktopId, newSliceIndex});
+}
+
+void OverviewEffect::moveWorkspaceToScreen(const QString& desktopId, const QString& targetScreenId, int sliceIndex)
+{
+    m_daemon->callOverview(QStringLiteral("moveWorkspaceToScreen"), {desktopId, targetScreenId, sliceIndex});
+}
+
+void OverviewEffect::renameWorkspace(const QString& desktopId, const QString& name)
+{
+    m_daemon->callOverview(QStringLiteral("renameWorkspace"), {desktopId, name});
+}
+
+void OverviewEffect::pinWorkspace(const QString& desktopId, bool pinned)
+{
+    m_daemon->callOverview(QStringLiteral("pinWorkspace"), {desktopId, pinned});
+}
+
+void OverviewEffect::panStrip(const QString& screenId, const QString& desktopId, int deltaPx)
+{
+    m_daemon->callOverview(QStringLiteral("panStrip"), {screenId, desktopId, deltaPx});
 }
 
 void OverviewEffect::tryStart()

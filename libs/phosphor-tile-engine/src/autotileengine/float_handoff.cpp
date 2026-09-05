@@ -309,32 +309,57 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
 // Cross-engine handoff (see IPlacementEngine.h for contract)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// NOTE: autotile ignores ctx.toDesktop — arrivals always land in the
-// CURRENT desktop's TilingState. Cross-desktop moves onto an autotile
-// desktop must use the reactive catch-scan path instead (the cross-mode
-// dispatcher's reactiveAutotileDesktopArrival branch does exactly that).
+// A receive with ctx.toDesktop unset (0) lands in the CURRENT desktop's
+// TilingState and retiles the screen. With ctx.toDesktop set, the window is
+// adopted into that desktop's state for the screen, which may not be the one
+// the screen is showing: the workspace overview moves a window onto a
+// desktop the user is looking at only as a thumbnail, and it needs the tile
+// to exist in that state at once so the thumbnail can show it there. For a
+// non-current key the state's zones are recomputed in place and no geometry
+// is applied, so the visible desktop's tiles are untouched until the screen
+// switches to that desktop and retiles.
 void AutotileEngine::handoffReceive(const HandoffContext& ctx)
 {
     if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty() || !isAutotileScreen(ctx.toScreenId)) {
         return;
     }
     qCInfo(PhosphorTileEngine::lcTileEngine)
-        << "AutotileEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId << "from" << ctx.fromEngineId
-        << "wasFloating=" << ctx.wasFloating;
+        << "AutotileEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId << "desktop" << ctx.toDesktop
+        << "from" << ctx.fromEngineId << "wasFloating=" << ctx.wasFloating;
 
     const QString windowId = canonicalizeWindowId(ctx.windowId);
 
-    PhosphorTiles::TilingState* state = tilingStateForScreen(ctx.toScreenId);
+    // The destination key is the screen's current context with the desktop
+    // replaced when the caller named one; the activity always stays current.
+    const auto currentKey = currentKeyForScreen(ctx.toScreenId);
+    auto destKey = currentKey;
+    if (ctx.toDesktop > 0) {
+        destKey.desktop = ctx.toDesktop;
+    }
+    const bool destIsCurrent = destKey == currentKey;
+
+    PhosphorTiles::TilingState* state = tilingStateForKey(destKey);
     if (!state) {
         return;
     }
+
+    // Reflow the destination after a change. The current key goes through the
+    // full retile so the arrival lands on screen; a non-current key only
+    // recomputes its zones, since applying geometry for a desktop the screen
+    // is not showing would move windows the user cannot see.
+    const auto reflowDestination = [&]() {
+        if (destIsCurrent) {
+            retileAfterOperation(ctx.toScreenId, true);
+        } else {
+            recalculateLayoutForState(destKey, state);
+        }
+    };
 
     // Already tracked on the destination screen — nothing to adopt; the float
     // toggle path is what the caller probably wants instead. No float
     // announcement needed on this return: the float bit is untouched (we
     // return before setFloating), so what subscribers last heard remains
     // accurate.
-    const auto destKey = currentKeyForScreen(ctx.toScreenId);
     const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
         && state->containsWindow(windowId)) {
@@ -343,7 +368,11 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         // re-validate (same contract as windowMinSizeUpdated).
         if ((ctx.minSize.width() > 0 || ctx.minSize.height() > 0)
             && storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height())) {
-            scheduleRetileForScreen(ctx.toScreenId);
+            if (destIsCurrent) {
+                scheduleRetileForScreen(ctx.toScreenId);
+            } else {
+                recalculateLayoutForState(destKey, state);
+            }
         }
         return;
     }
@@ -353,7 +382,17 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // the entry — handoffRelease is the correct primitive for "drop
     // tracking without mutating geometry" within this engine too.
     QSize preservedMin(0, 0);
+    // A cross-desktop receive that pulls the window out of another state of
+    // this engine leaves a hole there. The same-desktop path leaves the prior
+    // state to the daemon's own follow-up, as it always has; the cross-desktop
+    // path has no such follow-up, so the prior key is reflowed here once the
+    // adoption is settled (its state is looked up again then, since the
+    // release below may leave it empty but never destroys it).
+    std::optional<PhosphorEngine::TilingStateKey> priorKeyToReflow;
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() != destKey) {
+        if (!destIsCurrent) {
+            priorKeyToReflow = trackedKeyIt.value();
+        }
         // Internal re-home: the release wipes m_windowMinSizes on the
         // assumption that ctx.minSize re-seeds it — untrue when the daemon
         // built the context from an engine that does not model min sizes
@@ -407,7 +446,8 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         } else {
             m_windowMinSizes.remove(windowId);
         }
-        retileAfterOperation(ctx.toScreenId, true);
+        reflowDestination();
+        reflowPriorKeyAfterHandoff(priorKeyToReflow);
         return;
     }
     // Autotile-engine policy on receive: a window arriving as "floating in
@@ -449,8 +489,24 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
 
     // Trigger a retile so a non-floating arrival actually lands in a tile;
     // floating arrivals retile too because their displacement may free a
-    // slot for the remaining tiled set.
-    retileAfterOperation(ctx.toScreenId, true);
+    // slot for the remaining tiled set. A non-current destination only gets
+    // its zones recomputed (see reflowDestination).
+    reflowDestination();
+    reflowPriorKeyAfterHandoff(priorKeyToReflow);
+}
+
+void AutotileEngine::reflowPriorKeyAfterHandoff(const std::optional<PhosphorEngine::TilingStateKey>& priorKey)
+{
+    if (!priorKey) {
+        return;
+    }
+    if (*priorKey == currentKeyForScreen(priorKey->screenId)) {
+        retileAfterOperation(priorKey->screenId, true);
+        return;
+    }
+    if (PhosphorTiles::TilingState* prior = m_states.stateForKey(*priorKey)) {
+        recalculateLayoutForState(*priorKey, prior);
+    }
 }
 
 void AutotileEngine::handoffRelease(const QString& windowId)

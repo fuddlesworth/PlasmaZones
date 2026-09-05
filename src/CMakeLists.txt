@@ -593,9 +593,13 @@ set(plasmazones_daemon_SRCS
     # Dynamic per-monitor workspaces
     daemon/controllers/workspacecontroller.cpp
     daemon/controllers/workspacecontroller_verbs.cpp
+    daemon/controllers/workspacecontroller_overview.cpp
     daemon/controllers/workspacecontroller.h
     daemon/controllers/overviewcontroller.cpp
     daemon/controllers/overviewcontroller_model.cpp
+    daemon/controllers/overviewcontroller_verbs.cpp
+    daemon/controllers/overviewdropresolver.cpp
+    daemon/controllers/overviewdropresolver.h
     daemon/controllers/overviewcontroller.h
     daemon/controllers/overviewmodelbuilder.cpp
     daemon/controllers/overviewmodelbuilder.h

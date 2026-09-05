@@ -4,9 +4,15 @@
 // The vertical stack of this screen's workspaces. Geometry follows niri's
 // workspaces_render_geo: every cell is the screen scaled by zoom, cells are
 // separated by a gap of 10% of the screen height (also zoomed), the column
-// is centred horizontally, and the CURRENT workspace sits at the screen's
-// centre. At progress 0 the current cell therefore covers the real screen
-// exactly, so the open animation starts from what the user was looking at.
+// is centred horizontally, and the ANCHOR workspace sits at the screen's
+// centre. The anchor is the current workspace, except during the close
+// sequence after a click, when it is the chosen cell so the zoom-in lands
+// on it before the compositor's current-desktop change arrives. At
+// progress 0 the anchor cell therefore covers the real screen exactly.
+//
+// Every gap, plus the space above the first cell and below the last, is a
+// WorkspaceGapDropArea whose index is the slice index a workspace created
+// there would take.
 
 import QtQuick
 
@@ -21,6 +27,10 @@ Item {
     readonly property real cellHeight: stack.root.snap(stack.height * stack.root.zoom)
     readonly property real gap: stack.root.snap(stack.height * 0.1 * stack.root.zoom)
     readonly property real cellX: stack.root.snap((stack.width - stack.cellWidth) / 2)
+    // The slice index the column is centred on. anchorOverride is set by
+    // the close sequence and cleared by the root once the effect is closed.
+    property int anchorOverride: -1
+    readonly property int anchorIndex: stack.anchorOverride >= 0 ? stack.anchorOverride : stack.root.currentIndex
     // A live per-output desktop swipe (KWin's desktopChanging) slides the
     // column by whole workspaces; a programmatic switch emits none.
     property real swipeOffset: 0
@@ -46,12 +56,65 @@ Item {
         reflowHold.restart();
     }
 
+    function anchorTo(sliceIndex) {
+        stack.anchorOverride = sliceIndex;
+    }
+
     function cellY(sliceIndex) {
         const step = stack.cellHeight + stack.gap;
-        return stack.root.snap((stack.height - stack.cellHeight) / 2 + (sliceIndex - stack.root.currentIndex - stack.swipeOffset) * step);
+        return stack.root.snap((stack.height - stack.cellHeight) / 2 + (sliceIndex - stack.anchorIndex - stack.swipeOffset) * step);
+    }
+
+    // The cell item for a slice index, or null.
+    function cellAt(sliceIndex) {
+        return cells.itemAt(sliceIndex);
+    }
+
+    // What lies under a point in this column's coordinates: {cell} for a
+    // workspace, {gapIndex} for a gap, or null beside the column.
+    function targetAt(point) {
+        if (point.x < stack.cellX || point.x >= stack.cellX + stack.cellWidth) {
+            return null;
+        }
+        const count = stack.root.slice.length;
+        for (let i = 0; i < count; ++i) {
+            const top = stack.cellY(i);
+            if (point.y < top) {
+                return point.y >= top - stack.gap ? ({
+                        gapIndex: i
+                    }) : null;
+            }
+            if (point.y < top + stack.cellHeight) {
+                const cell = stack.cellAt(i);
+                return cell ? ({
+                        cell: cell
+                    }) : null;
+            }
+        }
+        if (count > 0 && point.y < stack.cellY(count - 1) + stack.cellHeight + stack.gap) {
+            return ({
+                    gapIndex: count
+                });
+        }
+        return null;
     }
 
     Repeater {
+        id: gaps
+        model: stack.root.slice.length + 1
+        delegate: WorkspaceGapDropArea {
+            required property int index
+            root: stack.root
+            gapIndex: index
+            x: stack.cellX
+            y: stack.cellY(index) - stack.gap
+            width: stack.cellWidth
+            height: stack.gap
+        }
+    }
+
+    Repeater {
+        id: cells
         model: stack.root.slice
         delegate: WorkspaceCell {
             required property int index

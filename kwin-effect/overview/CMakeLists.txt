@@ -39,6 +39,8 @@ qt6_add_qml_module(kwin_effect_plasmazones_overview
         qml/WorkspaceCell.qml
         qml/WindowTile.qml
         qml/WorkspaceLabel.qml
+        qml/WorkspaceGapDropArea.qml
+        qml/DragProxy.qml
         qml/DockLayer.qml
 )
 

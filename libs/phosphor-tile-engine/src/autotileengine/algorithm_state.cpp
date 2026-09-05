@@ -370,7 +370,16 @@ PhosphorTiles::TilingState* AutotileEngine::tilingStateForScreen(const QString& 
         return nullptr;
     }
 
-    const TilingStateKey key = currentKeyForScreen(screenId);
+    return tilingStateForKey(currentKeyForScreen(screenId));
+}
+
+PhosphorTiles::TilingState* AutotileEngine::tilingStateForKey(const TilingStateKey& key)
+{
+    const QString& screenId = key.screenId;
+    if (screenId.isEmpty()) {
+        qCWarning(PhosphorTileEngine::lcTileEngine) << "AutotileEngine::tilingStateForKey: empty screen name";
+        return nullptr;
+    }
 
     // Check for existing state before validating screen existence — existing
     // states are valid even if the screen is temporarily disconnected (e.g.,

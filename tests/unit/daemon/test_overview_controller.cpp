@@ -7,6 +7,7 @@
 // stamping, and the adaptor's open-state ownership.
 
 #include "daemon/controllers/overviewcontroller.h"
+#include "daemon/controllers/overviewdropresolver.h"
 #include "daemon/controllers/overviewmodelbuilder.h"
 #include "dbus/overviewadaptor.h"
 
@@ -406,6 +407,60 @@ private Q_SLOTS:
         controller.setOpen(true);
         QCOMPARE(published.count(), 2);
         QCOMPARE(controller.generation(), 2u);
+    }
+
+    /// Two columns of a horizontal strip at x 0..400 and 500..900, the second
+    /// stacked with two tiles (0..250, 250..500), the same picture niri's
+    /// scrolling_insert_position resolves against.
+    static OverviewStripEntry twoColumnStrip()
+    {
+        OverviewStripEntry strip;
+        OverviewStripColumn a;
+        a.rect = QRect(0, 0, 400, 500);
+        a.tiles = {OverviewStripTile{QStringLiteral("a"), QRect(0, 0, 400, 500)}};
+        OverviewStripColumn b;
+        b.rect = QRect(500, 0, 400, 500);
+        b.tiles = {OverviewStripTile{QStringLiteral("b1"), QRect(500, 0, 400, 250)},
+                   OverviewStripTile{QStringLiteral("b2"), QRect(500, 250, 400, 250)}};
+        strip.columns = {a, b};
+        return strip;
+    }
+
+    void scrollDropResolvesLikeNiri()
+    {
+        const OverviewStripEntry strip = twoColumnStrip();
+        // Before the first column: a new first column.
+        QCOMPARE(resolveScrollDrop(strip, QPoint(-10, 100), false), (ScrollDropTarget{0, -1}));
+        // Inside the solo column's tile: join it at tile 0.
+        QCOMPARE(resolveScrollDrop(strip, QPoint(100, 100), false), (ScrollDropTarget{0, 0}));
+        // In the gap between the columns: a new column between them.
+        QCOMPARE(resolveScrollDrop(strip, QPoint(450, 100), false), (ScrollDropTarget{1, -1}));
+        // Inside the stacked column's second tile: join at tile 1.
+        QCOMPARE(resolveScrollDrop(strip, QPoint(600, 300), false), (ScrollDropTarget{1, 1}));
+        // Below every tile of that column: append to it.
+        QCOMPARE(resolveScrollDrop(strip, QPoint(600, 700), false), (ScrollDropTarget{1, 2}));
+        // Past the last column: a new column at the end.
+        QCOMPARE(resolveScrollDrop(strip, QPoint(1200, 100), false), (ScrollDropTarget{2, -1}));
+        // An empty strip: the first column.
+        QCOMPARE(resolveScrollDrop(OverviewStripEntry{}, QPoint(5, 5), false), (ScrollDropTarget{0, -1}));
+        QVERIFY(!stripIsVertical(strip));
+    }
+
+    void scrollDropOnAVerticalStripSwapsTheAxes()
+    {
+        OverviewStripEntry strip;
+        OverviewStripColumn top;
+        top.rect = QRect(0, 0, 900, 300);
+        top.tiles = {OverviewStripTile{QStringLiteral("t1"), QRect(0, 0, 450, 300)},
+                     OverviewStripTile{QStringLiteral("t2"), QRect(450, 0, 450, 300)}};
+        OverviewStripColumn bottom;
+        bottom.rect = QRect(0, 400, 900, 300);
+        bottom.tiles = {OverviewStripTile{QStringLiteral("u"), QRect(0, 400, 900, 300)}};
+        strip.columns = {top, bottom};
+        QVERIFY(stripIsVertical(strip));
+        QCOMPARE(resolveScrollDrop(strip, QPoint(600, 100), true), (ScrollDropTarget{0, 1}));
+        QCOMPARE(resolveScrollDrop(strip, QPoint(100, 350), true), (ScrollDropTarget{1, -1}));
+        QCOMPARE(resolveScrollDrop(strip, QPoint(100, 800), true), (ScrollDropTarget{2, -1}));
     }
 
     void adaptorGateFollowsTheControllerAndDetachCloses()

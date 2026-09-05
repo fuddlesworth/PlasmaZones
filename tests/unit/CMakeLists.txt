@@ -304,6 +304,12 @@ p_add_test(test_autotile_engine_overview autotile/engine/test_autotile_engine_ov
 target_sources(test_autotile_engine_overview PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_autotile_engine_overview PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_compile_definitions(test_autotile_engine_overview PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_engine_overview_handoff autotile/engine/test_autotile_engine_overview_handoff.cpp)
+# The cross-desktop handoff test reads real calculated zones for the target
+# desktop, so it runs the same fake-screen retile pipeline as the overview test.
+target_sources(test_autotile_engine_overview_handoff PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_engine_overview_handoff PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_compile_definitions(test_autotile_engine_overview_handoff PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_drag_insert autotile/behavior/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_layer_switch autotile/behavior/test_autotile_layer_switch.cpp)
@@ -609,13 +615,16 @@ add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
 add_executable(test_overview_controller daemon/test_overview_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewcontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewcontroller_model.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewcontroller_verbs.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewdropresolver.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewmodelbuilder.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller_verbs.cpp)
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller_verbs.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller_overview.cpp)
 target_link_libraries(test_overview_controller
     PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core PhosphorEngine::PhosphorEngine
             PhosphorWorkspaces::PhosphorWorkspaces PhosphorScreens::PhosphorScreens
-            PhosphorZones::PhosphorZones)
+            PhosphorZones::PhosphorZones PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_overview_controller COMMAND test_overview_controller)
 
 # The daemon's in-process strip-preview payload (StripZones::zoneMapsForTiles),

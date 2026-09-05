@@ -97,9 +97,30 @@ public:
     Q_INVOKABLE int stackingIndex(const QString& windowId) const;
     Q_INVOKABLE bool windowExists(const QString& windowId) const;
     Q_INVOKABLE void closeWindow(const QString& windowId);
+    /// Activate (focus and raise) a window directly in the compositor. Not a
+    /// daemon verb: the QML calls this after focusWorkspace so the switch and
+    /// the activation land in the same close sequence.
+    Q_INVOKABLE void activateWindow(const QString& windowId);
     /// The live per-output desktop swipe offset (KWin's desktopChanging), so a
     /// touchpad desktop swipe shows inside an open overview.
     Q_INVOKABLE QPointF desktopOffsetForScreen(KWin::LogicalOutput* screen) const;
+
+    // Verb forwarders to org.plasmazones.Overview, one per daemon verb, all
+    // fire-and-forget. A refusal is a daemon-side no-op and the next
+    // overviewModelChanged repositions whatever the QML sprang back. Drop
+    // coordinates are workspace-local logical pixels, unzoomed; slice indices
+    // for the new-workspace verbs are 0-based gap indices (0 = above the
+    // first workspace, N = below the last).
+    Q_INVOKABLE void focusWorkspace(const QString& screenId, const QString& desktopId);
+    Q_INVOKABLE void moveWindowToWorkspace(const QString& windowId, const QString& screenId, const QString& desktopId,
+                                           int dropX, int dropY);
+    Q_INVOKABLE void moveWindowToNewWorkspace(const QString& windowId, const QString& screenId, int sliceIndex,
+                                              int dropX, int dropY);
+    Q_INVOKABLE void reorderWorkspace(const QString& screenId, const QString& desktopId, int newSliceIndex);
+    Q_INVOKABLE void moveWorkspaceToScreen(const QString& desktopId, const QString& targetScreenId, int sliceIndex);
+    Q_INVOKABLE void renameWorkspace(const QString& desktopId, const QString& name);
+    Q_INVOKABLE void pinWorkspace(const QString& desktopId, bool pinned);
+    Q_INVOKABLE void panStrip(const QString& screenId, const QString& desktopId, int deltaPx);
 
 public Q_SLOTS:
     void activate();

@@ -12,6 +12,7 @@
 #include "plasmazones_export.h"
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorEngine/HandoffIntent.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
@@ -1569,7 +1570,16 @@ private:
     /// position and can be renumbered out from under the request in flight.
     void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
                            const QString& targetScreenId, int targetDesktop, const QString& direction,
-                           bool allowSameEngine = false, const QString& targetDesktopId = QString());
+                           bool allowSameEngine = false, const QString& targetDesktopId = QString(),
+                           const std::optional<PhosphorEngine::HandoffIntent>& intent = std::nullopt);
+    /// The overview drop's landing slot on an autotile / snap target: fills
+    /// the intent's insertIndex (autotile) or the landing zone (snap) from
+    /// its drop point. Scrolling intents arrive pre-resolved by the overview
+    /// controller, which holds the strip model.
+    QStringList resolveDropLanding(PhosphorZones::AssignmentEntry::Mode targetMode,
+                                   PhosphorEngine::PlacementEngineBase* targetEngine, const QString& targetScreenId,
+                                   int targetDesktop, const QString& activity,
+                                   PhosphorEngine::HandoffIntent& intent) const;
 
 public:
     /**
@@ -1600,6 +1610,12 @@ public:
      */
     void moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
                                    const QString& targetDesktopId, const QString& direction, bool moveOutput = true);
+    /// The workspace overview's window move: moveWindowToWorkspaceVerb with a
+    /// drop intent (a drop point and / or a resolved slot) that the target
+    /// engine places by instead of the direction-derived entry. Always moves
+    /// the output leg; the direction is "down" for the entry-edge fallbacks.
+    void moveWindowToWorkspaceWithIntent(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
+                                         const QString& targetDesktopId, const PhosphorEngine::HandoffIntent& intent);
 
 private:
     /**

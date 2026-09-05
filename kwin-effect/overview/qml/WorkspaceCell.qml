@@ -7,11 +7,15 @@
 // highlight and a label. The window rects come from the daemon's model, so
 // a non-current scrolling workspace renders where its engine says its
 // columns are rather than where KWin last committed them.
+//
+// Input: the cell is a DropArea for windows and workspace labels, a left
+// click on empty area switches this screen to the workspace and closes, and
+// a right drag on a scrolling workspace pans its strip.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
 
-Item {
+DropArea {
     id: cell
 
     required property Item root
@@ -23,6 +27,8 @@ Item {
 
     readonly property string desktopId: cell.entry && cell.entry.id ? cell.entry.id : ""
     readonly property bool current: !cell.placeholder && cell.sliceIndex === cell.root.currentIndex
+    readonly property bool highlighted: !cell.placeholder && cell.sliceIndex === cell.root.selectedSlice
+    readonly property bool pinned: !cell.placeholder && !!(cell.entry && cell.entry.name)
     // The model's workspace object for this desktop, or null while the
     // model has not arrived (the cell then shows only its frame).
     readonly property var workspace: {
@@ -35,6 +41,22 @@ Item {
     }
     readonly property string mode: cell.workspace ? cell.workspace.mode : "none"
     readonly property var windows: (cell.workspace && Array.isArray(cell.workspace.windows)) ? cell.workspace.windows : []
+    readonly property bool droppable: !cell.placeholder && cell.desktopId !== "" && cell.mode !== "none"
+    // A strip's main axis is horizontal unless every column sits at the
+    // same x, in which case the columns are stacked vertically.
+    readonly property bool stripVertical: {
+        const strip = cell.workspace ? cell.workspace.strip : null;
+        if (!strip || !Array.isArray(strip.columns) || strip.columns.length < 2) {
+            return false;
+        }
+        const x0 = strip.columns[0].rect ? strip.columns[0].rect.x : 0;
+        for (let i = 1; i < strip.columns.length; ++i) {
+            if (!strip.columns[i].rect || strip.columns[i].rect.x !== x0) {
+                return false;
+            }
+        }
+        return true;
+    }
     readonly property string label: {
         if (cell.placeholder) {
             return i18nd("plasmazones", "No workspaces yet");
@@ -43,6 +65,21 @@ Item {
             return cell.entry.name;
         }
         return i18nd("plasmazones", "Workspace %1", cell.entry ? cell.entry.index : 0);
+    }
+    readonly property alias nameLabel: nameLabel
+
+    keys: ["pz-window", "pz-workspace"]
+
+    // Not Item.enabled: that would also switch off the tiles' handlers. A
+    // placeholder or mode-less cell refuses the drag at entry instead, so it
+    // never shows a drop hover and the proxy springs back.
+    onEntered: drag => {
+        drag.accepted = cell.droppable;
+    }
+    onDropped: drop => {
+        const payload = drop.source ? drop.source.payload : null;
+        cell.root.dropOntoCell(payload, cell, Qt.point(drop.x, drop.y));
+        drop.accept(Qt.MoveAction);
     }
 
     // Workspace shadow (niri's workspace-shadow, always on), normalized to a
@@ -64,6 +101,81 @@ Item {
         }
     }
 
+    // Keyboard highlight (the workspace the arrow keys and F2 act on) and
+    // the drop hover, drawn as a soft wash inside the frame.
+    Rectangle {
+        anchors.fill: parent
+        radius: cell.root.snap(Kirigami.Units.cornerRadius * cell.root.progress)
+        color: Kirigami.Theme.highlightColor
+        opacity: cell.containsDrag ? 0.25 : (cell.highlighted && cell.root.selectedWindowId === "" && cell.root.interactive ? 0.12 : 0)
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Kirigami.Units.shortDuration
+            }
+        }
+    }
+
+    HoverHandler {
+        id: hover
+        enabled: cell.root.interactive
+    }
+
+    // Left click on empty cell area: switch this screen to the workspace and
+    // close, focus unchanged. Tiles sit above this handler and take their
+    // own presses first.
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        enabled: cell.root.interactive && !cell.placeholder
+        onTapped: {
+            const p = cell.mapToItem(surface, point.pressPosition.x, point.pressPosition.y);
+            if (surface.childAt(p.x, p.y)) {
+                return;
+            }
+            cell.root.focusCellAndClose(cell);
+        }
+    }
+
+    // Right drag on a scrolling workspace pans its strip. Steps are
+    // coalesced by a short timer and sent unzoomed; the sign follows the
+    // content (drag right moves the strip right, so the view moves left).
+    DragHandler {
+        id: pan
+        target: null
+        acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        enabled: cell.root.interactive && cell.mode === "scrolling"
+        // Unzoomed pixels already sent this drag; the next step is the
+        // rounded difference to the total the pointer asks for, so rounding
+        // never loses distance across steps.
+        property int sentTotal: 0
+        onActiveChanged: {
+            if (active) {
+                pan.sentTotal = 0;
+            } else {
+                panFlush.stop();
+                cell.flushPan();
+            }
+        }
+        onActiveTranslationChanged: if (active && !panFlush.running) {
+            panFlush.start();
+        }
+    }
+    Timer {
+        id: panFlush
+        interval: 33
+        onTriggered: cell.flushPan()
+    }
+    function flushPan() {
+        const along = cell.stripVertical ? pan.activeTranslation.y : pan.activeTranslation.x;
+        const wanted = -along / cell.root.zoom;
+        const step = Math.round(wanted - pan.sentTotal);
+        if (step === 0) {
+            return;
+        }
+        pan.sentTotal += step;
+        cell.root.effect.panStrip(cell.root.screenId, cell.desktopId, step);
+    }
+
     Item {
         id: surface
         anchors.fill: parent
@@ -74,17 +186,24 @@ Item {
             delegate: WindowTile {
                 required property var modelData
                 root: cell.root
+                cell: cell
                 win: modelData
             }
         }
     }
 
     WorkspaceLabel {
+        id: nameLabel
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.top
         anchors.bottomMargin: Kirigami.Units.smallSpacing
+        root: cell.root
+        cell: cell
         text: cell.label
         current: cell.current
+        pinned: cell.pinned
+        inert: cell.placeholder
+        cellHovered: hover.hovered
         visible: cell.root.effect.showWorkspaceNames || cell.placeholder
         opacity: cell.root.progress
     }
