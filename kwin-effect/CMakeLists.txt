@@ -275,3 +275,8 @@ target_include_directories(kwin_effect_plasmazones PRIVATE
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in
 # the KWIN_EFFECT_FACTORY_SUPPORTED macro. The source file MUST include
 # "plasmazoneseffect.moc" at the end for MOC to process the generated Q_OBJECT class.
+
+# The workspace overview: a second effect plugin (QuickSceneEffect) in its
+# own subdirectory. See overview/CMakeLists.txt for why it is not part of
+# kwin_effect_plasmazones.
+add_subdirectory(overview)

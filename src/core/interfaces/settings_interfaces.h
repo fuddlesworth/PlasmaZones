@@ -653,6 +653,64 @@ public:
 };
 
 /**
+ * @brief The workspace overview's look and input (Workspaces.Overview).
+ *
+ * Every accessor is defaulted rather than pure: the D-Bus settings registry
+ * publishes these five keys through the interface and the overview KWin
+ * effect reads them back over that wire, so a non-Settings backend must still
+ * answer them (the scrollingTabIndicatorEnabled pattern on ISettings). The
+ * literals are pinned against their ConfigDefaults twins by static_asserts in
+ * settings/workspaces.cpp and by test_configdefaults, since this header does
+ * not see the config layer.
+ *
+ * NOTE: the matching NOTIFY signals live on ISettings, the QObject that mixes
+ * this interface in.
+ */
+class PLASMAZONES_EXPORT IOverviewSettings
+{
+public:
+    virtual ~IOverviewSettings() = default;
+
+    /// Fully open zoom, 0.1 to 0.75.
+    virtual qreal overviewZoom() const
+    {
+        return 0.5;
+    }
+    virtual void setOverviewZoom(qreal /*zoom*/)
+    {
+    }
+    /// Concrete colour string behind the zoomed-out workspaces.
+    virtual QString overviewBackdropColor() const
+    {
+        return QStringLiteral("#262626");
+    }
+    virtual void setOverviewBackdropColor(const QString& /*color*/)
+    {
+    }
+    virtual bool overviewGestureEnabled() const
+    {
+        return true;
+    }
+    virtual void setOverviewGestureEnabled(bool /*enabled*/)
+    {
+    }
+    virtual bool overviewWheelSwitchesWorkspaces() const
+    {
+        return true;
+    }
+    virtual void setOverviewWheelSwitchesWorkspaces(bool /*enabled*/)
+    {
+    }
+    virtual bool overviewShowWorkspaceNames() const
+    {
+        return true;
+    }
+    virtual void setOverviewShowWorkspaceNames(bool /*enabled*/)
+    {
+    }
+};
+
+/**
  * @brief Why PlasmaZones is disabled in a given context.
  *
  * Priority order: Monitor > Desktop > Activity (matches isContextDisabled check order).

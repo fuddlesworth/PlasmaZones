@@ -83,6 +83,8 @@ class ShaderAdaptor;
 class ControlAdaptor;
 class CompositorBridgeAdaptor;
 class OverlayAdaptor;
+class OverviewAdaptor;
+class OverviewController;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;

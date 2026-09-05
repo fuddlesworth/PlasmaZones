@@ -268,6 +268,9 @@ CatalogMeta catalogMetaForId(const QString& id)
         // with kglobalaccel once at startup precisely so they stay rebindable
         // there while the feature is off.
         // Short labels drop the "Workspace" the group heading already says.
+        add(kIdOverviewToggle, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Overview"),
+            QT_TRANSLATE_NOOP("plasmazones", "Shows every workspace of every monitor at once."));
         add(kIdWorkspaceFocusUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Focus Above"));
         add(kIdWorkspaceFocusDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,

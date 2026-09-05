@@ -455,6 +455,16 @@ public:
      */
     PhosphorTiles::TilingState* tilingStateForScreen(const QString& screenId);
 
+    /**
+     * @brief Get the tiling state for an explicit (screen, desktop, activity) key
+     *
+     * The per-key form of tilingStateForScreen: creates the state when it does
+     * not exist yet, with the same known-screen gate and the same config
+     * seeding. A cross-desktop handoff uses it to adopt a window into a
+     * desktop the screen is not currently showing.
+     */
+    PhosphorTiles::TilingState* tilingStateForKey(const PhosphorEngine::TilingStateKey& key);
+
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
     const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
 
@@ -1398,6 +1408,26 @@ public:
     /// tiled here (or has closed).
     QRect lastManagedRect(const QString& rawWindowId) const override;
 
+    /// IOverviewModelSource: the windows this engine holds under @p key, read
+    /// straight from the existing TilingState without creating one. Tiled
+    /// windows carry their calculated zone (an over-cap window carries the
+    /// tile rect it was last applied at), floats carry the last tile rect
+    /// this engine emitted for them, if any. Implemented in
+    /// src/autotileengine/engine_overview.cpp.
+    std::optional<QList<PhosphorEngine::OverviewWindowEntry>>
+    overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key) const override;
+
+    /// The window-order index a window dropped at @p pos should take in the
+    /// state under @p key: the order position of the tiled window whose
+    /// calculated zone contains the point, or the end of the order when no
+    /// zone does. Answers 0 for a key with no state. The unit is the one
+    /// handoffReceive consumes through HandoffContext::insertIndex (a raw
+    /// windowOrder() position, floats counted), so the overview can hand the
+    /// result straight to a cross-desktop receive. Pure read: no state is
+    /// created and no drag preview is consulted. Implemented in
+    /// src/autotileengine/engine_overview.cpp.
+    int insertIndexForPoint(const PhosphorEngine::PlacementStateKey& key, const QPoint& pos) const;
+
 private Q_SLOTS:
     void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);
@@ -1434,6 +1464,17 @@ private:
     void dropClosedWindowFromDragPreview(const QString& windowId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
+    /// The body of recalculateLayout for an explicit key and its state: runs
+    /// the algorithm and stores the zones on @p state without applying any
+    /// geometry. recalculateLayout is this for the screen's current key; a
+    /// cross-desktop handoff calls it for a non-current key so that state's
+    /// calculatedZones reflect the arrival while the visible desktop is left
+    /// alone.
+    bool recalculateLayoutForState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
+    /// After a cross-desktop handoffReceive pulled a window out of another
+    /// state of this engine, reflow that state: a full retile when it is its
+    /// screen's current key, a zone recompute otherwise. No-op for nullopt.
+    void reflowPriorKeyAfterHandoff(const std::optional<PhosphorEngine::TilingStateKey>& priorKey);
     void applyTiling(const QString& screenId);
 
     /**

@@ -96,7 +96,8 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
                                      public IOrderingSettings,
-                                     public IAnimationSettings
+                                     public IAnimationSettings,
+                                     public IOverviewSettings
 {
     Q_OBJECT
 
@@ -119,6 +120,7 @@ public:
     //   - IDefaultLayoutSettings: default layout ID
     //   - IOrderingSettings: manual layout / algorithm / scrolling-template ordering
     //   - IAnimationSettings: animation/shader-profile state + window filtering
+    //   - IOverviewSettings: the workspace overview's look and input
     //
     // See settings_interfaces.h for the full API.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1014,20 +1016,18 @@ Q_SIGNALS:
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
 
-    // Workspaces settings (dynamic per-monitor workspaces).
-    //
-    // Notification-only, the same shape as the autotile shortcut signals
-    // above: no matching pure-virtual getters. Every consumer of these holds a
-    // concrete Settings* and reads the value there, and the workspace surface
-    // is thirty-odd scalars plus two slot families, so mirroring it into the
-    // interface would grow ISettings by more than it would buy. A consumer
-    // that genuinely needs to read one through the interface should have the
-    // getter added here alongside its signal rather than reach around it.
+    // Workspaces settings (dynamic per-monitor workspaces). Notification-only
+    // like the autotile signals above; wire-read keys go on IOverviewSettings.
     void workspacesEnabledChanged();
     void workspacesManageKWinPerOutputChanged();
     void workspacesSnapBackOsdHintChanged();
     void workspacesNamedEntriesChanged();
     void workspacesRebindKWinShortcutsChanged();
+    void overviewZoomChanged();
+    void overviewBackdropColorChanged();
+    void overviewGestureEnabledChanged();
+    void overviewWheelSwitchesWorkspacesChanged();
+    void overviewShowWorkspaceNamesChanged();
     void workspaceFocusUpShortcutChanged();
     void workspaceFocusDownShortcutChanged();
     void workspaceMoveWindowUpShortcutChanged();
@@ -1038,6 +1038,7 @@ Q_SIGNALS:
     void workspaceReorderDownShortcutChanged();
     void workspaceMoveToMonitorLeftShortcutChanged();
     void workspaceMoveToMonitorRightShortcutChanged();
+    void overviewToggleShortcutChanged();
     void workspaceSlotShortcutsChanged();
     void workspaceSlotTargetsChanged();
 

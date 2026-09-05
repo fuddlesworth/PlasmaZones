@@ -31,6 +31,7 @@ add_library(PhosphorSnapEngine SHARED
     src/SnapState.cpp
     src/calculate.cpp
     src/commit.cpp
+    src/engine_overview.cpp
     src/float.cpp
     src/lifecycle.cpp
     src/navigation.cpp

@@ -370,6 +370,21 @@ QStringList Settings::managedGroupNames()
     };
 }
 
+// Delete every per-screen override group, plus the container they nest
+// under. Three things are swept:
+//   1. Whatever PerScreenPathResolver::isPerScreenPrefix claims. The
+//      prefixes are NOT re-spelled here — the resolver's mapping table is
+//      the one list, so a prefix added there is swept by reset() without
+//      touching this function. Today that covers ZoneSelector:*,
+//      AutotileScreen:*, ScrollingScreen:*, ScrollingZoneSelector:*, and
+//      the legacy SnappingScreen:*
+//      which is no longer written but is still swept to scrub any file an
+//      older build left behind.
+//   2. VirtualScreen:* groups, which are per-screen in the same sense but
+//      resolve through their own group accessor rather than the resolver.
+//   3. The resolver's reserved "PerScreen" container key, which groupList()
+//      hides and which can survive as an empty husk once every descendant
+//      is gone.
 void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();

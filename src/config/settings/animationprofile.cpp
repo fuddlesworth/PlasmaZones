@@ -250,6 +250,13 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // call site: a refresh inside the helper would run AFTER that read, and the
 // no-op guard would compare against the stale value — swallowing exactly the
 // healing write the refresh exists to enable.
+/// Reparse the backend from disk IF it holds no pending writes.
+/// Called by every composite-value setter (animation Profile blob,
+/// shader/decoration profile trees, autotile per-algorithm map,
+/// snapping and tiling trigger lists including the zoneSpan pair, and
+/// the named-workspace declaration list)
+/// before its stale-sensitive read; see the definition for the
+/// cross-process coherence rationale.
 void Settings::refreshCleanBackendFromDisk()
 {
     if (!m_configBackend || m_configBackend->isDirty()) {

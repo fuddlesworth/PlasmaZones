@@ -174,6 +174,11 @@ public:
     // Effect interface
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
+    /// Another effect (the PlasmaZones overview, KWin's Overview, Present
+    /// Windows) holds the fullscreen slot: its opaque view covers the whole
+    /// stack, so the strip pass, tab pills, decoration folds and per-window
+    /// burn work are skipped for the duration (paint_pipeline.cpp).
+    bool foreignFullScreenEffectActive() const;
 
     // KWin 6.7 dropped the explicit presentTime parameter from the prePaint
     // hooks; effects now self-source time (our CompositorClock samples

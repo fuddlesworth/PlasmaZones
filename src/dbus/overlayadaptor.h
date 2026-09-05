@@ -12,8 +12,6 @@
 #include <QSet>
 #include <QString>
 
-class QDBusServiceWatcher;
-
 namespace PhosphorScreens {
 class ScreenManager;
 }
@@ -24,6 +22,8 @@ class IZoneDetector;
 }
 
 namespace PlasmaZones {
+
+class KwinSenderTrust;
 
 class IOverlayService;
 class ISettings;
@@ -47,7 +47,7 @@ class ISettings;
  * accepts an attacker-influenceable image payload from the unauthenticated
  * session bus and only @c kwin_wayland is meant to invoke it.
  */
-class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")
@@ -128,68 +128,16 @@ private:
      * The thumbnail-injection method is a UI-spoofing primitive in the
      * wrong hands: any peer on the session bus could otherwise feed
      * arbitrary 256² ARGB32 buffers into the daemon's bounded thumbnail
-     * cache, keyed on a compositor handle leaked through the
-     * @c snapAssistShown signal. We bind the call to @c kwin_wayland by
-     * resolving the sender's bus name to a PID via
-     * @c GetConnectionUnixProcessID and checking the basename of
-     * @c /proc/<pid>/exe against the accepted set. The @c /proc/<pid>/exe
-     * symlink is kernel-maintained and cannot be rewritten from userspace
-     * (unlike @c /proc/<pid>/comm, which @c prctl(PR_SET_NAME) can
-     * trivially spoof — that earlier comm-based check was replaced for
-     * exactly that reason). Verified bus names are cached so the
-     * steady-state cost is one set lookup; @c NameOwnerChanged
-     * invalidates the cache so a kwin restart followed by a PID reuse
-     * cannot inherit trust.
-     *
-     * Slow-path fallback only: in steady state @ref prewarmKwinTrust has
-     * already populated the cache before any thumbnail call arrives, so
-     * this path runs only if a call races the pre-warm reply (or the
-     * pre-warm failed because @c org.kde.KWin wasn't yet registered).
+     * cache. The check is the shared kwin-sender trust (KwinSenderTrust):
+     * the sender's unique name resolved to a PID and its
+     * @c /proc/<pid>/exe basename matched against the accepted kwin
+     * binaries, pre-warmed so the steady-state cost is one set lookup.
+     * Direct (non-D-Bus) calls are accepted because there is no remote
+     * peer to authorise.
      *
      * @return true if the sender has been authenticated as kwin.
      */
     bool authenticateKwinSender();
-
-    /**
-     * @brief Async pre-warm the trusted-sender cache against the current
-     *        owner of @c org.kde.KWin.
-     *
-     * Inverts the original "first thumbnail pays the auth cost" pattern:
-     * resolve kwin's unique bus name and validate its @c /proc/<pid>/exe
-     * basename at adaptor construction (and again on any future kwin
-     * restart, via @ref m_kwinWatcher). By the time the kwin-effect posts
-     * the first thumbnail of a snap-assist invocation, the sender's
-     * unique name is already in @ref m_trustedKwinSenders and
-     * @ref setSnapAssistThumbnail returns synchronously after a single
-     * set lookup — no sync @c GetConnectionUnixProcessID round-trip from
-     * inside the D-Bus method handler.
-     *
-     * Failure modes are bounded: GetNameOwner failure logs and bails
-     * (kwin will register later → watcher fires → pre-warm retries);
-     * a thumbnail that races the pre-warm falls through to
-     * @ref authenticateKwinSender's existing sync path.
-     */
-    void prewarmKwinTrust();
-
-    /// Async second leg of the pre-warm chain. Resolves @p uniqueName
-    /// to a PID via @c GetConnectionUnixProcessID, then hands off to
-    /// @ref validateExeAndTrust. Factored out so the @c GetNameOwner
-    /// reply lambda stays narrow.
-    void resolvePidAndTrust(const QString& uniqueName);
-
-    /**
-     * @brief Validate @c /proc/<pid>/exe and (on success) admit
-     *        @p uniqueName to @ref m_trustedKwinSenders with an arming
-     *        watcher.
-     *
-     * Single source of truth for the trust-admission step shared by the
-     * pre-warm path (@ref resolvePidAndTrust) and the sync fallback
-     * (@ref authenticateKwinSender). Idempotent against duplicate
-     * admissions for the same unique name.
-     *
-     * @return true iff @p uniqueName is now in the trust cache.
-     */
-    bool validateExeAndTrust(const QString& uniqueName, uint pid);
 
     IOverlayService* m_overlayService; // Interface type (DIP)
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
@@ -199,20 +147,8 @@ private:
     PhosphorScreens::ScreenManager* m_screenManager;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 
-    /// Set of session-bus unique names previously verified as belonging to
-    /// kwin_wayland. Populated eagerly via @ref prewarmKwinTrust at
-    /// construction (and on every @c org.kde.KWin re-registration), with
-    /// the lazy @ref authenticateKwinSender path retained as a slow-path
-    /// fallback for the narrow window where a thumbnail call races the
-    /// pre-warm reply. Entries are evicted via per-sender
-    /// @c QDBusServiceWatcher when their owner unregisters, so a PID
-    /// reuse after kwin_wayland exits cannot inherit trust.
-    QSet<QString> m_trustedKwinSenders;
-
-    /// Watches @c org.kde.KWin so kwin restarts re-fire the pre-warm
-    /// chain. Parent-owned (this); destroyed automatically with the
-    /// adaptor.
-    QDBusServiceWatcher* m_kwinWatcher = nullptr;
+    /// Shared kwin-sender authentication (see KwinSenderTrust). Parent-owned.
+    KwinSenderTrust* m_kwinTrust = nullptr;
 };
 
 } // namespace PlasmaZones

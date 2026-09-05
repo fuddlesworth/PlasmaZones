@@ -921,6 +921,12 @@ public:
                               ///< Used by cross-mode SWAP (partner's exact slot)
                               ///< and by edge-aware cross-mode MOVE entry.
                               ///< Ignored by snap targets.
+        int insertTileIndex = -1; ///< Scrolling target only: join the column at
+                                  ///< insertIndex as a tile at this position
+                                  ///< (clamped to the column's tile count; a
+                                  ///< tabbed column joins its tabs). -1 = a
+                                  ///< NEW column at insertIndex. Set by the
+                                  ///< workspace overview's drop resolver.
     };
 
     /// Receive ownership of a window from another engine.

@@ -425,6 +425,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/workspaces/NamedWorkspacesPage.qml
         qml/pages/workspaces/NamedWorkspaceRow.qml
         qml/pages/workspaces/WorkspacesShortcutsPage.qml
+        qml/pages/workspaces/WorkspacesOverviewPage.qml
         qml/pages/screens/VirtualScreenPreview.qml
         # Sub-components (copied from KCM)
         qml/pages/layouts/QuickLayoutSlotsCard.qml

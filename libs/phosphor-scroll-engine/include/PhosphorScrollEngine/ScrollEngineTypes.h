@@ -158,6 +158,17 @@ struct ScrollStripSnapshotTile
     /// was resolved while it was hidden; tab renderers draw segments from
     /// the flag, not the rect).
     QRectF relRect;
+    /// The tile's resolved rect in the engine's own ABSOLUTE coordinate
+    /// space, filled ONLY by the key-taking ScrollEngine::stripSnapshot
+    /// overload (the workspace overview's read). The screenId overload
+    /// leaves it null, since its consumers draw off relRect. Where filled,
+    /// it is the relayout's rect verbatim: a hidden tab shares its column's
+    /// active tile rect (ResolvedTile::rect), a minimized tile stays null,
+    /// and a parked column's tiles land OUTSIDE the work area, which is
+    /// their visual position on the strip. Unlike relRect it is never
+    /// blanked for a hidden tab, because the overview wants a rect for every
+    /// window it can draw.
+    QRect absRect;
     bool minimized = false;
     /// Non-active tab of a tabbed column. The shipped renderer branches on
     /// the column's tabbed flag instead; carried for direct consumers.
@@ -181,6 +192,11 @@ struct ScrollStripSnapshotColumn
     /// clamped to (0, 1]. 0 when the column resolves no rect (fully
     /// minimized) — renderers fall back to a full-extent preview there.
     qreal widthFraction = 0.0;
+    /// The column's resolved bounding rect (ResolvedColumn::rect) in the
+    /// engine's absolute coordinate space. Same fill rule as the tile field:
+    /// only the key overload sets it, and a fully minimized column (no
+    /// resolved entry) leaves it null.
+    QRect absRect;
     /// MODEL tile order, minimized tiles included.
     QVector<ScrollStripSnapshotTile> tiles;
 };
@@ -208,6 +224,13 @@ struct ScrollStripSnapshot
     /// its place (the right neighbour, or the new last column), matching the
     /// real detach; -1 only when the snapshot ends up with no columns.
     int activeColumnIndex = -1;
+    /// The viewport's leading edge in strip coordinates
+    /// (ResolvedStrip::viewOffset), filled only by the key-taking overload
+    /// alongside the absRects; the screenId overload leaves it 0. A column's
+    /// on-screen main-axis position is already folded into its absRect, so
+    /// this is for a consumer that wants the strip-space position back
+    /// (absRect main position plus viewX).
+    int viewX = 0;
     /// False when the screen has no strip state or no valid work area —
     /// distinct from a valid, empty strip (zero columns). A test /
     /// introspection seam: the daemon's serializer collapses both states to

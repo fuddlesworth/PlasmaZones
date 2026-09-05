@@ -55,6 +55,9 @@ inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 inline constexpr QLatin1String Rules("org.plasmazones.Rules");
 inline constexpr QLatin1String Control("org.plasmazones.Control");
 inline constexpr QLatin1String Shader("org.plasmazones.Shader");
+// Workspace overview: per-(screen, desktop) model stream plus the verbs the
+// KWin overview effect sends back.
+inline constexpr QLatin1String Overview("org.plasmazones.Overview");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised

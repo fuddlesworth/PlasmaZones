@@ -146,6 +146,14 @@ add_executable(test_snap_engine_workspaces core/snap/test_snap_engine_workspaces
 target_link_libraries(test_snap_engine_workspaces PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine_workspaces COMMAND test_snap_engine_workspaces)
 
+# Snap engine's IOverviewModelSource read surface (per-key window list for the
+# workspace overview). QTEST_MAIN with Qt6::Gui explicit, exactly as
+# test_snap_unfloat_fallback: the offscreen primary screen is what makes
+# zoneGeometry() resolve so the zone-frame assertions are reachable.
+add_executable(test_snap_engine_overview core/snap/test_snap_engine_overview.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_overview PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_overview COMMAND test_snap_engine_overview)
+
 # Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
 # entry-zone crossing).
 add_executable(test_snap_engine_exclude core/snap/test_snap_engine_exclude.cpp helpers/SnapEngineTestFixture.h)
@@ -290,6 +298,18 @@ p_add_test(test_autotile_engine_order_cycling autotile/engine/test_autotile_engi
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_engine_class_mutation autotile/engine/test_autotile_engine_class_mutation.cpp)
 p_add_test(test_autotile_engine_workspaces autotile/engine/test_autotile_engine_workspaces.cpp)
+p_add_test(test_autotile_engine_overview autotile/engine/test_autotile_engine_overview.cpp)
+# The overview read needs real calculated zones, so this test runs the engine's
+# retile pipeline against a fake screen and the bundled Luau algorithms.
+target_sources(test_autotile_engine_overview PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_engine_overview PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_compile_definitions(test_autotile_engine_overview PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_engine_overview_handoff autotile/engine/test_autotile_engine_overview_handoff.cpp)
+# The cross-desktop handoff test reads real calculated zones for the target
+# desktop, so it runs the same fake-screen retile pipeline as the overview test.
+target_sources(test_autotile_engine_overview_handoff PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_engine_overview_handoff PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_compile_definitions(test_autotile_engine_overview_handoff PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_drag_insert autotile/behavior/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_layer_switch autotile/behavior/test_autotile_layer_switch.cpp)
@@ -588,6 +608,24 @@ add_executable(test_stripcard_serialize daemon/test_stripcard_serialize.cpp)
 target_link_libraries(test_stripcard_serialize
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
+
+# The workspace overview's daemon side: model builder over fake engine read
+# surfaces, the controller's streaming gate and generation stamps, and the
+# adaptor's open-state ownership.
+add_executable(test_overview_controller daemon/test_overview_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewcontroller_model.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewcontroller_verbs.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewdropresolver.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/overviewmodelbuilder.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller_verbs.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/workspacecontroller_overview.cpp)
+target_link_libraries(test_overview_controller
+    PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core PhosphorEngine::PhosphorEngine
+            PhosphorWorkspaces::PhosphorWorkspaces PhosphorScreens::PhosphorScreens
+            PhosphorZones::PhosphorZones PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_overview_controller COMMAND test_overview_controller)
 
 # The daemon's in-process strip-preview payload (StripZones::zoneMapsForTiles),
 # which the OSD strip card renders without crossing the bus. Its wire twin is

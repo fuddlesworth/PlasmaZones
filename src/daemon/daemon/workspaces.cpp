@@ -588,30 +588,7 @@ void Daemon::initializeWorkspaces()
                                                                        targetDesktopId, direction, moveOutput);
                 }
             });
-    // Owner-wins snap-back hint (plain prose; toggleable).
-    connect(m_workspaceController.get(), &WorkspaceController::snapBackOccurred, wiring,
-            [this](const QString& screenId) {
-                // Its own toggle layered ON TOP of the shared navigation gate
-                // (OSD style None, global suppression, the per-context rule) —
-                // this family was consulting only the toggle.
-                if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService
-                    && navigationOsdAllowed(screenId)) {
-                    m_overlayService->showDisabledOsd(
-                        PhosphorI18n::tr("That workspace is on another monitor.", "OSD hint"), screenId);
-                }
-            });
-    // A window mapped onto a workspace during its removal window and KWin
-    // swept it to an arbitrary neighbour; the controller re-issued a move to
-    // the owner's current workspace (plan §4.3 destroy step 4) — hint it.
-    connect(m_workspaceController.get(), &WorkspaceController::windowDisplacedByRemoval, wiring,
-            [this](const QString& screenId) {
-                if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService
-                    && navigationOsdAllowed(screenId)) {
-                    m_overlayService->showDisabledOsd(
-                        PhosphorI18n::tr("That workspace closed. The window moved to the current one.", "OSD hint"),
-                        screenId);
-                }
-            });
+    wireWorkspaceOsdHints(wiring);
     // Focused-screen tracking (fork 3): externally created desktops adopt to
     // the screen the user is working on, resolved from the effect's activation
     // reports (already in the effect id space; extract the physical output).
@@ -825,9 +802,11 @@ void Daemon::initializeWorkspaces()
     // pass-through; restore on toggle-off. If the backend cannot rebind
     // (portal), nothing is stolen and snap-back-with-hint stays the story.
     static const QStringList KWinDesktopActions{
-        QStringLiteral("Switch One Desktop Up"),          QStringLiteral("Switch One Desktop Down"),
+        QStringLiteral("Switch One Desktop Up"), QStringLiteral("Switch One Desktop Down"),
         QStringLiteral("Switch One Desktop to the Left"), QStringLiteral("Switch One Desktop to the Right"),
-        QStringLiteral("Walk Through Desktops"),          QStringLiteral("Walk Through Desktops (Reverse)")};
+        QStringLiteral("Walk Through Desktops"), QStringLiteral("Walk Through Desktops (Reverse)"),
+        // KWin's own Overview holds Meta+W, the overview toggle's default.
+        QStringLiteral("Overview")};
     const auto applyStockRebind = [this]() {
         if (!m_settings->workspacesRebindKWinShortcuts()) {
             restoreKWinShortcutBackup(m_shortcutManager.get());
@@ -908,44 +887,18 @@ void Daemon::initializeWorkspaces()
             });
     }
 
-    // Window → screen resolver for the owner-wins reunion arm: an engine's
-    // live tracking wins; the placement store's last managed-context screen
-    // covers untracked (floating) windows that still carry a record. Empty
-    // means "cannot vouch" and the controller skips the check.
-    m_workspaceController->setWindowScreenResolver([this](const QString& windowId) -> QString {
-        for (PhosphorEngine::PlacementEngineBase* engine :
-             {m_scrollEngine.get(), m_autotileEngine.get(), m_snapEngine.get()}) {
-            if (engine && engine->isWindowTracked(windowId)) {
-                return engine->screenForTrackedWindow(windowId);
-            }
-        }
-        if (m_windowTrackingAdaptor) {
-            if (auto* service = m_windowTrackingAdaptor->service()) {
-                if (const auto record = service->placementStore().peekExact(windowId)) {
-                    return record->screenId;
-                }
-            }
-        }
-        return QString();
+    // Window → screen resolver for the owner-wins reunion arm and the sticky
+    // predicate for the named-workspace verbs; both are the daemon's shared
+    // answers (daemon/overview.cpp), the overview builder reads the same two.
+    m_workspaceController->setWindowScreenResolver([this](const QString& windowId) {
+        return trackedWindowScreen(windowId);
     });
-
-    // Sticky predicate for the named-workspace verbs: the SAME answer the
-    // adaptor's move slot refuses on (crossmode.cpp asks
-    // WindowTrackingService::isWindowSticky after shadowWindowId, and
-    // shadowWindowId is that service's own canonicalizeForLookup, so the
-    // single call here lands on the identical key). Read through the daemon
-    // on every call rather than captured, so a torn-down service cannot be
-    // dereferenced; no service means "cannot tell" and the verbs keep their
-    // pre-check behaviour.
     m_workspaceController->setWindowStickyPredicate([this](const QString& windowId) {
-        if (!m_windowTrackingAdaptor) {
-            return false;
-        }
-        auto* service = m_windowTrackingAdaptor->service();
-        return service && service->isWindowSticky(windowId);
+        return isTrackedWindowSticky(windowId);
     });
 
     m_workspaceController->start();
+    initializeOverview();
     qCInfo(lcDaemon) << "dynamic workspaces active";
 }
 
@@ -967,6 +920,7 @@ void Daemon::teardownWorkspaces()
     // controller, then tear the controller down (its dtor writes the final
     // state file) and hand KWin its chords back. The kwinrc write is
     // deliberately NOT reverted (stated in the UI).
+    teardownOverview();
     m_workspaceWiring.reset();
     if (m_shortcutManager) {
         m_shortcutManager->unregisterAdhocShortcuts(m_workspaceNamedShortcutIds);

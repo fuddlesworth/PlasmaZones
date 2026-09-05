@@ -25,7 +25,9 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>
@@ -136,6 +138,80 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId
                       targetDesktopId);
 }
 
+void WindowTrackingAdaptor::moveWindowToWorkspaceWithIntent(const QString& rawWindowId, const QString& targetScreenId,
+                                                            int targetDesktop, const QString& targetDesktopId,
+                                                            const PhosphorEngine::HandoffIntent& intent)
+{
+    if (rawWindowId.isEmpty() || targetDesktop < 1 || targetScreenId.isEmpty()) {
+        return;
+    }
+    const QString windowId = shadowWindowId(rawWindowId);
+    if (m_service && m_service->isWindowSticky(windowId)) {
+        qCDebug(lcDbusWindow) << "overview move: refusing sticky window" << windowId;
+        return;
+    }
+    PhosphorEngine::PlacementEngineBase* sourceEngine = nullptr;
+    for (PhosphorEngine::PlacementEngineBase* engine :
+         {m_scrollEngine.data(), m_autotileEngine.data(), m_snapEngine.data()}) {
+        if (engine && engine->isWindowTracked(windowId)) {
+            sourceEngine = engine;
+            break;
+        }
+    }
+    if (!sourceEngine) {
+        // Untracked (floating / excluded): the plain desktop and output legs,
+        // as the directional verb does; there is no engine state to place.
+        emitDesktopMove(windowId, targetDesktop, targetDesktopId);
+        Q_EMIT windowOutputMoveRequested(windowId, targetScreenId);
+        return;
+    }
+    crossModeMoveImpl(sourceEngine, windowId, targetScreenId, targetDesktop, QStringLiteral("down"),
+                      /*allowSameEngine=*/true, targetDesktopId, intent);
+}
+
+QStringList WindowTrackingAdaptor::resolveDropLanding(PhosphorZones::AssignmentEntry::Mode targetMode,
+                                                      PhosphorEngine::PlacementEngineBase* targetEngine,
+                                                      const QString& targetScreenId, int targetDesktop,
+                                                      const QString& activity,
+                                                      PhosphorEngine::HandoffIntent& intent) const
+{
+    QStringList landingZoneIds;
+    if (!intent.dropPos) {
+        return landingZoneIds;
+    }
+    const QPoint drop = *intent.dropPos;
+    if (targetMode == PhosphorZones::AssignmentEntry::Snapping) {
+        // The zone under the drop on the TARGET context's layout. Zone
+        // geometry resolves through the tracking service, which finds a zone
+        // in any layout, so a non-current desktop's layout answers too.
+        PhosphorZones::Layout* layout =
+            m_layoutManager ? m_layoutManager->layoutForScreen(targetScreenId, targetDesktop, activity) : nullptr;
+        if (layout && m_service) {
+            for (PhosphorZones::Zone* zone : layout->zones()) {
+                if (!zone) {
+                    continue;
+                }
+                const QString zoneId = zone->id().toString();
+                if (m_service->zoneGeometry(zoneId, targetScreenId).contains(drop)) {
+                    landingZoneIds = QStringList{zoneId};
+                    break;
+                }
+            }
+        }
+        // No zone under the drop: the window is left free at its live frame
+        // (the receive's no-zone arm), which is what niri does for a drop
+        // onto empty floating space.
+        return landingZoneIds;
+    }
+    if (targetMode == PhosphorZones::AssignmentEntry::Autotile && intent.insertIndex < 0) {
+        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(targetEngine)) {
+            const PhosphorEngine::PlacementStateKey key{targetScreenId, targetDesktop, activity};
+            intent.insertIndex = autotile->insertIndexForPoint(key, drop);
+        }
+    }
+    return landingZoneIds;
+}
+
 void WindowTrackingAdaptor::emitDesktopMove(const QString& windowId, int targetDesktop, const QString& targetDesktopId)
 {
     // Prefer the id. The number is a POSITION, resolved daemon-side and then
@@ -155,7 +231,8 @@ void WindowTrackingAdaptor::emitDesktopMove(const QString& windowId, int targetD
 void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine,
                                               const QString& windowId, const QString& targetScreenId, int targetDesktop,
                                               const QString& direction, bool allowSameEngine,
-                                              const QString& targetDesktopId)
+                                              const QString& targetDesktopId,
+                                              const std::optional<PhosphorEngine::HandoffIntent>& intent)
 {
     if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
         return;
@@ -195,7 +272,22 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     // target — the SnapEngine cast fails there and the zone list stays empty,
     // which is what a strip target needs (its landing is insertIndex, below).
     QStringList landingZoneIds;
-    if (!targetIsAutotile) {
+    // An overview drop names its landing itself: the zone under the drop for
+    // a snap target, the slot under it for an autotile one. Resolved BEFORE
+    // the release below, like the directional zone resolution.
+    PhosphorEngine::HandoffIntent resolvedIntent = intent.value_or(PhosphorEngine::HandoffIntent{});
+    if (intent) {
+        landingZoneIds =
+            resolveDropLanding(targetMode, targetEngine, targetScreenId, effectiveDesktop, activity, resolvedIntent);
+    }
+    // A snap window dropped onto empty space of its OWN engine keeps its
+    // zone unless the engine lets go: a same-engine handoff skips the release
+    // (it is a re-key), so release here and let the receive re-track it free.
+    if (intent && landingZoneIds.isEmpty() && targetEngine == sourceEngine
+        && targetMode == PhosphorZones::AssignmentEntry::Snapping) {
+        sourceEngine->handoffRelease(windowId);
+    }
+    if (!targetIsAutotile && landingZoneIds.isEmpty() && !intent) {
         auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine);
         QString zoneId;
         if (snapTarget) {
@@ -237,7 +329,12 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     //   - cross-desktop onto a SCROLLING desktop: scroll handoffReceive honours
     //     toDesktop too (places into that desktop's strip) — the reactive
     //     deferral is autotile-only.
-    const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
+    // The overview path (an intent) receives immediately even on an autotile
+    // desktop: the deferral existed because directional verbs had no
+    // target-desktop state to place into, and the drop names one; the
+    // receive keys the window into the target desktop's state and the
+    // overview shows it there at once.
+    const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0 && !intent;
     bool placedOnTarget = false;
     // Set only on the reactive branch (see its arm below): the compositor-side
     // output hop that branch has no other carrier for.
@@ -263,6 +360,17 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         // appends at the right end, same as "left".
         if (targetMode == PhosphorZones::AssignmentEntry::Scrolling && direction == QLatin1String("right")) {
             ctx.insertIndex = 0;
+        }
+        if (intent) {
+            // The autotile receive treats a drop point as "append, ignore the
+            // slot"; its slot is already resolved into insertIndex above.
+            if (resolvedIntent.dropPos && !targetIsAutotile) {
+                ctx.dropPos = *resolvedIntent.dropPos;
+            }
+            if (resolvedIntent.insertIndex >= 0) {
+                ctx.insertIndex = resolvedIntent.insertIndex;
+            }
+            ctx.insertTileIndex = resolvedIntent.insertTileIndex;
         }
         // An autotile target's handoffReceive also announces the arrival's
         // tiled (non-floating) state on the passive float-sync channel —

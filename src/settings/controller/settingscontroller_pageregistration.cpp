@@ -133,6 +133,10 @@ void SettingsController::buildApplicationController()
                QStringLiteral("input-keyboard"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("workspaces-overview"), QStringLiteral("workspaces"), PhosphorI18n::tr("Overview"),
+               QStringLiteral("pages/workspaces/WorkspacesOverviewPage.qml"), QStringLiteral("view-grid"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category. Divider after it (i.e.
     // above Appearance) sets the placement categories apart from the
