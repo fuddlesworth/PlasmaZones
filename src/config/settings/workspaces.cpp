@@ -32,6 +32,35 @@ P_STORE_GET(bool, workspacesRebindKWinShortcuts, workspacesBehaviorGroup, rebind
 P_STORE_SET_BOOL(setWorkspacesRebindKWinShortcuts, workspacesBehaviorGroup, rebindKWinShortcutsKey,
                  workspacesRebindKWinShortcutsChanged)
 
+// Workspaces.Overview: the overview effect's look and input. Read by the
+// KWin effect over the settings wire (see the adaptor registry). ISettings
+// carries defaulted getters for these five (its header does not see
+// ConfigDefaults), so the agreement is pinned here the way scrolling.cpp
+// pins the tab indicator's; the backdrop string is checked in the
+// settings-defaults test since a QString cannot be a constant expression.
+static_assert(ConfigDefaults::overviewZoom() == 0.5,
+              "ISettings::overviewZoom defaults to 0.5 — update it with this default");
+static_assert(ConfigDefaults::overviewGestureEnabled(),
+              "ISettings::overviewGestureEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::overviewWheelSwitchesWorkspaces(),
+              "ISettings::overviewWheelSwitchesWorkspaces defaults to true — update it with this default");
+static_assert(ConfigDefaults::overviewShowWorkspaceNames(),
+              "ISettings::overviewShowWorkspaceNames defaults to true — update it with this default");
+P_STORE_GET(qreal, overviewZoom, workspacesOverviewGroup, overviewZoomKey, double)
+P_STORE_SET_DOUBLE(setOverviewZoom, workspacesOverviewGroup, overviewZoomKey, overviewZoomChanged)
+P_STORE_GET(QString, overviewBackdropColor, workspacesOverviewGroup, overviewBackdropColorKey, QString)
+P_STORE_SET_STRING(setOverviewBackdropColor, workspacesOverviewGroup, overviewBackdropColorKey,
+                   overviewBackdropColorChanged)
+P_STORE_GET(bool, overviewGestureEnabled, workspacesOverviewGroup, overviewGestureEnabledKey, bool)
+P_STORE_SET_BOOL(setOverviewGestureEnabled, workspacesOverviewGroup, overviewGestureEnabledKey,
+                 overviewGestureEnabledChanged)
+P_STORE_GET(bool, overviewWheelSwitchesWorkspaces, workspacesOverviewGroup, overviewWheelSwitchesWorkspacesKey, bool)
+P_STORE_SET_BOOL(setOverviewWheelSwitchesWorkspaces, workspacesOverviewGroup, overviewWheelSwitchesWorkspacesKey,
+                 overviewWheelSwitchesWorkspacesChanged)
+P_STORE_GET(bool, overviewShowWorkspaceNames, workspacesOverviewGroup, overviewShowWorkspaceNamesKey, bool)
+P_STORE_SET_BOOL(setOverviewShowWorkspaceNames, workspacesOverviewGroup, overviewShowWorkspaceNamesKey,
+                 overviewShowWorkspaceNamesChanged)
+
 // Named-workspace declarations: whole-replace QVariantList composite, same
 // write shape as the trigger lists (read-back compare so a semantically
 // identical list swallows no signal).

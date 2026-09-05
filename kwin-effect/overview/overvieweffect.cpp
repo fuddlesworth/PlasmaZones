@@ -55,6 +55,20 @@ OverviewEffect::OverviewEffect()
                 }
             });
 
+    // Desktop names: KWin owns them, the label reads them through
+    // desktopName() and re-reads on every revision bump.
+    const auto desktops = KWin::effects->desktops();
+    for (KWin::VirtualDesktop* desktop : desktops) {
+        watchDesktopName(desktop);
+    }
+    connect(KWin::effects, &KWin::EffectsHandler::desktopAdded, this, [this](KWin::VirtualDesktop* desktop) {
+        watchDesktopName(desktop);
+        bumpDesktopNames();
+    });
+    connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop*) {
+        bumpDesktopNames();
+    });
+
     // The live per-output desktop swipe, shown inside an open overview. A
     // programmatic setCurrentDesktop emits only desktopChanged, so this is
     // purely for the touchpad gesture.
@@ -329,6 +343,12 @@ void OverviewEffect::tryStart()
         m_state->deactivate();
         return;
     }
+    // A swipe reaches here as an in-progress partial activation; the
+    // shortcut and the daemon's toggle never do.
+    if (!m_gestureEnabled && m_state->inProgress()) {
+        m_state->deactivate();
+        return;
+    }
     // The data source is the workspace map; before adoption (or with the
     // feature off) it is empty and there is nothing honest to draw.
     if (!m_daemon->isAvailable() || m_daemon->workspaceMap().isEmpty()) {
@@ -390,6 +410,28 @@ void OverviewEffect::toggle()
     }
 }
 
+QString OverviewEffect::desktopName(const QString& desktopId) const
+{
+    const auto desktops = KWin::effects->desktops();
+    for (KWin::VirtualDesktop* desktop : desktops) {
+        if (desktop->id() == desktopId) {
+            return desktop->name();
+        }
+    }
+    return QString();
+}
+
+void OverviewEffect::watchDesktopName(KWin::VirtualDesktop* desktop)
+{
+    connect(desktop, &KWin::VirtualDesktop::nameChanged, this, &OverviewEffect::bumpDesktopNames);
+}
+
+void OverviewEffect::bumpDesktopNames()
+{
+    ++m_desktopNamesRevision;
+    Q_EMIT desktopNamesRevisionChanged();
+}
+
 void OverviewEffect::loadSettings()
 {
     using PhosphorProtocol::ClientHelpers::loadSettingAsync;
@@ -409,6 +451,45 @@ void OverviewEffect::loadSettings()
         }
         m_motionTree = PhosphorAnimation::ProfileTree::fromJson(doc.object(), m_curveRegistry);
         resolveAnimationDuration();
+    });
+    // Workspaces.Overview. The daemon's schema already clamps the zoom and
+    // canonicalises the colour, so the guards here only cover a wire value
+    // that failed to convert at all.
+    loadSettingAsync(this, QStringLiteral("overviewZoom"), [this](const QVariant& v) {
+        bool ok = false;
+        const qreal zoom = v.toDouble(&ok);
+        if (!ok || zoom <= 0.0 || zoom >= 1.0 || qFuzzyCompare(1.0 + zoom, 1.0 + m_zoom)) {
+            return;
+        }
+        m_zoom = zoom;
+        Q_EMIT zoomChanged();
+    });
+    loadSettingAsync(this, QStringLiteral("overviewBackdropColor"), [this](const QVariant& v) {
+        const QColor color(v.toString());
+        if (!color.isValid() || color == m_backdropColor) {
+            return;
+        }
+        m_backdropColor = color;
+        Q_EMIT backdropColorChanged();
+    });
+    loadSettingAsync(this, QStringLiteral("overviewGestureEnabled"), [this](const QVariant& v) {
+        m_gestureEnabled = v.toBool();
+    });
+    loadSettingAsync(this, QStringLiteral("overviewWheelSwitchesWorkspaces"), [this](const QVariant& v) {
+        const bool enabled = v.toBool();
+        if (enabled == m_wheelSwitchesWorkspaces) {
+            return;
+        }
+        m_wheelSwitchesWorkspaces = enabled;
+        Q_EMIT wheelSwitchesWorkspacesChanged();
+    });
+    loadSettingAsync(this, QStringLiteral("overviewShowWorkspaceNames"), [this](const QVariant& v) {
+        const bool enabled = v.toBool();
+        if (enabled == m_showWorkspaceNames) {
+            return;
+        }
+        m_showWorkspaceNames = enabled;
+        Q_EMIT showWorkspaceNamesChanged();
     });
 }
 

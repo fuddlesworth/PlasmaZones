@@ -395,6 +395,48 @@ public:
     {
     }
 
+    // The workspace overview's five keys (Workspaces.Overview), on the
+    // interface for the same reason the tab indicator toggle above is: the
+    // settings registry publishes them through these accessors and the
+    // overview KWin effect reads them back over that wire. The literals are
+    // pinned against their ConfigDefaults twins by static_asserts in
+    // settings/workspaces.cpp, the same way the block above is pinned.
+    virtual qreal overviewZoom() const
+    {
+        return 0.5;
+    }
+    virtual void setOverviewZoom(qreal /*zoom*/)
+    {
+    }
+    virtual QString overviewBackdropColor() const
+    {
+        return QStringLiteral("#262626");
+    }
+    virtual void setOverviewBackdropColor(const QString& /*color*/)
+    {
+    }
+    virtual bool overviewGestureEnabled() const
+    {
+        return true;
+    }
+    virtual void setOverviewGestureEnabled(bool /*enabled*/)
+    {
+    }
+    virtual bool overviewWheelSwitchesWorkspaces() const
+    {
+        return true;
+    }
+    virtual void setOverviewWheelSwitchesWorkspaces(bool /*enabled*/)
+    {
+    }
+    virtual bool overviewShowWorkspaceNames() const
+    {
+        return true;
+    }
+    virtual void setOverviewShowWorkspaceNames(bool /*enabled*/)
+    {
+    }
+
     // The tab indicator's PAINT settings, on this interface for the same
     // reason the toggle above is: the settings registry publishes them and the
     // KWin effect's loadCachedSettings reads them back to paint the pills. The
@@ -1028,6 +1070,14 @@ Q_SIGNALS:
     void workspacesSnapBackOsdHintChanged();
     void workspacesNamedEntriesChanged();
     void workspacesRebindKWinShortcutsChanged();
+    // Workspace overview (Workspaces.Overview). The getter/setter pairs are
+    // declared in the public section above with defaulted bodies; only the
+    // signals live here.
+    void overviewZoomChanged();
+    void overviewBackdropColorChanged();
+    void overviewGestureEnabledChanged();
+    void overviewWheelSwitchesWorkspacesChanged();
+    void overviewShowWorkspaceNamesChanged();
     void workspaceFocusUpShortcutChanged();
     void workspaceFocusDownShortcutChanged();
     void workspaceMoveWindowUpShortcutChanged();

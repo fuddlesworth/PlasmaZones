@@ -49,6 +49,52 @@ public:
         return true;
     }
 
+    // ── Workspaces.Overview ──────────────────────────────────────────────
+
+    /// How far the overview zooms out when fully open: a cell is the screen
+    /// scaled by this. niri's overview.zoom default and bounds.
+    static constexpr double overviewZoom()
+    {
+        return 0.5;
+    }
+    static constexpr double overviewZoomMin()
+    {
+        return 0.1;
+    }
+    static constexpr double overviewZoomMax()
+    {
+        return 0.75;
+    }
+
+    /// The colour drawn behind the zoomed-out workspaces. A concrete colour
+    /// rather than a theme-fallback sentinel: the overview replaces the
+    /// whole screen and niri's neutral dark grey reads correctly on every
+    /// wallpaper.
+    static QString overviewBackdropColor()
+    {
+        return QStringLiteral("#262626");
+    }
+
+    /// Open the overview with a four-finger touchpad swipe up (three fingers
+    /// on a touchscreen).
+    static constexpr bool overviewGestureEnabled()
+    {
+        return true;
+    }
+
+    /// The mouse wheel over a monitor's column switches that monitor's
+    /// workspace while the overview is open.
+    static constexpr bool overviewWheelSwitchesWorkspaces()
+    {
+        return true;
+    }
+
+    /// Show each workspace's name (or its number) above its cell.
+    static constexpr bool overviewShowWorkspaceNames()
+    {
+        return true;
+    }
+
     /// Named-workspace declarations: none by default. Entry shape (all
     /// QVariantMap fields): name (unique, non-empty), output (screenId, empty
     /// = unpinned), position (preferred slice index, -1 = before the trailing

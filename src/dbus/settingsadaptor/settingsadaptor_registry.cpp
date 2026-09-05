@@ -835,6 +835,15 @@ void SettingsAdaptor::initializeRegistry()
                                  setRotateVirtualScreensCounterclockwiseShortcut)
     }
 
+    // Workspace overview: read by the overview KWin effect through
+    // loadSettingAsync, so each key must be reachable here.
+    REGISTER_DOUBLE_SETTING("overviewZoom", overviewZoom, setOverviewZoom)
+    REGISTER_STRING_SETTING("overviewBackdropColor", overviewBackdropColor, setOverviewBackdropColor)
+    REGISTER_BOOL_SETTING("overviewGestureEnabled", overviewGestureEnabled, setOverviewGestureEnabled)
+    REGISTER_BOOL_SETTING("overviewWheelSwitchesWorkspaces", overviewWheelSwitchesWorkspaces,
+                          setOverviewWheelSwitchesWorkspaces)
+    REGISTER_BOOL_SETTING("overviewShowWorkspaceNames", overviewShowWorkspaceNames, setOverviewShowWorkspaceNames)
+
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
 #undef REGISTER_VALIDATED_STRING_SETTING

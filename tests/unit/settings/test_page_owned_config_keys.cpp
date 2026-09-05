@@ -211,7 +211,8 @@ private Q_SLOTS:
               ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup(),
               ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
               ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::workspacesBehaviorGroup(),
-              ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::workspacesSlotsGroup()}) {
+              ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::workspacesSlotsGroup(),
+              ConfigDefaults::workspacesOverviewGroup()}) {
             const auto it = schema.groups.constFind(group);
             if (it == schema.groups.constEnd()) {
                 // Collect-then-assert, like the rest of this file: an abort

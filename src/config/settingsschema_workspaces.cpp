@@ -12,7 +12,9 @@
 #include "settingsschema.h"
 
 #include "configdefaults.h"
+#include "settingsschema_p.h"
 
+#include <QColor>
 #include <QSet>
 
 #include <algorithm>
@@ -83,6 +85,17 @@ QVariant canonicalNamedEntries(const QVariant& v)
     return out;
 }
 
+/// The overview backdrop: any string QColor parses, stored in the form it
+/// was given; anything else is the default.
+QVariant canonicalBackdropColor(const QVariant& value)
+{
+    const QString text = value.toString().trimmed();
+    if (!text.isEmpty() && QColor::isValidColorName(text)) {
+        return text;
+    }
+    return ConfigDefaults::overviewBackdropColor();
+}
+
 } // namespace
 
 void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
@@ -108,6 +121,25 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
         {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList,
          QStringLiteral("The named workspaces, each of which persists while empty and may be pinned to a monitor."),
          canonicalNamedEntries},
+    };
+    // The workspace overview's look and input. The backdrop is a concrete
+    // colour string; an unparseable value falls back to the default so the
+    // effect never paints an invalid colour.
+    schema.groups[CD::workspacesOverviewGroup()] = {
+        {CD::overviewZoomKey(), CD::overviewZoom(), QMetaType::Double,
+         QStringLiteral("How far the overview zooms out when it is fully open. Each workspace is drawn at this "
+                        "fraction of the screen."),
+         SchemaValidators::clampDouble(CD::overviewZoomMin(), CD::overviewZoomMax())},
+        {CD::overviewBackdropColorKey(), CD::overviewBackdropColor(), QMetaType::QString,
+         QStringLiteral("The colour drawn behind the zoomed-out workspaces."), canonicalBackdropColor},
+        {CD::overviewGestureEnabledKey(), CD::overviewGestureEnabled(), QMetaType::Bool,
+         QStringLiteral("Opens the overview with a four-finger swipe up on a touchpad, or three fingers on a touch "
+                        "screen.")},
+        {CD::overviewWheelSwitchesWorkspacesKey(), CD::overviewWheelSwitchesWorkspaces(), QMetaType::Bool,
+         QStringLiteral("Lets the mouse wheel over a monitor's column switch that monitor's workspace while the "
+                        "overview is open.")},
+        {CD::overviewShowWorkspaceNamesKey(), CD::overviewShowWorkspaceNames(), QMetaType::Bool,
+         QStringLiteral("Shows each workspace's name, or its number, above it in the overview.")},
     };
     // Quick-slot targets: the named workspace each move slot sends the
     // active window to; empty = unassigned (the slot's chord does nothing).

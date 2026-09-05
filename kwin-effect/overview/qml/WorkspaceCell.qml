@@ -64,6 +64,14 @@ DropArea {
         if (cell.entry && cell.entry.name) {
             return cell.entry.name;
         }
+        // A dynamic workspace carries no declaration; its label is whatever
+        // KWin calls the desktop (a rename pushes there). The revision read
+        // is what re-evaluates this when a name moves.
+        void cell.root.effect.desktopNamesRevision;
+        const kwinName = cell.desktopId ? cell.root.effect.desktopName(cell.desktopId) : "";
+        if (kwinName) {
+            return kwinName;
+        }
         return i18nd("plasmazones", "Workspace %1", cell.entry ? cell.entry.index : 0);
     }
     readonly property alias nameLabel: nameLabel

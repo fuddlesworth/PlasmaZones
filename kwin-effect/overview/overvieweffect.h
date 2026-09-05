@@ -48,6 +48,9 @@ class OverviewEffect : public KWin::QuickSceneEffect
     /// The parsed dynamic-workspaces map ({v, generation, screenOrder,
     /// slices: {screenId: [{id, index, name?, current?}]}}).
     Q_PROPERTY(QVariantMap workspaceMap READ workspaceMap NOTIFY workspaceMapChanged)
+    /// Bumped whenever a desktop is added, removed or renamed; a label binds
+    /// to it so desktopName() is re-read when KWin's names move.
+    Q_PROPERTY(int desktopNamesRevision READ desktopNamesRevision NOTIFY desktopNamesRevisionChanged)
     /// The parsed overview model (see dbus/org.plasmazones.Overview.xml).
     Q_PROPERTY(QVariantMap overviewModel READ overviewModel NOTIFY overviewModelChanged)
     Q_PROPERTY(bool daemonAvailable READ daemonAvailable NOTIFY daemonAvailableChanged)
@@ -89,6 +92,13 @@ public:
     /// connector, plus a "/connector" suffix while a duplicate model is
     /// connected). Every id sent to the daemon comes from here.
     Q_INVOKABLE QString screenIdFor(KWin::LogicalOutput* output) const;
+    /// KWin's current name for a desktop id (the name a rename pushed, or
+    /// KWin's own default); empty when the desktop is gone.
+    Q_INVOKABLE QString desktopName(const QString& desktopId) const;
+    int desktopNamesRevision() const
+    {
+        return m_desktopNamesRevision;
+    }
     /// The QUuid handle WindowThumbnail wants, for a daemon window id; an
     /// invalid QVariant when the window is gone.
     Q_INVOKABLE QVariant windowHandle(const QString& windowId) const;
@@ -138,15 +148,18 @@ Q_SIGNALS:
     void workspaceMapChanged();
     void overviewModelChanged();
     void daemonAvailableChanged();
+    void desktopNamesRevisionChanged();
     void desktopOffsetChanged(KWin::LogicalOutput* screen);
 
 protected:
     QVariantMap initialProperties(KWin::LogicalOutput* screen) override;
 
 private Q_SLOTS:
-    /// Re-fetch the two settings the effect reads (global animation duration
-    /// and the motion profile tree). Bound to the daemon's settingsChanged and
-    /// motionProfileTreeChanged broadcasts by name, hence a slot.
+    /// Re-fetch everything the effect reads from the daemon: the global
+    /// animation duration, the motion profile tree and the Workspaces.Overview
+    /// group (zoom, backdrop, gesture, wheel, names). Bound to the daemon's
+    /// settingsChanged and motionProfileTreeChanged broadcasts by name, hence
+    /// a slot.
     void loadSettings();
 
 private:
@@ -159,6 +172,8 @@ private:
     void resolveAnimationDuration();
     void setAnimationDuration(int duration);
     KWin::EffectWindow* windowFor(const QString& windowId) const;
+    void watchDesktopName(KWin::VirtualDesktop* desktop);
+    void bumpDesktopNames();
 
     KWin::EffectTogglableState* const m_state;
     QTimer* const m_shutdownTimer;
@@ -166,12 +181,17 @@ private:
     QHash<KWin::LogicalOutput*, QPointF> m_screenDesktopOffsets;
     mutable QHash<QString, QString> m_screenIdCache;
     bool m_daemonOpen = false;
+    int m_desktopNamesRevision = 0;
 
     int m_animationDuration = 300;
     qreal m_zoom = 0.5;
     QColor m_backdropColor = QColor(0x26, 0x26, 0x26);
     bool m_showWorkspaceNames = true;
     bool m_wheelSwitchesWorkspaces = true;
+    // The swipe gesture is registered once with KWin (its QActions live on
+    // the togglable state and cannot be unregistered), so the setting is a
+    // gate in tryStart: a gesture-driven activation is rolled back while off.
+    bool m_gestureEnabled = true;
 
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     PhosphorAnimation::Profile m_globalMotion;

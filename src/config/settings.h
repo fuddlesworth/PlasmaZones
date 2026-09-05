@@ -405,6 +405,16 @@ public:
                    workspacesNamedEntriesChanged)
     Q_PROPERTY(bool workspacesRebindKWinShortcuts READ workspacesRebindKWinShortcuts WRITE
                    setWorkspacesRebindKWinShortcuts NOTIFY workspacesRebindKWinShortcutsChanged)
+    // Workspace overview (Workspaces.Overview)
+    Q_PROPERTY(qreal overviewZoom READ overviewZoom WRITE setOverviewZoom NOTIFY overviewZoomChanged)
+    Q_PROPERTY(QString overviewBackdropColor READ overviewBackdropColor WRITE setOverviewBackdropColor NOTIFY
+                   overviewBackdropColorChanged)
+    Q_PROPERTY(bool overviewGestureEnabled READ overviewGestureEnabled WRITE setOverviewGestureEnabled NOTIFY
+                   overviewGestureEnabledChanged)
+    Q_PROPERTY(bool overviewWheelSwitchesWorkspaces READ overviewWheelSwitchesWorkspaces WRITE
+                   setOverviewWheelSwitchesWorkspaces NOTIFY overviewWheelSwitchesWorkspacesChanged)
+    Q_PROPERTY(bool overviewShowWorkspaceNames READ overviewShowWorkspaceNames WRITE setOverviewShowWorkspaceNames
+                   NOTIFY overviewShowWorkspaceNamesChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -1396,6 +1406,18 @@ public:
     void setWorkspacesNamedEntries(const QVariantList& entries);
     bool workspacesRebindKWinShortcuts() const;
     void setWorkspacesRebindKWinShortcuts(bool enabled);
+    // Workspace overview (Workspaces.Overview). The zoom is clamped by the
+    // schema validator to ConfigDefaults::overviewZoomMin()..Max().
+    qreal overviewZoom() const override;
+    void setOverviewZoom(qreal zoom) override;
+    QString overviewBackdropColor() const override;
+    void setOverviewBackdropColor(const QString& color) override;
+    bool overviewGestureEnabled() const override;
+    void setOverviewGestureEnabled(bool enabled) override;
+    bool overviewWheelSwitchesWorkspaces() const override;
+    void setOverviewWheelSwitchesWorkspaces(bool enabled) override;
+    bool overviewShowWorkspaceNames() const override;
+    void setOverviewShowWorkspaceNames(bool enabled) override;
     QString workspaceFocusUpShortcut() const;
     void setWorkspaceFocusUpShortcut(const QString& shortcut);
     QString workspaceFocusDownShortcut() const;

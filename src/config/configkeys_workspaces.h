@@ -38,6 +38,10 @@ public:
     P_CONFIG_GROUP(workspacesBehaviorGroup, "Workspaces.Behavior")
     P_CONFIG_GROUP(workspacesNamedGroup, "Workspaces.Named")
     P_CONFIG_GROUP(workspacesSlotsGroup, "Workspaces.Slots")
+    // The workspace overview's look and input (read by the overview KWin
+    // effect through the settings wire, so every key here is registered in
+    // the settings adaptor registry).
+    P_CONFIG_GROUP(workspacesOverviewGroup, "Workspaces.Overview")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Indexed quick-slot count
@@ -144,6 +148,21 @@ public:
     P_CONFIG_KEY(workspaceMoveToMonitorLeftKey, "WorkspaceMoveToMonitorLeft")
     P_CONFIG_KEY(workspaceMoveToMonitorRightKey, "WorkspaceMoveToMonitorRight")
     P_CONFIG_KEY(overviewToggleKey, "OverviewToggle")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Workspaces.Overview
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Fully open zoom factor (niri's overview.zoom).
+    P_CONFIG_KEY(overviewZoomKey, "Zoom")
+    // Concrete #RRGGBB / #AARRGGBB behind the zoomed-out workspaces.
+    P_CONFIG_KEY(overviewBackdropColorKey, "BackdropColor")
+    // Four-finger touchpad / three-finger touchscreen swipe opens it.
+    P_CONFIG_KEY(overviewGestureEnabledKey, "GestureEnabled")
+    // The wheel over a workspace column switches that screen's workspace.
+    P_CONFIG_KEY(overviewWheelSwitchesWorkspacesKey, "WheelSwitchesWorkspaces")
+    // Name labels above every workspace cell.
+    P_CONFIG_KEY(overviewShowWorkspaceNamesKey, "ShowWorkspaceNames")
 };
 
 } // namespace PlasmaZones
