@@ -34,16 +34,22 @@ QtObject {
     // reveal / dismiss for a surface opening and closing, tick for a
     // discrete step (volume notch, clock minute). The M3 durations above
     // stay for settings pages.
+    //
+    // Reduced motion (05 §3.2) keeps every primitive, because they carry
+    // state, and halves the long tails: release 180 ms, the long release
+    // 360 ms, reveal a 120 ms opacity enter. Enter, dismiss and tick are
+    // already at the floor.
     readonly property int duration_enter: 90
-    readonly property int duration_enter_content: 140
-    readonly property int duration_release: 360
-    readonly property int duration_release_long: 720
-    readonly property int duration_reveal: 220
+    readonly property int duration_enter_content: reducedMotion ? 100 : 140
+    readonly property int duration_release: reducedMotion ? 180 : 360
+    readonly property int duration_release_long: reducedMotion ? 360 : 720
+    readonly property int duration_reveal: reducedMotion ? 120 : 220
     readonly property int duration_dismiss: 140
     readonly property int duration_tick: 60
-    // Reduced-motion switch. The shell host sets this from the session's
-    // accessibility preference at startup; chrome reads it to drop the
-    // idle gleam and the overshoot on enter. Default off.
+    // Reduced-motion switch. The shell host binds this to the session's
+    // accessibility preference (ShellMotion.reducedMotion, from the
+    // settings portal); chrome reads it to drop the idle gleam and the
+    // overshoot on enter. Default off.
     property bool reducedMotion: false
     // ─── Easings ─────────────────────────────────────────────────────────
     // M3 standard, emphasized, decelerated, and accelerated curves.

@@ -337,24 +337,17 @@ Item {
                     easing: Motion.reveal
                 }
             }
-            // Travels with its window rather than re-appearing.
+            // Travels with its window rather than re-appearing, on the
+            // settle spring (A1 M4): a window still being dragged keeps
+            // retargeting one motion instead of restarting a bezier.
             Behavior on x {
-                NumberAnimation {
-                    duration: Motion.duration_enter_content
-                    easing: Motion.reveal
-                }
+                SettleAnimation {}
             }
             Behavior on y {
-                NumberAnimation {
-                    duration: Motion.duration_enter_content
-                    easing: Motion.reveal
-                }
+                SettleAnimation {}
             }
             Behavior on width {
-                NumberAnimation {
-                    duration: Motion.duration_enter_content
-                    easing: Motion.reveal
-                }
+                SettleAnimation {}
             }
         }
     }

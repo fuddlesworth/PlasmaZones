@@ -7,6 +7,7 @@
 // Pulls in the public surface of the library so consumers can write
 // `#include <PhosphorTheme/PhosphorTheme.h>` instead of cherry-picking.
 
+#include <PhosphorTheme/FontFaces.h>
 #include <PhosphorTheme/IThemeService.h>
 #include <PhosphorTheme/MatugenRunner.h>
 #include <PhosphorTheme/PaletteStore.h>

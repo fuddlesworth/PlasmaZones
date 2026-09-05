@@ -53,6 +53,15 @@ import QtQuick
 Item {
     id: root
 
+    // The session's reduced-motion preference, read by the host from the
+    // settings portal (ShellMotion), drives the theme's motion switch:
+    // release tails halve, enter loses its overshoot, the gleam stops.
+    Binding {
+        target: Motion
+        property: "reducedMotion"
+        value: ShellMotion.reducedMotion
+    }
+
     // The wallpaper, one surface per output, and the first of the
     // per-screen surfaces because it is the bottom layer: a Background
     // panel that draws what WallpaperService resolves for its output.

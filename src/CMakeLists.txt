@@ -736,6 +736,8 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/panerules.cpp
         shell/ShellEffects.h
         shell/shelleffects.cpp
+        shell/ShellMotion.h
+        shell/shellmotion.cpp
         # The launcher's registry owner: built-in providers, the model the
         # launcher popout binds, and the clipboard + Toplevels services the
         # providers read that nothing else in the shell owns yet.
@@ -809,6 +811,11 @@ if(BUILD_PHOSPHOR_SHELL)
             # loaded at startup through PaletteStore (see main.cpp).
             PhosphorShellPicker::PhosphorShellPickerQml
             PhosphorShellPickerQmlplugin
+            # ShellMotion owns the profile registry behind SettleAnimation
+            # and publishes the QML-side motion defaults.
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorAnimation::PhosphorAnimationQml
+            PhosphorAnimationQmlplugin
             PhosphorShellPolkit::PhosphorShellPolkitQml
             PhosphorShellPolkitQmlplugin
             PhosphorTheme::PhosphorTheme

@@ -65,6 +65,7 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/SpectrumStroke.qml
     qml/Phosphor/Widgets/SpectrumUnderline.qml
     qml/Phosphor/Widgets/TabularText.qml
+    qml/Phosphor/Widgets/SettleAnimation.qml
     qml/Phosphor/Widgets/PlacementMiniature.qml
     qml/Phosphor/Widgets/MiniatureEdges.js
     # Phase 3.2 connected-corner primitives.
@@ -117,6 +118,9 @@ qt_add_qml_module(PhosphorShellWidgetsQml
     # import does.
     DEPENDENCIES
         org.kde.kirigami
+        # SettleAnimation is a PhosphorMotionAnimation; the module is
+        # linked below so the import resolves in a static build.
+        org.phosphor.animation
     SOURCES
         src/phosphorshellwidgets_qml_plugin.cpp
     QML_FILES ${_phosphor_widgets_qml_files}
@@ -151,6 +155,14 @@ endif()
 if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorShellWidgetsQml PUBLIC PhosphorThemeQmlplugin)
 endif()
+# The motion runtime behind SettleAnimation, module and registrar both, so
+# every consumer of the widgets (and their tests) resolves the import.
+target_link_libraries(PhosphorShellWidgetsQml
+    PUBLIC
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAnimation::PhosphorAnimationQml
+        PhosphorAnimationQmlplugin
+)
 
 # Static archive: VERSION/SOVERSION apply to SHARED libraries only and are
 # silently ignored on STATIC. Don't set them so the property surface

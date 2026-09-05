@@ -81,11 +81,11 @@ Item {
         height: card._vertical ? _len : (card.showProgress ? 3 : 2)
         color: card._hue
 
+        // The fill end tracks a live value (A3 §4 follow), so it settles
+        // on the spring: a run of volume notches retargets one motion
+        // instead of stacking a bezier per notch.
         Behavior on _len {
-            NumberAnimation {
-                duration: Motion.duration_enter_content
-                easing: Motion.reveal
-            }
+            SettleAnimation {}
         }
     }
 
@@ -103,12 +103,17 @@ Item {
             sourceComponent: card.icon
         }
 
+        // The readout rides a window's edge with no ground of its own
+        // (A3 §4), so a 1 px outline in the void colour keeps the figure
+        // legible over a light window as well as a dark one.
         TabularText {
             anchors.verticalCenter: parent.verticalCenter
             visible: card.showProgress
             text: Math.round(card._fraction * 100)
             font.pixelSize: Tokens.font_size_display_m
             font.weight: Tokens.font_weight_medium
+            style: Text.Outline
+            styleColor: Theme.background
             tickOnChange: true
             t: card._fraction
         }
@@ -119,6 +124,8 @@ Item {
             Accessible.ignored: true
             text: card.label
             color: Theme.on_surface_variant
+            style: Text.Outline
+            styleColor: Theme.background
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_label_m
             font.capitalization: Font.AllUppercase

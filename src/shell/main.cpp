@@ -12,6 +12,7 @@
 #include "PolkitController.h"
 #include "RoutingPopoutTransport.h"
 #include "ShellEffects.h"
+#include "ShellMotion.h"
 #include "SocketPopoutTransport.h"
 #include "ToastController.h"
 
@@ -350,6 +351,14 @@ int main(int argc, char* argv[])
     // Compositor-side effects the QML asks for (blur behind the bar band).
     PhosphorShellApp::ShellEffects shellEffects;
 
+    // The motion root: the profile registry every `shell.*` profile
+    // binding resolves against, and the session's reduced-motion
+    // preference. Published as the QML defaults before the engine exists
+    // and unpublished only after it is gone (reverse declaration order),
+    // because Behavior bindings keep registry handles.
+    PhosphorShellApp::ShellMotion shellMotion;
+    shellMotion.publish();
+
     // The pane's window rule, seeded into the daemon's store if absent so
     // the engines know where to put a toplevel with the pane's app id.
     PhosphorShellApp::PaneRules::seed(
@@ -455,6 +464,9 @@ int main(int argc, char* argv[])
     // shell builds, startup and each hot reload alike.
     // Compositor effects, same shape: shell.qml asks for blur behind the
     // bar band through ShellEffects.setBlurBehind.
+    engine.addEngineHook([&shellMotion](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellMotion"), &shellMotion);
+    });
     engine.addEngineHook([&shellEffects](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellEffects"), &shellEffects);
     });

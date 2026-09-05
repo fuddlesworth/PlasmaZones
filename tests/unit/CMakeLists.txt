@@ -2366,6 +2366,27 @@ target_link_libraries(test_osd_controller
 target_include_directories(test_osd_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_osd_controller COMMAND test_osd_controller)
 
+# The shell's motion root: settle profile, QML default publication, and
+# the portal's reduced-motion decoding.
+add_executable(test_shell_motion
+    shell/test_shell_motion.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ShellMotion.h
+    ${CMAKE_SOURCE_DIR}/src/shell/shellmotion.cpp
+)
+target_link_libraries(test_shell_motion
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAnimation::PhosphorAnimationQml
+)
+target_include_directories(test_shell_motion PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_shell_motion COMMAND test_shell_motion)
+
 # The toast broker behind the `notify` IpcTarget.
 add_executable(test_toast_controller
     shell/test_toast_controller.cpp
