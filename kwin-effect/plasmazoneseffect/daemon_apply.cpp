@@ -111,9 +111,12 @@ void PlasmaZonesEffect::placeWindowWhereItIs(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
 {
-    if (desktop < 1) {
-        return;
-    }
+    // No early bail on desktop < 1. It arrives over a D-Bus signal, and 0 is
+    // not hypothetical — it is WindowPlacement::virtualDesktop's own sentinel
+    // for "on all desktops / unknown". desktopByNumber() answers nullptr for
+    // it like any other unresolvable number, which routes it into the recovery
+    // below; returning here instead would skip that and leave the window
+    // unplaced for the rest of the session.
     KWin::EffectWindow* w = findWindowById(windowId);
     if (!w) {
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;

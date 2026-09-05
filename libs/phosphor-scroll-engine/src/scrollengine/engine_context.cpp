@@ -1020,15 +1020,6 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     if (matches(m_activeScreen)) {
         m_activeScreen.clear();
     }
-    // Three screen-keyed maps are deliberately NOT swept here: m_pendingRetiles,
-    // m_closeReflowHoldUntil and m_closeReflowFlushScheduled. All three are
-    // single-turn scheduling state that self-drains within one event-loop pass,
-    // and each of their consumers re-resolves the screen (applyLayout no-ops for
-    // a screen outside the scrolling set, and the close-reflow flush goes
-    // through it), so a leftover entry for a dead output only expires. Adding
-    // them to the walk above is not the fix either: the ordering contract on
-    // this function forbids re-entrant work inside the removeStatesIf
-    // iteration.
     if (!releasedWindows.isEmpty()) {
         // Emit first, sweep second: the handler reads the float markers and the
         // last-applied rects. releasedWindows is the same list

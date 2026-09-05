@@ -112,6 +112,20 @@ void VirtualDesktopManager::initKWinDBus()
     }
 
     m_useKWinDBus = true;
+    // The `rows` / `current` property reads below and in refreshFromKWin are
+    // synchronous, and QDBusInterface defaults to a 25-second timeout. A
+    // wedged-but-registered KWin would stall whichever thread refreshes for
+    // that long, which for the shell is the GUI thread. One second is far
+    // beyond any healthy round trip and bounds the damage.
+    //
+    // This does NOT bound everything: QDBusInterface's constructor above
+    // already performed a blocking Introspect call at the 25-second default
+    // before isValid() could be consulted, and setTimeout cannot reach
+    // backwards to it. Capping that too would mean probing with a bounded
+    // message before constructing the interface, or building it
+    // asynchronously — worth doing if a wedged KWin ever shows up in
+    // practice, but not something this line achieves.
+    m_kwinVDInterface->setTimeout(1000);
     refreshRowsFromKWin();
     // Subscribing and refreshing are NOT part of binding: this is also the
     // KWin-restart path, and a stopped manager must come out of it bound but
@@ -209,6 +223,24 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
     QStringList names;
     ids.reserve(desktops.size());
     names.reserve(desktops.size());
+    // D-Bus replies are a system boundary, and a signature mismatch makes
+    // QDBusArgument extraction yield DEFAULTS silently — the empty-list check
+    // below catches a fully-empty result but not a partially-garbage one whose
+    // ids all demarshalled to empty strings. An empty id can never be a real
+    // KWin desktop UUID, so the whole snapshot is rejected.
+    //
+    // Rejected by DROPPING the parsed ids rather than returning here, so the
+    // failure lands in the retry arm below: everything this class publishes is
+    // keyed by id (m_currentDesktopId, desktopIndexOf, setCurrentDesktopById,
+    // and the reconciler's ledger matching), so committing blank ids would
+    // poison all of it, and a bare return would leave the cache stale with no
+    // re-ask armed.
+    const bool anyIdBlank = std::any_of(desktops.cbegin(), desktops.cend(), [](const DesktopInfo& d) {
+        return d.id.isEmpty();
+    });
+    if (anyIdBlank) {
+        desktops.clear();
+    }
     for (const auto& desktop : desktops) {
         ids.append(desktop.id);
         // RAW, exactly as KWin reports it — an empty entry means "unnamed".
