@@ -290,6 +290,26 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         // failed blit means THIS slice is missing, not that the others are invalid.
         return;
     }
+    // The backdrop is OPAQUE by construction — it is the scene painted below
+    // this window, and KWin's scene starts from an opaque background — but
+    // the framebuffer it was just blitted from does not always say so. The
+    // strip pass (StripTransitionManager) uses its capture's alpha as a side
+    // channel: it zeroes it at the strip band's bottom edge so that, once the
+    // columns have painted, alpha is the strip layer's coverage. A column's
+    // backdrop captured inside that walk therefore arrives with alpha 0 under
+    // wallpaper-coloured texels, and the blur pack builds its frost's alpha
+    // from the blurred backdrop's, so the pane vanished for the length of
+    // every scroll leg. Stamp alpha to 1 across the texture: the written
+    // slices are opaque scene, and the never-written margin is never sampled
+    // (backdropTexel clamps into backdropRect), so the blanket fill is exact
+    // where it matters and harmless where it does not. Colour is untouched.
+    // The guard above restores the clear colour; the mask is restored here.
+    KWin::GLFramebuffer::pushFramebuffer(&fbo);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    KWin::GLFramebuffer::popFramebuffer();
     // Valid sub-rect in TEXTURE PIXELS first, normalized at the end — matches
     // backdropTexel's clamp space. Non-restart captures UNION with the slices
     // already accumulated (sibling outputs tiling the canvas, earlier damage
