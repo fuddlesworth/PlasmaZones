@@ -323,6 +323,29 @@ QList<TileRect> tileRectsFromJson(const QString& tilesJson)
     return tiles;
 }
 
+QList<Cell> stackedColumns(const QStringList& windowIds)
+{
+    QStringList ids;
+    for (const QString& id : windowIds) {
+        if (!id.isEmpty()) {
+            ids.append(id);
+        }
+    }
+    QList<Cell> cells;
+    cells.reserve(ids.size());
+    const qreal w = ids.isEmpty() ? 0.0 : 1.0 / ids.size();
+    for (int i = 0; i < ids.size(); ++i) {
+        Cell c;
+        c.id = ids[i];
+        c.windowId = ids[i];
+        c.rect = QRectF(i * w, 0.0, w, 1.0);
+        c.t = hueFor(c.rect);
+        c.occupied = true;
+        cells.append(c);
+    }
+    return cells;
+}
+
 QList<Cell> parseCurrentTiles(const QString& tilesJson, const QString& screenId, const QRect& workArea)
 {
     return parseTileBatch(tileRectsFromJson(tilesJson), screenId, workArea);

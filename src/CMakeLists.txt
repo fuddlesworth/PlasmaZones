@@ -153,6 +153,7 @@ set(plasmazones_core_SRCS
     dbus/compositorbridgeadaptor.cpp
     dbus/compositorbridgeadaptor.h
     dbus/controladaptor.cpp
+    dbus/controladaptor_shortcuts.cpp
     dbus/controladaptor.h
     dbus/overlayadaptor.cpp
     dbus/overlayadaptor.h
@@ -177,6 +178,7 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor/shellsurface.cpp
+    dbus/windowtrackingadaptor/shellsurface_desktop.cpp
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/windowdragadaptor/windowdragadaptor.cpp
@@ -750,6 +752,14 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/qmlcomponentosdfactory.cpp
         shell/ToastController.h
         shell/toastcontroller.cpp
+        # The PolicyKit agent owner (registers the shell as the session's
+        # agent, starts each PAM conversation, carries the requester's pid
+        # and the prompt's placement) and the picker strip's open state:
+        # the PolkitRegistry / PickerRegistry context properties.
+        shell/PolkitController.h
+        shell/polkitcontroller.cpp
+        shell/PickerController.h
+        shell/pickercontroller.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -783,6 +793,25 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellOsdQmlplugin
             PhosphorShellNotifications::PhosphorShellNotificationsQml
             PhosphorShellNotificationsQmlplugin
+            # Phosphor.Dashboard + its registrar: the dashboard and the
+            # cheatsheet popouts shell.qml opens, and the ShortcutCatalog
+            # the sheet reads its chords through.
+            PhosphorShellDashboard::PhosphorShellDashboardQml
+            PhosphorShellDashboardQmlplugin
+            # Phosphor.Lock + its registrar, for the per-screen lock
+            # surfaces shell.qml mounts (LockSurface windows + LockScreen).
+            PhosphorShellLock::PhosphorShellLockQml
+            PhosphorShellLockQmlplugin
+            # Phosphor.Picker (the wallpaper and theme strip, whose C++
+            # types ride in the module) and Phosphor.Polkit (the prompt)
+            # + their registrars, for the per-screen strips and the polkit
+            # popout shell.qml mounts. The picker's committed palette is
+            # loaded at startup through PaletteStore (see main.cpp).
+            PhosphorShellPicker::PhosphorShellPickerQml
+            PhosphorShellPickerQmlplugin
+            PhosphorShellPolkit::PhosphorShellPolkitQml
+            PhosphorShellPolkitQmlplugin
+            PhosphorTheme::PhosphorTheme
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.

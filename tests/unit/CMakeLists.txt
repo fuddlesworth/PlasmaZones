@@ -1237,6 +1237,21 @@ add_executable(test_wta_shell_surface dbus/test_wta_shell_surface.cpp)
 target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_shell_surface COMMAND test_wta_shell_surface)
 
+# The per-desktop reads of the same surface (shellsurface_desktop.cpp):
+# getWindowStatesForDesktop's desktop / sticky / screen filter and
+# findWindowByPid's most-recent-push tie-break.
+add_executable(test_wta_shell_desktop dbus/test_wta_shell_desktop.cpp)
+target_link_libraries(test_wta_shell_desktop PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_wta_shell_desktop COMMAND test_wta_shell_desktop)
+
+# ControlAdaptor's shortcut catalog read (controladaptor_shortcuts.cpp):
+# getShortcutsJson serialises the injected provider's rows and answers []
+# without one; shortcutsChanged relays notifyShortcutsChanged.
+add_executable(test_control_shortcuts dbus/test_control_shortcuts.cpp)
+target_link_libraries(test_control_shortcuts PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_control_shortcuts COMMAND test_control_shortcuts)
+
 add_executable(test_settings_schema dbus/test_settings_schema.cpp)
 target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_settings_schema COMMAND test_settings_schema)

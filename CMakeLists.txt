@@ -399,6 +399,10 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell-launcher)       # Launcher core: ILauncherProvider implementations, fzf-style matcher, .desktop scanner (Phase 4.2); depends on registry
     add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the shell-tier libs that also require KF6 Kirigami (bar, power, control-center and launcher)
     add_subdirectory(libs/phosphor-shell-power)    # Phosphor.Power session menu (Phase 4.6); depends on theme + widgets + Kirigami
+    add_subdirectory(libs/phosphor-shell-dashboard) # Phosphor.Dashboard: dashboard grid + keybind cheatsheet on the placement map (Phase 4); depends on theme + widgets + protocol
+    add_subdirectory(libs/phosphor-shell-picker)   # Phosphor.Picker wallpaper and theme strip (Phase 4); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-polkit)   # Phosphor.Polkit authentication prompt (Phase 4); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-lock)     # Phosphor.Lock lockscreen surface (Phase 4); depends on theme + widgets + Kirigami + phosphor-wayland (lock surfaces)
 endif()
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine

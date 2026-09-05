@@ -34,6 +34,14 @@ public:
             integration->display()->flushRequests();
     }
 
+    // Publish (or retract) the lock object for the QPA layer: lock surfaces
+    // are created against it in LayerShellIntegration::createShellSurface.
+    static void publishLock(struct ext_session_lock_v1* lock)
+    {
+        if (auto* integration = LayerShellIntegration::instance())
+            integration->setActiveSessionLock(lock);
+    }
+
     static void handleLocked(void* data, struct ext_session_lock_v1*)
     {
         auto* self = static_cast<Private*>(data);
@@ -55,6 +63,7 @@ public:
         // protocol-correct destructor (unlock_and_destroy iff `locked` was
         // sent, destroy otherwise) so the proxy is freed exactly once.
         if (self->lockObj) {
+            publishLock(nullptr);
             if (self->isLocked)
                 ext_session_lock_v1_unlock_and_destroy(self->lockObj);
             else
@@ -89,6 +98,8 @@ SessionLock::~SessionLock()
         // locked event into the same error. The proxy is reclaimed when the
         // wl_display tears down.
         wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(d->lockObj), nullptr);
+        // No lock surface may be created against a proxy whose owner is gone.
+        Private::publishLock(nullptr);
     }
 }
 
@@ -120,13 +131,24 @@ void SessionLock::lock()
         .finished = Private::handleFinished,
     };
     ext_session_lock_v1_add_listener(d->lockObj, &listener, d.get());
+    // Surfaces may be created from here on: the protocol wants one per
+    // output before the compositor presents the locked frame, so this must
+    // not wait for `locked`.
+    Private::publishLock(d->lockObj);
     d->flush();
+}
+
+bool SessionLock::canCreateSurfaces()
+{
+    auto* integration = LayerShellIntegration::instance();
+    return integration && integration->activeSessionLock();
 }
 
 void SessionLock::unlockAndDestroy()
 {
     if (!d->lockObj || !d->isLocked)
         return; // unlock_and_destroy is a protocol error before `locked`.
+    Private::publishLock(nullptr);
     ext_session_lock_v1_unlock_and_destroy(d->lockObj);
     d->lockObj = nullptr;
     d->isLocked = false;

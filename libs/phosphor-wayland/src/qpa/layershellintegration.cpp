@@ -3,8 +3,10 @@
 
 #include "layershellintegration.h"
 #include "layershellwindow.h"
+#include "sessionlockwindow.h"
 #include "../compositorlost_internal.h"
 #include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorWayland/LockSurface.h>
 
 #include <algorithm>
 #include <cstring>
@@ -122,8 +124,28 @@ bool LayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay* display
 QtWaylandClient::QWaylandShellSurface*
 LayerShellIntegration::createShellSurface(QtWaylandClient::QWaylandWindow* window)
 {
-    // Only create layer surfaces for windows we've marked
     QWindow* qwindow = window->window();
+
+    // A lock surface is a child of the active ext_session_lock_v1, so it can
+    // only exist while SessionLock holds one. Refusing leaves the window
+    // roleless and unmapped, which is the protocol's own answer: nothing may
+    // be presented as a lock surface outside a lock. Deliberately NOT handed
+    // to xdg-shell either: a lock screen that came up as an ordinary toplevel
+    // would look locked without being locked.
+    if (qwindow && qwindow->property(LockSurfaceProps::IsSessionLock).toBool()) {
+        if (!m_activeSessionLock) {
+            qCWarning(lcLayerShellIntegration) << "Refusing to create a lock surface: no session lock is held";
+            return nullptr;
+        }
+        auto* lockWindow = new SessionLockWindow(this, window);
+        if (!lockWindow->isValid()) {
+            delete lockWindow;
+            return nullptr;
+        }
+        return lockWindow;
+    }
+
+    // Only create layer surfaces for windows we've marked
     if (!qwindow || !qwindow->property(LayerSurfaceProps::IsLayerShell).toBool()) {
         // Not a layer-shell window — delegate to xdg-shell so the window gets
         // a proper xdg_toplevel or xdg_popup role. Without this, the window has

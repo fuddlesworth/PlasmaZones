@@ -209,6 +209,10 @@ void PlacementMapScreen::switchDesktop(int index)
 
 int PlacementMapScreen::wireDesktop() const
 {
+    // A pinned screen IS its desktop.
+    if (isPinned()) {
+        return m_pinnedDesktop + 1;
+    }
     // The daemon's own resolved desktop for this screen (getScreenStates)
     // is the context an assignment must land on; the workspace row is the
     // fallback before the states have answered.

@@ -93,6 +93,9 @@ void WindowTrackingAdaptor::onShellRegistryMetadata(const QString& instanceId,
 {
     const QString windowId = shellWindowIdFor(instanceId);
 
+    // Desktop / pid ledger for the per-desktop reads (shellsurface_desktop.cpp).
+    recordShellWindowFacts(windowId, current);
+
     // Identity: announced on first registration (previous null) and on any
     // later change of the two fields the announcement carries. Every other
     // metadata edge (geometry, flags, a caption-only refresh that left the
@@ -124,6 +127,7 @@ void WindowTrackingAdaptor::onShellRegistryWindowGone(const QString& instanceId)
     // mapping is still available, so the id resolves to the same composite
     // the urgent set was keyed under.
     const QString windowId = shellWindowIdFor(instanceId);
+    m_shellWindowFacts.remove(windowId);
     if (m_urgentWindowIds.remove(windowId)) {
         Q_EMIT windowUrgencyChanged(windowId, false);
     }

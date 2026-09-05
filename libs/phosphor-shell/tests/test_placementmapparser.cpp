@@ -457,6 +457,61 @@ private Q_SLOTS:
         QCOMPARE(a->mode(), -1);
         QVERIFY(a->cells().isEmpty());
     }
+
+    // A desktop that cannot be replayed draws its window count as equal
+    // columns: occupied, keyed by window id, hued at their centres.
+    void stackedColumnsSplitTheWorkAreaEvenly()
+    {
+        QVERIFY(stackedColumns({}).isEmpty());
+        QVERIFY(stackedColumns({QString(), QString()}).isEmpty());
+        const auto cells = stackedColumns({QStringLiteral("a"), QString(), QStringLiteral("b"), QStringLiteral("c")});
+        QCOMPARE(cells.size(), 3);
+        QCOMPARE(cells[0].id, QStringLiteral("a"));
+        QCOMPARE(cells[0].windowId, QStringLiteral("a"));
+        QVERIFY(cells[0].occupied);
+        QCOMPARE(cells[0].rect, QRectF(0, 0, 1.0 / 3, 1));
+        QCOMPARE(cells[2].rect, QRectF(2.0 / 3, 0, 1.0 / 3, 1));
+        QCOMPARE(cells[1].t, 0.5);
+        QCOMPARE(cells[2].zoneNumber, 0);
+        QCOMPARE(cells[2].columnIndex, -1);
+    }
+
+    // forScreenDesktop: the same ownership rule as forScreen, one object
+    // per (screen, desktop), and the live screen for the current desktop
+    // (or a negative index). Without a compositor the workspace model is
+    // empty, so no index is current and every non-negative one is pinned.
+    void forScreenDesktopVendsOnePinnedScreenPerDesktop()
+    {
+        PlacementMap map;
+        PlacementMapScreen* live = map.forScreen(QStringLiteral("DP-1"));
+        QCOMPARE(live->pinnedDesktop(), -1);
+        QVERIFY(!live->isPinned());
+        QCOMPARE(map.forScreenDesktop(QStringLiteral("DP-1"), -1), live);
+        QCOMPARE(map.forScreenDesktop(QStringLiteral("DP-1"), -7), live);
+
+        PlacementMapScreen* second = map.forScreenDesktop(QStringLiteral("DP-1"), 1);
+        QVERIFY(second);
+        QVERIFY(second != live);
+        QCOMPARE(second->parent(), &map);
+        QCOMPARE(QQmlEngine::objectOwnership(second), QQmlEngine::CppOwnership);
+        QCOMPARE(second->pinnedDesktop(), 1);
+        QVERIFY(second->isPinned());
+        QCOMPARE(second->screenName(), QStringLiteral("DP-1"));
+        // Cached per (screen, desktop): the same object again, another for
+        // another desktop, another for another screen.
+        QCOMPARE(map.forScreenDesktop(QStringLiteral("DP-1"), 1), second);
+        QVERIFY(map.forScreenDesktop(QStringLiteral("DP-1"), 2) != second);
+        QVERIFY(map.forScreenDesktop(QStringLiteral("DP-2"), 1) != second);
+        // The live one is untouched by the pinned ones.
+        QCOMPARE(map.forScreen(QStringLiteral("DP-1")), live);
+        // No daemon: a pinned screen reads as none, with no cells, and its
+        // verbs are inert like the live screen's.
+        QCOMPARE(second->mode(), -1);
+        QVERIFY(second->cells().isEmpty());
+        second->activate(QStringLiteral("x"));
+        second->switchDesktop(1);
+        QVERIFY(second->cellRect(QStringLiteral("x")).isNull());
+    }
 };
 
 QTEST_MAIN(TestPlacementMapParser)

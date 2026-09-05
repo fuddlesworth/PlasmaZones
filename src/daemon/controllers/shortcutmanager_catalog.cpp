@@ -525,7 +525,7 @@ QString lastKeyToken(const QString& sequence)
 
 } // namespace
 
-QVariantList ShortcutManager::cheatsheetModel() const
+QVector<QVariantMap> ShortcutManager::catalogRows() const
 {
     QVector<QVariantMap> rows;
     rows.reserve(m_entries.size());
@@ -570,6 +570,42 @@ QVariantList ShortcutManager::cheatsheetModel() const
         row.insert(QStringLiteral("mode"), QString::fromLatin1(meta.mode));
         rows.push_back(row);
     }
+    return rows;
+}
+
+void ShortcutManager::sortCatalogRows(QVector<QVariantMap>& rows)
+{
+    // Category blocks in display order, then the catalog table's authored
+    // row order within each block. The old single-key sort fell back to
+    // REGISTRATION order inside a category, which was append order across
+    // many PRs, not a reading order. Sorting the map vector (before the
+    // QVariantList conversion) compares by reference instead of detaching
+    // two QVariantMaps per comparison.
+    std::stable_sort(rows.begin(), rows.end(), [](const QVariantMap& a, const QVariantMap& b) {
+        const int catA = a.value(QLatin1String("categoryOrder")).toInt();
+        const int catB = b.value(QLatin1String("categoryOrder")).toInt();
+        if (catA != catB) {
+            return catA < catB;
+        }
+        return a.value(QLatin1String("rowOrder")).toInt() < b.value(QLatin1String("rowOrder")).toInt();
+    });
+}
+
+QVariantList ShortcutManager::shortcutCatalog() const
+{
+    QVector<QVariantMap> rows = catalogRows();
+    sortCatalogRows(rows);
+    QVariantList model;
+    model.reserve(rows.size());
+    for (const QVariantMap& row : std::as_const(rows)) {
+        model.push_back(row);
+    }
+    return model;
+}
+
+QVariantList ShortcutManager::cheatsheetModel() const
+{
+    const QVector<QVariantMap> rows = catalogRows();
 
     // ─── Family compression ────────────────────────────────────────────────
     // The numbered slot families (kIndexedSlotCount rows each) and the
@@ -660,20 +696,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     };
 
     QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);
-    // Category blocks in display order, then the catalog table's authored
-    // row order within each block. The old single-key sort fell back to
-    // REGISTRATION order inside a category, which was append order across
-    // many PRs, not a reading order. Sorting the map vector (before the
-    // QVariantList conversion) compares by reference instead of detaching
-    // two QVariantMaps per comparison.
-    std::stable_sort(out.begin(), out.end(), [](const QVariantMap& a, const QVariantMap& b) {
-        const int catA = a.value(QLatin1String("categoryOrder")).toInt();
-        const int catB = b.value(QLatin1String("categoryOrder")).toInt();
-        if (catA != catB) {
-            return catA < catB;
-        }
-        return a.value(QLatin1String("rowOrder")).toInt() < b.value(QLatin1String("rowOrder")).toInt();
-    });
+    sortCatalogRows(out);
     QVariantList model;
     model.reserve(out.size());
     for (const QVariantMap& row : std::as_const(out)) {

@@ -56,7 +56,10 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using PlasmaZones::TestHelpers::StubOverlayService;
 namespace Key = PhosphorProtocol::Service::DropProxyKey;
 
-namespace {
+// Named, not anonymous: the test class's Fixture (a member of a Q_OBJECT
+// class with external linkage) holds one of these by value, and a field of
+// anonymous-namespace type there is a -Wsubobject-linkage warning.
+namespace DropProxyTestSupport {
 
 QJsonArray rectJson(const QRect& r)
 {
@@ -89,7 +92,9 @@ public:
     int clears = 0;
 };
 
-} // namespace
+} // namespace DropProxyTestSupport
+
+using namespace DropProxyTestSupport;
 
 class TestWindowDragDropProxy : public QObject
 {

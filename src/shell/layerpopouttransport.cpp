@@ -367,14 +367,17 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     role.anchors = PhosphorLayer::AnchorAll;
     role.exclusiveZone = -1;
     // Exclusive is a wholesale keyboard grab on the Overlay layer, so only a
-    // Modal earns it: that is the case where the popout genuinely is the only
-    // thing the user should be typing at. `keyboardFocus` defaults to true, so
-    // granting Exclusive on it alone would give a tray or calendar popout the
-    // keyboard away from the focused application. OnDemand gives those focus
-    // when clicked and leaves it alone otherwise.
+    // Modal earns it by default: that is the case where the popout genuinely
+    // is the only thing the user should be typing at. `keyboardFocus`
+    // defaults to true, so granting Exclusive on it alone would give a tray
+    // or calendar popout the keyboard away from the focused application.
+    // OnDemand gives those focus when clicked and leaves it alone otherwise.
+    // A request may ask for the grab explicitly (`exclusiveKeyboard`)
+    // without the Modal scrim: a credential prompt must not lose the
+    // keyboard to a click elsewhere, and it does not dim the desktop.
     if (!request.keyboardFocus) {
         role.keyboard = PhosphorLayer::KeyboardInteractivity::None;
-    } else if (request.exclusive == PhosphorPopout::ExclusiveMode::Modal) {
+    } else if (request.exclusive == PhosphorPopout::ExclusiveMode::Modal || request.exclusiveKeyboard) {
         role.keyboard = PhosphorLayer::KeyboardInteractivity::Exclusive;
     } else {
         role.keyboard = PhosphorLayer::KeyboardInteractivity::OnDemand;

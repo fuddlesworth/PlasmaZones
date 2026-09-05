@@ -180,6 +180,17 @@ PHOSPHORSHELL_EXPORT StripParse parseStripModel(const QString& modelJson);
  */
 PHOSPHORSHELL_EXPORT QList<TileRect> tileRectsFromJson(const QString& tilesJson);
 
+/**
+ * @brief Equal columns for a desktop whose tiles cannot be replayed.
+ *
+ * A tiling or scrolling desktop that is not current has no engine batch
+ * or strip to read, so its map shows what IS known: the desktop's window
+ * count, as `windowIds.size()` equal columns across the work area, each
+ * occupied, keyed by its window id and hued at its centre. Empty ids are
+ * dropped. An empty list is an empty map.
+ */
+PHOSPHORSHELL_EXPORT QList<Cell> stackedColumns(const QStringList& windowIds);
+
 /// `parseTileBatch(tileRectsFromJson(tilesJson), screenId, workArea)`.
 PHOSPHORSHELL_EXPORT QList<Cell> parseCurrentTiles(const QString& tilesJson, const QString& screenId,
                                                    const QRect& workArea);

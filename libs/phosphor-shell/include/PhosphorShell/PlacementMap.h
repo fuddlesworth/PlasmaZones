@@ -6,6 +6,8 @@
 #include <PhosphorShell/PlacementMapParser.h>
 #include <PhosphorShell/phosphorshell_export.h>
 
+#include <PhosphorProtocol/WindowTypes.h>
+
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -60,6 +62,15 @@ class Workspaces;
  *
  * `currentDesktop` and `switchDesktop(index)` are both 0-based, matching
  * the row index of `Workspaces.model`.
+ *
+ * `pinnedDesktop` is -1 for the live screen (`forScreen`) and the 0-based
+ * desktop for a screen vended by `forScreenDesktop`: a view of that
+ * desktop's placement whether or not it is current (A3 §7, the
+ * dashboard's grid). A pinned screen reads its mode and snapping layout
+ * per desktop (`getModeForScreenDesktop`, `getLayoutForScreenDesktop`)
+ * and its occupancy from `WindowTracking.getWindowStatesForDesktop`; it
+ * never follows the engine's focus or a tile batch, both of which are
+ * the current desktop's. See placementmap_desktop.cpp.
  */
 class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
 {
@@ -79,6 +90,7 @@ class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
     Q_PROPERTY(int currentDesktop READ currentDesktop NOTIFY currentDesktopChanged)
     Q_PROPERTY(bool urgent READ isUrgent NOTIFY urgentChanged)
     Q_PROPERTY(QVariantList menuModel READ menuModel NOTIFY menuModelChanged)
+    Q_PROPERTY(int pinnedDesktop READ pinnedDesktop CONSTANT)
 
 public:
     enum Mode {
@@ -90,7 +102,12 @@ public:
     Q_ENUM(Mode)
 
     PlacementMapScreen(const QString& screenName, PlacementMap* parent);
+    /// A screen pinned to the 0-based `desktopIndex` (placementmap_desktop.cpp).
+    PlacementMapScreen(const QString& screenName, int desktopIndex, PlacementMap* parent);
     ~PlacementMapScreen() override;
+
+    [[nodiscard]] int pinnedDesktop() const;
+    [[nodiscard]] bool isPinned() const;
 
     [[nodiscard]] QString screenName() const;
     [[nodiscard]] QString screenId() const;
@@ -172,6 +189,10 @@ public:
     void tileBatchReceived(const QList<PlacementMapParser::TileRect>& tiles);
     /// `Tiling.tilingChanged` for this screen.
     void tilingChanged();
+    /// `WindowTracking.windowStateChanged` landed in the singleton's table
+    /// (or the table was re-seeded). The live screen rebuilds from it; a
+    /// pinned screen re-reads its desktop's states instead.
+    void windowStatesChanged();
     /// `Scrolling.stripChanged` / `stripContextChanged` for this screen.
     void stripChanged();
     /// `Tiling.focusedWindowChanged` for this screen: the engine's own
@@ -219,6 +240,12 @@ private:
     void fetchScrollingMenu();
     void setMenu(const QVariantList& menu);
     void runVerb(const QString& id);
+    // placementmap_desktop.cpp
+    void fetchPinnedMode();
+    void fetchPinnedSnappingLayout();
+    void fetchDesktopWindows();
+    void applyDesktopWindows(const PhosphorProtocol::WindowStateList& states);
+    void clearPinnedSource();
     void sendDropProxy(const QString& json);
     [[nodiscard]] int wireDesktop() const;
     [[nodiscard]] const PlacementMapParser::Cell* cellById(const QString& id) const;
@@ -235,6 +262,14 @@ private:
     PlacementMap* m_map = nullptr;
     QString m_screenName;
     QString m_screenId;
+    // -1 for the live screen; the 0-based desktop for a pinned one.
+    int m_pinnedDesktop = -1;
+    // Pinned screens only: the desktop's occupants (snapping) or window ids
+    // (tiling / scrolling) from getWindowStatesForDesktop, and the
+    // coalescer behind windowStatesChanged.
+    QList<PlacementMapParser::Occupant> m_pinnedOccupants;
+    QStringList m_pinnedWindowIds;
+    QTimer m_pinnedRefetch;
     // Both in the daemon's global coordinates; the published workArea and
     // cellRect() subtract the screen origin.
     QRect m_workArea;
@@ -315,6 +350,12 @@ public:
     /// The map for a QScreen name (`PanelWindow.screen.name`). Same
     /// object every call; owned by this singleton.
     Q_INVOKABLE PhosphorShell::PlacementMapScreen* forScreen(const QString& screenName);
+    /// The map for a QScreen name pinned to the 0-based `desktopIndex`
+    /// (a row of `Workspaces.model`). The CURRENT desktop's map is the live
+    /// one, so this answers `forScreen(screenName)` for it (and for a
+    /// negative index); every other desktop gets its own screen object,
+    /// cached per (screen, desktop) and owned here like the live ones.
+    Q_INVOKABLE PhosphorShell::PlacementMapScreen* forScreenDesktop(const QString& screenName, int desktopIndex);
 
     [[nodiscard]] bool isAvailable() const;
     [[nodiscard]] Workspaces* workspaces() const;
@@ -368,6 +409,7 @@ private:
         bool moveWindowToDesktop = true;
         bool moveColumnTo = true;
         bool dropProxy = true;
+        bool windowStatesForDesktop = true;
     };
 
     void setAvailable(bool available);
@@ -376,6 +418,8 @@ private:
     void seedActivity();
     void applyWindowState(const QString& windowId, const QString& screenId, const QStringList& zoneIds, bool floating);
     void forEachScreen(void (PlacementMapScreen::*fn)());
+    /// The `m_screens` key for a live (-1) or pinned screen.
+    [[nodiscard]] static QString screenKey(const QString& screenName, int desktopIndex);
     /// Ask the daemon for a window's app id and title once; the answer
     /// lands in `windowMetadata()` and rebuilds every screen.
     void requestMetadata(const QString& windowId);
@@ -387,6 +431,8 @@ private:
     PlacementMapBus* m_bus = nullptr;
     QDBusServiceWatcher* m_watcher = nullptr;
     Workspaces* m_workspaces = nullptr;
+    // Keyed by screenKey(): the live screen under its name, the pinned
+    // ones under name + desktop.
     QHash<QString, PlacementMapScreen*> m_screens;
     QHash<QString, WindowOccupancy> m_occupancy;
     quint64 m_occupancySeq = 0;

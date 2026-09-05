@@ -234,3 +234,21 @@ set_tests_properties(test_phosphorshell_inputregion_rearm PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 60
 )
+
+# WallpaperService as the shell's own wallpaper store: the per-screen map,
+# the preview layer, persistence, and the one-time seed. Points
+# XDG_CONFIG_HOME at a fixture itself, on top of the sandbox.
+add_executable(test_phosphorshell_wallpaperservice test_wallpaperservice.cpp)
+target_link_libraries(test_phosphorshell_wallpaperservice
+    PRIVATE
+        Qt6::Test
+        Qt6::Gui
+        PhosphorShell::PhosphorShell
+        PhosphorShaders::PhosphorShaders
+)
+add_test(NAME test_phosphorshell_wallpaperservice COMMAND test_phosphorshell_wallpaperservice)
+phosphorshell_isolate_test(test_phosphorshell_wallpaperservice "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_wallpaperservice PROPERTIES
+    LABELS "phosphorshell"
+    TIMEOUT 30
+)

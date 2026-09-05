@@ -37,13 +37,22 @@ using namespace PlacementMapIface;
 // =====================================================================
 
 PlacementMapScreen::PlacementMapScreen(const QString& screenName, PlacementMap* parent)
+    : PlacementMapScreen(screenName, -1, parent)
+{
+}
+
+PlacementMapScreen::PlacementMapScreen(const QString& screenName, int desktopIndex, PlacementMap* parent)
     : QObject(parent)
     , m_map(parent)
     , m_screenName(screenName)
+    , m_pinnedDesktop(desktopIndex < 0 ? -1 : desktopIndex)
 {
     m_coalesce.setSingleShot(true);
     m_coalesce.setInterval(0);
     connect(&m_coalesce, &QTimer::timeout, this, &PlacementMapScreen::publish);
+    m_pinnedRefetch.setSingleShot(true);
+    m_pinnedRefetch.setInterval(0);
+    connect(&m_pinnedRefetch, &QTimer::timeout, this, &PlacementMapScreen::fetchDesktopWindows);
 
     if (Workspaces* ws = m_map->workspaces()) {
         connect(ws, &Workspaces::activeChanged, this, &PlacementMapScreen::desktopsChanged);
@@ -130,6 +139,7 @@ void PlacementMapScreen::reseed()
     m_sourceStripExtentPx = 0;
     m_focusedWindowId.clear();
     m_focusFromDaemon = false;
+    clearPinnedSource();
     // A restarted daemon has no proxy for us; the bar re-registers on its
     // next geometry pass.
     m_dropProxyJson.clear();
@@ -145,6 +155,7 @@ void PlacementMapScreen::serviceLost()
     m_sourceStripExtentPx = 0;
     m_focusedWindowId.clear();
     m_focusFromDaemon = false;
+    clearPinnedSource();
     m_dropProxyJson.clear();
     setState(ScreenState());
     setMenu({});
@@ -185,8 +196,9 @@ void PlacementMapScreen::refreshGeometry()
         }
         m_workArea = rect;
         // A tiling batch is in screen pixels; re-normalise it against the new
-        // work area. Snapping is relative already; scrolling is re-read.
-        if (m_mode == Tiling) {
+        // work area. Snapping is relative already; scrolling is re-read, and
+        // so is a pinned desktop (its cells are not from a batch).
+        if (m_mode == Tiling && !isPinned()) {
             applyTiles(m_lastBatch);
         } else {
             fetchModeData();
@@ -198,6 +210,10 @@ void PlacementMapScreen::refreshGeometry()
 void PlacementMapScreen::refreshMode()
 {
     if (m_screenId.isEmpty()) {
+        return;
+    }
+    if (isPinned()) {
+        fetchPinnedMode();
         return;
     }
     call<QString>(Iface::LayoutRegistry, QStringLiteral("getScreenStates"), {}, [this](const QString& json) {
@@ -237,13 +253,23 @@ void PlacementMapScreen::fetchModeData()
 {
     switch (m_mode) {
     case Snapping:
-        fetchSnappingLayout();
+        if (isPinned()) {
+            fetchPinnedSnappingLayout();
+        } else {
+            fetchSnappingLayout();
+        }
         break;
     case Tiling:
-        fetchCurrentTiles();
-        break;
     case Scrolling:
-        fetchStrip();
+        // A non-current desktop has no engine replay to read: its cells
+        // are the desktop's windows (placementmap_desktop.cpp).
+        if (isPinned()) {
+            fetchDesktopWindows();
+        } else if (m_mode == Tiling) {
+            fetchCurrentTiles();
+        } else {
+            fetchStrip();
+        }
         break;
     default:
         m_source.clear();
@@ -335,7 +361,8 @@ void PlacementMapScreen::fetchCurrentTiles()
 
 void PlacementMapScreen::applyTiles(const QList<TileRect>& tiles)
 {
-    if (m_mode != Tiling) {
+    // A batch is the current desktop's; a pinned screen never draws one.
+    if (m_mode != Tiling || isPinned()) {
         return;
     }
     m_source = parseTileBatch(tiles, m_screenId, m_workArea);
@@ -348,8 +375,9 @@ void PlacementMapScreen::fetchFocus()
 {
     // The engine's own focus for this screen; mode-agnostic. Without it
     // (older daemon) the singleton's focus-request proxy stands in, which
-    // misses focus changes made with the pointer.
-    if (m_screenId.isEmpty() || !m_map->m_caps.focusQuery) {
+    // misses focus changes made with the pointer. Focus is the current
+    // desktop's; a pinned screen has none to read.
+    if (m_screenId.isEmpty() || !m_map->m_caps.focusQuery || isPinned()) {
         return;
     }
     call<QString>(
@@ -398,7 +426,14 @@ void PlacementMapScreen::tileBatchReceived(const QList<TileRect>& tiles)
 
 void PlacementMapScreen::tilingChanged()
 {
-    if (m_mode == Tiling) {
+    if (m_mode != Tiling) {
+        return;
+    }
+    if (isPinned()) {
+        // A retile on this screen may be a window arriving on or leaving
+        // the pinned desktop; the desktop read is what settles it.
+        fetchDesktopWindows();
+    } else {
         fetchCurrentTiles();
     }
 }
@@ -406,7 +441,11 @@ void PlacementMapScreen::tilingChanged()
 void PlacementMapScreen::stripChanged()
 {
     if (m_mode == Scrolling) {
-        fetchStrip();
+        if (isPinned()) {
+            fetchDesktopWindows();
+        } else {
+            fetchStrip();
+        }
     } else {
         // A context epoch change can mean the desktop switched onto a
         // scrolling context; the mode read is what settles it.
@@ -435,7 +474,9 @@ void PlacementMapScreen::desktopsChanged()
         Q_EMIT currentDesktopChanged();
         changed = true;
         // Assignments resolve per desktop; the mode may differ over there.
-        if (m_map->isAvailable() && !m_screenId.isEmpty()) {
+        // A pinned screen's desktop never moves, so it has nothing to
+        // re-read.
+        if (m_map->isAvailable() && !m_screenId.isEmpty() && !isPinned()) {
             refreshMode();
         }
     }
@@ -447,10 +488,12 @@ void PlacementMapScreen::desktopsChanged()
 void PlacementMapScreen::rebuildFromSource()
 {
     m_resolved = m_source;
-    const QString focused = effectiveFocusedWindowId();
+    // The engine's focus is the current desktop's; a pinned screen shows
+    // no focus, and its snapping occupancy is its own desktop's read.
+    const QString focused = isPinned() ? QString() : effectiveFocusedWindowId();
     switch (m_mode) {
     case Snapping:
-        applyOccupancy(m_resolved, m_map->occupantsForScreen(m_screenId), focused);
+        applyOccupancy(m_resolved, isPinned() ? m_pinnedOccupants : m_map->occupantsForScreen(m_screenId), focused);
         break;
     case Tiling:
         applyFocusByWindowId(m_resolved, focused);
@@ -588,7 +631,7 @@ PlacementMap::PlacementMap(QObject* parent)
     });
     connect(m_bus, &PlacementMapBus::windowStateChanged, this, [this](const PhosphorProtocol::WindowStateEntry& e) {
         applyWindowState(e.windowId, e.screenId, e.zoneIds.isEmpty() ? QStringList{e.zoneId} : e.zoneIds, e.isFloating);
-        forEachScreen(&PlacementMapScreen::occupancyChanged);
+        forEachScreen(&PlacementMapScreen::windowStatesChanged);
     });
     connect(m_bus, &PlacementMapBus::windowMetadataChanged, this,
             [this](const QString& windowId, const QString& appId, const QString& title) {
@@ -674,14 +717,15 @@ PlacementMap* PlacementMap::create(QQmlEngine* engine, QJSEngine* scriptEngine)
 
 PlacementMapScreen* PlacementMap::forScreen(const QString& screenName)
 {
-    if (auto it = m_screens.find(screenName); it != m_screens.end()) {
+    const QString key = screenKey(screenName, -1);
+    if (auto it = m_screens.find(key); it != m_screens.end()) {
         return it.value();
     }
     // Parented here and pinned to C++ ownership: a parentless QObject
     // handed back from a Q_INVOKABLE is collected by the QML engine.
     auto* screen = new PlacementMapScreen(screenName, this);
     QQmlEngine::setObjectOwnership(screen, QQmlEngine::CppOwnership);
-    m_screens.insert(screenName, screen);
+    m_screens.insert(key, screen);
     return screen;
 }
 
@@ -853,7 +897,7 @@ void PlacementMap::pruneMetadata()
 {
     QSet<QString> keep;
     for (auto it = m_referenced.cbegin(); it != m_referenced.cend(); ++it) {
-        if (m_screens.contains(it.key()->screenName())) {
+        if (m_screens.contains(screenKey(it.key()->screenName(), it.key()->pinnedDesktop()))) {
             keep.unite(it.value());
         }
     }
@@ -885,7 +929,7 @@ void PlacementMap::seedWindowStates()
             applyWindowState(e.windowId, e.screenId, e.zoneIds.isEmpty() ? QStringList{e.zoneId} : e.zoneIds,
                              e.isFloating);
         }
-        forEachScreen(&PlacementMapScreen::occupancyChanged);
+        forEachScreen(&PlacementMapScreen::windowStatesChanged);
     });
 }
 

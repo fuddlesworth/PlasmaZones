@@ -157,6 +157,21 @@ public:
         return m_sessionLockManagerAvailable ? m_sessionLockManager : nullptr;
     }
 
+    /// The `ext_session_lock_v1` SessionLock currently holds (requested or
+    /// granted), or nullptr. Lock surfaces are children of that object, so
+    /// `createShellSurface` reads it for a window marked with
+    /// `LockSurfaceProps::IsSessionLock`. SessionLock publishes the object
+    /// when it sends `lock` and retracts it on release; the integration never
+    /// owns it.
+    struct ext_session_lock_v1* activeSessionLock() const
+    {
+        return m_activeSessionLock;
+    }
+    void setActiveSessionLock(struct ext_session_lock_v1* lock)
+    {
+        m_activeSessionLock = lock;
+    }
+
     /// Access the Wayland display for explicit flushing after surface creation.
     QtWaylandClient::QWaylandDisplay* display() const
     {
@@ -203,6 +218,7 @@ private:
     struct ext_session_lock_manager_v1* m_sessionLockManager = nullptr;
     uint32_t m_sessionLockManagerId = 0;
     bool m_sessionLockManagerAvailable = false;
+    struct ext_session_lock_v1* m_activeSessionLock = nullptr;
 
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;

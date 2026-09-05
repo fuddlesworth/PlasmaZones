@@ -22,12 +22,13 @@ namespace PhosphorWayland {
  * session). On a successful authentication the owner calls `unlockAndDestroy()`.
  *
  * This is the foundation primitive a lock service composes; it carries no
- * authentication, no UI, and (deliberately) no lock *surfaces*. Per the
- * protocol a real lock screen must create an `ext_session_lock_surface_v1` for
- * every output before the compositor presents the locked frame and sends
- * `locked()`; that rendering layer is a shell concern wired in a later phase.
- * Until surfaces are added the compositor decides, per its own policy and time
- * limit, when (or whether) to emit `locked()`.
+ * authentication and no UI. Lock *surfaces* (one `ext_session_lock_surface_v1`
+ * per output, presented by the compositor as the locked frame) are QWindows
+ * marked through `LockSurface::get()`; the QPA plugin creates them against the
+ * lock object this class holds, so they can only exist between `lock()` and
+ * the lock's release (`canCreateSurfaces()`). The compositor decides, per its
+ * own policy and time limit, when (or whether) to emit `locked()`, and may do
+ * so before any surface exists.
  *
  * Security guarantee (from the protocol): if the client dies while the session
  * is locked, the compositor must NOT unlock. Accordingly this object never
@@ -69,6 +70,11 @@ public:
     /// True between `locked()` and `unlockAndDestroy()` (or a compositor-driven
     /// `finished()`).
     [[nodiscard]] bool isLocked() const;
+
+    /// True while a lock object exists (requested or granted), which is when a
+    /// `LockSurface`-marked window can be mapped as a lock surface. Reads the
+    /// process-wide state: at most one SessionLock holds a lock at a time.
+    static bool canCreateSurfaces();
 
 Q_SIGNALS:
     /// The session is now locked; this client owns the lock and must call

@@ -103,6 +103,8 @@ private Q_SLOTS:
     void lockRefusalReturnsToUnlocked();
     void authenticateIgnoredUntilLocked();
     void successfulAuthUnlocks();
+    void releaseFailsafeUnlocksWithoutFinish();
+    void finishUnlockIgnoredOutsideReleasing();
     void failedAuthReturnsToLocked();
     void compositorEndWhileLockedUnlocks();
     void compositorEndWhileAuthenticatingUnlocks();
@@ -187,10 +189,57 @@ void LockStateMachineTest::successfulAuthUnlocks()
     QCOMPARE(auth.lastUser, QStringLiteral("testuser")); // the session user, not the password
     QCOMPARE(auth.lastPassword, QStringLiteral("hunter2"));
 
+    // Success does not release the compositor lock yet: the surfaces get
+    // aboutToUnlock and answer with finishUnlock when their exit is done.
+    QSignalSpy aboutSpy(&machine, &LockStateMachine::aboutToUnlock);
     auth.resolveSuccess();
+    QCOMPARE(n(machine.state()), n(State::Releasing));
+    QCOMPARE(aboutSpy.count(), 1);
+    QCOMPARE(lock.unlockCalls, 0);
+    QCOMPARE(unlockedSpy.count(), 0);
+
+    machine.finishUnlock();
     QCOMPARE(n(machine.state()), n(State::Unlocked));
     QCOMPARE(lock.unlockCalls, 1); // the compositor lock was released
     QCOMPARE(unlockedSpy.count(), 1);
+    // A second finishUnlock is a no-op.
+    machine.finishUnlock();
+    QCOMPARE(lock.unlockCalls, 1);
+}
+
+void LockStateMachineTest::releaseFailsafeUnlocksWithoutFinish()
+{
+    FakeSessionLock lock;
+    FakeAuthenticator auth;
+    LockStateMachine machine(&lock, &auth, QStringLiteral("testuser"));
+    QSignalSpy unlockedSpy(&machine, &LockStateMachine::unlocked);
+
+    machine.requestLock();
+    lock.grant();
+    machine.authenticate(QStringLiteral("hunter2"));
+    auth.resolveSuccess();
+    QCOMPARE(n(machine.state()), n(State::Releasing));
+
+    // Nobody calls finishUnlock: a lock must never outlive a successful
+    // login, so the failsafe releases on its own.
+    QVERIFY(unlockedSpy.wait(LockStateMachine::ReleaseFailsafeMs + 500));
+    QCOMPARE(n(machine.state()), n(State::Unlocked));
+    QCOMPARE(lock.unlockCalls, 1);
+}
+
+void LockStateMachineTest::finishUnlockIgnoredOutsideReleasing()
+{
+    FakeSessionLock lock;
+    FakeAuthenticator auth;
+    LockStateMachine machine(&lock, &auth, QStringLiteral("testuser"));
+
+    machine.finishUnlock();
+    QCOMPARE(lock.unlockCalls, 0);
+    machine.requestLock();
+    lock.grant();
+    machine.finishUnlock();
+    QCOMPARE(n(machine.state()), n(State::Locked));
+    QCOMPARE(lock.unlockCalls, 0);
 }
 
 void LockStateMachineTest::failedAuthReturnsToLocked()

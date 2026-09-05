@@ -8,14 +8,19 @@
 #include "OsdController.h"
 #include "PanePopoutTransport.h"
 #include "PaneRules.h"
+#include "PickerController.h"
+#include "PolkitController.h"
 #include "RoutingPopoutTransport.h"
 #include "ShellEffects.h"
 #include "SocketPopoutTransport.h"
 #include "ToastController.h"
 
 #include <PhosphorShellLauncher/LauncherModel.h>
+#include <PhosphorShellPicker/RetintController.h>
+#include <PhosphorTheme/PaletteStore.h>
 
 #include <PhosphorServiceIdle/IdleService.h>
+#include <PhosphorServiceMpris/MprisHost.h>
 
 #include <PhosphorPopout/PopoutController.h>
 
@@ -46,6 +51,7 @@
 
 #include "version.h"
 
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QLoggingCategory>
@@ -270,6 +276,26 @@ int main(int argc, char* argv[])
     PhosphorShellApp::OsdController osdController;
     PhosphorShellApp::ToastController toastController;
 
+    // The dashboard's media cell reads one MprisHost for the process.
+    // Owned here rather than declared in QML because the dashboard popout
+    // is built by the transport against the root context, where a
+    // shell.qml id does not resolve, and a host per open would re-enumerate
+    // every player each time. Same reverse-destruction placement as the
+    // controllers above.
+    PhosphorServiceMpris::MprisHost dashboardMedia;
+
+    // The PolicyKit agent owner and the picker strip's open state, same
+    // shape and same declaration-order reason. Both read the screen
+    // provider, which is declared above them and so outlives them.
+    //
+    // Registering makes this process the session's authentication agent
+    // (polkit-kde-agent must not be running for that to succeed); a
+    // refusal is logged and the prompt stays inert rather than failing
+    // the shell.
+    PhosphorShellApp::PolkitController polkitController(screenProvider.get());
+    polkitController.registerAgent();
+    PhosphorShellApp::PickerController pickerController(screenProvider.get());
+
     // The IPC router every IpcTarget in the shell's QML registers with.
     // Declared before the engine for the same reverse-destruction reason as
     // the others: targets unregister themselves on destruction and must find
@@ -455,6 +481,43 @@ int main(int argc, char* argv[])
     });
     engine.addEngineHook([&toastController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ToastRegistry"), &toastController);
+    });
+    engine.addEngineHook([&dashboardMedia](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("DashboardMedia"), &dashboardMedia);
+    });
+
+    // The polkit agent owner and the picker's open state, bound the same
+    // way: the per-screen dim overlays and picker strips are
+    // PerScreenPanels delegates, and the polkit popout is built against
+    // the root context.
+    engine.addEngineHook([&polkitController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("PolkitRegistry"), &polkitController);
+    });
+    engine.addEngineHook([&pickerController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("PickerRegistry"), &pickerController);
+    });
+
+    // The palette the picker committed last time. PaletteStore is a
+    // per-engine QML singleton that starts at the built-in defaults, so
+    // every fresh engine (startup and each hot reload) loads the
+    // committed file, when there is one, and watches it from then on.
+    // The path is the picker's own convention (RetintController writes
+    // it on Apply); without the file the defaults stand.
+    engine.addEngineHook([](QQmlEngine* qmlEngine) {
+        const QString palettePath = PhosphorShellPicker::RetintController::defaultPersistPath();
+        if (!QFileInfo::exists(palettePath)) {
+            return;
+        }
+        auto* store = qmlEngine->singletonInstance<PhosphorTheme::PaletteStore*>(QStringLiteral("Phosphor.Theme"),
+                                                                                 QStringLiteral("PaletteStore"));
+        if (!store) {
+            qCWarning(lcShell) << "Phosphor.Theme's PaletteStore is not available; the committed palette at"
+                               << palettePath << "was not loaded";
+            return;
+        }
+        if (!store->loadFromFile(palettePath)) {
+            qCWarning(lcShell) << "the committed palette at" << palettePath << "did not load; using the defaults";
+        }
     });
 
     // A failure after the initial load is not fatal to the process: the

@@ -643,6 +643,34 @@ public Q_SLOTS:
      */
     QStringList getUrgentWindows();
 
+    // ── Phosphor shell surface, per-desktop reads (shellsurface_desktop.cpp).
+    // Both answer from the desktop / pid ledger the registry mirror keeps
+    // beside the urgent set: one row per registered window, refreshed on
+    // every metadata push and dropped on close. ──
+
+    /**
+     * @brief getAllWindowStates, filtered to one screen and desktop.
+     *
+     * @p virtualDesktop is 1-based; 0 means the screen's current desktop.
+     * A window is on a desktop when its last metadata push said so
+     * (virtualDesktop, or any entry of the spanned list), or when it is
+     * sticky (isSticky, or virtualDesktop 0 meaning "all"), which lands it
+     * on every desktop. An empty @p screenId means any screen. Windows the
+     * registry does not know are left out: without a push there is no
+     * desktop to compare against.
+     */
+    PhosphorProtocol::WindowStateList getWindowStatesForDesktop(const QString& screenId, int virtualDesktop);
+
+    /**
+     * @brief The tracked window whose metadata pid is @p pid.
+     *
+     * The most recent metadata push wins when several windows share the
+     * pid (a multi-window app), so the polkit prompt attaches to the
+     * window the compositor touched last. Empty when no window matches
+     * or @p pid is not positive.
+     */
+    QString findWindowByPid(int pid);
+
     /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
@@ -1606,6 +1634,26 @@ private:
     void onShellRegistryWindowGone(const QString& instanceId);
     /// Windows currently demanding attention, keyed by shell window id.
     QSet<QString> m_urgentWindowIds;
+
+    // ── Shell-surface desktop / pid ledger (shellsurface_desktop.cpp) ──
+    /// What the last metadata push said about a window's desktop and
+    /// process, keyed by shell window id. `seq` orders the pushes so a pid
+    /// shared by several windows resolves to the one pushed most recently.
+    struct ShellWindowFacts
+    {
+        int pid = 0;
+        int virtualDesktop = 0;
+        QList<int> virtualDesktops;
+        bool sticky = false;
+        quint64 seq = 0;
+    };
+    /// Registry subscriber, called from onShellRegistryMetadata: records the
+    /// push. `previous` unused; every push refreshes the row.
+    void recordShellWindowFacts(const QString& windowId, const PhosphorEngine::WindowMetadata& current);
+    /// True when the ledger row puts the window on @p desktop (1-based).
+    static bool factsOnDesktop(const ShellWindowFacts& facts, int desktop);
+    QHash<QString, ShellWindowFacts> m_shellWindowFacts;
+    quint64 m_shellWindowFactsSeq = 0;
 
     /**
      * @brief Detect which screen a zone is on by finding where its center falls

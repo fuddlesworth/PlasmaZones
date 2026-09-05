@@ -192,6 +192,7 @@ void ControlAdaptor::detach()
     m_compositorBridge = nullptr;
     m_scrollEngine = nullptr;
     m_modeRouter = nullptr;
+    m_shortcutCatalog = nullptr;
 }
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)

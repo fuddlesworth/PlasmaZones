@@ -17,6 +17,8 @@ LockStateMachine::LockStateMachine(ISessionLock* lock, IAuthenticator* authentic
     , m_authenticator(authenticator)
     , m_username(std::move(username))
 {
+    m_releaseFailsafe.setSingleShot(true);
+    connect(&m_releaseFailsafe, &QTimer::timeout, this, &LockStateMachine::finishUnlock);
     connect(m_lock, &ISessionLock::locked, this, &LockStateMachine::onLocked);
     connect(m_lock, &ISessionLock::finished, this, &LockStateMachine::onFinished);
     connect(m_authenticator, &IAuthenticator::succeeded, this, &LockStateMachine::onAuthSucceeded);
@@ -56,6 +58,7 @@ void LockStateMachine::onFinished()
     // The compositor refused the lock (while Locking) or ended an active one
     // (while Locked / Authenticating). Either way the lock object is gone and we
     // are back to an unlocked session; a fresh requestLock() is needed to retry.
+    m_releaseFailsafe.stop();
     if (m_state != LockService::State::Unlocked)
         setState(LockService::State::Unlocked);
 }
@@ -74,6 +77,19 @@ void LockStateMachine::onAuthSucceeded()
 {
     if (m_state != LockService::State::Authenticating)
         return;
+    // Do not release yet: the lock surfaces are still on screen and get to
+    // play their exit first (aboutToUnlock -> finishUnlock). The failsafe
+    // guarantees the release even if no surface ever answers.
+    setState(LockService::State::Releasing);
+    Q_EMIT aboutToUnlock();
+    m_releaseFailsafe.start(ReleaseFailsafeMs);
+}
+
+void LockStateMachine::finishUnlock()
+{
+    if (m_state != LockService::State::Releasing)
+        return;
+    m_releaseFailsafe.stop();
     // Release the compositor lock and return to a usable session.
     m_lock->unlockAndDestroy();
     setState(LockService::State::Unlocked);
