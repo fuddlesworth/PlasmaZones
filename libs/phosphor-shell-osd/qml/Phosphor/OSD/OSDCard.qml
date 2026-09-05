@@ -9,9 +9,9 @@
 // point. Stateful OSDs (mic, caps) draw a 2 px band across the whole
 // edge with the glyph and label at its centre.
 //
-// Phase 1 anchors bands to the SCREEN edge; the window-edge placement
-// (volume on the focused window's bottom edge) is phase 2 and needs the
-// compositor to hand the shell that window's rect.
+// The card only draws along whatever frame OSDHost gives it: the host
+// places a bottom or top band on the FOCUSED WINDOW's edge from the
+// placement map, and on the screen edge when no window is focused.
 //
 //   OSDCard {
 //       edge: OSDCard.Bottom
@@ -74,7 +74,7 @@ Item {
     Rectangle {
         id: band
 
-        readonly property real _len: card._length * card._fill * card.reveal
+        property real _len: card._length * card._fill * card.reveal
         x: card._vertical ? card.width - 3 : 0
         y: card._vertical ? card.height - _len : card.height - (card.showProgress ? 3 : 2)
         width: card._vertical ? 3 : _len

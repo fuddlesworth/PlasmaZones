@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/ScrollEngineTypes.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <phosphorscrollengine_export.h>
 
@@ -735,6 +736,17 @@ public:
     /// Resolve every non-minimized tile's absolute pixel rect against
     /// @p params. Pure function of the current model state; does not mutate.
     ResolvedStrip relayout(const ScrollLayoutParams& params) const;
+
+    /// The whole strip as a renderer of a strip MAP reads it: every column's
+    /// strip position and main extent, every tile's cross extent, the
+    /// viewport's offset and extent on the same axis, and the active column
+    /// (ScrollStripModel documents each field). ONE relayout pass plus one
+    /// cumulative walk over the columns, so the cost is the same as a
+    /// relayout rather than a columnStripPos per column. Pure function of the
+    /// current model state; does not mutate. On a degenerate work area the
+    /// columns still carry their positions and extents while every tile's
+    /// cross extent is 0, since the relayout resolves nothing there.
+    ScrollStripModel stripModel(const ScrollLayoutParams& params) const;
 
     /// True when the whole strip already fits the viewport, i.e. there is
     /// nothing off screen to scroll to. A degenerate work area counts as

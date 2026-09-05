@@ -14,6 +14,7 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
+#include <QDBusError>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
@@ -24,6 +25,7 @@
 #include <QSize>
 
 #include <functional>
+#include <type_traits>
 
 namespace {
 Q_LOGGING_CATEGORY(lcPlacementMap, "phosphorshell.placementmap")
@@ -75,6 +77,9 @@ public:
                     SLOT(onTilingChanged(QString)));
         bus.connect(Name, ObjectPath, Iface::Tiling, QStringLiteral("focusWindowRequested"), this,
                     SLOT(onFocusWindowRequested(QString)));
+        // Phase-2 surface: an older daemon never emits it, which is harmless.
+        bus.connect(Name, ObjectPath, Iface::Tiling, QStringLiteral("focusedWindowChanged"), this,
+                    SLOT(onFocusedWindowChanged(QString, QString)));
         bus.connect(Name, ObjectPath, Iface::Scrolling, QStringLiteral("stripChanged"), this,
                     SLOT(onStripChanged(QString)));
         bus.connect(Name, ObjectPath, Iface::Scrolling, QStringLiteral("stripContextChanged"), this,
@@ -94,6 +99,7 @@ Q_SIGNALS:
     void tileBatch(const QList<PlacementMapParser::TileRect>& tiles);
     void tilingChanged(const QString& screenId);
     void focusRequested(const QString& windowId);
+    void focusedWindowChanged(const QString& screenId, const QString& windowId);
     void stripChanged(const QString& screenId);
 
 private Q_SLOTS:
@@ -140,6 +146,10 @@ private Q_SLOTS:
     void onFocusWindowRequested(const QString& windowId)
     {
         Q_EMIT focusRequested(windowId);
+    }
+    void onFocusedWindowChanged(const QString& screenId, const QString& windowId)
+    {
+        Q_EMIT focusedWindowChanged(screenId, windowId);
     }
     void onStripChanged(const QString& screenId)
     {
@@ -188,6 +198,14 @@ qreal PlacementMapScreen::aspect() const
 {
     return m_aspect;
 }
+QRect PlacementMapScreen::workArea() const
+{
+    return m_publishedWorkArea;
+}
+int PlacementMapScreen::stripExtentPx() const
+{
+    return m_stripExtentPx;
+}
 QVariantList PlacementMapScreen::cells() const
 {
     return m_cells;
@@ -213,24 +231,38 @@ int PlacementMapScreen::currentDesktop() const
     return m_currentDesktop;
 }
 
-template<typename Reply, typename Fn>
-void PlacementMapScreen::call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply)
+template<typename Reply, typename Fn, typename ErrFn>
+void PlacementMapScreen::call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply,
+                              ErrFn&& onError)
 {
     const int generation = m_generation;
     auto* watcher = new QDBusPendingCallWatcher(m_map->m_bus->call(interface, method, args), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, generation, fn = std::forward<Fn>(onReply)](QDBusPendingCallWatcher* w) {
+            [this, generation, fn = std::forward<Fn>(onReply),
+             err = std::forward<ErrFn>(onError)](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 if (generation != m_generation) {
                     return;
                 }
-                QDBusPendingReply<Reply> reply = *w;
+                using ReplyT = std::conditional_t<std::is_void_v<Reply>, QDBusPendingReply<>, QDBusPendingReply<Reply>>;
+                ReplyT reply = *w;
                 if (reply.isError()) {
                     qCDebug(lcPlacementMap) << m_screenName << reply.error().message();
+                    err(reply.error());
                     return;
                 }
-                fn(reply.value());
+                if constexpr (std::is_void_v<Reply>) {
+                    fn();
+                } else {
+                    fn(reply.value());
+                }
             });
+}
+
+template<typename Reply, typename Fn>
+void PlacementMapScreen::call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply)
+{
+    call<Reply>(interface, method, args, std::forward<Fn>(onReply), [](const QDBusError&) { });
 }
 
 void PlacementMapScreen::reseed()
@@ -241,6 +273,9 @@ void PlacementMapScreen::reseed()
     m_sourceLens = QRectF();
     m_sourceOverflowLeft = 0;
     m_sourceOverflowRight = 0;
+    m_sourceStripExtentPx = 0;
+    m_focusedWindowId.clear();
+    m_focusFromDaemon = false;
     resolveScreenId();
 }
 
@@ -250,6 +285,9 @@ void PlacementMapScreen::serviceLost()
     m_source.clear();
     m_lastBatch.clear();
     m_sourceLens = QRectF();
+    m_sourceStripExtentPx = 0;
+    m_focusedWindowId.clear();
+    m_focusFromDaemon = false;
     setMode(None);
     rebuildFromSource();
 }
@@ -265,6 +303,7 @@ void PlacementMapScreen::resolveScreenId()
         }
         refreshGeometry();
         refreshMode();
+        fetchFocus();
     });
 }
 
@@ -273,6 +312,14 @@ void PlacementMapScreen::refreshGeometry()
     if (m_screenId.isEmpty()) {
         return;
     }
+    // The screen origin, so workArea and cellRect() can be screen-local.
+    call<QRect>(Iface::Screen, QStringLiteral("getScreenGeometry"), {m_screenId}, [this](const QRect& rect) {
+        if (rect == m_screenGeometry) {
+            return;
+        }
+        m_screenGeometry = rect;
+        schedulePublish();
+    });
     call<QRect>(Iface::Screen, QStringLiteral("getAvailableGeometry"), {m_screenId}, [this](const QRect& rect) {
         if (rect == m_workArea) {
             return;
@@ -281,7 +328,7 @@ void PlacementMapScreen::refreshGeometry()
         // A tiling batch is in screen pixels; re-normalise it against the new
         // work area. Snapping is relative already; scrolling is re-read.
         if (m_mode == Tiling) {
-            tileBatchReceived(m_lastBatch);
+            applyTiles(m_lastBatch);
         } else {
             fetchModeData();
         }
@@ -317,9 +364,7 @@ void PlacementMapScreen::fetchModeData()
         fetchSnappingLayout();
         break;
     case Tiling:
-        // [NEW] Tiling.currentTilesJson(screenId): until the daemon can
-        // replay the last batch, the map is empty until the next retile.
-        tileBatchReceived(m_lastBatch);
+        fetchCurrentTiles();
         break;
     case Scrolling:
         fetchStrip();
@@ -327,6 +372,7 @@ void PlacementMapScreen::fetchModeData()
     default:
         m_source.clear();
         m_sourceLens = QRectF();
+        m_sourceStripExtentPx = 0;
         rebuildFromSource();
         break;
     }
@@ -351,14 +397,110 @@ void PlacementMapScreen::fetchSnappingLayout()
 
 void PlacementMapScreen::fetchStrip()
 {
+    // The strip model carries the structure axis, the lens and the overflow
+    // counts. A daemon without it answers UnknownMethod and the visible
+    // cut stands in (full lens, hue sampled inside the cut).
+    if (!m_map->m_caps.stripModel) {
+        fetchVisibleStrip();
+        return;
+    }
+    call<QString>(
+        Iface::Scrolling, QStringLiteral("stripModelJson"), {m_screenId},
+        [this](const QString& json) {
+            applyStrip(parseStripModel(json));
+        },
+        [this](const QDBusError& error) {
+            if (error.type() == QDBusError::UnknownMethod) {
+                m_map->m_caps.stripModel = false;
+            }
+            fetchVisibleStrip();
+        });
+}
+
+void PlacementMapScreen::fetchVisibleStrip()
+{
     call<QString>(Iface::Scrolling, QStringLiteral("visibleStripJson"), {m_screenId}, [this](const QString& json) {
-        const StripParse parse = parseVisibleStrip(json);
-        m_source = parse.cells;
-        m_sourceLens = parse.lens;
-        m_sourceOverflowLeft = parse.overflowLeft;
-        m_sourceOverflowRight = parse.overflowRight;
-        rebuildFromSource();
+        applyStrip(parseVisibleStrip(json));
     });
+}
+
+void PlacementMapScreen::applyStrip(const StripParse& parse)
+{
+    m_source = parse.cells;
+    m_sourceLens = parse.lens;
+    m_sourceOverflowLeft = parse.overflowLeft;
+    m_sourceOverflowRight = parse.overflowRight;
+    m_sourceStripExtentPx = parse.stripExtentPx;
+    rebuildFromSource();
+}
+
+void PlacementMapScreen::fetchCurrentTiles()
+{
+    // Replay of the engine's current tiles, so the map is never blank
+    // after a reseed or a mode switch. Without it (older daemon) the last
+    // batch seen on the bus stands until the next retile.
+    if (!m_map->m_caps.currentTiles) {
+        applyTiles(m_lastBatch);
+        return;
+    }
+    call<QString>(
+        Iface::Tiling, QStringLiteral("currentTilesJson"), {m_screenId},
+        [this](const QString& json) {
+            m_lastBatch = tileRectsFromJson(json);
+            applyTiles(m_lastBatch);
+        },
+        [this](const QDBusError& error) {
+            if (error.type() == QDBusError::UnknownMethod) {
+                m_map->m_caps.currentTiles = false;
+            }
+            applyTiles(m_lastBatch);
+        });
+}
+
+void PlacementMapScreen::applyTiles(const QList<TileRect>& tiles)
+{
+    if (m_mode != Tiling) {
+        return;
+    }
+    m_source = parseTileBatch(tiles, m_screenId, m_workArea);
+    m_sourceLens = QRectF();
+    m_sourceStripExtentPx = 0;
+    rebuildFromSource();
+}
+
+void PlacementMapScreen::fetchFocus()
+{
+    // The engine's own focus for this screen; mode-agnostic. Without it
+    // (older daemon) the singleton's focus-request proxy stands in, which
+    // misses focus changes made with the pointer.
+    if (m_screenId.isEmpty() || !m_map->m_caps.focusQuery) {
+        return;
+    }
+    call<QString>(
+        Iface::Tiling, QStringLiteral("managedFocusedWindow"), {m_screenId},
+        [this](const QString& windowId) {
+            focusedWindowChanged(windowId);
+        },
+        [this](const QDBusError& error) {
+            if (error.type() == QDBusError::UnknownMethod) {
+                m_map->m_caps.focusQuery = false;
+            }
+        });
+}
+
+void PlacementMapScreen::focusedWindowChanged(const QString& windowId)
+{
+    const bool changed = !m_focusFromDaemon || windowId != m_focusedWindowId;
+    m_focusFromDaemon = true;
+    m_focusedWindowId = windowId;
+    if (changed) {
+        rebuildFromSource();
+    }
+}
+
+QString PlacementMapScreen::effectiveFocusedWindowId() const
+{
+    return m_focusFromDaemon ? m_focusedWindowId : m_map->focusedWindowId();
 }
 
 void PlacementMapScreen::tileBatchReceived(const QList<TileRect>& tiles)
@@ -375,18 +517,13 @@ void PlacementMapScreen::tileBatchReceived(const QList<TileRect>& tiles)
     if (namesUs) {
         m_lastBatch = tiles;
     }
-    if (m_mode != Tiling) {
-        return;
-    }
-    m_source = parseTileBatch(m_lastBatch, m_screenId, m_workArea);
-    m_sourceLens = QRectF();
-    rebuildFromSource();
+    applyTiles(m_lastBatch);
 }
 
 void PlacementMapScreen::tilingChanged()
 {
     if (m_mode == Tiling) {
-        tileBatchReceived(m_lastBatch);
+        fetchCurrentTiles();
     }
 }
 
@@ -434,7 +571,7 @@ void PlacementMapScreen::desktopsChanged()
 void PlacementMapScreen::rebuildFromSource()
 {
     m_resolved = m_source;
-    const QString focused = m_map->focusedWindowId();
+    const QString focused = effectiveFocusedWindowId();
     switch (m_mode) {
     case Snapping:
         applyOccupancy(m_resolved, m_map->occupancyForScreen(m_screenId), focused);
@@ -443,9 +580,9 @@ void PlacementMapScreen::rebuildFromSource()
         applyFocusByWindowId(m_resolved, focused);
         break;
     default:
-        // Scrolling cells carry no window id in phase 1; the daemon's
-        // focus signal cannot be matched to a column.
-        // [NEW] Scrolling.stripModelJson activeColumn.
+        // Scrolling: the strip model marks activeColumn focused itself, and
+        // the visible-cut fallback carries no window id to match, so the
+        // source focus stands either way.
         break;
     }
     schedulePublish();
@@ -475,6 +612,16 @@ void PlacementMapScreen::publish()
         m_overflowRight = right;
         Q_EMIT overflowChanged();
     }
+    const int extent = m_mode == Scrolling ? m_sourceStripExtentPx : 0;
+    if (extent != m_stripExtentPx) {
+        m_stripExtentPx = extent;
+        Q_EMIT stripExtentChanged();
+    }
+    const QRect workArea = m_workArea.translated(-m_screenGeometry.topLeft());
+    if (workArea != m_publishedWorkArea) {
+        m_publishedWorkArea = workArea;
+        Q_EMIT workAreaChanged();
+    }
     const qreal aspect = m_workArea.height() > 0 ? qreal(m_workArea.width()) / m_workArea.height() : 0.0;
     if (!qFuzzyCompare(aspect, m_aspect)) {
         m_aspect = aspect;
@@ -491,6 +638,27 @@ const Cell* PlacementMapScreen::cellById(const QString& id) const
         }
     }
     return nullptr;
+}
+
+QRect PlacementMapScreen::cellRect(const QString& id) const
+{
+    const Cell* cell = cellById(id);
+    if (!cell || m_publishedWorkArea.isEmpty()) {
+        return QRect();
+    }
+    const QRect& area = m_publishedWorkArea;
+    return QRect(qRound(area.x() + cell->rect.x() * area.width()), qRound(area.y() + cell->rect.y() * area.height()),
+                 qRound(cell->rect.width() * area.width()), qRound(cell->rect.height() * area.height()));
+}
+
+QString PlacementMapScreen::focusedCellId() const
+{
+    for (const Cell& c : m_resolved) {
+        if (c.focused) {
+            return c.id;
+        }
+    }
+    return QString();
 }
 
 void PlacementMapScreen::activate(const QString& id)
@@ -514,30 +682,73 @@ void PlacementMapScreen::activate(const QString& id)
         // [NEW] Tiling.focusWindow(windowId): focusNext/focusPrevious only
         // step; a direct focus-by-id verb is needed for a click.
         break;
-    case Scrolling: {
-        // Step focus toward the clicked column from the focused one.
-        int from = -1;
-        int to = -1;
-        for (int i = 0; i < m_resolved.size(); ++i) {
-            if (m_resolved[i].focused) {
-                from = i;
-            }
-            if (&m_resolved[i] == cell) {
-                to = i;
-            }
-        }
-        if (from < 0 || to < 0 || from == to) {
+    case Scrolling:
+        if (cell->focused) {
             return;
         }
-        const int step = to > from ? 1 : -1;
-        for (int i = from; i != to; i += step) {
-            m_map->m_bus->call(Iface::Scrolling, QStringLiteral("focusColumn"), {m_screenId, step});
+        if (cell->columnIndex >= 0 && m_map->m_caps.focusColumnAt) {
+            // The stepping fallback needs the cell after the reply, and
+            // the resolved list may have been rebuilt by then, so it is
+            // re-found by id.
+            const QString cellId = cell->id;
+            call<void>(
+                Iface::Scrolling, QStringLiteral("focusColumnAt"), {m_screenId, cell->columnIndex}, [] { },
+                [this, cellId](const QDBusError& error) {
+                    if (error.type() != QDBusError::UnknownMethod) {
+                        return;
+                    }
+                    m_map->m_caps.focusColumnAt = false;
+                    stepFocusToward(cellById(cellId));
+                });
+            return;
         }
+        stepFocusToward(cell);
         break;
-    }
     default:
         break;
     }
+}
+
+void PlacementMapScreen::stepFocusToward(const Cell* cell)
+{
+    // Older daemon: only ±1 focus steps exist, so walk from the focused
+    // column to the clicked one.
+    if (!cell) {
+        return;
+    }
+    int from = -1;
+    int to = -1;
+    for (int i = 0; i < m_resolved.size(); ++i) {
+        if (m_resolved[i].focused) {
+            from = i;
+        }
+        if (&m_resolved[i] == cell) {
+            to = i;
+        }
+    }
+    if (from < 0 || to < 0 || from == to) {
+        return;
+    }
+    const int step = to > from ? 1 : -1;
+    for (int i = from; i != to; i += step) {
+        m_map->m_bus->call(Iface::Scrolling, QStringLiteral("focusColumn"), {m_screenId, step});
+    }
+}
+
+void PlacementMapScreen::scrollViewByPx(int px)
+{
+    if (!m_map->isAvailable() || m_mode != Scrolling || px == 0 || !m_map->m_caps.scrollViewByPx) {
+        return;
+    }
+    // No pixel-precise pan exists on an older daemon; the lens drag is
+    // simply inert there rather than approximated with whole-column steps.
+    call<void>(
+        Iface::Scrolling, QStringLiteral("scrollViewByPx"), {m_screenId, px}, [] { },
+        [this](const QDBusError& error) {
+            if (error.type() == QDBusError::UnknownMethod) {
+                m_map->m_caps.scrollViewByPx = false;
+            }
+        });
 }
 
 void PlacementMapScreen::scrollView(int delta)
@@ -625,9 +836,18 @@ PlacementMap::PlacementMap(QObject* parent)
             }
         }
     });
-    // Best available focus proxy: the daemon names the window it asks the
-    // compositor to focus. It misses focus changes the user makes with the
-    // pointer. [NEW] Tiling.managedFocusedWindow + focusedWindowChanged.
+    // The engine's own focus per screen (Tiling.focusedWindowChanged).
+    connect(m_bus, &PlacementMapBus::focusedWindowChanged, this,
+            [this](const QString& screenId, const QString& windowId) {
+                for (PlacementMapScreen* s : std::as_const(m_screens)) {
+                    if (s->screenId() == screenId) {
+                        s->focusedWindowChanged(windowId);
+                    }
+                }
+            });
+    // Focus proxy for a daemon without focusedWindowChanged: the window it
+    // asks the compositor to focus. It misses focus changes the user makes
+    // with the pointer. A screen that has heard from the daemon ignores it.
     connect(m_bus, &PlacementMapBus::focusRequested, this, [this](const QString& windowId) {
         if (windowId == m_focusedWindowId) {
             return;
@@ -695,6 +915,8 @@ void PlacementMap::setAvailable(bool available)
     m_available = available;
     Q_EMIT availableChanged();
     if (available) {
+        // A restarted daemon may be a newer one: probe every surface again.
+        m_caps = Capabilities();
         seedWindowStates();
         forEachScreen(&PlacementMapScreen::reseed);
     } else {

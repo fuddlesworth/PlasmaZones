@@ -262,6 +262,30 @@ void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
     m_engine->scrollViewByPercent(delta * m_viewScrollStep(), screenId);
 }
 
+void ScrollingAdaptor::focusColumnAt(const QString& screenId, int index)
+{
+    // focusColumn's gate chain through the shared guard (this verb carries
+    // no extra term beyond the index range, so unlike the wheel pair it
+    // folds in cleanly), plus the out-of-contract index. The strip's own
+    // clamp handles an index past the end; a negative one is refused here
+    // so it never reads as a press on the first column.
+    if (index < 0 || refusesScreenVerb(screenId)) {
+        return;
+    }
+    m_engine->focusColumnAtIndex(index, screenId);
+}
+
+void ScrollingAdaptor::scrollViewByPx(const QString& screenId, int px)
+{
+    // Same guard as focusColumnAt. A zero distance is refused at this
+    // boundary rather than handed down: the engine would answer it with a
+    // no_movement OSD, and a drag that has not moved yet is not a pan.
+    if (px == 0 || refusesScreenVerb(screenId)) {
+        return;
+    }
+    m_engine->scrollViewByPx(px, screenId);
+}
+
 void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
 {
     // Wire-boundary validation in focusColumn's terms: the screen gate keeps
@@ -476,6 +500,49 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+
+QString ScrollingAdaptor::stripModelJson(const QString& screenId) const
+{
+    // Same wire-boundary and ownership gates as visibleStripJson, for the
+    // same load-bearing reason (a sibling-context strip survives the screen
+    // leaving the scrolling set). The engine resolves the params once and the
+    // strip runs one relayout; this is a straight serialization of what comes
+    // back, with the enum fields written as their underlying values (the
+    // StripModelKey doc spells the numbering).
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return QStringLiteral("{}");
+    }
+    namespace Key = PhosphorProtocol::Service::StripModelKey;
+    const PhosphorScrollEngine::ScrollStripModel model = m_engine->stripModelForScreen(screenId);
+    QJsonObject obj;
+    obj[Key::Axis] = model.axis.isVertical() ? 1 : 0;
+    obj[Key::ViewOffsetPx] = model.viewOffsetPx;
+    obj[Key::ViewportPx] = model.viewportPx;
+    obj[Key::StripExtentPx] = model.stripExtentPx;
+    obj[Key::ActiveColumn] = model.activeColumn;
+    QJsonArray columns;
+    for (const PhosphorScrollEngine::ScrollStripModelColumn& column : model.columns) {
+        QJsonObject col;
+        col[Key::Index] = column.index;
+        col[Key::StripPosPx] = column.stripPosPx;
+        col[Key::ExtentPx] = column.extentPx;
+        col[Key::Display] = static_cast<int>(column.display);
+        col[Key::ActiveTile] = column.activeTile;
+        col[Key::Maximized] = column.maximized;
+        QJsonArray tiles;
+        for (const PhosphorScrollEngine::ScrollStripModelTile& tile : column.tiles) {
+            QJsonObject t;
+            t[Key::WindowId] = tile.windowId;
+            t[Key::CrossPx] = tile.crossPx;
+            t[Key::Minimized] = tile.minimized;
+            tiles.append(t);
+        }
+        col[Key::Tiles] = tiles;
+        columns.append(col);
+    }
+    obj[Key::Columns] = columns;
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
 QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const

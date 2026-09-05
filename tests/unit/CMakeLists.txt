@@ -1151,6 +1151,13 @@ add_executable(test_scrolling_adaptor_verbs dbus/test_scrolling_adaptor_verbs.cp
 target_link_libraries(test_scrolling_adaptor_verbs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                            PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_scrolling_adaptor_verbs COMMAND test_scrolling_adaptor_verbs)
+# The placement-map surfaces (stripModelJson, focusColumnAt, scrollViewByPx)
+# the Phosphor shell's strip map rides on; same fixture header.
+add_executable(test_scrolling_adaptor_map dbus/test_scrolling_adaptor_map.cpp
+                                          dbus/scrollingadaptortestfixture.h)
+target_link_libraries(test_scrolling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                         PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor_map COMMAND test_scrolling_adaptor_map)
 
 # Close/reopen restore on the scroll engine through the unified placement
 # store: a reopened window's fresh uuid must match its record by appId FIFO
@@ -1321,6 +1328,17 @@ target_link_libraries(test_tiling_adaptor_scroll_tabs PRIVATE Qt6::Test Qt6::Cor
                       PhosphorRules::PhosphorRules PhosphorEngine::PhosphorEngine
                       PhosphorZones::PhosphorZones)
 add_test(NAME test_tiling_adaptor_scroll_tabs COMMAND test_tiling_adaptor_scroll_tabs)
+
+# Placement-map surfaces on TilingAdaptor: the currentTilesJson per-screen
+# replay of the last tile batch (its pruning on close and its drop on
+# clearEngine and on a screen leaving the managed set), and the
+# managedFocusedWindow read with its once-per-change focusedWindowChanged
+# gate, driven against a real ScrollEngine wired the way init_engines.cpp
+# wires it.
+add_executable(test_tiling_adaptor_map dbus/test_tiling_adaptor_map.cpp)
+target_link_libraries(test_tiling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorEngine::PhosphorEngine PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_tiling_adaptor_map COMMAND test_tiling_adaptor_map)
 
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
@@ -2297,6 +2315,40 @@ target_link_libraries(test_bar_controller
 target_include_directories(test_bar_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_bar_controller COMMAND test_bar_controller)
 
+# The OSD registry owner, same shape and same reasoning as test_bar_controller.
+add_executable(test_osd_controller
+    shell/test_osd_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/OsdController.h
+    ${CMAKE_SOURCE_DIR}/src/shell/osdcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentOSDFactory.h
+    ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponentosdfactory.cpp
+)
+target_link_libraries(test_osd_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        PhosphorRegistry::PhosphorRegistry
+)
+target_include_directories(test_osd_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_osd_controller COMMAND test_osd_controller)
+
+# The toast broker behind the `notify` IpcTarget.
+add_executable(test_toast_controller
+    shell/test_toast_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ToastController.h
+    ${CMAKE_SOURCE_DIR}/src/shell/toastcontroller.cpp
+)
+target_link_libraries(test_toast_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+)
+target_include_directories(test_toast_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_toast_controller COMMAND test_toast_controller)
+
 # Ties BarController's registered type names to the QML the Phosphor.Bar
 # module actually ships. Gated on the bar module target, since it links that
 # module and its plugin registrar to resolve the types.
@@ -2393,6 +2445,66 @@ if(TARGET PhosphorPopout::PhosphorPopout)
             PhosphorPopout::PhosphorPopout
     )
     add_test(NAME test_routing_popout_transport COMMAND test_routing_popout_transport)
+endif()
+
+# PanePopoutTransport: the engine-placed pane (A2 §4), a real toplevel
+# built from FloatingWindow with the pane app id, hosted in
+# Phosphor.Popout's PaneHost. Needs the shell library for FloatingWindow,
+# the popout QML module + plugin for PaneHost, and Theme + Widgets for the
+# band and stroke PaneHost draws. The controller it drives brings the
+# registry and idle service along, as test_control_center_controller does.
+if(TARGET PhosphorShell::PhosphorShell AND TARGET PhosphorPopout::PhosphorPopoutQml
+   AND TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml AND TARGET PhosphorServiceIdle::PhosphorServiceIdle)
+    add_executable(test_pane_popout_transport
+        shell/test_pane_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/PanePopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/panepopouttransport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_pane_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_pane_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShell::PhosphorShell
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorShellWidgets::PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorServiceIdle::PhosphorServiceIdle
+    )
+    add_test(NAME test_pane_popout_transport COMMAND test_pane_popout_transport)
+endif()
+
+# PaneRules: the shell's bundled window rule for the control-center pane.
+# Validates against the real action registry, so it links phosphor-rules;
+# the seeding path is D-Bus and not exercised here.
+if(TARGET PhosphorRules::PhosphorRules AND TARGET PhosphorProtocol::PhosphorProtocol)
+    add_executable(test_pane_rules
+        shell/test_pane_rules.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/PaneRules.h
+        ${CMAKE_SOURCE_DIR}/src/shell/panerules.cpp
+    )
+    target_include_directories(test_pane_rules PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_pane_rules
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
+    )
+    add_test(NAME test_pane_rules COMMAND test_pane_rules)
 endif()
 
 # ControlCenterController: the shell's tile registry owner and the

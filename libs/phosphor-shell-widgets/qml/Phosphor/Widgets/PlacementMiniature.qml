@@ -20,10 +20,13 @@
 //
 // Model contract (a PlacementMapScreen QObject): int mode (0 snapping,
 // 1 tiling, 2 scrolling, -1 none), real aspect, var cells (list of {id,
-// x, y, w, h, t, occupied, focused, label} with x/y/w/h as fractions of
-// the map), var lens ({x, w} fractions, scrolling only), int overflowLeft,
-// int overflowRight, int desktopCount, int currentDesktop, signal
-// changed(), activate(id), scrollView(delta), switchDesktop(index).
+// x, y, w, h, t, occupied, focused, label, stack, stripT, columnIndex}
+// with x/y/w/h as fractions of the map), var lens ({x, w} fractions,
+// scrolling only), int overflowLeft, int overflowRight (columns wholly
+// off either end of the lens, from the strip model), int stripExtentPx,
+// int desktopCount, int currentDesktop, signal changed(), activate(id),
+// scrollView(delta), scrollViewByPx(px), switchDesktop(index). The
+// miniature reads none of the pixel members; the bar's lens drag does.
 
 import QtQuick
 import Phosphor.Theme

@@ -38,9 +38,15 @@ class Workspaces;
  *
  * `mode` is 0 snapping, 1 tiling, 2 scrolling, and -1 when the daemon is
  * absent or does not list this screen. `cells` is a list of maps with
- * `id, x, y, w, h, t, occupied, focused, label, zoneNumber, stack`, where
- * the rect is 0..1 of the work area and `t` is the hue axis (A2 §1.2).
- * `lens` is `{x, w}` in scrolling mode and empty otherwise.
+ * `id, x, y, w, h, t, occupied, focused, label, zoneNumber, stack, stripT,
+ * columnIndex`, where the rect is 0..1 of the work area and `t` is the
+ * hue axis (A2 §1.2). `lens` is `{x, w}` in scrolling mode and empty
+ * otherwise; `stripExtentPx` is the strip's length in scrolling mode (0
+ * against a daemon without `stripModelJson`).
+ *
+ * `workArea` and `cellRect(id)` are in this screen's own pixels, origin
+ * at the screen's top-left, so a full-screen surface on the screen can
+ * place an item on a cell directly (the OSD and toast bands, A3 §3–§4).
  *
  * `currentDesktop` and `switchDesktop(index)` are both 0-based, matching
  * the row index of `Workspaces.model`.
@@ -53,10 +59,12 @@ class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
     Q_PROPERTY(QString screenId READ screenId NOTIFY screenIdChanged)
     Q_PROPERTY(int mode READ mode NOTIFY modeChanged)
     Q_PROPERTY(qreal aspect READ aspect NOTIFY aspectChanged)
+    Q_PROPERTY(QRect workArea READ workArea NOTIFY workAreaChanged)
     Q_PROPERTY(QVariantList cells READ cells NOTIFY cellsChanged)
     Q_PROPERTY(QVariantMap lens READ lens NOTIFY lensChanged)
     Q_PROPERTY(int overflowLeft READ overflowLeft NOTIFY overflowChanged)
     Q_PROPERTY(int overflowRight READ overflowRight NOTIFY overflowChanged)
+    Q_PROPERTY(int stripExtentPx READ stripExtentPx NOTIFY stripExtentChanged)
     Q_PROPERTY(int desktopCount READ desktopCount NOTIFY desktopCountChanged)
     Q_PROPERTY(int currentDesktop READ currentDesktop NOTIFY currentDesktopChanged)
 
@@ -76,20 +84,32 @@ public:
     [[nodiscard]] QString screenId() const;
     [[nodiscard]] int mode() const;
     [[nodiscard]] qreal aspect() const;
+    [[nodiscard]] QRect workArea() const;
     [[nodiscard]] QVariantList cells() const;
     [[nodiscard]] QVariantMap lens() const;
     [[nodiscard]] int overflowLeft() const;
     [[nodiscard]] int overflowRight() const;
+    [[nodiscard]] int stripExtentPx() const;
     [[nodiscard]] int desktopCount() const;
     [[nodiscard]] int currentDesktop() const;
 
+    /// The cell's rect in screen pixels (work-area fractions scaled onto
+    /// `workArea`), or a null rect for an unknown id.
+    Q_INVOKABLE QRect cellRect(const QString& id) const;
+    /// The id of the cell holding the focused window, or empty.
+    Q_INVOKABLE QString focusedCellId() const;
+
     /// Click on a cell. Snapping: snap the focused window into an empty
     /// zone. Tiling: no daemon surface exists yet to focus a window by id.
-    /// Scrolling: focus one column toward the cell.
+    /// Scrolling: `Scrolling.focusColumnAt`, stepping one column at a time
+    /// toward the cell on a daemon without it.
     Q_INVOKABLE void activate(const QString& id);
     /// Wheel over the map. Scrolling pans the strip; snapping and tiling
     /// move focus one cell in reading order.
     Q_INVOKABLE void scrollView(int delta);
+    /// Drag of the lens: pan the strip's view by `px` in strip space
+    /// (`Scrolling.scrollViewByPx`). Scrolling only.
+    Q_INVOKABLE void scrollViewByPx(int px);
     /// Switch to the desktop at this 0-based row of `Workspaces.model`.
     Q_INVOKABLE void switchDesktop(int index);
 
@@ -110,15 +130,20 @@ public:
     void tilingChanged();
     /// `Scrolling.stripChanged` / `stripContextChanged` for this screen.
     void stripChanged();
+    /// `Tiling.focusedWindowChanged` for this screen: the engine's own
+    /// focus, which supersedes the singleton's focus-request proxy.
+    void focusedWindowChanged(const QString& windowId);
     void desktopsChanged();
 
 Q_SIGNALS:
     void screenIdChanged();
     void modeChanged();
     void aspectChanged();
+    void workAreaChanged();
     void cellsChanged();
     void lensChanged();
     void overflowChanged();
+    void stripExtentChanged();
     void desktopCountChanged();
     void currentDesktopChanged();
     /// Coalesced: once per event-loop turn after any of the above.
@@ -129,21 +154,40 @@ private:
     void fetchModeData();
     void fetchSnappingLayout();
     void fetchStrip();
+    void fetchVisibleStrip();
+    void fetchCurrentTiles();
+    void fetchFocus();
+    void applyStrip(const PlacementMapParser::StripParse& parse);
+    void applyTiles(const QList<PlacementMapParser::TileRect>& tiles);
+    void stepFocusToward(const PlacementMapParser::Cell* cell);
     void rebuildFromSource();
     void setMode(int mode);
     void schedulePublish();
     void publish();
     [[nodiscard]] const PlacementMapParser::Cell* cellById(const QString& id) const;
+    [[nodiscard]] QString effectiveFocusedWindowId() const;
     /// Async daemon call whose reply is dropped if the screen has been
-    /// reseeded since it was sent.
+    /// reseeded since it was sent. `onError` runs for a D-Bus error (an
+    /// older daemon without the method, typically) under the same
+    /// generation guard.
+    template<typename Reply, typename Fn, typename ErrFn>
+    void call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply, ErrFn&& onError);
     template<typename Reply, typename Fn>
     void call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply);
 
     PlacementMap* m_map = nullptr;
     QString m_screenName;
     QString m_screenId;
+    // Both in the daemon's global coordinates; the published workArea and
+    // cellRect() subtract the screen origin.
     QRect m_workArea;
+    QRect m_screenGeometry;
     int m_mode = None;
+    // The engine's own focus for this screen (Tiling.managedFocusedWindow
+    // / focusedWindowChanged). Authoritative once the daemon has answered;
+    // until then the singleton's focus-request proxy stands in.
+    QString m_focusedWindowId;
+    bool m_focusFromDaemon = false;
     // Bumped by reseed()/serviceLost(); in-flight replies carry the value
     // they were sent under and are dropped on mismatch.
     int m_generation = 0;
@@ -154,6 +198,7 @@ private:
     QRectF m_sourceLens;
     int m_sourceOverflowLeft = 0;
     int m_sourceOverflowRight = 0;
+    int m_sourceStripExtentPx = 0;
 
     // Resolved cells (occupancy + focus applied), the input to publish().
     QList<PlacementMapParser::Cell> m_resolved;
@@ -161,9 +206,11 @@ private:
     // Published values, change-gated.
     QVariantList m_cells;
     QVariantMap m_lens;
+    QRect m_publishedWorkArea;
     qreal m_aspect = 0.0;
     int m_overflowLeft = 0;
     int m_overflowRight = 0;
+    int m_stripExtentPx = 0;
     int m_desktopCount = 0;
     int m_currentDesktop = -1;
 
@@ -208,7 +255,8 @@ public:
     /// windowId → zone ids for non-floating windows on `screenId`.
     [[nodiscard]] QHash<QString, QStringList> occupancyForScreen(const QString& screenId) const;
     /// The window the daemon last asked the compositor to focus or
-    /// activate, or empty. Best available focus proxy; see the .cpp.
+    /// activate, or empty. The focus proxy a screen falls back on until
+    /// `Tiling.managedFocusedWindow` has answered for it; see the .cpp.
     [[nodiscard]] QString focusedWindowId() const;
 
 Q_SIGNALS:
@@ -224,6 +272,18 @@ private:
         QStringList zoneIds;
     };
 
+    /// Phase-2 daemon surfaces, each assumed present until a call fails
+    /// with UnknownMethod; then the screens use the phase-1 fallback.
+    /// Reset when the service (re)appears, since it may have been upgraded.
+    struct Capabilities
+    {
+        bool stripModel = true;
+        bool currentTiles = true;
+        bool focusQuery = true;
+        bool focusColumnAt = true;
+        bool scrollViewByPx = true;
+    };
+
     void setAvailable(bool available);
     void seedWindowStates();
     void applyWindowState(const QString& windowId, const QString& screenId, const QStringList& zoneIds, bool floating);
@@ -235,6 +295,7 @@ private:
     QHash<QString, PlacementMapScreen*> m_screens;
     QHash<QString, WindowOccupancy> m_occupancy;
     QString m_focusedWindowId;
+    Capabilities m_caps;
     bool m_available = false;
 };
 

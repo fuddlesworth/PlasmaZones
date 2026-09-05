@@ -120,6 +120,9 @@ set_target_properties(PhosphorPopout PROPERTIES
 
 set(_phosphor_popout_qml_files
     qml/Phosphor/Popout/PopoutHost.qml
+    # The root item of an engine-placed pane (a real toplevel): ground,
+    # top-edge spectrum band, enter/release choreography, Escape.
+    qml/Phosphor/Popout/PaneHost.qml
 )
 
 # qt_add_qml_module nests QML_FILES under their source-relative path
@@ -167,6 +170,10 @@ qt_add_qml_module(PhosphorPopoutQml
     # at build time. The runtime registration is handled by the
     # PhosphorThemeQmlplugin link below.
     IMPORTS Phosphor.Theme
+    # PaneHost.qml draws its band and stroke with Phosphor.Widgets.
+    # DEPENDENCIES rather than IMPORTS: it satisfies the import scanner
+    # without injecting the widget type names into every file here.
+    DEPENDENCIES Phosphor.Widgets
     SOURCES ${_phosphor_popout_qml_sources}
     QML_FILES ${_phosphor_popout_qml_files}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Popout
@@ -208,6 +215,12 @@ endif()
 if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorPopoutQml PUBLIC PhosphorThemeQmlplugin)
 endif()
+# Phosphor.Widgets (PaneHost.qml's band and stroke) is NOT linked here:
+# phosphor-shell-widgets is added to the build after this library, so the
+# target does not exist yet at this point. The consumers that build a
+# PaneHost (the shell binary through Phosphor.Bar, and
+# test_pane_popout_transport directly) link the widgets module and its
+# plugin themselves.
 
 # Static archive: VERSION/SOVERSION apply to SHARED libraries only and are
 # silently ignored on STATIC. Don't set them so the property surface

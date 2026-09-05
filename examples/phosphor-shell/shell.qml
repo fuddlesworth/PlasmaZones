@@ -13,6 +13,8 @@ import Phosphor.Bar
 import Phosphor.ControlCenter
 import Phosphor.Ipc
 import Phosphor.Launcher
+import Phosphor.Notifications
+import Phosphor.OSD
 import Phosphor.Popout
 import Phosphor.Power
 import Phosphor.Shell
@@ -51,16 +53,20 @@ Item {
 
         model: PhosphorShell.screens
 
-        // The control center hangs from THIS bar as a tethered pane under
-        // its chip (05 §8; phase 1 draws it inside the bar's surface, the
-        // engine-placed pane is phase 2).
+        // The control center is tethered to THIS bar's chip (05 §8). Phase
+        // 2 opens it as an ENGINE-PLACED PANE, a real toplevel the daemon
+        // positions (A2 §4), and the bar draws only the tether to it; the
+        // phase-1 pane painted inside the bar's surface stays as the
+        // floating fallback for an output with no placement engine.
         //
         // Everything the delegate reads must come from a CONTEXT PROPERTY,
         // never an id in this file: PerScreenPanels builds each delegate
         // with a fresh QQmlContext carrying `modelData`, so shell.qml's ids
         // do not resolve inside one. Hence the open state lives on
-        // ControlCenterRegistry and the pane content is declared inline
-        // here, in the delegate's own scope.
+        // ControlCenterRegistry and the fallback pane content is declared
+        // inline here, in the delegate's own scope (the engine-placed
+        // pane's content is `paneComponent` below, built by the transport
+        // against the root context).
         delegate: BarHost {
             id: bar
 
@@ -76,11 +82,46 @@ Item {
             // dangles on hot-unplug, while this property is QPointer-backed
             // and simply reads null once the output dies. Hence the guard.
             paneOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
+            // External: the open pane is a toplevel, so no inline pane,
+            // only the tether routed to where the placement map says it is.
+            paneExternal: ControlCenterRegistry.paneExternal
 
-            // ONE CONTROL CENTER PER SCREEN, built on that screen's first
-            // open and kept: the pane Loader latches active, and the
-            // tiles hold live service connections that would be torn
-            // down and re-enumerated on every close.
+            // The bar is the only thing that can locate the pane (a
+            // Wayland client is never told where its toplevel went), so it
+            // reports the frame back for the pane's own top band.
+            onPaneScreenRectChanged: ControlCenterRegistry.reportPaneRect(bar.paneScreenRect)
+
+            // The pane transport asks which mode this output runs before
+            // opening; none means the floating fallback.
+            readonly property int screenMode: bar.placementMap ? bar.placementMap.mode : -1
+            function reportMode(): void {
+                if (bar.screen)
+                    ControlCenterRegistry.reportScreenMode(bar.screen.name, bar.screenMode);
+            }
+            onScreenModeChanged: reportMode()
+            onScreenChanged: reportMode()
+
+            // Band material (05 §5, A2 §3.2): phosphor-glass is real
+            // backdrop blur under a navy tint. A client cannot sample what
+            // is behind its surface, so the blur is the compositor's,
+            // requested behind the band's rect once the surface exists and
+            // again whenever the band's rect changes.
+            readonly property var bandWindow: bar.bandItem ? bar.bandItem.Window.window : null
+            function applyBlur(): void {
+                if (bar.bandWindow)
+                    ShellEffects.setBlurBehind(bar.bandItem, bar.bandRect);
+            }
+            onBandWindowChanged: applyBlur()
+            onBandRectChanged: applyBlur()
+            Component.onCompleted: {
+                reportMode();
+                applyBlur();
+            }
+
+            // ONE CONTROL CENTER PER SCREEN for the fallback, built on that
+            // screen's first open and kept: the pane Loader latches active,
+            // and the tiles hold live service connections that would be
+            // torn down and re-enumerated on every close.
             //
             // The pane depth is a constant on the bar, and the pane
             // CLIPS: a rail list taller than the depth is cut off, so
@@ -92,6 +133,104 @@ Item {
                     tileIds: ControlCenterRegistry.tileIds
                 }
             }
+        }
+    }
+
+    // The OSD overlay, one per output. OSDHost places a band on any screen
+    // edge (a volume band on the focused window's bottom edge, a
+    // brightness band down the right), so it needs the WHOLE screen: a
+    // Top panel whose thickness is the screen's height, on the Overlay
+    // layer so it draws above the bar, with no exclusive zone (an overlay
+    // cannot reserve one, and this one must not) and an EMPTY input
+    // region, which is PanelWindow's click-through case. Nothing here is
+    // ever clickable; the OSD is pure feedback.
+    //
+    // Same context rule as the bar above: the delegate reads OsdRegistry
+    // (a context property) and never an id from this file. The host
+    // attaches itself to the registry so the `osd` IpcTarget below can
+    // reach every screen's host through it; OSDHost's own targetScreen
+    // filter decides which one draws.
+    PerScreenPanels {
+        id: osdOverlays
+
+        model: PhosphorShell.screens
+
+        delegate: PanelWindow {
+            id: osdSurface
+
+            edge: PanelWindow.Top
+            alignment: PanelWindow.Fill
+            thickness: modelData.height
+            panelLayer: PanelWindow.LayerOverlay
+            exclusiveZoneEnabled: false
+            keyboardFocus: PanelWindow.None
+            inputRegion: []
+
+            OSDHost {
+                id: osdHost
+
+                anchors.fill: parent
+                provider: OsdRegistry
+                // Through PanelWindow.screen, not modelData.screen, for the
+                // hot-unplug reason the bar delegate gives.
+                screenName: osdSurface.screen ? osdSurface.screen.name : ""
+                topInset: Tokens.bar_thickness
+                Component.onCompleted: OsdRegistry.attachHost(osdHost)
+                Component.onDestruction: OsdRegistry.detachHost(osdHost)
+            }
+        }
+    }
+
+    // The toast overlay, one per output, on its own surface rather than
+    // the OSD's because the two want different input: OSD bands never
+    // take a click, while a toast card needs hover (which pauses its
+    // timer) and a close button. Same full-screen Overlay panel, but the
+    // input region follows the cards: ToastHost publishes their rects and
+    // PanelWindow opens input over exactly those, so everything around
+    // them stays click-through and an empty stack passes every click to
+    // the window beneath.
+    PerScreenPanels {
+        id: toastOverlays
+
+        model: PhosphorShell.screens
+
+        delegate: PanelWindow {
+            id: toastSurface
+
+            edge: PanelWindow.Top
+            alignment: PanelWindow.Fill
+            thickness: modelData.height
+            panelLayer: PanelWindow.LayerOverlay
+            exclusiveZoneEnabled: false
+            keyboardFocus: PanelWindow.None
+            inputRegion: toastHost.inputRects
+
+            ToastHost {
+                id: toastHost
+
+                anchors.fill: parent
+                screenName: toastSurface.screen ? toastSurface.screen.name : ""
+                // The `notify` IpcTarget below lands on the primary
+                // output's host, which is why the flag travels with the
+                // attachment.
+                Component.onCompleted: ToastRegistry.attachHost(toastHost, toastHost.screenName, modelData.isPrimary)
+                Component.onDestruction: ToastRegistry.detachHost(toastHost)
+            }
+        }
+    }
+
+    // The engine-placed pane's content, built FRESH on every open by
+    // PanePopoutTransport against the engine's root context (so only
+    // context properties, never ids from this file), and destroyed with
+    // the toplevel on close. Same declaration as the fallback above; the
+    // two cannot share one Component because the delegate's is in a
+    // PerScreenPanels context the transport cannot reach.
+    Component {
+        id: paneComponent
+
+        ControlCenter {
+            provider: ControlCenterRegistry
+            tileIds: ControlCenterRegistry.tileIds
         }
     }
 
@@ -133,27 +272,30 @@ Item {
         PowerMenu {}
     }
 
-    // The control center hangs from the bar as a pane. There is no
-    // surface to place — BarHost paints the pane inside the bar's own
-    // surface and the delegate above mounts the content — but it IS still
-    // a popout to the controller:
-    // main.cpp routes the "control-center" id to a SocketPopoutTransport
-    // that drives ControlCenterRegistry.openScreen. Going through
-    // Popouts rather than writing that property directly is what makes
-    // the Modal power menu close it, refuses it while a modal is up, and
-    // drains it on reload, all without this file remembering to.
+    // The control center is a pane tethered to the bar. main.cpp routes
+    // the "control-center" id to a PanePopoutTransport, which opens it as
+    // a toplevel the placement engine places (A2 §4), with the bar-socket
+    // transport behind it as the floating fallback (an output with no
+    // engine, or a toplevel that could not be built); both drive
+    // ControlCenterRegistry.openScreen. Going through Popouts rather than
+    // writing that property directly is what makes the Modal power menu
+    // close it, refuses it while a modal is up, and drains it on reload,
+    // all without this file remembering to.
     //
-    // No `content`: the socket transport creates nothing, and the
-    // controller never reads it. `targetScreen` is the output whose bar
-    // button fired, so a multi-head setup hangs the pane from that bar.
-    // No keyboard focus: a bar-painted pane is not a surface that can
-    // take a layer-shell grab.
+    // `content` is the pane's content for the toplevel; the fallback
+    // ignores it and the delegate above mounts its own. `targetScreen` is
+    // the output whose bar button fired, so a multi-head setup tethers the
+    // pane to that bar. Keyboard focus: a toplevel takes it as a window,
+    // which is what lets Escape close the pane (A2 §4.7). No dismiss on
+    // focus loss: a pane is a tile, and tiles do not vanish when you look
+    // elsewhere.
     // The control center and the launcher share the default popout
     // scope, so opening one CLOSES the other. That is the intended
     // behaviour for two full-attention surfaces triggered from the same
     // bar, and it is worth stating because nothing at either call site
     // hints at it: give one of them its own scope and they would happily
-    // sit open together.
+    // sit open together. The same scope is the A2 §4.7 arbitration for
+    // panes: a second pane id opened here replaces the first.
     function toggleControlCenter(source: Item): void {
         // screenOf hands back a QScreen the C++ side owns; the controller
         // marks it CppOwnership before returning, so the JS GC cannot
@@ -162,9 +304,10 @@ Item {
         const target = ControlCenterRegistry.screenOf(source);
         const request = {
             "popoutId": "control-center",
+            "content": paneComponent,
             "targetScreen": target,
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
-            "keyboardFocus": false,
+            "keyboardFocus": true,
             "dismissOnFocusLoss": false
         };
         // The arbiter keys on the popout id alone, which is right for the
@@ -326,6 +469,37 @@ Item {
             "keyboardFocus": true,
             "dismissOnFocusLoss": true
         });
+    }
+
+    // The OSD's wire surface, per the OSD demo:
+    // `phosphorctl call osd.show --arg kind=volume --arg value=62`. This is
+    // how a compositor keybind for a volume or brightness key reaches the
+    // band. Broadcast to every screen (the demo's "" target), which is what
+    // a hardware key means. For the stateful kinds (mic, caps) a value of 0
+    // reads as off and non-zero as on; the value-based kinds ignore that.
+    // Returns false for a kind no factory serves, so a typo reports failure
+    // over the wire rather than vanishing.
+    IpcTarget {
+        target: "osd"
+
+        function show(kind: string, value: int): bool {
+            return OsdRegistry.show(kind, value, "");
+        }
+    }
+
+    // A toast over the wire:
+    // `phosphorctl call notify.send --arg summary=Hi --arg body=There`. It
+    // lands on the primary output's stack and returns the toast id the host
+    // assigned (-1 when suppressed or when no host is up). This is the
+    // shell's own path, for scripts and for seeing the stack at all; the
+    // org.freedesktop.Notifications server is not run by this process yet,
+    // so notify-send does not arrive here.
+    IpcTarget {
+        target: "notify"
+
+        function send(summary: string, body: string): int {
+            return ToastRegistry.send(summary, body);
+        }
     }
 
     // The launcher's wire surface, per the mockup's

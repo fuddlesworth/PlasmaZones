@@ -99,6 +99,9 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Widgets/NotificationButton.qml
     qml/Phosphor/Bar/Widgets/PowerButton.qml
     qml/Phosphor/Bar/Widgets/Spacer.qml
+    # The wire from a chip to its engine-placed pane (A2 §4.3): pure
+    # routing math plus the two segments it draws.
+    qml/Phosphor/Bar/PaneTether.qml
 )
 
 # Pin each QML file's resource alias to its basename so import resolution

@@ -10,6 +10,9 @@
 
 #include <PhosphorShell/PanelWindow.h>
 
+#include <QRect>
+#include <QRectF>
+#include <QRegion>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QtTest/QtTest>
@@ -25,7 +28,84 @@ private Q_SLOTS:
     void shadowSizeAndCarveClampToZero();
     void settersNotifyOncePerRealChange();
     void interactiveThicknessFollowsThicknessUntilSet();
+    void inputRegionIsUnsetUntilAListArrives();
+    void explicitInputRegionClampsAndSkipsJunk();
 };
+
+// The explicit region is the second live input-region input, and its
+// three states have to stay distinct: unset (the band rule), an empty list
+// (click-through, which the engine expresses through a window flag rather
+// than a mask) and a list of rects. Collapsing any two turns a full-screen
+// OSD overlay into a click sink over every window.
+void TestPanelWindowSetters::inputRegionIsUnsetUntilAListArrives()
+{
+    PanelWindow panel;
+    QVERIFY(!panel.hasExplicitInputRegion());
+    QVERIFY(!panel.inputRegion().isValid());
+
+    QSignalSpy spy(&panel, &PanelWindow::inputRegionChanged);
+
+    // An empty list IS a setting: it is the click-through case.
+    panel.setInputRegion(QVariantList{});
+    QVERIFY(panel.hasExplicitInputRegion());
+    QVERIFY(panel.inputRegion().toList().isEmpty());
+    QCOMPARE(spy.count(), 1);
+
+    // Change-gated, like every other setter here.
+    panel.setInputRegion(QVariantList{});
+    QCOMPARE(spy.count(), 1);
+
+    const QVariantList cards{QVariant(QRectF(10, 20, 300, 80))};
+    panel.setInputRegion(cards);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(panel.inputRegion().toList(), cards);
+    panel.setInputRegion(cards);
+    QCOMPARE(spy.count(), 2);
+
+    // A non-list value is refused into the empty (click-through) region
+    // rather than the band rule: a typo in QML must not make an overlay
+    // start swallowing clicks.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("expects a list of rects")));
+    panel.setInputRegion(QVariant(42));
+    QVERIFY(panel.hasExplicitInputRegion());
+    QVERIFY(panel.inputRegion().toList().isEmpty());
+    QCOMPARE(spy.count(), 3);
+
+    // undefined / null from QML reverts to the band rule.
+    panel.setInputRegion(QVariant());
+    QVERIFY(!panel.hasExplicitInputRegion());
+    QCOMPARE(spy.count(), 4);
+}
+
+void TestPanelWindowSetters::explicitInputRegionClampsAndSkipsJunk()
+{
+    const QSize surface(1920, 1080);
+
+    // Unset and empty both yield nothing.
+    QVERIFY(PanelWindow::explicitInputRegion(QVariant(), surface).isEmpty());
+    QVERIFY(PanelWindow::explicitInputRegion(QVariantList{}, surface).isEmpty());
+
+    // Two cards: the union, with the one overhanging the surface clamped to
+    // it (an overhanging region is one the compositor would have to clip).
+    const QVariantList rects{
+        QVariant(QRectF(100, 50, 360, 90)),
+        QVariant(QRect(1800, 900, 400, 400)),
+        // Not a rect at all: skipped, never a crash or a full-surface region.
+        QVariant(QStringLiteral("nope")),
+        // Entirely off the surface: contributes nothing.
+        QVariant(QRectF(-500, -500, 100, 100)),
+    };
+    const QRegion region = PanelWindow::explicitInputRegion(rects, surface);
+    QVERIFY(!region.isEmpty());
+    QCOMPARE(region.boundingRect(), QRect(100, 50, 1820, 1030));
+    QVERIFY(region.contains(QPoint(120, 60)));
+    QVERIFY(region.contains(QPoint(1900, 1000)));
+    QVERIFY(!region.contains(QPoint(1000, 500)));
+    QCOMPARE(region.rectCount(), 2);
+
+    // A degenerate surface yields nothing regardless of the list.
+    QVERIFY(PanelWindow::explicitInputRegion(rects, QSize(0, 0)).isEmpty());
+}
 
 // The input band's depth is the ONE panel geometry ShellEngine samples
 // live, so the "0 means follow thickness" rule has to hold exactly: a

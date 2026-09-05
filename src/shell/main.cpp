@@ -5,8 +5,13 @@
 #include "ControlCenterController.h"
 #include "LauncherController.h"
 #include "LayerPopoutTransport.h"
+#include "OsdController.h"
+#include "PanePopoutTransport.h"
+#include "PaneRules.h"
 #include "RoutingPopoutTransport.h"
+#include "ShellEffects.h"
 #include "SocketPopoutTransport.h"
+#include "ToastController.h"
 
 #include <PhosphorShellLauncher/LauncherModel.h>
 
@@ -256,6 +261,15 @@ int main(int argc, char* argv[])
     // (and every QML binding to LauncherResults) down first.
     PhosphorShellApp::LauncherController launcherController;
 
+    // The OSD registry owner and the toast broker, process-global like the
+    // controllers above and declared before the engine for the same
+    // reverse-destruction reason. Each per-screen host built by shell.qml
+    // attaches itself to these, and the `osd` / `notify` IpcTargets fan
+    // out through them; the hosts are held by QPointer so a reload that
+    // destroys them leaves nothing dangling.
+    PhosphorShellApp::OsdController osdController;
+    PhosphorShellApp::ToastController toastController;
+
     // The IPC router every IpcTarget in the shell's QML registers with.
     // Declared before the engine for the same reverse-destruction reason as
     // the others: targets unregister themselves on destruction and must find
@@ -297,9 +311,25 @@ int main(int argc, char* argv[])
     // after the layer transport and before the controller, so reverse
     // destruction tears the controller down first.
     PhosphorShellApp::SocketPopoutTransport socketTransport(&controlCenterController);
-    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &socketTransport,
+    // Phase 2: the control center is an ENGINE-PLACED PANE, a real toplevel
+    // the daemon positions (A2 §4). The pane transport builds it and keeps
+    // the bar-socket transport as its floating fallback for an output with
+    // no placement engine, so the router's "socket" slot is the pane
+    // transport and the socket transport sits behind it.
+    PhosphorShellApp::PanePopoutTransport paneTransport(&controlCenterController, &socketTransport);
+    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport,
                                                              {QStringLiteral("control-center")});
     PhosphorPopout::PopoutController popouts(&routedTransport);
+
+    // Compositor-side effects the QML asks for (blur behind the bar band).
+    PhosphorShellApp::ShellEffects shellEffects;
+
+    // The pane's window rule, seeded into the daemon's store if absent so
+    // the engines know where to put a toplevel with the pane's app id.
+    PhosphorShellApp::PaneRules::seed(
+        &app,
+        PhosphorShellApp::PaneRules::controlCenterRule(
+            PhosphorShellApp::PanePopoutTransport::appIdFor(QStringLiteral("control-center"))));
 
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{
@@ -324,8 +354,9 @@ int main(int argc, char* argv[])
     // the new one on every hot reload. Paired with the aboutToReload drain
     // below: that drops the outgoing engine's surfaces while its object
     // graph is still valid, and this adopts the replacement.
-    engine.addEngineHook([&popoutTransport](QQmlEngine* qmlEngine) {
+    engine.addEngineHook([&popoutTransport, &paneTransport](QQmlEngine* qmlEngine) {
         popoutTransport.setEngine(qmlEngine);
+        paneTransport.setEngine(qmlEngine);
     });
 
     // Bar-anchored popouts hang below the bar's reserved band. The popout
@@ -363,9 +394,10 @@ int main(int argc, char* argv[])
     // popout stack, so defining the work once keeps them from drifting.
     // Both inner transports drain: the socket one holds the bar pocket's
     // open state, which would otherwise survive a reload.
-    const auto drainPopouts = [&popoutTransport, &socketTransport, &popouts] {
+    const auto drainPopouts = [&popoutTransport, &paneTransport, &socketTransport, &popouts] {
         popouts.closeAll();
         popoutTransport.drain();
+        paneTransport.drain();
         socketTransport.drain();
     };
     QObject::connect(&engine, &PhosphorShell::ShellEngine::aboutToReload, &popouts, drainPopouts);
@@ -395,6 +427,12 @@ int main(int argc, char* argv[])
     // same reason: ControlCenter mounts each tile through
     // ControlCenterRegistry.createTile(id, parent) on every engine the
     // shell builds, startup and each hot reload alike.
+    // Compositor effects, same shape: shell.qml asks for blur behind the
+    // bar band through ShellEffects.setBlurBehind.
+    engine.addEngineHook([&shellEffects](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellEffects"), &shellEffects);
+    });
+
     engine.addEngineHook([&controlCenterController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controlCenterController);
     });
@@ -406,6 +444,17 @@ int main(int argc, char* argv[])
     // engine the shell builds.
     engine.addEngineHook([&launcherController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherResults"), launcherController.model());
+    });
+
+    // The OSD provider and the toast broker, bound the same way. Context
+    // properties rather than ids because the per-screen hosts that read
+    // them are PerScreenPanels delegates, built in a context where
+    // shell.qml's ids do not resolve.
+    engine.addEngineHook([&osdController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("OsdRegistry"), &osdController);
+    });
+    engine.addEngineHook([&toastController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ToastRegistry"), &toastController);
     });
 
     // A failure after the initial load is not fatal to the process: the

@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Notifications.Toast, a single notification card under its band.
 //
-// A toast is a 2 px spectrum band on the top edge of the work area
-// (purple; rose while critical, breathing) with the card hanging 8 px
-// under it (A3 §3). The card is abyss glass with a 1 px spectrum stroke,
-// no shadow. It owns its auto-dismiss timer, which pauses while the
-// pointer hovers. Position and stacking are the host's job (ToastHost).
-//
-// Phase 1 hangs the band from the screen's top edge; hanging it from the
-// concerned WINDOW's top edge is phase 2 and needs that window's rect.
+// A toast is a 2 px spectrum band on the top edge of the window it
+// concerns, or of the work area when it has none (purple; rose while
+// critical, breathing), with the card hanging 8 px under it (A3 §3). The
+// band spans the toast's full width and the card is at most 360 px,
+// centred, so a host that sizes the toast to a window's width gets the
+// band across the window's edge with the card under its middle. The
+// card is abyss glass with a 1 px spectrum stroke, no shadow. It owns its
+// auto-dismiss timer, which pauses while the pointer hovers. Position
+// and stacking are the host's job (ToastHost).
 //
 //   Toast {
 //       appName: "Mail"; summary: "New message"
@@ -84,10 +85,10 @@ Item {
     Item {
         id: card
 
-        anchors.left: parent.left
-        anchors.right: parent.right
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: 2 + Tokens.spacing_s
+        width: Math.min(360, toast.width)
         implicitHeight: Math.max(64, row.implicitHeight + 2 * Tokens.spacing_m)
         height: implicitHeight
 

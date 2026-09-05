@@ -195,6 +195,7 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor/autotileadaptor.h
     dbus/tilingadaptor/tilingadaptor.cpp
     dbus/tilingadaptor/relay.cpp
+    dbus/tilingadaptor/mapmodel.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
@@ -720,11 +721,32 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/routingpopouttransport.cpp
         shell/SocketPopoutTransport.h
         shell/socketpopouttransport.cpp
+        # The engine-placed pane (A2 §4): a real toplevel the daemon
+        # places, with the bar-socket transport as its floating fallback;
+        # the bundled window rule that names its placement; and the
+        # compositor blur request behind the bar's band.
+        shell/PanePopoutTransport.h
+        shell/panepopouttransport.cpp
+        shell/PaneRules.h
+        shell/panerules.cpp
+        shell/ShellEffects.h
+        shell/shelleffects.cpp
         # The launcher's registry owner: built-in providers, the model the
         # launcher popout binds, and the clipboard + Toplevels services the
         # providers read that nothing else in the shell owns yet.
         shell/LauncherController.h
         shell/launchercontroller.cpp
+        # The OSD registry owner + its generic QML-component factory, and
+        # the toast broker: the per-screen OSDHost / ToastHost surfaces in
+        # shell.qml read them as the OsdRegistry / ToastRegistry context
+        # properties, and the `osd` / `notify` IpcTargets fan out through
+        # them.
+        shell/OsdController.h
+        shell/osdcontroller.cpp
+        shell/QmlComponentOSDFactory.h
+        shell/qmlcomponentosdfactory.cpp
+        shell/ToastController.h
+        shell/toastcontroller.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -752,6 +774,12 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellLauncher::PhosphorShellLauncher
             PhosphorShellLauncher::PhosphorShellLauncherQml
             PhosphorShellLauncherQmlplugin
+            # Phosphor.OSD and Phosphor.Notifications + their registrars,
+            # for the per-screen OSD and toast overlays shell.qml mounts.
+            PhosphorShellOsd::PhosphorShellOsdQml
+            PhosphorShellOsdQmlplugin
+            PhosphorShellNotifications::PhosphorShellNotificationsQml
+            PhosphorShellNotificationsQmlplugin
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.
@@ -789,11 +817,28 @@ if(BUILD_PHOSPHOR_SHELL)
             # under XDG paths, ShellLoader falls back to qrc:/qt/qml/...
             # so the binary works without the optional DATADIR install.
             phosphor_shell_exampleplugin
+            # The pane rule is built with the rules library's own types
+            # and seeded over org.plasmazones.Rules.
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
             Qt6::Core
             Qt6::Gui
             Qt6::Quick
             Qt6::Qml
+            Qt6::DBus
     )
+
+    # Compositor blur behind the bar's band goes through the kde-blur
+    # Wayland protocol, which KWindowEffects speaks. Optional: without it
+    # the band is a plain navy tint and ShellEffects.blurAvailable() says
+    # so, rather than the whole shell tier failing to configure.
+    find_package(KF6WindowSystem QUIET)
+    if(KF6WindowSystem_FOUND)
+        target_link_libraries(phosphor-shell PRIVATE KF6::WindowSystem)
+        target_compile_definitions(phosphor-shell PRIVATE PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM)
+    else()
+        message(STATUS "KF6WindowSystem not found: the Phosphor bar band gets no compositor blur")
+    endif()
 
     install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
 endif()

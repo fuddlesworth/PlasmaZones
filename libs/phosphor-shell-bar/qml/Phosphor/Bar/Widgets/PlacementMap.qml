@@ -7,7 +7,8 @@
 // drawn from the engine's own model through Phosphor.Shell.PlacementMap,
 // with one 2 × 1 px tick per virtual desktop under it (A2 §1). Hover
 // grows it to 22 px; click activates a cell; wheel pans the strip or
-// steps focus; Ctrl+wheel switches desktop.
+// steps focus; Ctrl+wheel switches desktop; on a scrolling screen a drag
+// pans the strip's view 1:1 in strip space (the lens drag).
 //
 // The map draws whatever mode the screen is in right now; the shape IS
 // the mode, so there is no label.
@@ -64,6 +65,52 @@ BarWidget {
                 duration: hover.hovered ? Motion.duration_enter_content : Motion.duration_release
                 easing: hover.hovered ? Motion.reveal : Motion.release
             }
+        }
+
+        // Lens drag (A2 §1.5): on a scrolling screen a press-and-drag over
+        // the miniature pans the real strip 1:1 in strip space, a map
+        // pixel being stripExtentPx / map width strip pixels. Deltas are
+        // accumulated and flushed once per frame so a fast drag is one
+        // daemon call per frame rather than one per pointer event.
+        DragHandler {
+            id: lensDrag
+
+            property real sentX: 0
+            property real pendingPx: 0
+
+            enabled: root.map !== null && root.map.mode === 2 && root.map.stripExtentPx > 0
+            target: null
+            xAxis.enabled: true
+            yAxis.enabled: false
+
+            function flush() {
+                const px = Math.round(pendingPx);
+                if (px !== 0 && root.map)
+                    root.map.scrollViewByPx(px);
+                // Keep the sub-pixel remainder so a slow drag still adds up.
+                pendingPx -= px;
+            }
+
+            onActiveChanged: {
+                if (active) {
+                    sentX = 0;
+                } else {
+                    flush();
+                }
+                pendingPx = 0;
+            }
+            onActiveTranslationChanged: {
+                if (!active || mini.width <= 0)
+                    return;
+                const dx = activeTranslation.x - sentX;
+                sentX = activeTranslation.x;
+                pendingPx += dx * root.map.stripExtentPx / mini.width;
+            }
+        }
+
+        FrameAnimation {
+            running: lensDrag.active && Math.abs(lensDrag.pendingPx) >= 1
+            onTriggered: lensDrag.flush()
         }
     }
 

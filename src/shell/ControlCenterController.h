@@ -14,6 +14,8 @@
 // QV4::ExecutionEngine::fromData took an unknown-pointer path and
 // segfaulted the shell on the third IPC toggle (the first two survived
 // by returning undefined, silently falling back to the primary output).
+#include <QHash>
+#include <QRect>
 #include <QScreen>
 #include <QString>
 #include <QStringList>
@@ -66,6 +68,18 @@ class ControlCenterController : public QObject
     /// the panel on the bar the user actually clicked, instead of every bar
     /// at once.
     Q_PROPERTY(QString openScreen READ openScreen NOTIFY openScreenChanged)
+    /// True while the open control center is an ENGINE-PLACED PANE (a
+    /// toplevel the daemon positions, A2 §4) rather than the bar's inline
+    /// pane. The bar on `openScreen` then draws only the tether to it.
+    /// Written by PanePopoutTransport alongside openScreen.
+    Q_PROPERTY(bool paneExternal READ isPaneExternal NOTIFY paneExternalChanged)
+    /// The engine-placed pane's frame in its screen's pixels (origin at the
+    /// screen's top-left), or an empty rect when unknown. A Wayland client
+    /// is not told where the compositor put its toplevel, so the bar locates
+    /// the pane on the placement map and reports it here (reportPaneRect);
+    /// the pane's own top band reads it back to sample the rail over its
+    /// x-range.
+    Q_PROPERTY(QRect paneRect READ paneRect NOTIFY paneRectChanged)
 
 public:
     // `idleService` is handed to IdleTile as an initial property. Passing
@@ -108,13 +122,35 @@ public:
     /// surface at runtime, as an undefined that quietly opens nothing.
     [[nodiscard]] Q_INVOKABLE QScreen* screenOf(QQuickItem* item) const;
 
+    [[nodiscard]] bool isPaneExternal() const;
+    /// Not Q_INVOKABLE, for the same reason as setOpenScreen: only the pane
+    /// transport says whether the open pane is a toplevel.
+    void setPaneExternal(bool external);
+
+    [[nodiscard]] QRect paneRect() const;
+    /// The bar reports where the placement map says the pane is. An empty
+    /// rect clears it (the pane closed, or it could not be located).
+    Q_INVOKABLE void reportPaneRect(const QRect& rect);
+
+    /// Each bar reports its screen's placement mode as the map changes
+    /// (0 snapping, 1 tiling, 2 scrolling, -1 none). The pane transport
+    /// asks before opening: no engine on the output means the floating
+    /// fallback, since a toplevel nobody places is not a pane.
+    Q_INVOKABLE void reportScreenMode(const QString& screenName, int mode);
+    [[nodiscard]] int modeForScreen(const QString& screenName) const;
+
 Q_SIGNALS:
     void openScreenChanged();
+    void paneExternalChanged();
+    void paneRectChanged();
 
 private:
     PhosphorRegistry::Registry<PhosphorRegistry::IControlCenterTileFactory> m_registry;
     QStringList m_tileIds;
     QString m_openScreen;
+    QRect m_paneRect;
+    QHash<QString, int> m_screenModes;
+    bool m_paneExternal = false;
 };
 
 } // namespace PhosphorShellApp

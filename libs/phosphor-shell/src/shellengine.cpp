@@ -958,6 +958,26 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
         if (!guardedPanel) {
             return;
         }
+        // An explicit region replaces the band. Its empty case means
+        // click-through, which a mask cannot say: QWaylandWindow treats an
+        // empty mask as "no input region", the whole surface. So the empty
+        // case goes through Qt::WindowTransparentForInput instead, which
+        // is the same flag phosphor-layer's hide path uses, and which
+        // QWaylandWindow::updateInputRegion tests before the mask. The
+        // flag is only touched while the window is visible: the layer
+        // library sets it on hide and clears it on show, and a write from
+        // here while hidden would fight that.
+        if (guardedPanel->hasExplicitInputRegion()) {
+            const QRegion region = PanelWindow::explicitInputRegion(guardedPanel->inputRegion(), window->size());
+            if (window->isVisible()) {
+                window->setFlag(Qt::WindowTransparentForInput, region.isEmpty());
+            }
+            if (!region.isEmpty()) {
+                window->setMask(region);
+            }
+            window->requestUpdate();
+            return;
+        }
         const QRect visible = PanelWindow::visibleBand(edge, guardedPanel->effectiveInputThickness(), window->size());
         if (visible.isEmpty()) {
             return;
@@ -1027,6 +1047,9 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // zone — which is why the depth is a separate property rather than a
     // relaxation of the rule below.
     connect(panel, &PanelWindow::interactiveThicknessChanged, window, apply);
+    // The explicit region is live for the same reason: a toast surface
+    // re-shapes its input to the cards as they come and go.
+    connect(panel, &PanelWindow::inputRegionChanged, window, apply);
 
     // Deliberately NOT connected to thicknessChanged / edgeChanged.
     //
