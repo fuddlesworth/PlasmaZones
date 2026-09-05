@@ -119,6 +119,9 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
     }
     if (shader) {
         compiled.uStripLoc = shader->uniformLocation("uStrip");
+        // Always live: the entry point's re-composite samples it even when
+        // the pack itself never does, so it is never optimised out.
+        compiled.uBelowLoc = shader->uniformLocation("uBelow");
         compiled.iTimeLoc = shader->uniformLocation("iTime");
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
         compiled.iFrameLoc = shader->uniformLocation("iFrame");

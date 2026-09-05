@@ -22,16 +22,36 @@
 // on the settle frame — no fade is run for you — so a pack that still
 // distorts at zero motion pops when the normal scene paint takes over.
 //
-// The pass covers the FULL OUTPUT, but the capture holds only the STRIP
-// LAYER and what lies beneath it (the desktop background, keep-below
-// windows). Everything stacked above the strip — OSDs, notifications,
-// floating windows, panels, daemon overlays — is excluded from the capture
-// and composited sharp on top after the pass, so a pack cannot smear a
-// surface that is not scrolling. The software cursor is kept out the same
-// way: the compositor's cursor is hidden for the pass and the pass blits it
-// itself as its last draw. stripMask() below is still useful for
-// confining distortion to the strip's work area (keeping the wallpaper
-// margins steady, feathering the blur at the strip's edges).
+// The pass covers the FULL OUTPUT, but getStripColor() returns ONLY THE
+// STRIP LAYER: the columns, the tab pills, and nothing else. The pass
+// renders the scene into uStrip with everything stacked BELOW the strip
+// (the desktop background, keep-below windows) painted first, so the
+// compositor's blur and translucency have their backdrop; at the strip
+// band's bottom edge it copies that below-strip content into uBelow and
+// zeroes uStrip's alpha, then the columns paint over it with their real
+// coverage. getStripColor() subtracts uBelow back out of every sample, and
+// the entry point (PZ_FINALIZE_COLOR below) re-composites the pack's
+// output over the UNDISPLACED uBelow. Everything stacked above the strip
+// (OSDs, notifications, floating windows, panels, daemon overlays) is
+// excluded from the capture and composited sharp on top after the pass. So
+// a pack cannot smear a surface that is not scrolling, and the wallpaper
+// stays still no matter how the pack warps the strip. The software cursor
+// is kept out the same way: the compositor's cursor is hidden for the pass
+// and the pass blits it itself as its last draw.
+//
+// getStripColor() CARRIES REAL ALPHA: premultiplied pixels with a = 1 over
+// an opaque column, a = 0 in the gaps between columns and everywhere no
+// column reaches, fractional along anti-aliased corners, shadows and
+// translucent clients. The re-composite is premultiplied (out = pack +
+// below * (1 - pack.a)), so a pack's result must stay premultiplied: rgb <=
+// a everywhere, additive light scaled by the coverage it decorates, and
+// alpha carried through from the samples rather than forced to 1. Pure
+// resamples and averages of getStripColor() (blur, warp, bow) keep the
+// invariant by construction. A pack that takes channels from different taps
+// or adds its own light must keep it deliberately (see strip-chromatic and
+// phosphor-gate). stripMask() below is still useful for confining
+// distortion to the strip's work area (feathering the blur at the strip's
+// edges).
 //
 // Strip transitions only ever ATTACH in the kwin-effect (the daemon has no
 // strip scene to capture), but the pack sources compile on both uniform
@@ -86,8 +106,14 @@
 
 #ifdef PLASMAZONES_KWIN
 uniform sampler2D uStrip;
+uniform sampler2D uBelow;
 #else
 #define uStrip uTexture1
+// Slot 2 is never fed on the UBO branch (the preview plays the pack against
+// a stand-in scene that IS the strip layer), and an unfed sampler reads as
+// transparent black there — which makes both uses of uBelow below the
+// identity, exactly as intended.
+#define uBelow uTexture2
 #endif
 
 // vec4 iStripMotion — the spring's live displacement and speed, pushed every
@@ -174,13 +200,46 @@ vec2 stripAxisPerp() {
 // convention as getFromColor/getToColor on the desktop pass. A Qt-RHI
 // uploaded scene is top-origin (Y-down), so the UBO branch samples the uv
 // directly.
-vec4 getStripColor(vec2 uv) {
+vec2 stripSampleUv(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
-    return texture(uStrip, vec2(uv.x, 1.0 - uv.y));
+    return vec2(uv.x, 1.0 - uv.y);
 #else
-    return texture(uStrip, uv);
+    return uv;
 #endif
 }
+
+// The strip layer alone, premultiplied. uStrip holds the columns composited
+// over the below-strip content (so blur and translucency are already
+// resolved in it) with alpha = the columns' coverage; uBelow holds that
+// below-strip content on its own. Over a column the capture is exactly
+// window + below * (1 - a), so subtracting below * (1 - a) leaves the
+// window layer: opaque content is untouched, a translucent client keeps
+// only its own contribution, and a gap (a = 0) comes back as zero. The
+// max() only absorbs the quantisation of an 8-bit capture, which can leave
+// a channel a fraction below its exact value; the invariant rgb <= a holds
+// by construction otherwise.
+vec4 getStripColor(vec2 uv) {
+    vec2 suv = stripSampleUv(uv);
+    vec4 c = texture(uStrip, suv);
+    vec4 below = texture(uBelow, suv);
+    return vec4(max(c.rgb - below.rgb * (1.0 - c.a), vec3(0.0)), c.a);
+}
+
+// The strip pass's final-colour hook: put the below-strip content back,
+// UNDISPLACED, under whatever the pack produced from the strip layer. This
+// is what makes the wallpaper stand still while a pack warps the columns
+// over it. Overrides the identity default from animation_uniforms.glsl
+// (included by the prologue, so it is already defined here) for the kwin
+// branch only; the UBO branch keeps the identity and its unfed uBelow. The
+// output is opaque: the quad replaces the frame.
+#ifdef PLASMAZONES_KWIN
+vec4 stripComposite(vec4 packColor) {
+    vec4 below = texture(uBelow, stripSampleUv(vTexCoord));
+    return vec4(packColor.rgb + below.rgb * (1.0 - packColor.a), 1.0);
+}
+#undef PZ_FINALIZE_COLOR
+#define PZ_FINALIZE_COLOR(c) stripComposite(c)
+#endif
 
 // 1.0 inside the strip work area, 0.0 outside, with a soft edge of
 // `feather` uv units (of the shorter output axis) so a masked effect fades

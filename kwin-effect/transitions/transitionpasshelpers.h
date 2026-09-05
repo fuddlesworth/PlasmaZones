@@ -52,6 +52,17 @@ namespace TransitionPass {
 /// resting on a guarantee made in another file.
 GLenum captureFormatFor(const KWin::RenderTarget& outputTarget);
 
+/// The format for a capture that must carry REAL ALPHA: the strip pass's,
+/// which holds the strip layer alone over a transparent clear and is then
+/// blended over the composite beneath it. captureFormatFor cannot serve it:
+/// KWin's output buffers are typically opaque (GL_RGB8, or GL_RGB10_A2 with
+/// two bits of alpha), so a capture in the target's own format turns the
+/// transparent clear into opaque black and the blended quad paints over the
+/// wallpaper. Keeps the target's PRECISION so an HDR intermediate loses no
+/// headroom: any float or wide target maps to GL_RGBA16F, everything else to
+/// GL_RGBA8.
+GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget);
+
 /// Allocate a capture texture of @p deviceSize in @p internalFormat (LINEAR
 /// filter, CLAMP_TO_EDGE) — the shared preamble of every per-output capture.
 /// Returns null when the size is empty or GL allocation fails.

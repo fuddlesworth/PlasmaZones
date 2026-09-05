@@ -30,6 +30,26 @@ GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
     return targetTex ? targetTex->internalFormat() : GL_RGBA8;
 }
 
+GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget)
+{
+    switch (captureFormatFor(outputTarget)) {
+    // Float and wide (10-bit and up) targets: keep the precision, add the
+    // alpha channel. GL_RGB10_A2 is listed here on purpose: it is what KWin
+    // hands a 10-bit SDR output, and its 2-bit alpha cannot carry coverage.
+    case GL_RGBA16F:
+    case GL_RGB16F:
+    case GL_RGBA32F:
+    case GL_RGB32F:
+    case GL_R11F_G11F_B10F:
+    case GL_RGB10_A2:
+    case GL_RGBA16:
+    case GL_RGB16:
+        return GL_RGBA16F;
+    default:
+        return GL_RGBA8;
+    }
+}
+
 std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, GLenum internalFormat)
 {
     if (deviceSize.isEmpty()) {

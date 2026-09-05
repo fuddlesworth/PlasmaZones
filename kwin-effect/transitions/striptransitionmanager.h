@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 namespace KWin {
+class EffectWindow;
 class GLFramebuffer;
 class GLShader;
 class GLTexture;
@@ -39,18 +40,28 @@ class PlasmaZonesEffect;
 /// no from/to endpoint pair and no progress: wheel scrolling retargets the
 /// view spring with PreserveVelocity on every batch (StripViewAnimator), so
 /// there are no discrete legs for a crossfade to play. Instead, every frame
-/// while the spring is live, the strip layer — columns already translated
-/// by the spring's offset, parked columns relocated, the tab pills blitted
-/// at the anchor's slot, the desktop background beneath — is rendered into
-/// a per-output capture (windows stacked ABOVE the strip are excluded and
-/// composited sharp on top after the pass, so an OSD popped mid-scroll is
-/// never smeared; see PlasmaZonesEffect::m_stripCaptureAboveStrip and the
-/// record-and-return in paintWindow that consumes it), and one
-/// full-screen quad runs the assigned strip pack (data/animations/<id>,
-/// appliesTo ["strip"], sampling uStrip via strip_transition.glsl) over it,
-/// driven by offset/velocity uniforms (iStripMotion). The pack DECORATES the
-/// motion; the spring still owns it, so the curve/duration settings on
-/// `scrolling.view` behave identically with or without a pack.
+/// while the spring is live, the scene — columns already translated by the
+/// spring's offset, parked columns relocated, the tab pills blitted at the
+/// anchor's slot — is rendered into a per-output capture whose ALPHA is the
+/// strip layer's coverage alone. The windows stacked BELOW the strip (the
+/// desktop background, keep-below windows) paint into it first, so the
+/// compositor's blur and translucency have their backdrop; at the band's
+/// bottom edge paintWindow calls snapshotBelowCapture(), which copies that
+/// below-strip content into a second texture (uBelow) and zeroes the
+/// capture's alpha before the columns paint over it. Windows stacked ABOVE
+/// the strip (OSDs, notifications, floats, panels) are skipped and
+/// composited sharp over the pass, so an OSD popped mid-scroll is never
+/// smeared; see PlasmaZonesEffect::m_stripCaptureBelowStrip /
+/// m_stripCaptureAboveStrip and the trigger and record-and-return in
+/// paintWindow that consume them. One full-screen quad then runs the
+/// assigned strip pack (data/animations/<id>, appliesTo ["strip"], sampling
+/// uStrip via strip_transition.glsl, which subtracts uBelow out of every
+/// sample so the pack only ever displaces the strip layer, and whose entry
+/// point re-composites the result over the UNDISPLACED uBelow), driven by
+/// offset/velocity uniforms (iStripMotion). The wallpaper therefore never
+/// moves with the columns. The pack DECORATES the motion; the spring still
+/// owns it, so the curve/duration settings on `scrolling.view` behave
+/// identically with or without a pack.
 ///
 /// The tiling batch path resolves the `scrolling.view` shader beside its
 /// motion-profile resolve and calls notifyLeg() for every output it seeds a
@@ -210,6 +221,10 @@ private:
         // settle, so a new burst of scrolling pays one allocation.
         std::unique_ptr<KWin::GLTexture> captureTex;
         std::unique_ptr<KWin::GLFramebuffer> captureFbo;
+        // The below-strip snapshot (uBelow): a copy of the capture taken at
+        // the strip band's bottom edge, before any column paints. Same
+        // size and format as captureTex, allocated and freed with it.
+        std::unique_ptr<KWin::GLTexture> belowTex;
         // Velocity estimation, painted-frame iTime accumulation, batch-jump
         // compensation and the settle fade, extracted into a plain-numbers
         // struct so the arithmetic is unit-testable without a compositor
@@ -237,6 +252,7 @@ private:
     {
         std::unique_ptr<KWin::GLShader> shader; // null == compile failed (sentinel, don't retry)
         int uStripLoc = -1;
+        int uBelowLoc = -1;
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
         int iFrameLoc = -1;
@@ -293,6 +309,24 @@ private:
     void drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
 
+    /// Draw @p windows sharp onto the current target, bottom to top, each
+    /// through the effect's own paintWindow with m_directPaintCapture set.
+    /// Used for the above-strip set after the pack's quad.
+    void compositeSharp(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                        const QList<KWin::EffectWindow*>& windows);
+
+public:
+    /// Called by PlasmaZonesEffect::paintWindow, inside the capture walk,
+    /// for the first window that is not below the strip band: copies the
+    /// capture (below-strip content only at that point) into the pass's
+    /// belowTex and zeroes the capture's alpha, so the columns that paint
+    /// next leave the capture's alpha equal to the strip layer's coverage.
+    /// Idempotent per capture through m_stripCaptureBelowSnapshotted; a
+    /// no-op outside a capture. Requires the capture framebuffer to be the
+    /// current one, which is true for the whole walk.
+    void snapshotBelowCapture();
+
+private:
     /// Erase one entry, freeing its GL resources. Caller ensures a current
     /// GL context (paintOutput is on the paint thread; the off-thread
     /// mutators call ensureGlContextCurrent first).

@@ -63,9 +63,16 @@ vec3 fluxGradient(float t) {
 // the arrival/departure role weights (each already folded with amp and the
 // work-area mask). Every term carries `kill`, which is EXACTLY 0.0 beyond
 // q = 1.2 — that factor is the bit-exact-identity guarantee for the middle
-// of the screen.
-vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P, float glow, float dimK,
-               float sparkle, float timeSec, float uvAcross) {
+// of the screen. `cov` is the sample's coverage (base.a): the capture is
+// the strip layer alone with transparent gaps between the columns
+// (strip_transition.glsl), so every ADDITIVE term is scaled by it. Light is
+// only ever emitted where there is content to emit it — the family's
+// content-is-the-medium rule — and the premultiplied invariant rgb <= a
+// holds in the gaps, where the gate must leave the wallpaper behind the
+// capture untouched. The silhouette mixes are already premultiplied by the
+// caller and the drain is multiplicative, so neither needs the factor.
+vec3 applyGate(vec3 col, float lum, vec3 sil, float cov, float q, float m, float A, float P, float glow,
+               float dimK, float sparkle, float timeSec, float uvAcross) {
     float kill = 1.0 - smoothstep(1.0, 1.2, q);
     if (kill <= 0.0) {
         return col;
@@ -84,7 +91,7 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     float rimD = (qm - 0.5) / 0.20;
     float rim = exp(-rimD * rimD) * kill; // squared via multiply: rimD is signed
     vec3 gArrCol = fluxGradient(clamp(qm * 0.35, 0.0, 0.35));
-    col += gArrCol * rim * A * glow * sparkle * lumW * 0.9;
+    col += gArrCol * rim * A * glow * sparkle * lumW * cov * 0.9;
 
     // ── Departure: de-energize with a rose afterglow ──
     // Peek's multiplicative drain, strongest where content is about to
@@ -111,7 +118,7 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     // max() floors the slightly-negative excursions the meander can produce.
     float ag = exp(-max(qm, 0.0) / tail) * kill;
     vec3 tailCol = fluxGradient(clamp(1.0 - qm * 0.35, 0.65, 1.0));
-    col += tailCol * ag * P * glow * lumW * 0.35;
+    col += tailCol * ag * P * glow * lumW * cov * 0.35;
 
     // ── Ember sparks feeding the arrival gate ──
     // Condense's comet embers laid ACROSS the travel axis: one comet per band
@@ -146,8 +153,8 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
         float trail = dq < 0.0 ? exp(dq * 5.0) * lat * 0.6 : 0.0;
         float life = smoothstep(0.0, 0.15, ph) * (1.0 - smoothstep(0.75, 1.0, ph));
         float dust = 0.35 + 0.65 * exp(-abs(qm - 0.5) / 0.4);
-        col += fluxGradient(clamp(eq * 0.35, 0.0, 0.35)) * (head + trail) * life * dust * A * embers * glow * 1.2
-            * kill;
+        col += fluxGradient(clamp(eq * 0.35, 0.0, 0.35)) * (head + trail) * life * dust * A * embers * glow * cov
+            * 1.2 * kill;
     }
     return col;
 }
@@ -195,6 +202,15 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     if (qLo > 1.2 && qHi > 1.2) {
         return base;
     }
+    // No coverage, no content: the gaps between columns and the empty run of
+    // the strip are transparent in the capture (strip_transition.glsl), and a
+    // gate lights CONTENT crossing the edge, never the wallpaper behind the
+    // capture. Exact zero out here also spares those fragments the meander
+    // and the silhouette; the fractional-coverage edge pixels fall through
+    // and are handled by the `cov` scaling below.
+    if (base.a < 1.0e-4) {
+        return base;
+    }
 
     // KNOWN CROSS-AXIS LIMIT, accepted: stripMask measures its feather on the
     // SHORTER output axis (strip_transition.glsl documents the hazard), while
@@ -228,13 +244,15 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // uniform cannot distinguish unset from black, and a slot-local threshold
     // would desync this probe from the four stops sharing the idiom.
     vec3 tint = length(p_colorTint.rgb) > 0.01 ? p_colorTint.rgb : vec3(0.043, 0.090, 0.188);
-    // The family silhouette: navy shaped by the content. Deliberately NOT
-    // scaled by base.a the way phosphor-iris scales its copy: the strip
-    // capture is backed by the desktop background inside the work area, so
-    // base.a is 1 wherever the gates can reach (stripMask zeroes everything
-    // outside), and the multiply would be ritual. If a future capture change
-    // lets translucency through, revisit alongside iris's premultiply note.
-    vec3 sil = tint * (0.5 + 1.6 * lum);
+    // The family silhouette: navy shaped by the content, scaled by the
+    // sample's coverage the way phosphor-iris scales its copy. The capture is
+    // the strip layer alone, so base.a is fractional along column edges and
+    // over translucent clients, and an unscaled silhouette mixed into a
+    // partly covered pixel would push rgb past a and bleed navy onto the
+    // wallpaper composited beneath. lum is taken on premultiplied rgb, so
+    // the shaping term already carries coverage; the tint base does not.
+    float cov = base.a;
+    vec3 sil = tint * (0.5 + 1.6 * lum) * cov;
     float glow = clamp(p_glow, 0.0, 2.0);
     float dimK = clamp(p_unlitDim, 0.0, 1.0);
     // The family sparkle grain, verbatim. iFrame grows without bound over a
@@ -259,8 +277,10 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // live in the same work-area space as the gate field they feed (see the
     // bandPos comment).
     float suAcross = dot(su, perp);
-    col = applyGate(col, lum, sil, qLo, m, arrLo * amp * mask, depLo * amp * mask, glow, dimK, sparkle, t, suAcross);
-    col = applyGate(col, lum, sil, qHi, m, arrHi * amp * mask, depHi * amp * mask, glow, dimK, sparkle, t, suAcross);
+    col = applyGate(col, lum, sil, cov, qLo, m, arrLo * amp * mask, depLo * amp * mask, glow, dimK, sparkle, t,
+                    suAcross);
+    col = applyGate(col, lum, sil, cov, qHi, m, arrHi * amp * mask, depHi * amp * mask, glow, dimK, sparkle, t,
+                    suAcross);
 
     // Replace pass; NO upper clamp on rgb (HDR captures, per the desktop
     // packs' rationale). Alpha is the capture's own, matching the identity

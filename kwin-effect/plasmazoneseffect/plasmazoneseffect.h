@@ -2483,27 +2483,41 @@ private:
     mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
 
     /// Latched by StripTransitionManager around its capture's paintScreen:
-    /// while set, paintWindow skips every window in the above-strip set
-    /// below and records it, so the pass can composite exactly that set
-    /// sharp on top of the shader output. Null outside a capture. The
+    /// while set, paintWindow skips every window in the two exclusion sets
+    /// below and records it, so the pass can composite exactly those sets
+    /// sharp under and over the shader output. Null outside a capture. The
     /// stored value is the capture's output; the record site only tests it
-    /// for truthiness (membership in the set already encodes the output),
+    /// for truthiness (membership in a set already encodes the output),
     /// so treat the pointer as a latch with a debugging-friendly value, not
     /// as something compared against.
     KWin::LogicalOutput* m_stripCaptureExclusionOutput = nullptr;
-    /// Which windows the current capture excludes: everything ABOVE the
-    /// topmost strip member (a column managed by the capture output) in
-    /// KWin's stacking order that also intersects
-    /// the capture output. Prebuilt by StripTransitionManager::paintOutput
+    /// Which windows the current capture excludes ABOVE the strip:
+    /// everything above the topmost strip member (a column managed by the
+    /// capture output) in KWin's stacking order that also intersects the
+    /// capture output. Prebuilt by StripTransitionManager::paintOutput
     /// right before its capture and cleared by the same scope guard as the
     /// latch — a stacking FACT, where the old role-based predicate promoted
     /// below-strip floats and closing columns above the shader output.
     QSet<KWin::EffectWindow*> m_stripCaptureAboveStrip;
-    /// The windows skipped by the current capture, in paint (bottom-to-top
-    /// stacking) order. Filled while the latch above is set; consumed by
-    /// the same paintOutput call on the normal path, and cleared by an
-    /// unwind guard when the capture's scene walk throws — either way
-    /// entries never outlive the frame.
+    /// Every window BELOW the strip band in the stacking order — the
+    /// desktop background above all, plus keep-below windows — whether or
+    /// not it touches the capture output. These paint into the capture
+    /// normally (the compositor's blur needs them as its backdrop); the set
+    /// only gates the snapshot trigger below. Same lifetime as the above
+    /// set.
+    QSet<KWin::EffectWindow*> m_stripCaptureBelowStrip;
+    /// Set once per capture by the first paintWindow whose window is not
+    /// in m_stripCaptureBelowStrip: that is the strip band's bottom edge,
+    /// where StripTransitionManager::snapshotBelowCapture copies the
+    /// below-strip content out and zeroes the capture's alpha. Reset with
+    /// the latch; paintOutput runs the snapshot itself after the walk if
+    /// no band window ever fired it.
+    bool m_stripCaptureBelowSnapshotted = false;
+    /// The above-strip windows skipped by the current capture, in paint
+    /// (bottom-to-top stacking) order. Filled while the latch above is set;
+    /// consumed by the same paintOutput call on the normal path, and
+    /// cleared by an unwind guard when the capture's scene walk throws —
+    /// either way entries never outlive the frame.
     QList<KWin::EffectWindow*> m_stripCaptureSkippedWindows;
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);

@@ -1475,14 +1475,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // notifications, floating windows, panels, daemon overlays) is skipped
     // here and RECORDED — the manager composites exactly the recorded set,
     // in this same bottom-to-top paint order, sharp on top of the shader
-    // output. Without this the capture is the whole scene and a volume OSD
-    // popped mid-scroll gets motion-blurred with the columns.
+    // output. Without this a volume OSD popped mid-scroll gets motion-blurred
+    // with the columns. Windows BELOW the strip (the desktop background,
+    // keep-below windows) paint normally, and the first window that is NOT
+    // one of them marks the strip band's bottom edge: the manager snapshots
+    // the capture there (snapshotBelowCapture), which is what keeps the
+    // wallpaper out of the pack's reach while leaving it in the capture as
+    // the backdrop the compositor's blur reads.
     //
-    // Membership in m_stripCaptureAboveStrip IS the predicate: the manager
-    // prebuilds it from KWin's stacking order (everything above the topmost
-    // strip member that intersects the capture output) right before the
-    // capture, so "above the strip" here is a stacking fact, not a role
-    // guess. The latch is scoped to the capture's paintScreen call, so the
+    // Membership in m_stripCaptureAboveStrip / m_stripCaptureBelowStrip IS
+    // the predicate: the manager prebuilds both from KWin's stacking order
+    // (everything above the topmost strip member that intersects the capture
+    // output; everything below the bottommost) right before the capture, so
+    // "above" and "below the strip" here are stacking facts, not role
+    // guesses. The latch is scoped to the capture's paintScreen call, so the
     // top-composite's own paintWindow re-entry (latch already cleared)
     // paints normally. The !m_capturingSnapshot guard mirrors the foreign-
     // output cull above: a window-rect snapshot capture re-entering inside
@@ -1505,11 +1511,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // Insurance rather than an observed fault: nothing drives a window through
     // this function twice inside one strip capture today. Cheap to keep correct
     // either way.
-    if (!m_capturingSnapshot && m_stripCaptureExclusionOutput && m_stripCaptureAboveStrip.contains(w)) {
-        if (!m_stripCaptureSkippedWindows.contains(w)) {
-            m_stripCaptureSkippedWindows.append(w);
+    if (!m_capturingSnapshot && m_stripCaptureExclusionOutput) {
+        if (m_stripCaptureAboveStrip.contains(w)) {
+            if (!m_stripCaptureSkippedWindows.contains(w)) {
+                m_stripCaptureSkippedWindows.append(w);
+            }
+            return;
         }
-        return;
+        // The walk paints in stacking order, so the first window here that
+        // is not below the band is the band's bottom edge, and every
+        // below-strip window has already painted. Sits BELOW the two culls
+        // above on purpose: a parked or foreign column paints nothing, so
+        // letting it fire the snapshot early would gain nothing, and the
+        // manager snapshots after the walk if no band window ever arrives.
+        if (!m_stripCaptureBelowSnapshotted && !m_stripCaptureBelowStrip.contains(w)) {
+            m_stripTransition.snapshotBelowCapture();
+        }
     }
 
     // Compositor-drawn tab indicators: blit them at the ANCHOR's slot — right

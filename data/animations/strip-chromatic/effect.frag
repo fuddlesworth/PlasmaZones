@@ -23,12 +23,18 @@ vec4 pTransition(vec2 uv, float t) {
         return getStripColor(uv);
     }
     vec4 base = getStripColor(uv);
-    float r = getStripColor(uv + stripAxisOffset(shift)).r;
-    float b = getStripColor(uv - stripAxisOffset(shift)).b;
-    // Taking r and b from neighbours while alpha comes from the centre can in
-    // principle break the premultiplied invariant (rgb <= a). It cannot today:
-    // the strip capture is the composited scene, opaque everywhere the strip
-    // covers, so base.a is 1 wherever shift is non-zero. A future capture that
-    // carries real alpha would need min(rgb, a) here.
-    return vec4(r, base.g, b, base.a);
+    vec4 rTap = getStripColor(uv + stripAxisOffset(shift));
+    vec4 bTap = getStripColor(uv - stripAxisOffset(shift));
+    // The capture carries real alpha (strip_transition.glsl): the gaps between
+    // columns are transparent. Taking r and b from neighbours while alpha
+    // comes from the centre alone would break the premultiplied invariant
+    // (rgb <= a) at every column edge and paint a red or blue fringe with no
+    // coverage behind it. Coverage is the UNION of the three taps instead:
+    // each channel came from a premultiplied sample whose alpha is at most
+    // this one, so the invariant holds, and the fringe that spills past a
+    // column edge is drawn with the coverage of the tap it came from — which
+    // is what chromatic aberration at a window edge looks like. No clamp on
+    // rgb, so HDR captures keep their headroom.
+    float a = max(base.a, max(rTap.a, bTap.a));
+    return vec4(rTap.r, base.g, bTap.b, a);
 }
