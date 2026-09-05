@@ -37,7 +37,7 @@ class KwinSenderTrust;
  * The model is a description of the user's windows and the verbs move them,
  * so a peer on the session bus must not be able to drive either.
  */
-class PLASMAZONES_EXPORT OverviewAdaptor : public QDBusAbstractAdaptor, protected QDBusContext
+class PLASMAZONES_EXPORT OverviewAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overview")
@@ -92,6 +92,14 @@ Q_SIGNALS:
 
 private:
     bool authenticate();
+    /// The call context of the method being dispatched. Qt sets it on the
+    /// adaptor's PARENT (the registered object), never on the adaptor, so a
+    /// context inherited here would always read "not from D-Bus" and wave
+    /// every sender through. Null when the parent carries none (a unit
+    /// test's plain QObject host), which counts as a direct call.
+    QDBusContext* dbusContext() const;
+    /// The unique bus name of the current caller, empty for a direct call.
+    QString callerName() const;
     /// The policy to route a verb to, or null (unauthenticated sender, or the
     /// feature is off), with the refusal logged.
     IOverviewPolicy* verbTarget(const char* verb);

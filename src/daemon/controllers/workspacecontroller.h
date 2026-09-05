@@ -302,6 +302,10 @@ private:
     void drainParkedNamedRoutes();
     /// Map entry id for a declared name, or empty.
     QString desktopIdForName(const QString& name) const;
+    /// Run @p fn with the desktop's live 1-based number once the desktop
+    /// manager knows it (now, or on the list refresh that carries it), or
+    /// with 0 when the ledger timeout passes first.
+    void whenDesktopNumbered(const QString& desktopId, std::function<void(int)> fn);
     /// Move every rider of @p desktopId to it on @p targetScreen (the window
     /// half of a workspace transfer), then show the workspace there. Shared
     /// by the directional and the by-id transfer.

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <QObject>
+#include <QDBusContext>
 #include <QGuiApplication>
 #include <QElapsedTimer>
 #include <QTimer>
@@ -41,7 +42,11 @@ namespace PlasmaZones {
  * Runs in the background managing layouts, zone overlays, KWin D-Bus
  * communication, keyboard shortcuts, and multi-monitor support.
  */
-class Daemon : public QObject
+// QDBusContext is on the DAEMON, not on the adaptors: Qt sets the call
+// context on the registered object (this one) for every adaptor-dispatched
+// method, so an adaptor that wants the caller's bus name reads its parent's
+// context (see OverviewAdaptor::dbusContext).
+class Daemon : public QObject, public QDBusContext
 {
     Q_OBJECT
 

@@ -359,10 +359,15 @@ bool OverlayAdaptor::authenticateKwinSender()
     // calls, such as unit tests invoking the slot via QMetaObject, produce an
     // empty service string; the trust object accepts those because there is
     // no remote peer to authorise.
-    if (!calledFromDBus()) {
+    // The context lives on the adaptor's PARENT (the registered Daemon): Qt
+    // sets it there for adaptor-dispatched calls, never on the adaptor, so
+    // reading this object's own context answered "direct call" for every
+    // real caller and admitted them all.
+    auto* ctx = dynamic_cast<QDBusContext*>(parent());
+    if (!ctx || !ctx->calledFromDBus()) {
         return true;
     }
-    return m_kwinTrust->isTrustedSender(message().service(), connection());
+    return m_kwinTrust->isTrustedSender(ctx->message().service(), ctx->connection());
 }
 
 } // namespace PlasmaZones

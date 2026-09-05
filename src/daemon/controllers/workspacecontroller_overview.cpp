@@ -11,6 +11,9 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 #include <QLoggingCategory>
+#include <QTimer>
+
+#include <memory>
 
 Q_DECLARE_LOGGING_CATEGORY(lcWorkspaceCtl)
 
@@ -87,13 +90,50 @@ void WorkspaceController::moveWindowToNewWorkspace(const QString& windowId, cons
                                         << screenId;
                 return;
             }
-            const int desktop = m_vdm->desktopIndexOf(created);
-            if (desktop <= 0 || !watchWindowMove(windowId, created)) {
-                m_reconciler.releaseReservation(created);
-                return;
-            }
-            Q_EMIT windowWorkspaceMoveWithIntentRequested(windowId, screenId, desktop, created, newIntent);
+            // The ledger quiets on KWin's create ECHO, which can land before
+            // the desktop manager has refreshed its list, so the new desktop
+            // may have no live number yet. Wait for the number rather than
+            // giving up: the reservation holds the workspace meanwhile.
+            whenDesktopNumbered(created, [this, windowId, screenId, created, newIntent](int desktop) {
+                if (desktop <= 0 || !watchWindowMove(windowId, created)) {
+                    m_reconciler.releaseReservation(created);
+                    return;
+                }
+                Q_EMIT windowWorkspaceMoveWithIntentRequested(windowId, screenId, desktop, created, newIntent);
+            });
         });
+    });
+}
+
+void WorkspaceController::whenDesktopNumbered(const QString& desktopId, std::function<void(int)> fn)
+{
+    const int now = m_vdm->desktopIndexOf(desktopId);
+    if (now > 0) {
+        fn(now);
+        return;
+    }
+    // One shared state so exactly one of the two exits runs the callback:
+    // the list refresh that numbers the desktop, or the deadline.
+    auto done = std::make_shared<bool>(false);
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    auto finish = [this, desktopId, fn, done, conn](bool fromDeadline) {
+        if (*done) {
+            return;
+        }
+        const int desktop = m_vdm->desktopIndexOf(desktopId);
+        if (desktop <= 0 && !fromDeadline) {
+            return; // a refresh that still does not carry it; keep waiting
+        }
+        *done = true;
+        QObject::disconnect(*conn);
+        fn(desktop);
+    };
+    *conn = connect(m_vdm, &PhosphorWorkspaces::VirtualDesktopManager::desktopListChanged, this,
+                    [finish](const QStringList&) {
+                        finish(false);
+                    });
+    QTimer::singleShot(PhosphorWorkspaces::WorkspaceReconciler::LedgerTimeoutMs, this, [finish]() {
+        finish(true);
     });
 }
 

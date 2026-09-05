@@ -47,7 +47,7 @@ class ISettings;
  * accepts an attacker-influenceable image payload from the unauthenticated
  * session bus and only @c kwin_wayland is meant to invoke it.
  */
-class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")

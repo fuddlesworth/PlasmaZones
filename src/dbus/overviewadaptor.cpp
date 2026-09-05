@@ -84,15 +84,27 @@ void OverviewAdaptor::requestClose()
     Q_EMIT closeOverviewRequested();
 }
 
+QDBusContext* OverviewAdaptor::dbusContext() const
+{
+    return dynamic_cast<QDBusContext*>(parent());
+}
+
+QString OverviewAdaptor::callerName() const
+{
+    QDBusContext* ctx = dbusContext();
+    return (ctx && ctx->calledFromDBus()) ? ctx->message().service() : QString();
+}
+
 bool OverviewAdaptor::authenticate()
 {
-    if (!calledFromDBus()) {
+    QDBusContext* ctx = dbusContext();
+    if (!ctx || !ctx->calledFromDBus()) {
         return true;
     }
-    if (m_kwinTrust->isTrustedSender(message().service(), connection())) {
+    if (m_kwinTrust->isTrustedSender(ctx->message().service(), ctx->connection())) {
         return true;
     }
-    qCWarning(lcDbus) << "overview: rejecting call from unauthenticated sender" << message().service();
+    qCWarning(lcDbus) << "overview: rejecting call from unauthenticated sender" << ctx->message().service();
     return false;
 }
 
@@ -129,7 +141,7 @@ void OverviewAdaptor::setOverviewOpen(bool open)
     if (!authenticate()) {
         return;
     }
-    const QString sender = calledFromDBus() ? message().service() : QString();
+    const QString sender = callerName();
     if (!m_controller) {
         qCDebug(lcDbus) << "overview: setOverviewOpen ignored, workspaces feature is off";
         return;
@@ -166,7 +178,7 @@ void OverviewAdaptor::reportOverviewState(bool open)
     if (!authenticate()) {
         return;
     }
-    const QString sender = calledFromDBus() ? message().service() : QString();
+    const QString sender = callerName();
     // A report of "not running" from the owner while the gate is open means
     // the effect's start was refused (another fullscreen effect, a failed
     // keyboard grab) after it had already opened the gate; close it so the
