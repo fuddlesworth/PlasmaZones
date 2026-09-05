@@ -152,8 +152,8 @@ pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
 # The compositor focus-report protocol: which self-activation echoes the
-# filter swallows and which it adopts. Split from the verbs suite, which is
-# past the size ceiling.
+# filter swallows and which it adopts. Its own file rather than more of the
+# verbs suite, which is past the size ceiling.
 pse_add_test(test_scrollengine_focusreport test_scrollengine_focusreport.cpp)
 # The close-settle reflow hold's observable contract (deferred windowsTiled
 # batch, deadline push, zero-delay immediacy). Needs the settings stub: the

@@ -22,6 +22,10 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (!screenId.isEmpty() && m_scrollingScreens.contains(screenId)) {
         m_activeScreen = screenId;
     }
+    // Resolved once, ahead of the echo filter: its adopt arm reads the
+    // strip's active slot, and every arm below works on the same state.
+    PhosphorEngine::PlacementStateKey key;
+    ScrollState* state = stateForWindow(windowId, &key);
     // Self-activation echo filter, m_pendingSelfActivations' consume side
     // and the home of its contract: the effect reports EVERY activation
     // back through notifyWindowFocused, including ones this engine
@@ -71,9 +75,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         // Stripping the reclaim (995f135ea) fixed the anchor ping-pong by
         // making the echo invisible; this keeps it invisible whenever a later
         // echo is still due, and lets only the final one speak.
-        PhosphorEngine::PlacementStateKey echoKey;
-        const ScrollState* echoState = stateForWindow(windowId, &echoKey);
-        const bool stripAgrees = !echoState || echoState->strip().activeWindowId() == windowId;
+        const bool stripAgrees = !state || state->strip().activeWindowId() == windowId;
         if (!expired && (!m_pendingSelfActivations.isEmpty() || stripAgrees)) {
             // The swallow is silent to every other observer; without this
             // line a report eaten here is indistinguishable in the journal
@@ -112,8 +114,6 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // removeAll, and the kMaxPendingSelfActivations cap all still run — and
     // the dropped-echo case the reclaim used to (over-)serve is now handled
     // precisely by the per-entry expiry at the match above.
-    PhosphorEngine::PlacementStateKey key;
-    ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
         return;
     }
