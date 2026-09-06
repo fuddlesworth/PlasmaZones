@@ -620,12 +620,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
         <source>Next Tab in Column</source>
-        <translation>Nächster Tab in der Spalte</translation>
+        <translation>Nächster Reiter in der Spalte</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
         <source>Previous Tab in Column</source>
-        <translation>Vorheriger Tab in der Spalte</translation>
+        <translation>Vorheriger Reiter in der Spalte</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="413"/>
@@ -676,7 +676,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="970"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="707"/>
         <source>Focus Tab %1</source>
-        <translation>Tab %1 fokussieren</translation>
+        <translation>Reiter %1 fokussieren</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="358"/>
@@ -1086,7 +1086,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="516"/>
         <source>Shows the numbered tab of the focused column. In a column that is not tabbed it focuses that window in the stack.</source>
-        <translation>Zeigt den nummerierten Tab der fokussierten Spalte. In einer Spalte ohne Tabs wird das entsprechende Fenster im Stapel fokussiert.</translation>
+        <translation>Zeigt den nummerierten Reiter der fokussierten Spalte. In einer Spalte ohne Reiter wird das entsprechende Fenster im Stapel fokussiert.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="696"/>
@@ -1182,12 +1182,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="355"/>
         <source>Shows the next tab of the focused column, wrapping round to the first one at the end. In a column that is not tabbed it focuses the next window down the stack.</source>
-        <translation>Zeigt den nächsten Tab der fokussierten Spalte und springt am Ende zurück zum ersten. In einer Spalte ohne Tabs wird das nächste Fenster im Stapel fokussiert.</translation>
+        <translation>Zeigt den nächsten Reiter der fokussierten Spalte und springt am Ende zurück zum ersten. In einer Spalte ohne Reiter wird das nächste Fenster im Stapel fokussiert.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="359"/>
         <source>Shows the previous tab of the focused column, wrapping round to the last one at the start. In a column that is not tabbed it focuses the previous window up the stack.</source>
-        <translation>Zeigt den vorherigen Tab der fokussierten Spalte und springt am Anfang zurück zum letzten. In einer Spalte ohne Tabs wird das vorherige Fenster im Stapel fokussiert.</translation>
+        <translation>Zeigt den vorherigen Reiter der fokussierten Spalte und springt am Anfang zurück zum letzten. In einer Spalte ohne Reiter wird das vorherige Fenster im Stapel fokussiert.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
@@ -21254,7 +21254,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="487"/>
         <source>Focus on the tab</source>
         <comment>@info:status focus moved to a numbered tab</comment>
-        <translation>Fokus auf dem Tab</translation>
+        <translation>Fokus auf den Reiter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="491"/>
@@ -22902,7 +22902,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Dekoration für Flächen, die einer Shell gehören: die Plasma-Leisten und Miniprogramm-Ausklappfenster sowie die Oberfläche der Phosphor-Shell. Die globale Standarddekoration gilt für sie nie. Plasma-Flächen bleiben ohne Dekoration, bis hier eine aktiviert wird, während die Phosphor-Flächen mit den Spektrum-Standardwerten starten.</translation>
+        <translation>Dekoration für Flächen, die einer Shell gehören: die Plasma-Kontrollleisten und Miniprogramm-Aufklappfenster sowie die Flächen der Phosphor-Shell. Die globale Standarddekoration gilt für sie nie. Plasma-Flächen bleiben ohne Dekoration, bis hier eine aktiviert wird, während die Phosphor-Flächen mit den Spektrum-Standardwerten starten.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>
@@ -23514,7 +23514,7 @@
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="96"/>
         <source>What&apos;s New</source>
         <comment>@title:window the browsable release history</comment>
-        <translation>Neuerungen</translation>
+        <translation>Neuigkeiten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="288"/>
@@ -23647,12 +23647,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
         <source>Collapse the %1 releases</source>
-        <translation>Die Versionen %1 einklappen</translation>
+        <translation>Die %1-Versionen einklappen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
         <source>Expand the %1 releases</source>
-        <translation>Die Versionen %1 ausklappen</translation>
+        <translation>Die %1-Versionen ausklappen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="633"/>

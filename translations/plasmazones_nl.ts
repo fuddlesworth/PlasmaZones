@@ -22902,7 +22902,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Decoratie voor oppervlakken die een shell bezit: de Plasma-panelen en applet-uitklapvensters, en de vensterchroom van de Phosphor-shell. De algemene standaarddecoratie geldt nooit voor deze. Plasma-oppervlakken blijven zonder decoratie totdat hier een decoratie wordt ingeschakeld, terwijl de Phosphor-oppervlakken beginnen met de spectrumstandaarden.</translation>
+        <translation>Decoratie voor oppervlakken die een shell bezit: de Plasma-panelen en applet-pop-ups, en de oppervlakken van de Phosphor-shell. De algemene standaarddecoratie geldt nooit voor deze. Plasma-oppervlakken blijven zonder decoratie totdat hier een decoratie wordt ingeschakeld, terwijl de Phosphor-oppervlakken beginnen met de spectrumstandaarden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>
@@ -22912,7 +22912,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="59"/>
         <source>OSD Bands</source>
-        <translation>OSD-banden</translation>
+        <translation>OSD-balken</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>

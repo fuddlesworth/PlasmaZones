@@ -1005,7 +1005,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="516"/>
         <source>Shows the numbered tab of the focused column. In a column that is not tabbed it focuses that window in the stack.</source>
-        <translation>Mostra a aba numerada da coluna em foco. Em uma coluna sem abas, foca essa janela da pilha.</translation>
+        <translation>Mostra a aba numerada da coluna focalizada. Em uma coluna sem abas, foca essa janela da pilha.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="696"/>
@@ -1101,12 +1101,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="355"/>
         <source>Shows the next tab of the focused column, wrapping round to the first one at the end. In a column that is not tabbed it focuses the next window down the stack.</source>
-        <translation>Mostra a próxima aba da coluna em foco, voltando para a primeira ao chegar ao fim. Em uma coluna sem abas, foca a próxima janela da pilha.</translation>
+        <translation>Mostra a próxima aba da coluna focalizada, voltando para a primeira ao chegar ao fim. Em uma coluna sem abas, foca a próxima janela da pilha.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="359"/>
         <source>Shows the previous tab of the focused column, wrapping round to the last one at the start. In a column that is not tabbed it focuses the previous window up the stack.</source>
-        <translation>Mostra a aba anterior da coluna em foco, voltando para a última ao chegar ao início. Em uma coluna sem abas, foca a janela anterior da pilha.</translation>
+        <translation>Mostra a aba anterior da coluna focalizada, voltando para a última ao chegar ao início. Em uma coluna sem abas, foca a janela anterior da pilha.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
@@ -22902,7 +22902,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Decoração para superfícies que pertencem a um shell: os painéis do Plasma e as janelas suspensas dos applets, além da moldura do shell Phosphor. A decoração padrão global nunca se aplica a elas. As superfícies do Plasma ficam sem decoração até que uma seja ativada aqui, enquanto as superfícies do Phosphor começam com os padrões do espectro.</translation>
+        <translation>Decoração para superfícies que pertencem a um shell: os painéis do Plasma e as janelas instantâneas de miniaplicativo, além da moldura do shell Phosphor. A decoração padrão global nunca se aplica a elas. As superfícies do Plasma ficam sem decoração até que uma seja ativada aqui, enquanto as superfícies do Phosphor começam com os padrões do espectro.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>

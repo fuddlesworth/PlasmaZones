@@ -5530,7 +5530,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="68"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="47"/>
         <source>Bar</source>
-        <translation>Panel</translation>
+        <translation>Skalrad</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="70"/>
@@ -21254,7 +21254,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="487"/>
         <source>Focus on the tab</source>
         <comment>@info:status focus moved to a numbered tab</comment>
-        <translation>Fokus på fliken</translation>
+        <translation>Fokusera fliken</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="491"/>
@@ -22902,7 +22902,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Dekoration för ytor som ägs av ett skal: Plasmas paneler och miniprogrammens utfällbara fönster, samt Phosphor-skalets ram. Den globala standarddekorationen gäller aldrig för dem. Plasmaytor förblir odekorerade tills en dekoration aktiveras här, medan Phosphor-ytorna börjar med spektrumets standardvärden.</translation>
+        <translation>Dekoration för ytor som ägs av ett skal: Plasmas paneler och appletpopupper, samt Phosphor-skalets ram. Den globala standarddekorationen gäller aldrig för dem. Plasmaytor förblir odekorerade tills en dekoration aktiveras här, medan Phosphor-ytorna börjar med spektrumets standardvärden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>

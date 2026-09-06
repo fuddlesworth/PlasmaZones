@@ -595,7 +595,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="970"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="707"/>
         <source>Focus Tab %1</source>
-        <translation>Перейти к вкладке %1</translation>
+        <translation>Фокус на вкладку %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="358"/>
@@ -5545,7 +5545,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="70"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="53"/>
         <source>Popouts</source>
-        <translation>Всплывающие окна</translation>
+        <translation>Выдвижные окна</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="72"/>
@@ -22956,7 +22956,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Оформление поверхностей, принадлежащих оболочке: панелей Plasma и всплывающих окон виджетов, а также элементов оболочки Phosphor. Общее оформление по умолчанию к ним никогда не применяется. Поверхности Plasma остаются без оформления, пока оно не включено здесь, а поверхности Phosphor используют значения спектра по умолчанию.</translation>
+        <translation>Оформление поверхностей, принадлежащих оболочке: панелей Plasma и всплывающих окон апплетов, а также элементов оболочки Phosphor. Общее оформление по умолчанию к ним никогда не применяется. Поверхности Plasma остаются без оформления, пока оно не включено здесь, а поверхности Phosphor изначально используют значения спектра по умолчанию.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>
@@ -22966,7 +22966,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="59"/>
         <source>OSD Bands</source>
-        <translation>Полосы экранного меню</translation>
+        <translation>Полосы OSD</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>

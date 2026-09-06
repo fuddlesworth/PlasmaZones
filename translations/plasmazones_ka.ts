@@ -595,7 +595,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="970"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="707"/>
         <source>Focus Tab %1</source>
-        <translation>ფოკუსი ჩანართზე %1</translation>
+        <translation>%1 ჩანართზე ფოკუსი</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="358"/>
@@ -22902,7 +22902,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>გაფორმება ზედაპირებისთვის, რომლებიც გარსს ეკუთვნის: Plasma-ის პანელები და აპლეტების გადმოსაშლელი ფანჯრები, ასევე Phosphor-ის გარსის გაფორმება. გლობალური ნაგულისხმევი გაფორმება მათზე არასოდეს ვრცელდება. Plasma-ის ზედაპირები გაუფორმებელი რჩება, სანამ აქ გაფორმებას არ ჩართავთ, Phosphor-ის ზედაპირები კი სპექტრის ნაგულისხმევი მნიშვნელობებით იწყება.</translation>
+        <translation>მორთულობა ზედაპირებისთვის, რომლებიც გარსს ეკუთვნის: Plasma-ის პანელები და აპლეტების ამომხტომები, ასევე Phosphor-ის გარსის ზედაპირები. გლობალური ნაგულისხმევი მორთულობა მათზე არასოდეს ვრცელდება. Plasma-ის ზედაპირები მოურთველი რჩება, სანამ აქ მორთულობას არ ჩართავთ, Phosphor-ის ზედაპირები კი სპექტრის ნაგულისხმევი მნიშვნელობებით იწყება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>
@@ -22912,7 +22912,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="59"/>
         <source>OSD Bands</source>
-        <translation>OSD-ის ზოლები</translation>
+        <translation>OSD-ის ლენტები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>
@@ -23563,17 +23563,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="381"/>
         <source>No new feature matches “%1”.</source>
-        <translation>„%1“-ს ახალი შესაძლებლობა არ ემთხვევა.</translation>
+        <translation>„%1“-ს არცერთი ახალი შესაძლებლობა არ ემთხვევა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="383"/>
         <source>No change matches “%1”.</source>
-        <translation>„%1“-ს ცვლილება არ ემთხვევა.</translation>
+        <translation>„%1“-ს არცერთი ცვლილება არ ემთხვევა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="385"/>
         <source>No fix matches “%1”.</source>
-        <translation>„%1“-ს შესწორება არ ემთხვევა.</translation>
+        <translation>„%1“-ს არცერთი შესწორება არ ემთხვევა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="386"/>
@@ -23637,7 +23637,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="628"/>
         <source>Everything since version %1</source>
-        <translation>ყველაფერი ვერსიიდან %1</translation>
+        <translation>ყველაფერი %1 ვერსიიდან</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="630"/>
@@ -23674,7 +23674,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="816"/>
         <source>Show only version %1</source>
-        <translation>მხოლოდ ვერსიის %1 ჩვენება</translation>
+        <translation>მხოლოდ %1 ვერსიის ჩვენება</translation>
     </message>
 </context>
 </TS>

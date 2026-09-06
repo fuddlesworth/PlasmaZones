@@ -22956,7 +22956,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
         <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Wystrój powierzchni należących do powłoki: paneli Plazmy i okien wysuwanych apletów oraz elementów powłoki Phosphor. Ogólny domyślny wystrój nigdy ich nie dotyczy. Powierzchnie Plazmy pozostają bez wystroju, dopóki nie włączysz go tutaj, a powierzchnie Phosphor zaczynają z domyślnymi wartościami widma.</translation>
+        <translation>Dekoracja powierzchni należących do powłoki: paneli Plasmy i okien wyskakujących apletów oraz elementów powłoki Phosphor. Ogólna domyślna dekoracja nigdy ich nie dotyczy. Powierzchnie Plasmy pozostają bez dekoracji, dopóki nie włączysz jej tutaj, a powierzchnie Phosphor zaczynają od domyślnych wartości widma.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>
