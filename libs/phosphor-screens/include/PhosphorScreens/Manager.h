@@ -179,7 +179,8 @@ public:
      * Mirrors the @ref actualAvailableGeometry(QScreen*) convention: resolve
      * through the tracked set so the sensor lookup is keyed the same way, and
      * fall back to the QScreen's own (coarse, integer) ratio for a connector
-     * the manager does not track — a hotplug race — or a null pointer.
+     * the manager does not track, which is a hotplug race. A null @p screen
+     * has no ratio to fall back to and answers 1.0.
      */
     qreal logicalScale(QScreen* screen) const;
 

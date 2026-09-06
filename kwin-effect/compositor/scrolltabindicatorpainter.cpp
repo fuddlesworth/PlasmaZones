@@ -251,6 +251,7 @@ void ScrollTabIndicatorPainter::releaseGl()
         entry.texture.reset();
         entry.textureBounds = QRect();
         entry.textureDeviceOrigin = QPoint();
+        entry.textureRenderOrigin = QPointF();
         entry.textureScale = 0.0;
         entry.dirty = true;
         entry.hoverDirtyRects.clear();
@@ -281,6 +282,7 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
         entry->texture.reset();
         entry->textureBounds = QRect();
         entry->textureDeviceOrigin = QPoint();
+        entry->textureRenderOrigin = QPointF();
         entry->textureScale = 0.0;
         entry->dirty = true;
         entry->hoverDirtyRects.clear();
@@ -288,7 +290,26 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     }
 
     const qreal scale = viewport.scale() > 0.0 ? viewport.scale() : 1.0;
-    const bool geometryChanged = entry->textureBounds != entry->bounds || entry->textureScale != scale;
+    // Every device-grid calculation below is anchored HERE, at the viewport's
+    // own render rect, not at the absolute logical origin. The device grid
+    // this pass draws on is the render target's, and the target's first
+    // column is renderRect's top-left — so "on the grid" means a whole number
+    // of device pixels FROM THAT CORNER, and anywhere else only agrees with
+    // it by luck.
+    //
+    // It is not luck on the primary output, which is why an absolute
+    // floor(x * scale) looked right: renderRect starts at (0, 0) there and
+    // the two anchors coincide. They part company on any other output.
+    // scaledRenderRect() is an integer Rect while renderRect() is logical and
+    // fractional-scaled, so scaledRenderRect().x() and renderRect().x() *
+    // scale differ by up to half a device pixel — a second monitor at logical
+    // x=1670 on a 1.15 output has its ortho origin at 1921 covering 1920.5.
+    // An absolute floor() would then place the quad a fraction off the target
+    // grid AND disagree with the (necessarily output-relative) damage box by
+    // a whole column, which is the defect this alignment exists to close.
+    const QPointF renderOrigin = viewport.renderRect().topLeft();
+    const bool geometryChanged = entry->textureBounds != entry->bounds || entry->textureScale != scale
+        || entry->textureRenderOrigin != renderOrigin;
     if (entry->dirty || !entry->texture || geometryChanged) {
         if (entry->failedBounds == entry->bounds && entry->failedScale == scale) {
             // A previous attempt at exactly this bounds/scale pair failed to
@@ -302,7 +323,8 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
         if (m_maxTextureSize <= 0) {
             glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_maxTextureSize);
         }
-        // The texture covers the band's DEVICE-ALIGNED box: the origin floored
+        // The texture covers the band's DEVICE-ALIGNED box, measured from the
+        // render rect's corner (see the anchor note above): the origin floored
         // and the far edge ceiled onto the device grid. That is the same box
         // KWin's damage alignment produces from the logical band the caller
         // hands addRepaint (which takes a logical region — the parameter is
@@ -321,10 +343,10 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
         // damage happened to be wider, where it appeared. A border column that
         // comes and goes with the shape of unrelated damage is a flicker, and
         // it needs a fractionally-scaled output to happen at all.
-        const QPoint deviceOrigin(int(std::floor(entry->bounds.x() * scale)),
-                                  int(std::floor(entry->bounds.y() * scale)));
-        const int deviceW = int(std::ceil((entry->bounds.x() + entry->bounds.width()) * scale)) - deviceOrigin.x();
-        const int deviceH = int(std::ceil((entry->bounds.y() + entry->bounds.height()) * scale)) - deviceOrigin.y();
+        const QPointF localBounds = QPointF(entry->bounds.topLeft()) - renderOrigin;
+        const QPoint deviceOrigin(int(std::floor(localBounds.x() * scale)), int(std::floor(localBounds.y() * scale)));
+        const int deviceW = int(std::ceil((localBounds.x() + entry->bounds.width()) * scale)) - deviceOrigin.x();
+        const int deviceH = int(std::ceil((localBounds.y() + entry->bounds.height()) * scale)) - deviceOrigin.y();
         if (m_maxTextureSize > 0 && (deviceW > m_maxTextureSize || deviceH > m_maxTextureSize)) {
             // Larger than the GPU can hold in one texture (a very wide
             // multi-column span at high scale with a large in-flight view
@@ -334,6 +356,7 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
             entry->texture.reset();
             entry->textureBounds = QRect();
             entry->textureDeviceOrigin = QPoint();
+            entry->textureRenderOrigin = QPointF();
             entry->textureScale = 0.0;
             entry->hoverDirtyRects.clear();
             entry->failedBounds = entry->bounds;
@@ -343,13 +366,14 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
         }
         // Rasterised through the device-addressed form, because the aligned
         // origin sits BETWEEN logical pixels whenever the floor moved it.
-        const QImage image = ScrollTabRaster::rasterisePatch(
-            entry->indicators, entry->style, QPointF(deviceOrigin.x() / scale, deviceOrigin.y() / scale),
-            QSize(deviceW, deviceH), scale, entry->hoveredWindowId);
+        const QImage image = ScrollTabRaster::rasterisePatch(entry->indicators, entry->style,
+                                                             renderOrigin + QPointF(deviceOrigin) / scale,
+                                                             QSize(deviceW, deviceH), scale, entry->hoveredWindowId);
         entry->texture.reset();
         entry->textureBounds = QRect();
         entry->textureScale = 0.0;
         entry->textureDeviceOrigin = QPoint();
+        entry->textureRenderOrigin = QPointF();
         entry->hoverDirtyRects.clear();
         if (image.isNull()) {
             // QImage allocation failure (the empty-bounds case returned
@@ -375,6 +399,7 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
         entry->textureBounds = entry->bounds;
         entry->textureScale = scale;
         entry->textureDeviceOrigin = deviceOrigin;
+        entry->textureRenderOrigin = renderOrigin;
         entry->dirty = false;
     } else if (!entry->hoverDirtyRects.isEmpty()) {
         // Hover moved and nothing else did: re-rasterise only the indicator
@@ -410,13 +435,18 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
             // leave into a band-wide QPainter pass plus a full texture
             // re-upload — exactly the cost this branch exists to avoid, and
             // silently so on the laptop iGPUs least able to absorb it.
-            // Relative to the texture's own DEVICE origin, which is the
-            // band's floored-onto-the-grid origin rather than the scaled
-            // logical one — see the alignment note in the full-raster arm.
-            const int devX0 = int(std::floor(clipped.x() * scale)) - entry->textureDeviceOrigin.x();
-            const int devY0 = int(std::floor(clipped.y() * scale)) - entry->textureDeviceOrigin.y();
-            const int devX1 = int(std::ceil((clipped.x() + clipped.width()) * scale)) - entry->textureDeviceOrigin.x();
-            const int devY1 = int(std::ceil((clipped.y() + clipped.height()) * scale)) - entry->textureDeviceOrigin.y();
+            // Measured from the texture's own DEVICE origin, which is the
+            // band's origin floored onto the grid from the render rect's
+            // corner rather than the scaled logical one, so the clipped rect
+            // is taken relative to that same corner first — see the alignment
+            // note in the full-raster arm.
+            const QPointF localClipped = QPointF(clipped.topLeft()) - renderOrigin;
+            const int devX0 = int(std::floor(localClipped.x() * scale)) - entry->textureDeviceOrigin.x();
+            const int devY0 = int(std::floor(localClipped.y() * scale)) - entry->textureDeviceOrigin.y();
+            const int devX1 =
+                int(std::ceil((localClipped.x() + clipped.width()) * scale)) - entry->textureDeviceOrigin.x();
+            const int devY1 =
+                int(std::ceil((localClipped.y() + clipped.height()) * scale)) - entry->textureDeviceOrigin.y();
             // Clamped to the live texture: `clipped` is inside `bounds`, so
             // the ceiled far edge can only overrun by the same rounding the
             // texture's own ceiled size already absorbed, but a sub-upload
@@ -430,8 +460,8 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
             }
             // The logical point the patch's top-left device pixel looks at.
             // Fractional by construction whenever the grid snap moved it.
-            const QPointF patchOrigin((entry->textureDeviceOrigin.x() + devX0) / scale,
-                                      (entry->textureDeviceOrigin.y() + devY0) / scale);
+            const QPointF patchOrigin =
+                renderOrigin + QPointF(entry->textureDeviceOrigin + QPoint(devX0, devY0)) / scale;
             const QImage patch = ScrollTabRaster::rasterisePatch(entry->indicators, entry->style, patchOrigin,
                                                                  QSize(devW, devH), scale, entry->hoveredWindowId);
             if (patch.isNull()) {
@@ -468,9 +498,15 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     // on every non-primary monitor. Same convention as
     // TransitionPass::drawOutputQuad, which feeds scaledRenderRect to the
     // same matrix.
-    // AT REST the origin is the texture's own device origin, verbatim: the
-    // texture was rasterised for the band's device-aligned box, so this is a
-    // whole device pixel by construction and the quad covers exactly that box.
+    // AT REST the origin is the render rect's own scaled corner plus the
+    // texture's device origin, verbatim: the texture was rasterised for the
+    // band's device-aligned box measured from that corner, so this is a whole
+    // device pixel of the render target by construction and the quad covers
+    // exactly that box. scaledRenderRect() is the integer corner the ortho
+    // this matrix carries is built over, which is why the offset is added to
+    // it rather than to renderRect() * scale — the two differ by up to half a
+    // device pixel on a fractionally-scaled output away from the origin, and
+    // it is the ortho's corner that decides where column zero lands.
     // No rounding step is needed or wanted here — the alignment happened at
     // raster time, where the pixels could be drawn to match it, rather than
     // being applied to a texture already rasterised for somewhere else.
@@ -483,7 +519,7 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     // offsetFor() returns a default-constructed QPointF on every path that is
     // not animating, including an animation's last frame — so the strip ends
     // up aligned when it settles.
-    QPointF destDevice(entry->textureDeviceOrigin);
+    QPointF destDevice(viewport.scaledRenderRect().topLeft() + entry->textureDeviceOrigin);
     if (!viewOffset.isNull()) {
         destDevice += QPointF(viewOffset.x() * scale, viewOffset.y() * scale);
     }

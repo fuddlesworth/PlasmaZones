@@ -571,10 +571,13 @@ qreal ScreenManager::logicalScale(const PhysicalScreen& screen) const
     // the number the header's note is about: QScreen would answer with the
     // wl_output integer buffer scale instead (2 for a 1.15 output), which is
     // not a scale anything here means.
-    // Gated on a MAPPED sensor, the same way calculateAvailableGeometry gates
-    // its sensor read. An unmapped QWindow has no platform window to carry a
-    // per-surface scale, and QWindow::devicePixelRatio() then answers with its
-    // screen's — the very integer buffer scale this accessor exists to avoid.
+    // Gated on a MAPPED sensor, and on the platform window as well —
+    // calculateAvailableGeometry needs only isVisible() because a geometry it
+    // reads back before mapping is simply the one it was given, while a scale
+    // read that early is actively wrong. An unmapped QWindow has no platform
+    // window to carry a per-surface scale, and QWindow::devicePixelRatio()
+    // then answers with its screen's — the very integer buffer scale this
+    // accessor exists to avoid.
     // Without the gate that value would be laundered through as though it were
     // the fractional one, which is worse than returning it from the fallback
     // below, where the coarseness is at least stated.

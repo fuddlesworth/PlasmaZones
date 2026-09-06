@@ -340,8 +340,8 @@ QRect axisRect(const ScrollTabIndicator& indicator, const IndicatorAxes& axes, i
 }
 
 /// The UNCLIPPED tab rects, in draw order. layoutPills clips these to the
-/// indicator for the hit rects; rasterise draws them under a clip to the
-/// same rect, so both derive from the one list.
+/// indicator for the hit rects; rasterisePatch draws them under a clip to
+/// the same rect, so both derive from the one list.
 QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes& axes,
                         const ScrollTabIndicatorStyle& style)
 {
@@ -568,20 +568,6 @@ QImage rasterisePatch(const QVector<ScrollTabIndicator>& indicators, const Scrol
     }
     painter.end();
     return image;
-}
-
-QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
-                 const QRect& bounds, qreal devicePixelRatio, const QString& hoveredWindowId)
-{
-    if (bounds.isEmpty()) {
-        return {};
-    }
-    const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
-    // The whole-band form: an integral logical rect, whose device size is the
-    // ceiling of the scaled extent. This is the size the blit's quad is drawn
-    // at, so it must keep ceiling rather than rounding.
-    const QSize deviceSize(int(std::ceil(bounds.width() * dpr)), int(std::ceil(bounds.height() * dpr)));
-    return rasterisePatch(indicators, style, QPointF(bounds.topLeft()), deviceSize, dpr, hoveredWindowId);
 }
 
 } // namespace ScrollTabRaster
