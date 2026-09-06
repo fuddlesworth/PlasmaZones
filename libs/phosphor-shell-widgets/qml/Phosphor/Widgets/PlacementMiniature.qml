@@ -164,6 +164,13 @@ Item {
     // delegate can release before _purge drops the row. Then reconcile
     // the edge layer against the new geometry.
     function _sync() {
+        // The map is C++ and outlives the QML engine: on a hot reload its
+        // changed() can reach a miniature whose engine is already tearing
+        // down (the theme singletons are gone by then). Rebuilding rows
+        // there creates the delegates' deferred animations on a dying
+        // context, which is a crash, not a TypeError. Nothing to draw.
+        if (typeof Motion === "undefined" || Motion === null || typeof Theme === "undefined" || Theme === null)
+            return;
         const cells = model && model.cells ? model.cells : [];
         const seen = {};
         for (let i = 0; i < cells.length; ++i) {

@@ -505,6 +505,11 @@ int main(int argc, char* argv[])
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellGestures"), &shellGestures);
     });
     engine.addEngineHook([&shellChrome](QQmlEngine* qmlEngine) {
+        // A fresh engine (startup, every hot reload): the decoration
+        // Component the previous shell.qml handed over belongs to the old
+        // engine, and wrapping it in this one crashes the delegates that
+        // read it. Clear it; the new root sets its own on completion.
+        shellChrome.setDecorationComponent(nullptr);
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellChrome"), &shellChrome);
         // The palette is per engine; a pack's theme colours follow this one.
         shellChrome.setPalette(qmlEngine->singletonInstance<PhosphorTheme::PaletteStore*>(
