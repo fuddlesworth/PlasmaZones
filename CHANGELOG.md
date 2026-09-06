@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A window on a scrolling screen no longer stays over the bottom gap after its edge is dragged past the work area**: dragging a tiled window's bottom edge down into the gap under it left the window there, covering the gap, until some later change happened to move it. The engine accepted the new height and worked out the corrected rect, but that rect matched the one it had already sent, so the correction was never sent to the compositor. A width change or a shrink happened to move the rect and so was corrected, which is why the problem came and went and looked like an autohide panel issue. The engine now records where the window actually sits after a resize, so the correction is always sent and the window snaps back to the work area. ([#1066](https://github.com/fuddlesworth/PlasmaZones/pull/1066))
+
 ## [3.4.12] - 2026-09-05
 
 ### Fixed

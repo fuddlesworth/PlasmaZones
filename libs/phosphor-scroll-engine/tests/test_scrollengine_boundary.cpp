@@ -81,6 +81,13 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
+/// The committed rect a windowsTiled batch entry describes.
+QRect rectOfEntry(const QJsonObject& o)
+{
+    return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                 o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+}
+
 } // namespace
 
 class TestScrollEngineBoundary : public QObject
@@ -125,10 +132,6 @@ private Q_SLOTS:
         engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
         QVERIFY(tiled.count() > 0);
 
-        const auto rectOfEntry = [](const QJsonObject& o) {
-            return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
-                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
-        };
         const QRect landscapeA = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
         QVERIFY2(!landscapeA.isEmpty(), "precondition: a is committed before the rotation");
         QVERIFY2(landscapeA.height() >= landscapeA.width(),
@@ -532,10 +535,6 @@ private Q_SLOTS:
         engine->retile(kS1);
         QCoreApplication::processEvents();
 
-        const auto rectOfEntry = [](const QJsonObject& o) {
-            return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
-                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
-        };
         const QRect applied = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
         QVERIFY2(!applied.isEmpty(), "precondition: a is committed before the resize");
         QCOMPARE(Ax::crossEnd(applied), Ax::crossEnd(inset));
