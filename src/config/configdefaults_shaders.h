@@ -315,10 +315,10 @@ public:
             p.parameters = params;
             return p;
         };
+        // Seeded in decorationShellPhosphorLeafPaths() order, which is the
+        // order the tree reports them in.
         tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorBarPath(), phosphorBorder(0, 0.03));
         tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPopoutPath(), phosphorBorder(10, 0.06));
-        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorNotificationPath(), phosphorBorder(8, 0.06));
-        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPickerPath(), phosphorBorder(0, 0.06));
         {
             ::PhosphorSurfaceShaders::DecorationProfile osd;
             osd.chain = QStringList{QStringLiteral("glow")};
@@ -333,6 +333,8 @@ public:
             osd.parameters = params;
             tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorOsdPath(), osd);
         }
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorNotificationPath(), phosphorBorder(8, 0.06));
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPickerPath(), phosphorBorder(0, 0.06));
         {
             ::PhosphorSurfaceShaders::DecorationProfile lock;
             lock.chain = QStringList{QStringLiteral("phosphor-motes")};

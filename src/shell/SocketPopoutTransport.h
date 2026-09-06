@@ -14,11 +14,11 @@ namespace PhosphorShellApp {
 class ControlCenterController;
 
 // IPopoutTransport for a popout that is painted INTO the bar rather than
-// given a surface of its own: the control center growing out of the
-// capsule through BarCanvas's socket (the connected-corner design).
+// given a surface of its own: the control center as the floating fallback
+// pane under the band, on an output with no placement engine (A2 §4.2).
 //
 // There is nothing to create here. The visible open/close is BarHost
-// animating its socket depth off ControlCenterController.openScreen, and
+// animating its pane progress off ControlCenterController.openScreen, and
 // this transport's whole job is to be the ONLY writer of that property,
 // so the open state is driven by PopoutController's arbitration like
 // every other popout's. That is what lets the Modal power menu close the

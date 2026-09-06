@@ -136,50 +136,6 @@ ApplicationWindow {
                 }
             }
 
-            // ── Pills ────────────────────────────────────────────────
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: Tokens.spacing_xl
-                Layout.rightMargin: Tokens.spacing_xl
-                spacing: Tokens.spacing_m
-
-                Label {
-                    text: qsTr("Pills")
-                    color: Theme.on_surface_variant
-                    font.pixelSize: Tokens.font_size_body_m
-                    font.weight: Tokens.font_weight_demibold
-                }
-
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: Tokens.spacing_m
-
-                    PhosphorPill {
-                        // Local toggle state for the demo; a real host
-                        // binds selected to a service property.
-                        property bool checked: true
-
-                        text: qsTr("Wi-Fi")
-                        selected: checked
-                        onToggled: checked = !checked
-                    }
-
-                    PhosphorPill {
-                        property bool checked: false
-
-                        text: qsTr("Bluetooth")
-                        selected: checked
-                        onToggled: checked = !checked
-                    }
-
-                    PhosphorPill {
-                        text: qsTr("Disabled")
-                        selected: true
-                        enabled: false
-                    }
-                }
-            }
-
             // ── Slider ───────────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true

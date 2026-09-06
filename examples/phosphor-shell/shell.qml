@@ -470,7 +470,7 @@ Item {
         }
     }
 
-    // The session menu, per docs/phosphor-shell-design/mockups/power-menu.svg:
+    // The session menu, per docs/phosphor-shell-design/mockups-v2/power-menu.svg:
     // a screen-centred Modal popout over a dimmed scrim, which is what
     // PhosphorPopout.ExclusiveMode.Modal means to the controller. It closes
     // every cooperative popout and suppresses new ones while it is up.
@@ -652,7 +652,7 @@ Item {
         }
     }
 
-    // The launcher, per docs/phosphor-shell-design/mockups/launcher-spotlight.svg:
+    // The launcher, per docs/phosphor-shell-design/mockups-v2/launcher.svg:
     // a screen-centred Cooperative popout that takes keyboard focus (it is
     // a search field) and goes away on focus loss. Cooperative, not Modal:
     // it should close when you click away, not dim the screen and

@@ -61,18 +61,19 @@ Window {
                 font.weight: Tokens.font_weight_medium
             }
 
-            // The surface under test. Elevated on its own container so the
-            // grid reads as a popout body rather than as loose tiles on the
-            // wallpaper.
+            // The surface under test, on its own container with a stroke
+            // so the grid reads as a popout body rather than as loose tiles
+            // on the wallpaper.
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: controlCenter.implicitHeight
-                radius: Tokens.radius_xl
+                radius: Tokens.radius_container
                 color: Theme.surface_container
 
-                layer.enabled: true
-                layer.effect: ElevationShadow {
-                    level: 2
+                SpectrumStroke {
+                    anchors.fill: parent
+                    radius: Tokens.radius_container
+                    active: true
                 }
 
                 ControlCenter {

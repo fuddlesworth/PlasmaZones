@@ -3,14 +3,13 @@
 #
 # PhosphorShellBar, the Phosphor.Bar surface module.
 #
-# A pure-QML module: BarHost (the connected-corner bar surface, a single
-# PanelWindow on the primary output, rendered with the BarCanvas atom)
-# plus the Slot left/center/right abstraction and the
+# A pure-QML module: BarHost (the spectrum-rail bar surface, one
+# PanelWindow per output) plus the Slot left/center/right abstraction and the
 # built-in bar-widget delegates. Widgets are instantiated through the
 # IBarWidgetFactory registry the shell owns (BarController), so the
 # module itself stays registry-agnostic and the delegates are pluggable.
 # Themed through phosphor-theme and built on the phosphor-shell-widgets
-# atoms (BarCanvas, ElevationShadow, PhosphorRipple). This lib depends on
+# atoms (SpectrumRail, SpectrumStroke, PhosphorRipple). This lib depends on
 # KF6 Kirigami, for Kirigami.Icon's named-icon resolution in the status
 # widgets. The other shell-tier libraries that need it for the same reason
 # are phosphor-shell-power, phosphor-shell-control-center and
@@ -34,8 +33,8 @@ endif()
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # QuickShapes has to be found in THIS directory scope, not merely inherited
-# from a parent: the bar draws through BarCanvas / ConnectedShape and
-# PhosphorRipple, all of which are QtQuick.Shapes types, so the static qml
+# from a parent: the bar draws through PhosphorRipple, a QtQuick.Shapes
+# type, so the static qml
 # plugin's dependency walk resolves Qt6::QuickShapes here and warns at
 # configure time without it.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
@@ -52,7 +51,7 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 find_package(KF6Kirigami REQUIRED)
 
 # The bar imports Phosphor.Theme (the Tokens / Theme / Motion / StateLayer
-# singletons) and Phosphor.Widgets (BarCanvas, ElevationShadow,
+# singletons) and Phosphor.Widgets (SpectrumRail, SpectrumStroke,
 # PhosphorRipple). The QML import scanner needs those modules visible at
 # build time, and consumers need their runtime plugins linked.
 # In-tree builds always have the sibling targets; fall back to installed
@@ -153,9 +152,9 @@ add_library(PhosphorShellBar::PhosphorShellBarQml ALIAS PhosphorShellBarQml)
 target_compile_features(PhosphorShellBarQml PUBLIC cxx_std_20)
 
 # No Qt6::QuickShapes here: the bar QML imports no QtQuick.Shapes itself. The
-# Shapes usage lives in Phosphor.Widgets' ConnectedShape, which BarCanvas
-# instantiates; that module's own target links Qt6::QuickShapes and propagates
-# it through the PUBLIC link below.
+# Shapes usage lives in Phosphor.Widgets' PhosphorRipple; that module's own
+# target links Qt6::QuickShapes and propagates it through the PUBLIC link
+# below.
 target_link_libraries(PhosphorShellBarQml
     PUBLIC
         Qt6::Core

@@ -54,10 +54,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # for the generated plugin + type registrar.
 
 set(_phosphor_widgets_qml_files
-    qml/Phosphor/Widgets/ElevationShadow.qml
     qml/Phosphor/Widgets/PhosphorRipple.qml
     qml/Phosphor/Widgets/PhosphorButton.qml
-    qml/Phosphor/Widgets/PhosphorPill.qml
     qml/Phosphor/Widgets/PhosphorCard.qml
     qml/Phosphor/Widgets/PhosphorSlider.qml
     qml/Phosphor/Widgets/PhosphorTextField.qml
@@ -69,11 +67,6 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/DecorationSlot.qml
     qml/Phosphor/Widgets/PlacementMiniature.qml
     qml/Phosphor/Widgets/MiniatureEdges.js
-    # Phase 3.2 connected-corner primitives.
-    qml/Phosphor/Widgets/ConnectorGeometry.js
-    qml/Phosphor/Widgets/ConnectedShape.qml
-    qml/Phosphor/Widgets/ConnectedCorner.qml
-    qml/Phosphor/Widgets/BarCanvas.qml
 )
 
 # qt_add_qml_module nests QML_FILES under their source-relative path
@@ -100,14 +93,12 @@ qt_add_qml_module(PhosphorShellWidgetsQml
     VERSION 1.0
     STATIC
     # The atoms import Phosphor.Theme (Theme / Motion / StateLayer) and
-    # QtQuick.Effects (MultiEffect, used by ElevationShadow). Declaring
-    # the imports here lets qmllint and qmlcachegen resolve symbols at
-    # build time; QtQuick.Effects ships with Qt6::Quick, and the
+    # QtQuick.Shapes (PhosphorRipple). Declaring the imports here lets
+    # qmllint and qmlcachegen resolve symbols at build time; the
     # Phosphor.Theme runtime registration is handled by the
     # PhosphorThemeQmlplugin link below.
     IMPORTS
         Phosphor.Theme
-        QtQuick.Effects
         QtQuick.Shapes
     # org.kde.kirigami: PlacementMiniature draws each cell's app glyph
     # through Kirigami.Icon at expanded height. A DEPENDENCY, never an
@@ -138,7 +129,7 @@ target_link_libraries(PhosphorShellWidgetsQml
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        # ConnectedShape uses QtQuick.Shapes (Shape/ShapePath/PathSvg);
+        # PhosphorRipple uses QtQuick.Shapes (Shape/ShapePath/PathSvg);
         # linking the module pulls its plugin so the import resolves in a
         # static build.
         Qt6::QuickShapes

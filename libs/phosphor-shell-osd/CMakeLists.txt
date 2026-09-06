@@ -7,7 +7,7 @@
 # timers / debounce / dedupe / fade / screen routing) plus the shared
 # OSDCard chrome and the four built-in OSD delegates (Volume, Brightness,
 # Mic, CapsLock). Themed through phosphor-theme and built on the
-# phosphor-shell-widgets atoms (ElevationShadow).
+# phosphor-shell-widgets atoms (TabularText, SettleAnimation, DecorationSlot).
 #
 # Phase 3.3 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -29,7 +29,7 @@ endif()
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # The OSDs import Phosphor.Theme (tokens) and Phosphor.Widgets
-# (ElevationShadow). The QML import scanner needs those modules visible at
+# (the atoms). The QML import scanner needs those modules visible at
 # build time, and consumers need their runtime plugins linked. In-tree
 # builds always have the sibling targets; fall back to installed packages.
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)

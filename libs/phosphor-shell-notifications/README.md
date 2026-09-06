@@ -84,7 +84,8 @@ it was visible or still queued.
 - Qt6 ≥ 6.6 Core / Gui / Qml / Quick; `QtQuick.Shapes` (`Qt6::QuickShapes`)
   for the close glyph.
 - `phosphor-theme` (`Phosphor.Theme`) for tokens, Motion, and `StateLayer`;
-  `phosphor-shell-widgets` (`Phosphor.Widgets`) for `ElevationShadow`.
+  `phosphor-shell-widgets` (`Phosphor.Widgets`) for `SpectrumStroke`,
+  `SettleAnimation` and `DecorationSlot`.
   In-tree builds link their QML plugins automatically. This
   module is static and in-tree-only today.
 

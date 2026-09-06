@@ -92,7 +92,8 @@ same trigger to all. `show()`'s `targetScreen` argument routes it
 - Qt6 ≥ 6.6 Core / Gui / Qml / Quick; `QtQuick.Shapes` (`Qt6::QuickShapes`)
   for the OSD glyphs.
 - `phosphor-theme` (`Phosphor.Theme`) for tokens and Motion;
-  `phosphor-shell-widgets` (`Phosphor.Widgets`) for `ElevationShadow`.
+  `phosphor-shell-widgets` (`Phosphor.Widgets`) for `TabularText`,
+  `SettleAnimation` and `DecorationSlot`.
   In-tree builds link their QML plugins automatically. This module is
   static and in-tree-only today.
 

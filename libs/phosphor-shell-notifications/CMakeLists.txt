@@ -7,7 +7,7 @@
 # the queue, per-toast lifecycle, and add/remove/reflow transitions) plus
 # the Toast card (image + rich text + hover-to-pause auto-dismiss).
 # Themed through phosphor-theme (tokens, Motion, StateLayer) and the
-# phosphor-shell-widgets ElevationShadow atom.
+# phosphor-shell-widgets atoms (SpectrumStroke, SettleAnimation, DecorationSlot).
 #
 # Phase 3.4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -29,7 +29,7 @@ endif()
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # Toast imports Phosphor.Theme (tokens) and Phosphor.Widgets
-# (ElevationShadow). The import scanner needs them visible at build time,
+# (the atoms). The import scanner needs them visible at build time,
 # and consumers need their runtime plugins linked. In-tree builds always
 # have the sibling targets; fall back to installed packages.
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)

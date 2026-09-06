@@ -48,13 +48,11 @@ QtObject {
     // ─── Elevation (per tier) ────────────────────────────────────────────
     // Settings pages only. Shell chrome carries no drop shadow (R2): depth
     // there is a stroke and a ground step, so elevation_1..5 are forbidden
-    // on shell chrome and ElevationShadow must never be attached to it.
-    // Both halves of the M3 elevation system live here so a retune touches
-    // one place: y/blur/opacity drive the drop shadow (rendered by
-    // ElevationShadow.qml into MultiEffect parameters) and tint is the
-    // surface-tint overlay opacity (applied by PhosphorCard over the base
-    // container colour). M3 levels 0 through 5. Most shell surfaces sit at
-    // level 1 for the bar, level 2 for popouts, level 3 for modals.
+    // on shell chrome. Both halves of the M3 elevation system live here so
+    // a retune touches one place: y/blur/opacity describe the drop shadow a
+    // settings-page host may render, and tint is the surface-tint overlay
+    // opacity (applied by PhosphorCard over the base container colour). M3
+    // levels 0 through 5.
     readonly property var elevation_0: ({
             "y": 0,
             "blur": 0,

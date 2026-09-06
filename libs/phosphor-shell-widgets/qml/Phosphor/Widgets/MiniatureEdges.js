@@ -4,7 +4,7 @@
 .pragma library
 
 // .pragma library directly under the SPDX header, as in
-// ConnectorGeometry.js: qt6_target_qml_sources only reads the first 128
+// a sibling .js file: qt6_target_qml_sources only reads the first 128
 // bytes when it decides whether the script is shared.
 
 // Phosphor.Widgets.MiniatureEdges, the matched-edge half of the placement

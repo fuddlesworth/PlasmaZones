@@ -37,8 +37,10 @@ Like `OSDHost` and `ToastHost`, `ControlCenter` renders into whatever
 item it is parented to and owns no surface of its own. The shell decides
 how it appears:
 
-- composed into the bar's `BarCanvas` socket, so it grows out of the bar
-  as one continuous painted shape (the connected-corner design), or
+- opened as an engine-placed pane: a real toplevel the placement engine
+  positions, tethered to the bar's chip (the spectrum design, A2 §4), or
+- painted into the bar's own surface as the floating fallback on an
+  output with no placement engine, or
 - parented into a standalone layer-shell popout opened through
   `PopoutController`.
 
