@@ -300,13 +300,23 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     // It is not luck on the primary output, which is why an absolute
     // floor(x * scale) looked right: renderRect starts at (0, 0) there and
     // the two anchors coincide. They part company on any other output.
-    // scaledRenderRect() is an integer Rect while renderRect() is logical and
-    // fractional-scaled, so scaledRenderRect().x() and renderRect().x() *
-    // scale differ by up to half a device pixel — a second monitor at logical
-    // x=1670 on a 1.15 output has its ortho origin at 1921 covering 1920.5.
-    // An absolute floor() would then place the quad a fraction off the target
-    // grid AND disagree with the (necessarily output-relative) damage box by
-    // a whole column, which is the defect this alignment exists to close.
+    //
+    // Both halves of that, in KWin's own terms. The damage box is
+    // Scene::addLogicalRepaint -> RenderView::mapToDeviceCoordinatesAligned,
+    // which is (logical - viewport().topLeft()) * scale + renderOffset, then
+    // roundedOut() — output-relative, floored on the origin and ceiled on the
+    // far edge. The quad's space is RenderViewport's ortho over
+    // m_scaledRenderRect, which is renderRect.scaled(scale).ROUNDED, so an
+    // ortho coordinate c lands on framebuffer column renderOffset.x() + (c -
+    // scaledRenderRect.x()). WorkspaceScene::paint builds that viewport from
+    // the same delegate viewport(), scale() and offset the damage used, so
+    // measuring from renderRect makes the two expressions identical.
+    //
+    // An ABSOLUTE floor() does not survive the round: a second monitor at
+    // logical x=1670 on a 1.15 output has its ortho origin at 1921 covering
+    // 1920.5, so the quad lands a fraction off the target grid and can
+    // disagree with the damage box by a whole column — the defect this
+    // alignment exists to close, reappearing everywhere but the primary.
     const QPointF renderOrigin = viewport.renderRect().topLeft();
     const bool geometryChanged = entry->textureBounds != entry->bounds || entry->textureScale != scale
         || entry->textureRenderOrigin != renderOrigin;
