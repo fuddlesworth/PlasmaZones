@@ -581,9 +581,11 @@ install(DIRECTORY data/scrolling-templates/
     FILES_MATCHING PATTERN "*.json"
 )
 
-# Settings embeds whatsnew.json as a Qt resource at build time. Also
-# install it on disk so docs/release tooling can read the user-facing
-# entries without grabbing the binary's resource bundle.
+# Settings embeds whatsnew.json as a Qt resource at build time, so nothing in
+# this repo reads the installed copy. It ships anyway as a packaging
+# convenience: the release notes a distro or a downstream tool wants to quote
+# are here in one file, rather than inside the settings binary's resource
+# bundle.
 install(FILES data/whatsnew.json
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones
 )

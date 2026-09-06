@@ -731,6 +731,15 @@ target_link_libraries(test_scrollingtemplate_store PRIVATE PhosphorFsLoader::Pho
                                                            PhosphorZones::PhosphorZones)
 target_compile_definitions(test_scrollingtemplate_store PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
+# data/whatsnew.json is consumed at runtime through the Qt resource, but the
+# ordering invariant the settings dialog relies on (newest release first) is
+# not something the schema can express, so this target reads the file straight
+# out of the source tree and pins it there. Same shape as the
+# scrolling-template schema test above.
+p_add_test(test_whatsnew_data data/test_whatsnew_data.cpp)
+target_link_libraries(test_whatsnew_data PRIVATE PhosphorFsLoader::PhosphorFsLoader)
+target_compile_definitions(test_whatsnew_data PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
 # The AssignmentEntry-shape half of the suite above, split off at its P6 banner
 # when the single file passed the 1150-line ceiling. Shares the same fixture.

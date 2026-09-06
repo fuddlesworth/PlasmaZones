@@ -5,7 +5,8 @@
 //   * buildApplicationController() — wires the PhosphorControl
 //     PageRegistry with PlasmaZones' settings pages and sidebar categories
 //     (the navigable leaf pages are enumerated in validPageNames()).
-//   * What's-New dismissal + last-seen-version state.
+//
+// What's New state lives in the sibling settingscontroller_whatsnew.cpp.
 //
 // The static sidebar topology accessors (pageGroupChildren,
 // pageOwnedConfigKeys, validPageNames) live in the sibling
@@ -15,18 +16,13 @@
 // as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
-#include "version.h"
 
-#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 #include "pageadapter.h"
 #include "settings/services/settingsstagingdomain.h"
 
-#include <QSettings>
-#include <QStringList>
 #include <QUrl>
-#include <QVersionNumber>
 
 namespace PlasmaZones {
 
@@ -580,60 +576,6 @@ void SettingsController::buildApplicationController()
             m_app->setCurrentPageId(m_activePage);
         }
     });
-}
-
-// Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
-// sorts after "1.9.0" (plain string compare gets that wrong). Entries come
-// from the bundled whatsnew.json resource in no guaranteed order.
-QString SettingsController::latestWhatsNewVersion() const
-{
-    QVersionNumber best;
-    QString bestStr;
-    for (const QVariant& v : m_whatsNewEntries) {
-        const QString ver = v.toMap().value(QStringLiteral("version")).toString();
-        const QVersionNumber parsed = QVersionNumber::fromString(ver);
-        if (parsed.isNull())
-            continue;
-        if (bestStr.isEmpty() || best < parsed) {
-            best = parsed;
-            bestStr = ver;
-        }
-    }
-    return bestStr;
-}
-
-bool SettingsController::hasUnseenWhatsNew() const
-{
-    const QString latest = latestWhatsNewVersion();
-    if (latest.isEmpty())
-        return false;
-    // Unseen iff the latest bundled entry is strictly newer than what the
-    // user last marked seen. String compare after normalisation would still
-    // mis-order "1.10" vs "1.9", so go through QVersionNumber.
-    const QVersionNumber latestV = QVersionNumber::fromString(latest);
-    const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
-    // Belt-and-braces: the ctor already clamps m_whatsNewEntries to
-    // VERSION_STRING (settingscontroller.cpp), so latestV can only exceed
-    // the running version if that filter regresses. Same version source on
-    // both sides, so the two can never disagree.
-    const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
-    if (!appV.isNull() && appV < latestV) {
-        return false;
-    }
-    return seenV < latestV;
-}
-
-void SettingsController::markWhatsNewSeen()
-{
-    const QString latest = latestWhatsNewVersion();
-    if (latest.isEmpty())
-        return;
-    if (m_lastSeenWhatsNewVersion != latest) {
-        m_lastSeenWhatsNewVersion = latest;
-        QSettings appSettings;
-        appSettings.setValue(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey(), latest);
-        Q_EMIT lastSeenWhatsNewVersionChanged();
-    }
 }
 
 } // namespace PlasmaZones

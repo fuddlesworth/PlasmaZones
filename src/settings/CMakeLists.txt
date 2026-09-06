@@ -34,6 +34,7 @@ set(plasmazones_settings_SRCS
     # page registry → per-domain CRUD.
     controller/settingscontroller_lifecycle.cpp
     controller/settingscontroller_pageregistration.cpp
+    controller/settingscontroller_whatsnew.cpp
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
     controller/settingscontroller_rulelookups.cpp

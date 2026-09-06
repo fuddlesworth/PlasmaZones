@@ -121,7 +121,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The daemon and the KWin effect must be the same build**: this release changes the message they speak again, so a mismatched pair refuses to connect rather than misbehaving. Packagers should rebuild and ship both together ([#1029](https://github.com/fuddlesworth/PlasmaZones/pull/1029), [#1030](https://github.com/fuddlesworth/PlasmaZones/pull/1030)).
+- **The daemon and the KWin effect must be the same build**: `Scrolling` gained a `leaveNativeFullscreenRequested` signal and `Tiling.managedScreensChanged` gained a `screenDesktops` map, so the effect knows which desktop each announced screen was resolved against. A mismatched pair refuses to connect rather than misbehaving, so packagers should rebuild and ship both together ([#1029](https://github.com/fuddlesworth/PlasmaZones/pull/1029), [#1030](https://github.com/fuddlesworth/PlasmaZones/pull/1030)).
 - **The support report says what it contains**: both the report and the archive tell you up front that they record your machine hostname, the class and title of tracked windows, the match patterns from your window rules, and the make, model and serial number your monitors report over EDID, so you can look before attaching either to a public bug report. Home paths are still redacted, and that redaction now also works when your home directory is written with a trailing slash ([#1031](https://github.com/fuddlesworth/PlasmaZones/pull/1031)).
 - **Windowed fullscreen exits through one shared helper**: two places unwound the fullscreen change notification by hand instead of using the helper that unwinds it for them. Both now go through the helper, so a later edit between the two halves cannot switch off the code that notices an application leaving fullscreen by itself ([#1031](https://github.com/fuddlesworth/PlasmaZones/pull/1031)).
 
@@ -168,7 +168,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The daemon and the KWin effect must be the same build**: this release changes the message they speak again, so a mismatched pair refuses to connect rather than misbehaving. Packagers should rebuild and ship both together ([#1019](https://github.com/fuddlesworth/PlasmaZones/pull/1019)).
+- **The daemon and the KWin effect must be the same build**: `Snap.resolveWindowRestore` replaced its `isOpenPath` bool with a `restoreReason` enum, because a login restore continuing onto a desktop you switched to has to be told apart from a window the user just opened, and two states could not say that. A mismatched pair refuses to connect rather than misbehaving, so packagers should rebuild and ship both together ([#1019](https://github.com/fuddlesworth/PlasmaZones/pull/1019)).
 - **The new settings text is translated**: the strings added for Session restore and Put windows back on their virtual desktop are translated in German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish, so those languages have no English left showing in the settings ([#1025](https://github.com/fuddlesworth/PlasmaZones/pull/1025)).
 
 ### Fixed
@@ -191,7 +191,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The daemon and the KWin effect must be the same build**: this release changes the message they speak again, so a mismatched pair refuses to connect rather than misbehaving. Packagers should rebuild and ship both together ([#1007](https://github.com/fuddlesworth/PlasmaZones/pull/1007), [#1013](https://github.com/fuddlesworth/PlasmaZones/pull/1013)).
+- **The daemon and the KWin effect must be the same build**: `Scrolling` gained a `toggleMaximizeToEdges` method and a `stripContextChanged` signal carrying the strip epoch, so the effect can tell a stale strip from a live one after a desktop switch. A mismatched pair refuses to connect rather than misbehaving, so packagers should rebuild and ship both together ([#1007](https://github.com/fuddlesworth/PlasmaZones/pull/1007), [#1013](https://github.com/fuddlesworth/PlasmaZones/pull/1013)).
 - **The new settings text is translated**: the strings added this release for Maximize to Screen Edges and Center short columns are translated in German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish, so those languages have no English left showing in the settings ([#1015](https://github.com/fuddlesworth/PlasmaZones/pull/1015)).
 
 ### Fixed
@@ -216,7 +216,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Decoration previews open on the focused appearance**: a pack's full-strength look is the focused one, and its unfocused look is a wash or an inactive colour derived from it, so the browser opened every card on the quieter of the two. Cards and the detail preview now start focused, and the switch in the detail preview is the comparison ([#998](https://github.com/fuddlesworth/PlasmaZones/pull/998)).
 - **Zone shader previews draw borders at the scale of the preview**: a zone's border width and corner radius are set in screen pixels, and the preview fits a whole screen into a pane a few hundred pixels wide. The zone rectangles were scaled into that pane but the border was not, so it drew several times too thick for the zones it sat on. It now shrinks with them, which at preview size is close to a hairline. The same applies to any parameter an overlay pack declares as a pixel length ([#998](https://github.com/fuddlesworth/PlasmaZones/pull/998)).
 - **Maximizing a window on a scrolling monitor maximizes its column**: the maximize button, Meta+PgUp and an application's own maximize request used to hand the window to the compositor's maximize, which fought the strip for control of its width. On a scrolling monitor they now do what the maximize column shortcut does, so the column fills the monitor along the strip and stays tiled. The column that grows is always the one holding the window you maximized, even when that window is not the focused one. Pressing it again gives the column its width back, or the default width when there is no earlier width to return to. The button also lights up whenever a column fills the monitor, however it got there, so the button and the shortcut agree about what a window is doing. A column that only fills the monitor because its windows will not go any narrower is left out, since there is no width for the button to give back. A window rule that matches on "is maximized" now follows the column rather than the single window, so it matches every window in a maximized column. Floating windows keep the ordinary maximize ([#994](https://github.com/fuddlesworth/PlasmaZones/pull/994)).
-- **The daemon and the KWin effect must be the same build**: this release changes the message they speak, so a mismatched pair refuses to connect rather than misbehaving. Packagers should rebuild and ship both together ([#994](https://github.com/fuddlesworth/PlasmaZones/pull/994)).
+- **The daemon and the KWin effect must be the same build**: `Scrolling` gained a `toggleMaximizeColumn` method and its `tileRequests` struct gained a flag for the maximized column, so maximize runs along the strip instead of going to the compositor's own maximize. A mismatched pair refuses to connect rather than misbehaving, so packagers should rebuild and ship both together ([#994](https://github.com/fuddlesworth/PlasmaZones/pull/994)).
 
 ### Fixed
 
@@ -644,7 +644,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Rebuilt for KWin 6.1.2**: the PlasmaZones KWin effect is compiled against a specific KWin version and will not load under a different one, so this release rebuilds the effect for KWin 6.1.2. Update to it once your system moves to that KWin, otherwise window dragging, shortcuts, and snapping stop working.
+- **Rebuilt for the current KWin**: the PlasmaZones KWin effect is compiled against a specific KWin version and will not load under a different one, so this release rebuilds the effect for the KWin this Plasma update ships. Update to it once your system has moved to that KWin, otherwise window dragging, shortcuts, and snapping stop working.
 - **Shorter KWin version-mismatch warning**: when the installed effect was built for a different KWin than the one running, the notification now gives just the diagnosis and the rebuild-and-reinstall fix, without the NixOS-specific install note.
 
 ## [3.1.2] - 2026-06-25

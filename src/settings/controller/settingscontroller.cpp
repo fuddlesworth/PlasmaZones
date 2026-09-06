@@ -924,61 +924,10 @@ SettingsController::SettingsController(QObject* parent)
         QSettings appSettings;
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
+        m_whatsNewBaselineVersion = m_lastSeenWhatsNewVersion;
     }
 
-    // Load What's New entries from embedded resource
-    {
-        QFile whatsNewFile(QStringLiteral(":/whatsnew.json"));
-        if (whatsNewFile.open(QIODevice::ReadOnly)) {
-            const auto doc = QJsonDocument::fromJson(whatsNewFile.readAll());
-
-            // Validate against the embedded schema before consuming. The same
-            // schema CI validates the file against. fromResource fails closed if
-            // the resource is missing (a build error), so malformed or
-            // unvalidatable data is skipped rather than surfaced (the page
-            // simply shows nothing).
-            const auto validator = PhosphorFsLoader::SchemaValidator::fromResource(
-                QStringLiteral(":/schemas/whatsnew.schema.json"), PlasmaZones::lcCore());
-            QJsonArray releases;
-            if (const auto errors = validator.validate(doc.object())) {
-                qCWarning(PlasmaZones::lcCore) << "whatsnew.json failed schema validation; skipping What's New entries";
-                PhosphorFsLoader::logSchemaErrors(PlasmaZones::lcCore(), *errors);
-            } else {
-                releases = doc.object().value(QLatin1String("releases")).toArray();
-            }
-            // Only entries for THIS build or older are consumed: whatsnew.json
-            // gains the next release's entry while it is still unreleased, and
-            // without the clamp a user opening What's New on the current build
-            // would both SEE the unreleased entry and get it stamped as seen,
-            // so the badge never fires when that release actually ships. An
-            // unparsable app version fails open (no filtering).
-            // VERSION_STRING, not applicationVersion(): the latter is only
-            // set by the settings app's own main(); a host that skips
-            // setApplicationVersion would fail the clamp open, let the
-            // unreleased entry through, AND let markWhatsNewSeen stamp it —
-            // exactly the badge-never-fires bug the clamp prevents. An
-            // unparsable VERSION_STRING (impossible for a release build)
-            // fails open: no filtering, and the stamp risk returns with it.
-            const QVersionNumber appVersion = QVersionNumber::fromString(PlasmaZones::VERSION_STRING);
-            for (const auto& entry : releases) {
-                const auto obj = entry.toObject();
-                const QVersionNumber entryVersion =
-                    QVersionNumber::fromString(obj.value(QLatin1String("version")).toString());
-                if (!appVersion.isNull() && !entryVersion.isNull() && entryVersion > appVersion) {
-                    continue;
-                }
-                QVariantMap release;
-                release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
-                release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
-                QVariantList highlights;
-                const auto arr = obj.value(QLatin1String("highlights")).toArray();
-                for (const auto& h : arr)
-                    highlights.append(h.toString());
-                release[QStringLiteral("highlights")] = highlights;
-                m_whatsNewEntries.append(release);
-            }
-        }
-    }
+    loadWhatsNew();
 
     // PhosphorControl integration — must run AFTER every page controller
     // has been constructed (the registry holds stable pointers to them).

@@ -129,10 +129,11 @@ class SettingsController : public QObject
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
 
-    // What's New
-    Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
+    // What's New — see loadWhatsNew() for the baseline snapshot contract.
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
+    Q_PROPERTY(QString whatsNewBaselineVersion READ whatsNewBaselineVersion CONSTANT)
+    Q_PROPERTY(int unseenWhatsNewReleaseCount READ unseenWhatsNewReleaseCount CONSTANT)
 
     // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
@@ -363,22 +364,12 @@ public:
         return &m_daemonController;
     }
     // What's New
-    QString lastSeenWhatsNewVersion() const
-    {
-        return m_lastSeenWhatsNewVersion;
-    }
     bool hasUnseenWhatsNew() const;
-    QVariantList whatsNewEntries() const
-    {
-        return m_whatsNewEntries;
-    }
+    QVariantList whatsNewEntries() const;
+    QString whatsNewBaselineVersion() const;
+    int unseenWhatsNewReleaseCount() const;
     Q_INVOKABLE void markWhatsNewSeen();
 
-private:
-    /// Highest entry version in m_whatsNewEntries, or empty if no entries.
-    QString latestWhatsNewVersion() const;
-
-public:
     // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
@@ -895,6 +886,10 @@ private Q_SLOTS:
     void reloadLocalRuleStore(bool persisted);
 
 private:
+    /// Highest parseable entry version in m_whatsNewEntries, or empty.
+    QString latestWhatsNewVersion() const;
+    /// Reads the bundled release history into m_whatsNewEntries. Ctor-only.
+    void loadWhatsNew();
     /// Install the RuleController's label resolvers (settingscontroller_rulelookups.cpp).
     /// Called once from the ctor after m_rulesPage and the registries it reads exist.
     void installRuleLabelLookups();
@@ -1103,6 +1098,8 @@ private:
 
     DaemonController m_daemonController;
     QString m_lastSeenWhatsNewVersion;
+    QString m_whatsNewBaselineVersion;
+    int m_unseenWhatsNewReleaseCount = 0;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
     /// Simple/advanced UI mode. THE single source of the default: false
