@@ -12,7 +12,10 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
 #include <QStandardPaths>
+
+Q_LOGGING_CATEGORY(lcPresets, "phosphorshellpicker.presets")
 
 namespace PhosphorShellPicker {
 
@@ -135,6 +138,20 @@ QVariantList ThemePresets::swatchesFor(const QVariantMap& tokens)
 
 QVariantMap ThemePresets::readPaletteFile(const QString& path)
 {
+    // A palette is a small flat map of token names to colours; a megabyte is
+    // already orders of magnitude past any real one. The scan directory is
+    // user-writable, so an oversized or non-regular file reached through a
+    // symlink with a .json name would otherwise be pulled into memory whole
+    // on the GUI thread. isFile() is checked on the RESOLVED target, so a
+    // symlink to a fifo or a device node is refused rather than blocking the
+    // shell on open.
+    static constexpr qint64 MaxPaletteBytes = 1024 * 1024;
+    const QFileInfo info(path);
+    if (!info.isFile() || info.size() > MaxPaletteBytes) {
+        qCWarning(lcPresets) << "ignoring palette" << path << "— not a regular file, or larger than" << MaxPaletteBytes
+                             << "bytes";
+        return {};
+    }
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         return {};

@@ -10,11 +10,14 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSet>
+#include <QLoggingCategory>
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QVariantMap>
 
 #include <utility>
+
+Q_LOGGING_CATEGORY(lcCandidates, "phosphorshellpicker.candidates")
 
 namespace PhosphorShellPicker {
 
@@ -115,6 +118,15 @@ bool WallpaperCandidates::isImageFile(const QString& fileName)
     return !suffix.isEmpty() && imageSuffixes().contains(suffix);
 }
 
+bool WallpaperCandidates::isUsableImage(const QFileInfo& entry)
+{
+    // QDir::Files admits any non-directory, including fifos, sockets and
+    // device nodes. A fifo named `x.png` would reach the QML Image and block
+    // its decode on open, hanging the strip. isFile() resolves symlinks and
+    // is true only for a regular file.
+    return entry.isFile() && isImageFile(entry.fileName());
+}
+
 QString WallpaperCandidates::packageImage(const QString& packageDir)
 {
     const QDir images(QDir(packageDir).filePath(QStringLiteral("contents/images")));
@@ -188,8 +200,16 @@ QList<Candidate> WallpaperCandidates::scanDirectory(const QString& directory)
             if (!image.isEmpty()) {
                 packages.append({image, packageName(entry.absoluteFilePath()), QStringLiteral("package")});
             }
-        } else if (isImageFile(entry.fileName())) {
+        } else if (isUsableImage(entry)) {
             result.append({entry.absoluteFilePath(), entry.completeBaseName(), QStringLiteral("file")});
+        }
+        // The scan is synchronous and on the GUI thread, and every candidate
+        // becomes a QVariantMap the strip reads. A picture folder configured
+        // as a wallpaper root would otherwise stall the shell on open.
+        if (result.size() + packages.size() >= MaxCandidatesPerDirectory) {
+            qCWarning(lcCandidates) << "wallpaper scan of" << directory << "stopped at" << MaxCandidatesPerDirectory
+                                    << "entries";
+            break;
         }
     }
     result.append(packages);

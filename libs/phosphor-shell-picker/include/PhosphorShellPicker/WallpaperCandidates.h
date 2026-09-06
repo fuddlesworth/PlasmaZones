@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+#include <QFileInfo>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -87,6 +88,17 @@ public:
 
     /// Whether a file name carries a raster image suffix the picker offers.
     [[nodiscard]] static bool isImageFile(const QString& fileName);
+
+    /// Whether a scanned entry is a REGULAR file the picker can offer.
+    /// `QDir::Files` admits fifos, sockets and device nodes, and a fifo with
+    /// an image suffix would block the QML Image decode that opens it.
+    [[nodiscard]] static bool isUsableImage(const QFileInfo& entry);
+
+    /// Most candidates taken from any one directory. The scan is synchronous
+    /// and on the GUI thread, and each candidate becomes a QVariantMap the
+    /// strip reads, so a large picture folder configured as a wallpaper root
+    /// would otherwise stall the shell every time the picker opens.
+    static constexpr int MaxCandidatesPerDirectory = 2000;
 
     /// Re-run the scan against `directories` and `currentPath`. Emits
     /// candidatesChanged only when the list differs from the last scan.
