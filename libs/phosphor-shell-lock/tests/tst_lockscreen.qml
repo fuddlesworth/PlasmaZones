@@ -270,6 +270,19 @@ TestCase {
         compare(c.phase, "idle");
     }
 
+    function test_altGrCharactersReachThePassword() {
+        // A German layout's "@" is AltGr+Q; a Polish "ą" is AltGr+A. Both must
+        // land, or those users cannot type their password at all.
+        const c = makeScene(true).controller;
+        c.handleKey(keyEvent(Qt.Key_Q, "@", Qt.GroupSwitchModifier));
+        // The platforms that spell AltGr as Control+Alt must work too.
+        c.handleKey(keyEvent(Qt.Key_A, "ą", Qt.ControlModifier | Qt.AltModifier));
+        compare(c.password, "@ą");
+        // A real command chord still contributes nothing.
+        verify(!c.handleKey(keyEvent(Qt.Key_C, "\u0003", Qt.ControlModifier)));
+        compare(c.password, "@ą");
+    }
+
     function test_outlineClickSetsThePlaceholder() {
         const s = makeScene(true);
         s.controller.placeholderFor("Firefox");

@@ -86,9 +86,19 @@ QtObject {
             controller.password = controller.password.slice(0, -1);
             return true;
         }
-        // Printable text only: modifiers other than Shift, and control
-        // characters, are not password input.
-        if (event.modifiers & ~(Qt.ShiftModifier | Qt.KeypadModifier))
+        // Printable text only. Command chords are rejected by their modifier,
+        // everything else by not producing a printable character.
+        //
+        // AltGr MUST get through. It is how a great many layouts reach
+        // characters that appear in real passwords (@ and € on a German
+        // layout, the whole accented row on a Polish one), and Qt spells it
+        // either as GroupSwitchModifier or, on some platforms, as Control+Alt
+        // together. Filtering on "anything but Shift" dropped every one of
+        // those keystrokes silently, which for those users is not a rejected
+        // character, it is a lock screen their password cannot be typed into.
+        const mods = event.modifiers;
+        const altGr = (mods & Qt.GroupSwitchModifier) || ((mods & Qt.ControlModifier) && (mods & Qt.AltModifier));
+        if (!altGr && (mods & (Qt.ControlModifier | Qt.MetaModifier)))
             return false;
         const text = event.text;
         if (!text || text.length === 0 || text.charCodeAt(0) < 0x20)

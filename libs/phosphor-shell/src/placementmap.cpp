@@ -662,7 +662,22 @@ PlacementMap::PlacementMap(QObject* parent)
         forEachScreen(&PlacementMapScreen::occupancyChanged);
     });
     connect(m_bus, &PlacementMapBus::currentActivityChanged, this, [this](const QString& activityId) {
+        if (m_activity == activityId) {
+            return;
+        }
         m_activity = activityId;
+        // Assignments resolve per (screen, desktop, activity), so the mode can
+        // differ in the activity we just switched to. Nothing else tells us:
+        // screenLayoutChanged is emitted from onLayoutAssigned, which fires
+        // when an assignment is WRITTEN, and switching activity writes none.
+        // Recording the id without re-reading left the map drawing the
+        // previous activity's mode. Same refresh the desktop switch does.
+        if (!isAvailable()) {
+            return;
+        }
+        for (PlacementMapScreen* s : std::as_const(m_screens)) {
+            s->refreshMode();
+        }
     });
     // Metadata for windows no screen draws any more is dropped once the
     // burst of rebuilds that dereferenced them has settled.
