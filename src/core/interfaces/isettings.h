@@ -1067,6 +1067,7 @@ Q_SIGNALS:
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();
     void scrollingFocusNewWindowsChanged();
+    void scrollingGroupSameAppAsTabsChanged();
     void scrollingFocusFollowsMouseChanged();
     void scrollingFocusFollowsMouseMaxScrollChanged();
     void scrollingStickyWindowHandlingChanged();

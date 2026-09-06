@@ -1642,6 +1642,17 @@ private:
     /// cached, and reading it live keeps a settings change effective without
     /// waiting for a settings-reload pass.
     bool effectiveFocusNewWindows(const QString& screenId) const;
+    /// Live IScrollSettings read, for effectiveFocusNewWindows's reason: the
+    /// verdict is consulted once per fresh open and a settings change should
+    /// take effect on the very next one.
+    bool groupSameAppAsTabs() const;
+    /// Index of the column a grouped open would join: the active column when
+    /// it holds a tile @p inGroup accepts, else the first column along the
+    /// strip that does, else -1. Only strip TILES are offered (a floated or
+    /// minimized sibling is not a column to join). The predicate is the
+    /// grouping key: same registry-aware appId for the settings default,
+    /// same resolved openTabGroup name for the rule.
+    int tabGroupColumnIndex(const ScrollStrip& strip, const std::function<bool(const QString&)>& inGroup) const;
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QString& screenId) const;
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QVariantMap& overrides) const;
     /// Shared bool-override reader for the five toggles above: takes the

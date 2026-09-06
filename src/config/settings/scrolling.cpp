@@ -582,6 +582,10 @@ P_STORE_GET(bool, scrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWind
 P_STORE_SET_BOOL(setScrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey,
                  scrollingFocusNewWindowsChanged)
 
+P_STORE_GET(bool, scrollingGroupSameAppAsTabs, scrollingBehaviorGroup, groupSameAppAsTabsKey, bool)
+P_STORE_SET_BOOL(setScrollingGroupSameAppAsTabs, scrollingBehaviorGroup, groupSameAppAsTabsKey,
+                 scrollingGroupSameAppAsTabsChanged)
+
 P_STORE_GET(bool, scrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey, bool)
 P_STORE_SET_BOOL(setScrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,
                  scrollingFocusFollowsMouseChanged)

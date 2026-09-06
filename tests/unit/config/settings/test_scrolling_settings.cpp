@@ -843,6 +843,9 @@ private Q_SLOTS:
         const auto* focusNew = findKey(schema, group, ConfigDefaults::focusNewWindowsKey());
         QVERIFY(focusNew);
         QCOMPARE(focusNew->defaultValue.toBool(), ConfigDefaults::scrollingFocusNewWindows());
+        const auto* groupSameApp = findKey(schema, group, ConfigDefaults::groupSameAppAsTabsKey());
+        QVERIFY(groupSameApp);
+        QCOMPARE(groupSameApp->defaultValue.toBool(), ConfigDefaults::scrollingGroupSameAppAsTabs());
         const auto* ffm = findKey(schema, group, ConfigDefaults::focusFollowsMouseKey());
         QVERIFY(ffm);
         QCOMPARE(ffm->defaultValue.toBool(), ConfigDefaults::scrollingFocusFollowsMouse());

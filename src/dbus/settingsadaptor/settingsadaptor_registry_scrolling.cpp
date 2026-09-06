@@ -711,6 +711,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
         };
         m_schemas[QStringLiteral("scrollingInsertPosition")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingFocusNewWindows", scrollingFocusNewWindows, setScrollingFocusNewWindows)
+        REGISTER_CONCRETE_BOOL("scrollingGroupSameAppAsTabs", scrollingGroupSameAppAsTabs,
+                               setScrollingGroupSameAppAsTabs)
         REGISTER_CONCRETE_BOOL("scrollingFocusFollowsMouse", scrollingFocusFollowsMouse, setScrollingFocusFollowsMouse)
         REGISTER_CONCRETE_INT("scrollingFocusFollowsMouseMaxScroll", scrollingFocusFollowsMouseMaxScroll,
                               setScrollingFocusFollowsMouseMaxScroll)

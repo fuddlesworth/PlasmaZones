@@ -508,6 +508,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::insertPositionKey()},
              {CD::scrollingBehaviorGroup(), CD::smartGapsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusNewWindowsKey()},
+             {CD::scrollingBehaviorGroup(), CD::groupSameAppAsTabsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()},
              {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},

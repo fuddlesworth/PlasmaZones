@@ -222,6 +222,7 @@ inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 inline constexpr QLatin1StringView OpenMaximized{"open-maximized"};
 inline constexpr QLatin1StringView OpenFocused{"open-focused"};
+inline constexpr QLatin1StringView OpenTabGroup{"open-tab-group"};
 inline constexpr QLatin1StringView OpenFullscreen{"open-fullscreen"};
 inline constexpr QLatin1StringView ScrollFactor{"scroll-factor"};
 // Per-context overlay-property slots (one per property so independent rules

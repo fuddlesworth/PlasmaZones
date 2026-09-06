@@ -855,6 +855,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("New window placement"),
                {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column"),
                 PhosphorI18n::tr("open")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingGroupSameAppAsTabs"),
+               PhosphorI18n::tr("Group windows of the same application as tabs"),
+               {PhosphorI18n::tr("tabs"), PhosphorI18n::tr("tabbed"), PhosphorI18n::tr("group"),
+                PhosphorI18n::tr("application"), PhosphorI18n::tr("same app"), PhosphorI18n::tr("open")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingSmartGaps"),
                PhosphorI18n::tr("Smart gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),

@@ -32,6 +32,14 @@ public:
         return true;
     }
 
+    /// Open a window as a tab of a column that already holds a window of the
+    /// same application (Scrolling.Behavior.GroupSameAppAsTabs). Off by
+    /// default: a fresh open takes its own column, niri's behaviour.
+    static constexpr bool scrollingGroupSameAppAsTabs()
+    {
+        return false;
+    }
+
     // ── Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll) ──
     //
     // niri's dnd-edge-view-scroll defaults, verbatim. Holding a dragged

@@ -360,6 +360,62 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             consumePendingInitialOrder(screenId, windowId);
         }
     }
+    // Tab grouping: a fresh open joins, as a tab, a column that already holds
+    // a window of its GROUP. Two keys, rule first: an openTabGroup rule names
+    // the group outright, and every tile whose own rules resolve to that name
+    // is a sibling (resolved live through the same resolver, so a rule edit
+    // takes effect on the next open and nothing has to be remembered per
+    // window); with no rule, Scrolling.Behavior.GroupSameAppAsTabs keys the
+    // group on the registry-aware appId. Ordered deliberately: BELOW the
+    // stash restore, the consume rule and the order seed, because a
+    // remembered shape or an explicit placement outranks a grouping verdict
+    // (the same precedence the insert-position setting has), and ABOVE the
+    // fresh-open block, because that block is where a column is CREATED and
+    // this arm creates none. A join spends no blueprint entry for the same
+    // reason the IntoActiveColumn arm spends none. The host column is turned
+    // tabbed through the engaged override, so a Normal stack becomes tabs on
+    // the first grouped arrival and a column that is already tabbed keeps its
+    // owner (applyColumnDisplay no-ops on a same-display write). The arriving
+    // window becomes the tab on show and takes the strip focus, which the
+    // focus arm in windowOpened rewinds when focus-new-windows says no,
+    // exactly as it does for insertWindow's focus.
+    if (!inserted) {
+        int hostIdx = -1;
+        if (openParams.tabGroup && !openParams.tabGroup->isEmpty()) {
+            const QString group = *openParams.tabGroup;
+            hostIdx = tabGroupColumnIndex(state->strip(), [&](const QString& tileId) {
+                const ScrollOpenParams tileParams =
+                    m_openParamsResolver ? m_openParamsResolver(tileId, screenId) : ScrollOpenParams{};
+                return tileParams.tabGroup && *tileParams.tabGroup == group;
+            });
+        } else if (PhosphorEngine::hasStableAppIdFor(appId, windowId) && groupSameAppAsTabs()) {
+            // Lazy on the settings read, which qobject_casts the settings
+            // object: the appId gate is the cheap half.
+            //
+            // A tile a rule has NAMED into a group belongs to that group
+            // only: it is not an app-group sibling, or an unnamed window of
+            // the app would be pulled into a "work" column because one of
+            // its kind happens to be tabbed there. The two keys are disjoint
+            // in both directions (the named arm above never reads the app).
+            hostIdx = tabGroupColumnIndex(state->strip(), [&](const QString& tileId) {
+                if (currentAppIdFor(tileId) != appId) {
+                    return false;
+                }
+                const ScrollOpenParams tileParams =
+                    m_openParamsResolver ? m_openParamsResolver(tileId, screenId) : ScrollOpenParams{};
+                return !tileParams.tabGroup || tileParams.tabGroup->isEmpty();
+            });
+        }
+        if (hostIdx >= 0) {
+            const int tileIdx = state->strip().columns().at(hostIdx).tiles.size();
+            inserted = state->strip().insertWindowIntoColumnAt(hostIdx, tileIdx, windowId, params, minWidth, minHeight,
+                                                               ColumnDisplay::Tabbed);
+            if (inserted) {
+                insertArm = "same-app-tab";
+                consumePendingInitialOrder(screenId, windowId);
+            }
+        }
+    }
     if (!inserted) {
         // Fresh open with no remembered position: the ONLY site the
         // insert-position setting governs. Restore/seed/unfloat paths above

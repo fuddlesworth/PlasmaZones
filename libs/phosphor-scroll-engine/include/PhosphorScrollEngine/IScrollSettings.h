@@ -28,6 +28,10 @@ public:
     virtual int scrollingOuterGapRight() const = 0;
     /// Whether newly opened windows take focus (Scrolling.Behavior).
     virtual bool scrollingFocusNewWindows() const = 0;
+    /// Whether a fresh open joins, as a tab, a column that already holds a
+    /// window of the same application (Scrolling.Behavior.GroupSameAppAsTabs).
+    /// Read LIVE on the open path like scrollingFocusNewWindows, never cached.
+    virtual bool scrollingGroupSameAppAsTabs() const = 0;
     /// StickyWindowHandling as int (0 = treat as normal, 1 = restore only,
     /// 2 = ignore all) — the shared PhosphorEngine enum's wire values.
     /// RestoreOnly and IgnoreAll both keep sticky windows out of the strip

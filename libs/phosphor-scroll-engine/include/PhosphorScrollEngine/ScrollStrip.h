@@ -180,8 +180,14 @@ public:
     /// the last arrival would otherwise keep it.
     /// The tile is seeded with @p params.defaultWindowHeight; callers with a
     /// remembered intent overwrite it via setWindowHeightIntent.
+    /// @p displayOverride, when ENGAGED, is applied to the host column BEFORE
+    /// the tile joins (through applyColumnDisplay, so the extent ownership
+    /// transition holds), the same contract insertWindowIntoActiveColumn
+    /// carries. Disengaged leaves the host's display alone, which is what a
+    /// float/minimize round trip wants.
     bool insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
-                                  const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
+                                  const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0,
+                                  std::optional<ColumnDisplay> displayOverride = std::nullopt);
     /// Remove @p windowId; a column left empty closes up. Keeps the view
     /// anchored so surviving neighbours don't jump, and selects a sensible
     /// new focus when the active tile/column vanished. Returns false when

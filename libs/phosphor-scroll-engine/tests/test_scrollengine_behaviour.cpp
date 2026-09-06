@@ -29,6 +29,7 @@
 // never the resolver's own return value: a test that called the resolver
 // would still pass if the engine stopped consulting it.
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
@@ -99,6 +100,8 @@ private Q_SLOTS:
     void focusScrollLimitNamesTheWindowsPastTheCap();
     void focusScrollLimitNamesEveryTileOfABlockedColumn();
     void focusScrollLimitFailsOpen();
+    void sameAppOpenJoinsItsColumnAsATab();
+    void sameAppGroupingYieldsToRulesAndUnstableIds();
 
 private:
     /// An engine on S1 and S2 with @p settings installed and its cached
@@ -940,6 +943,138 @@ void TestScrollEngineBehaviour::focusScrollLimitFailsOpen()
     // A lone column is the one the pointer is already on, so nothing is past
     // the cap however tight it is.
     QVERIFY(engine->windowsBeyondFocusScrollLimit(kS1, 0).isEmpty());
+}
+
+void TestScrollEngineBehaviour::sameAppOpenJoinsItsColumnAsATab()
+{
+    // Global ON. A second window of an app already on the strip joins that
+    // app's column as a tab, turning a Normal column tabbed on the way; a
+    // window of a different app still takes a column of its own. When two
+    // columns hold the app, the ACTIVE one wins, so the arrival lands where
+    // the user is working.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->groupSameAppAsTabs = true;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("firefox|1"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("kate|1"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columnCount(), 2);
+    QCOMPARE(state->strip().columns().at(0).display, ColumnDisplay::Normal);
+
+    // firefox|1 sits in column 0; kate is active. The firefox arrival must
+    // find its sibling's column rather than the active one.
+    engine->windowOpened(QStringLiteral("firefox|2"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), 2);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("firefox|2")), 0);
+    const Column& firefoxCol = state->strip().columns().at(0);
+    QCOMPARE(firefoxCol.display, ColumnDisplay::Tabbed);
+    QCOMPARE(firefoxCol.tiles.size(), 2);
+    // The join turned the column tabbed BEFORE the tile joined, so the tab on
+    // show at that moment (firefox|1) owns the extent, not the arrival.
+    QCOMPARE(firefoxCol.heightOwnerId, QStringLiteral("firefox|1"));
+    // The arrival is the tab on show and the strip's focus.
+    QCOMPARE(activeWindowOn(engine, kS1), QStringLiteral("firefox|2"));
+    // A tabbed column resolves exactly one visible tile, so the strip still
+    // shows two rects.
+    QCOMPARE(engine->visibleTileRects(kS1).size(), 2);
+
+    // Two firefox columns: manually give kate's column a firefox tab, then
+    // focus it. The next firefox open joins the ACTIVE firefox column.
+    QVERIFY(
+        state->strip().insertWindowIntoColumnAt(1, 1, QStringLiteral("firefox|3"), ScrollTestUtils::engineParams()));
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("firefox|3")), 1);
+    engine->windowOpened(QStringLiteral("firefox|4"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), 2);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("firefox|4")), 1);
+    QCOMPARE(state->strip().columns().at(1).display, ColumnDisplay::Tabbed);
+
+    // Global OFF: the same shape opens a column of its own, and an existing
+    // tabbed column is left alone.
+    settings->groupSameAppAsTabs = false;
+    engine->windowOpened(QStringLiteral("firefox|5"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), 3);
+    QCOMPARE(state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("firefox|5"))).tiles.size(), 1);
+}
+
+void TestScrollEngineBehaviour::sameAppGroupingYieldsToRulesAndUnstableIds()
+{
+    // The grouping is a config-wide DEFAULT, so a per-window rule outranks
+    // it: an openColumnPlacement=consume rule joins the ACTIVE column even
+    // when a same-app column exists elsewhere, and a window whose id carries
+    // no stable appId (nothing before the separator) never matches anything.
+    // Floated windows are not columns to join either.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->groupSameAppAsTabs = true;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("firefox|1"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("kate|1"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(activeWindowOn(engine, kS1), QStringLiteral("kate|1"));
+
+    engine->setOpenParamsResolver([](const QString& windowId, const QString&) {
+        ScrollOpenParams params;
+        if (windowId == QStringLiteral("firefox|ruled")) {
+            params.consume = true;
+        }
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("firefox|ruled"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), 2);
+    // Consumed into kate's column (the active one), not firefox's.
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("firefox|ruled")),
+             state->strip().columnOfWindow(QStringLiteral("kate|1")));
+    engine->setOpenParamsResolver({});
+
+    // An id with no app part has no stable appId: it opens its own column
+    // even though another bare id is already on the strip.
+    engine->windowOpened(QStringLiteral("bare"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("bare2"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), 4);
+
+    // A floated same-app window is not a column: the next firefox open joins
+    // the firefox COLUMN, never the float.
+    engine->setWindowFloat(QStringLiteral("firefox|ruled"), true, kS1);
+    QVERIFY(state->isFloating(QStringLiteral("firefox|ruled")));
+    engine->windowOpened(QStringLiteral("firefox|2"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("firefox|2")),
+             state->strip().columnOfWindow(QStringLiteral("firefox|1")));
+
+    // A NAMED tab group (openTabGroup rule) keys on the name, not the app:
+    // windows of different apps whose rules resolve to one name share a
+    // column, a window with a name never falls back to app grouping (a
+    // firefox window named "work" opens beside the "work" column, not the
+    // firefox one), and the rule outranks an OFF global.
+    engine->setOpenParamsResolver([](const QString& windowId, const QString&) {
+        ScrollOpenParams params;
+        if (PhosphorIdentity::WindowId::extractInstanceId(windowId).startsWith(QLatin1String("work"))) {
+            params.tabGroup = QStringLiteral("work");
+        }
+        return params;
+    });
+    settings->groupSameAppAsTabs = false;
+    const int before = state->strip().columnCount();
+    engine->windowOpened(QStringLiteral("kate|work1"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), before + 1); // no "work" column yet: its own
+    engine->windowOpened(QStringLiteral("konsole|work2"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnCount(), before + 1);
+    const int workCol = state->strip().columnOfWindow(QStringLiteral("kate|work1"));
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("konsole|work2")), workCol);
+    QCOMPARE(state->strip().columns().at(workCol).display, ColumnDisplay::Tabbed);
+    // Named beats app: even with app grouping back ON, the firefox window
+    // named "work" joins the work column rather than firefox|1's.
+    settings->groupSameAppAsTabs = true;
+    engine->windowOpened(QStringLiteral("firefox|work3"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("firefox|work3")), workCol);
+    // And an unnamed same-app window still groups by app, not into "work".
+    engine->windowOpened(QStringLiteral("kate|2"), kS1, 0, 0);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("kate|2")),
+             state->strip().columnOfWindow(QStringLiteral("kate|1")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineBehaviour)

@@ -519,6 +519,8 @@ public:
                    scrollingInsertPositionChanged)
     Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
                    scrollingFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollingGroupSameAppAsTabs READ scrollingGroupSameAppAsTabs WRITE setScrollingGroupSameAppAsTabs
+                   NOTIFY scrollingGroupSameAppAsTabsChanged)
     Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
                    NOTIFY scrollingFocusFollowsMouseChanged)
     Q_PROPERTY(int scrollingFocusFollowsMouseMaxScroll READ scrollingFocusFollowsMouseMaxScroll WRITE
@@ -1537,6 +1539,8 @@ public:
     // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
     bool scrollingFocusNewWindows() const override;
     void setScrollingFocusNewWindows(bool focus);
+    bool scrollingGroupSameAppAsTabs() const override;
+    void setScrollingGroupSameAppAsTabs(bool group);
     bool scrollingFocusFollowsMouse() const;
     void setScrollingFocusFollowsMouse(bool follows);
     int scrollingFocusFollowsMouseMaxScroll() const;

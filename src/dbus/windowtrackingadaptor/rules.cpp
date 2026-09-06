@@ -685,6 +685,14 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
         out.insert(ScrollOpenKeys::focused(),
                    action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
     }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenTabGroup))) {
+        // Trimmed, so two rules that spell the same name with stray spaces
+        // still land in one group; the descriptor rejects an empty result.
+        const QString name = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString().trimmed();
+        if (!name.isEmpty()) {
+            out.insert(ScrollOpenKeys::tabGroup(), name);
+        }
+    }
     return out;
 }
 

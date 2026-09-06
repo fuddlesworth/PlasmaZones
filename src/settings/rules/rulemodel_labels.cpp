@@ -784,6 +784,19 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // mixing these with the pill's own geometry rules stays readable, and
         // because the prefixes have to stay distinct from the ten entries
         // above. The three style flags come out of boolActionStateLabel.
+        if (action.type == ActionType::OpenTabGroup) {
+            // Same three states as the font family below, except that empty is
+            // a reject here: a group with no name names nothing, and the
+            // descriptor refuses it.
+            if (raw.isUndefined() || raw.isNull()) {
+                return PhosphorI18n::tr("Tab group");
+            }
+            const QString name = raw.toString().trimmed();
+            if (!raw.isString() || name.isEmpty()) {
+                return PhosphorI18n::tr("Tab group (invalid)");
+            }
+            return PhosphorI18n::tr("Tab group: %1").arg(name);
+        }
         if (action.type == ActionType::SetTabIndicatorFontFamily) {
             // Three states, kept apart the way SetSplitRatio keeps them.
             // Absent or null is present-but-unset and gets the bare label, so
