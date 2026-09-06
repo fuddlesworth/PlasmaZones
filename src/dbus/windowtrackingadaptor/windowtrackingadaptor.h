@@ -1651,6 +1651,9 @@ private:
     /// Registry subscriber, called from onShellRegistryMetadata: records the
     /// push. `previous` unused; every push refreshes the row.
     void recordShellWindowFacts(const QString& windowId, const PhosphorEngine::WindowMetadata& current);
+    /// Subscriptions to the current WindowRegistry, severed on a swap.
+    QList<QMetaObject::Connection> m_registryConnections;
+
     /// True when the ledger row puts the window on @p desktop (1-based).
     static bool factsOnDesktop(const ShellWindowFacts& facts, int desktop);
     QHash<QString, ShellWindowFacts> m_shellWindowFacts;

@@ -163,7 +163,8 @@ private:
     int m_paneHeight = 460;
     ZoneResolver m_zoneResolver;
     DecorationProvider m_decorationProvider;
-    int m_ruleZone = 0;
+    // Zone last written into each pane's placement rule, keyed by appId.
+    QHash<QString, int> m_ruleZone;
     quint64 m_counter = 0;
 };
 

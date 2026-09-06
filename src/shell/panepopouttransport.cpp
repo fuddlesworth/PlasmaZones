@@ -93,10 +93,26 @@ void PanePopoutTransport::setPaneSize(int width, int height)
 
 void PanePopoutTransport::drain()
 {
+    // The fallback's surfaces are ours too. Left open here they outlive the
+    // engine that drove them, and the handles stay in the set so a later
+    // closeSurface() for a recycled handle would be routed to the fallback.
+    const auto fallbacks = std::exchange(m_fallbackHandles, {});
+    if (m_fallback) {
+        for (const QString& handle : fallbacks) {
+            m_fallback->closeSurface(handle);
+        }
+    }
     const auto entries = std::exchange(m_entries, {});
     for (auto it = entries.cbegin(); it != entries.cend(); ++it) {
         destroyEntry(it.key(), it.value());
     }
+    // The zones the daemon holds are no longer ours to assume. A daemon that
+    // restarts under us has its rules back at their seeded defaults, and a
+    // stale cache here would skip the rewrite and leave the pane in zone 1.
+    m_ruleZone.clear();
+    // paneExternal deliberately stays as it is: destroyEntry releases each
+    // window asynchronously, so the bar's release animation is still running
+    // and flipping the flag now would make it show its inline pane underneath.
     publishOpenState({});
 }
 
@@ -309,8 +325,13 @@ QString PanePopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& re
     // the pane never hops from the seeded zone.
     if (mode == 0 && m_zoneResolver) {
         const int zone = m_zoneResolver(screenName);
-        if (zone > 0 && zone != m_ruleZone && PaneRules::updateControlCenterZone(appIdFor(request.popoutId), zone)) {
-            m_ruleZone = zone;
+        // Keyed by the appId the rule itself is keyed by. A single shared int
+        // made the second popout skip its rewrite whenever the first had
+        // already been sent that zone number, leaving its own rule wherever
+        // the seed had put it.
+        const QString appId = appIdFor(request.popoutId);
+        if (zone > 0 && zone != m_ruleZone.value(appId) && PaneRules::updateControlCenterZone(appId, zone)) {
+            m_ruleZone.insert(appId, zone);
         }
     }
     window->setWindowVisible(true);

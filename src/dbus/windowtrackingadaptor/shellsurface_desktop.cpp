@@ -29,6 +29,10 @@ void WindowTrackingAdaptor::recordShellWindowFacts(const QString& windowId,
     facts.virtualDesktops = current.virtualDesktops;
     // The push's own sticky flag, and the "all desktops" spelling of the
     // desktop field (0), read the same way: the window is on every desktop.
+    // NOTE: this is the compositor push feed, where 0 means all desktops. It
+    // is NOT WindowRegistry::WindowContext::effectiveDesktop, which reads a 0
+    // in the metadata feed as "unknown" and falls back to the current desktop.
+    // Same spelling, two feeds, two meanings; do not unify them.
     facts.sticky = current.isSticky.value_or(false) || current.virtualDesktop == 0;
     facts.seq = ++m_shellWindowFactsSeq;
     m_shellWindowFacts.insert(windowId, facts);
