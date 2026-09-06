@@ -132,6 +132,24 @@ public:
     {
         return QStringLiteral("Meta+Alt+T");
     }
+    static QString scrollingCycleTabShortcut()
+    {
+        // The Tab KEY, not a letter: the verb cycles a column's tabs and the
+        // key is named after them, which no free letter in the Meta+Alt pool
+        // can match (T is Toggle Tabbed Column's, and its Shift spelling
+        // would read as that toggle's opposite rather than as a walk through
+        // the tabs). Back is the Shift twin, per the family's convention.
+        //
+        // Verified against a live session as required by the banner: KWin's
+        // Walk Through Windows owns Alt+Tab / Meta+Tab and its reverse owns
+        // the Shift'd pair, but nothing stock claims Meta+Alt+Tab, and Tab is
+        // absent from the banner's externally-owned table.
+        return QStringLiteral("Meta+Alt+Tab");
+    }
+    static QString scrollingCycleTabBackShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+Tab");
+    }
     static QString scrollingToggleWindowedFullscreenShortcut()
     {
         // Shares the F letter with Meta+Alt+F (maximize column) because both

@@ -22,6 +22,8 @@
 #include "handlers/dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+// The tab wheel below walks the indicator model to find the neighbouring tab.
+#include "compositor/scrolltabindicatorpainter.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -37,6 +39,7 @@
 #include <QStringList>
 
 #include <cmath>
+#include <optional>
 #include <utility> // std::as_const over the collected exit list
 
 namespace PlasmaZones {
@@ -62,6 +65,58 @@ constexpr qreal kV120PerNotch = 120.0;
 /// about as far as one notch to spend a step. Treating that field as notches
 /// directly is what made a single notch fire a whole screenful of steps.
 constexpr qreal kSmoothUnitsPerNotch = 15.0;
+
+/// One axis event's worth of whole steps, banking the sub-notch remainder.
+///
+/// Shared by the two wheel gestures (the chords over the strip and the tab
+/// wheel over an indicator) because the arithmetic here is subtle in ways a
+/// second copy would get wrong: the two delta fields are different scales,
+/// the cap TRUNCATES rather than banking, and the opposite axis is zeroed so
+/// a diagonal drift cannot bank a second, opposite step. Each gesture owns
+/// its own accumulator pair; only the maths is common.
+///
+/// @p accum / @p other are this event's axis and its opposite. Returns 0 for
+/// a sub-notch event (the caller still consumes it — the gesture is live),
+/// and writes the direction to @p step.
+int spendWheelNotches(qreal notches, qreal& accum, qreal& other, int& step)
+{
+    accum += notches;
+    if (qAbs(accum) < 1.0) {
+        step = 0;
+        return 0;
+    }
+    const qreal whole = accum > 0 ? 1.0 : -1.0;
+    const bool capped = qAbs(accum) > static_cast<qreal>(kMaxWheelStepsPerEvent);
+    const int steps = static_cast<int>(qMin(qAbs(accum), static_cast<qreal>(kMaxWheelStepsPerEvent)));
+    if (capped) {
+        // TRUNCATE at the cap rather than banking the excess: keeping the
+        // remainder would re-fire the full cap on every later event of the
+        // gesture, since the cap binds again immediately.
+        accum = 0.0;
+    } else {
+        accum -= steps * whole;
+    }
+    other = 0.0;
+    step = whole > 0 ? 1 : -1;
+    return steps;
+}
+
+/// Notches for one axis event, or nullopt when it carries no usable
+/// direction (the zero/non-finite stop tick that ends a kinetic stream).
+///
+/// deltaV120 is exact and is what a wheel always carries, so prefer it and
+/// fall back to the smooth field only for continuous sources that leave it
+/// zero. Neither field is a notch count on its own.
+std::optional<qreal> wheelNotches(qreal delta, qint32 deltaV120)
+{
+    if (deltaV120 != 0) {
+        return deltaV120 / kV120PerNotch;
+    }
+    if (qFuzzyIsNull(delta) || !std::isfinite(delta)) {
+        return std::nullopt;
+    }
+    return delta / kSmoothUnitsPerNotch;
+}
 } // namespace
 
 bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientation orientation,
@@ -115,18 +170,12 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // non-finite smooth delta, and took its banked remainder with it. When
     // v120 carries the event `delta` is never read, so a NaN there cannot
     // reach the accumulator either way.
-    const bool useV120 = deltaV120 != 0;
-    if (!useV120 && (qFuzzyIsNull(delta) || !std::isfinite(delta))) {
+    const std::optional<qreal> maybeNotches = wheelNotches(delta, deltaV120);
+    if (!maybeNotches) {
         resetWheelAccumulators();
         return false;
     }
-    // Convert to NOTCHES before anything downstream looks at the magnitude.
-    // KWin's two delta fields are not notch counts: deltaV120 is 120 per
-    // notch, and the smooth delta is the source's own scale (degrees for a
-    // wheel, pixels for a touchpad). deltaV120 is exact and is what a wheel
-    // always carries, so prefer it and fall back to the smooth field only for
-    // the continuous sources that leave it zero.
-    const qreal notches = deltaV120 != 0 ? deltaV120 / kV120PerNotch : delta / kSmoothUnitsPerNotch;
+    const qreal notches = *maybeNotches;
     // Not while a window drag is in flight. The shipped defaults cannot
     // collide (drag activation is Alt, the chords are Meta and Meta+Shift),
     // but both sides are user-configurable now, and a user who binds the same
@@ -163,59 +212,27 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // here. A discrete wheel notch normalises to exactly 1.0 and so still
     // fires on its first event; a touchpad or high-resolution wheel spends
     // several fractional events per step instead of one verb each.
-    qreal& accum = orientation == Qt::Vertical ? m_wheelAccumVertical : m_wheelAccumHorizontal;
-    qreal& other = orientation == Qt::Vertical ? m_wheelAccumHorizontal : m_wheelAccumVertical;
-    accum += notches;
-    if (qAbs(accum) < 1.0) {
-        // Sub-notch, but still part of the chord gesture: consume it so the
-        // app underneath does not scroll its own content while the user is
-        // mid-step on the strip.
-        return true;
-    }
-    // The sign is fixed for this event; only the magnitude is spent below.
-    const qreal whole = accum > 0 ? 1.0 : -1.0;
-    // Spend the WHOLE accumulated magnitude, not one notch of it. A fast
+    // Spend the WHOLE accumulated magnitude, not one notch of it: a fast
     // discrete wheel and a coalesced high-resolution frame can both deliver
     // more than one notch in a single event, and taking one step per event
-    // there would bank the rest forever: the strip would lag the wheel by a
-    // growing margin and the unspent remainder would be dropped at the end of
-    // the gesture.
-    //
-    // Computed arithmetically and CAPPED rather than looped down. A loop here
-    // is a compositor hang waiting to happen: it runs on KWin's main thread,
-    // and a delta large enough that subtracting 1.0 no longer changes it
-    // never terminates. The cap also bounds the D-Bus fan-out below, since
-    // each step is its own message and no real gesture needs more than a
-    // handful per event.
-    const bool capped = qAbs(accum) > static_cast<qreal>(kMaxWheelStepsPerEvent);
-    const int steps = static_cast<int>(qMin(qAbs(accum), static_cast<qreal>(kMaxWheelStepsPerEvent)));
-    if (capped) {
-        // TRUNCATE at the cap, do not bank the excess. Subtracting only what
-        // was spent leaves the remainder in the accumulator, and since the cap
-        // binds again on the next event, one garbled delta fires the full 16
-        // steps — sixteen D-Bus messages — on EVERY later event of the gesture
-        // until the chord is released. Discarding makes the behaviour match
-        // what the cap's own doc says it does, and there is nothing worth
-        // keeping: reaching this branch means the delta already exceeded any
-        // real gesture by an order of magnitude.
-        accum = 0.0;
-    } else {
-        // Under the cap the remainder is a genuine sub-notch fraction from a
-        // high-resolution wheel or touchpad, and carrying it is the whole
-        // point of the accumulator.
-        accum -= steps * whole;
-    }
-    // This gesture belongs to one axis. Zeroing the other stops a diagonal
-    // drift from banking a second, opposite step on the axis the user is not
-    // actually scrolling along.
-    other = 0.0;
+    // would bank the rest forever, leaving the strip lagging the wheel by a
+    // growing margin.
+    qreal& accum = orientation == Qt::Vertical ? m_wheelAccumVertical : m_wheelAccumHorizontal;
+    qreal& other = orientation == Qt::Vertical ? m_wheelAccumHorizontal : m_wheelAccumVertical;
     // Sign, not magnitude: one notch is one column (or one view step), and
     // the engine owns the step size. A wheel DOWN or RIGHT moves toward the
     // end of the strip, matching niri and the scroll direction of the axis.
     // Which way that points on screen is resolved downstream against the
     // screen's own strip axis, so one rule serves a horizontal and a vertical
     // strip alike and a horizontal (tilted) wheel needs no separate arm.
-    int step = whole > 0 ? 1 : -1;
+    int step = 0;
+    const int steps = spendWheelNotches(notches, accum, other, step);
+    if (steps == 0) {
+        // Sub-notch, but still part of the chord gesture: consume it so the
+        // app underneath does not scroll its own content while the user is
+        // mid-step on the strip.
+        return true;
+    }
     if (m_wheelFocusInverted) {
         step = -step;
     }
@@ -377,6 +394,96 @@ void TilingHandler::resetWheelAccumulators()
 {
     m_wheelAccumVertical = 0.0;
     m_wheelAccumHorizontal = 0.0;
+}
+
+void TilingHandler::resetTabWheelAccumulators()
+{
+    m_tabWheelAccumVertical = 0.0;
+    m_tabWheelAccumHorizontal = 0.0;
+}
+
+bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 deltaV120, Qt::Orientation orientation,
+                                   Qt::KeyboardModifiers mods, Qt::MouseButtons buttons)
+{
+    // Same cheap gate the chord path opens with: every axis event in the
+    // session reaches here.
+    if (m_scrollingScreens.isEmpty()) {
+        resetTabWheelAccumulators();
+        return false;
+    }
+    // UNMODIFIED wheel only. A modified wheel that matched no chord belongs
+    // to whatever is underneath (Ctrl+wheel is an app's zoom on every
+    // toolkit), and a held button means a drag is spending the wheel.
+    // Claiming those would make the indicator a dead zone for gestures that
+    // have nothing to do with tabs.
+    if (mods != Qt::NoModifier || buttons != Qt::NoButton) {
+        resetTabWheelAccumulators();
+        return false;
+    }
+    // Reuses activateScrollTabAt's hit test, so the pill under the cursor is
+    // resolved by exactly the rules that decide whether a CLICK lands: the
+    // painted-pixels gate, the view-offset shift and the occlusion probe.
+    const QString hovered = scrollTabPillAt(pos);
+    if (hovered.isEmpty()) {
+        resetTabWheelAccumulators();
+        return false;
+    }
+    // The same drag and show-desktop refusals the click path carries, and for
+    // the same reason: switching the visible tab restructures the strip under
+    // a drag that is aiming at it.
+    if (PlasmaZonesEffect::isShowingDesktop()
+        || (m_effect->m_dragTracker
+            && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive()))) {
+        resetTabWheelAccumulators();
+        return false;
+    }
+    const std::optional<qreal> notches = wheelNotches(delta, deltaV120);
+    if (!notches) {
+        resetTabWheelAccumulators();
+        return false;
+    }
+    qreal& accum = orientation == Qt::Vertical ? m_tabWheelAccumVertical : m_tabWheelAccumHorizontal;
+    qreal& other = orientation == Qt::Vertical ? m_tabWheelAccumHorizontal : m_tabWheelAccumVertical;
+    int step = 0;
+    const int steps = spendWheelNotches(*notches, accum, other, step);
+    if (steps == 0) {
+        // Sub-notch of a live gesture: consume it, or the app under the pill
+        // scrolls its own content between the steps the user does spend.
+        return true;
+    }
+    // Walk the ring one tab per step rather than jumping `steps` at once: the
+    // painter's model is the only thing that knows the run, and each hop must
+    // start from where the last one landed. The hop is resolved entirely from
+    // the model — nothing round-trips to the daemon between steps, so a
+    // multi-notch event cannot read a half-applied strip.
+    KWin::LogicalOutput* out = KWin::effects ? KWin::effects->screenAt(pos.toPoint()) : nullptr;
+    if (!out) {
+        resetTabWheelAccumulators();
+        return false;
+    }
+    const ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
+    QString target = hovered;
+    for (int i = 0; i < steps; ++i) {
+        const QString next = painter->neighbourPill(out, target, step);
+        if (next.isEmpty()) {
+            break;
+        }
+        target = next;
+    }
+    // A single-tab indicator (or a model that lost the id mid-gesture) leaves
+    // the target where it started. Consume anyway: the cursor IS over a pill,
+    // and letting that one case fall through to the app would scroll the
+    // window's content out from under an indicator the user is pointing at.
+    if (target == hovered) {
+        return true;
+    }
+    // The activation the click path uses. One owner of "which tab is active":
+    // focus the tab's window and let the strip learn through windowFocused.
+    if (!m_effect->findWindowByIdExact(target)) {
+        return true;
+    }
+    slotFocusWindowRequested(target);
+    return true;
 }
 
 QString TilingHandler::wheelTargetScreen() const

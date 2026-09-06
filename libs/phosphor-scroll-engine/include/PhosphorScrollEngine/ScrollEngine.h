@@ -322,6 +322,17 @@ public:
     /// Adjacent-column focus that wraps to the far end at the strip edge
     /// (niri focus-column-left-or-last / right-or-first). delta -1/+1.
     void focusColumnWrap(int delta, const QString& screenId);
+    /// Cycle the active column's tabs, wrapping at either end. delta -1/+1.
+    /// The stack twin of focusColumnWrap: the generic directional focus
+    /// crosses onto the neighbouring output at the stack edge, and this is
+    /// the opt-in variant that stays inside the column. Acts on the tiles of
+    /// a stacked column too — they are the same tiles the column shows as
+    /// tabs once it is flipped.
+    void cycleTab(int delta, const QString& screenId);
+    /// Focus the active column's @p ordinal'th tab, 1-based, counting only
+    /// the tabs its indicator actually draws (minimized tiles are skipped).
+    /// An ordinal past the column's tab count answers no_target feedback.
+    void focusTab(int ordinal, const QString& screenId);
     /// Explicit float / re-tile of the focused window (niri
     /// move-window-to-floating / move-window-to-tiling); already-there
     /// presses answer with no_target feedback.

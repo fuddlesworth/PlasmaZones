@@ -596,4 +596,59 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
     Q_EMIT(this->*signals[index])();
     Q_EMIT settingsChanged();
 }
+
+// scrollFocusTab1..9 — the scrolling tab ordinals, same dispatch pattern as
+// the two families above and the same reason for naming the count once.
+inline constexpr int ScrollFocusTabSlotCount = 9;
+
+#define P_SCROLL_FOCUS_TAB(N)                                                                                          \
+    QString Settings::scrollFocusTab##N##Shortcut() const                                                              \
+    {                                                                                                                  \
+        return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::scrollFocusTabKey(N));   \
+    }                                                                                                                  \
+    void Settings::setScrollFocusTab##N##Shortcut(const QString& shortcut)                                             \
+    {                                                                                                                  \
+        setScrollFocusTabShortcut(N - 1, shortcut);                                                                    \
+    }
+
+P_SCROLL_FOCUS_TAB(1)
+P_SCROLL_FOCUS_TAB(2)
+P_SCROLL_FOCUS_TAB(3)
+P_SCROLL_FOCUS_TAB(4)
+P_SCROLL_FOCUS_TAB(5)
+P_SCROLL_FOCUS_TAB(6)
+P_SCROLL_FOCUS_TAB(7)
+P_SCROLL_FOCUS_TAB(8)
+P_SCROLL_FOCUS_TAB(9)
+#undef P_SCROLL_FOCUS_TAB
+
+QString Settings::scrollFocusTabShortcut(int index) const
+{
+    if (index < 0 || index >= ScrollFocusTabSlotCount) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::scrollFocusTabKey(index + 1));
+}
+
+void Settings::setScrollFocusTabShortcut(int index, const QString& shortcut)
+{
+    if (index < 0 || index >= ScrollFocusTabSlotCount) {
+        return;
+    }
+    const QString key = ConfigDefaults::scrollFocusTabKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+    static constexpr ShortcutSignalFn signals[] = {
+        &Settings::scrollFocusTab1ShortcutChanged, &Settings::scrollFocusTab2ShortcutChanged,
+        &Settings::scrollFocusTab3ShortcutChanged, &Settings::scrollFocusTab4ShortcutChanged,
+        &Settings::scrollFocusTab5ShortcutChanged, &Settings::scrollFocusTab6ShortcutChanged,
+        &Settings::scrollFocusTab7ShortcutChanged, &Settings::scrollFocusTab8ShortcutChanged,
+        &Settings::scrollFocusTab9ShortcutChanged,
+    };
+    static_assert(std::size(signals) == ScrollFocusTabSlotCount, "add a NOTIFY emitter for each new focus-tab slot");
+    Q_EMIT(this->*signals[index])();
+    Q_EMIT settingsChanged();
+}
 } // namespace PlasmaZones

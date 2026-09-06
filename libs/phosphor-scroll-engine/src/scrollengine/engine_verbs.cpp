@@ -555,6 +555,42 @@ void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
                   "focus", true, Detail::physicalTokenForMain(delta, params.axis));
 }
 
+void ScrollEngine::cycleTab(int delta, const QString& screenId)
+{
+    // Same delta contract (and the same deliberate silence) as
+    // focusColumnPlain: a zero must not read as a press, and an
+    // out-of-contract value must not short-circuit into the wrap fallback and
+    // teleport focus to an end of the column.
+    if (delta != -1 && delta != 1) {
+        return;
+    }
+    // The stack twin of focusColumnWrap, and it wraps for the same reason: a
+    // user cycling a column's tabs expects the far end, not the neighbouring
+    // OUTPUT that the generic directional focus crosses onto at the stack
+    // edge. Short-circuit keeps a successful adjacent step from also
+    // wrapping. Deliberately NOT gated on the column being tabbed — the tiles
+    // of a stacked column are the same tiles that become its tabs when it is
+    // flipped, so a gate would make one chord work or not depending on a
+    // display mode this verb does not touch.
+    P_SCROLL_VERB(screenId, state->strip().focusAdjacentTile(delta) || state->strip().focusTileAtEnd(delta < 0),
+                  "focus", true, Detail::physicalTokenForCross(delta, params.axis));
+}
+
+void ScrollEngine::focusTab(int ordinal, const QString& screenId)
+{
+    // Ordinals are 1-based and unbounded above: the strip answers false for
+    // an ordinal past the column's tab count, and P_SCROLL_VERB's refusal arm
+    // turns that into the same no_target feedback an edge press gets. Only a
+    // non-positive ordinal is out of contract, refused silently for the
+    // reason the delta verbs spell out.
+    if (ordinal < 1) {
+        return;
+    }
+    // No physical token: the verb names an absolute tab, not a direction, so
+    // there is no arrow for the OSD to derive.
+    P_SCROLL_VERB(screenId, state->strip().focusTileByOrdinal(ordinal), "focus", true, QString());
+}
+
 void ScrollEngine::setColumnWidth(const ColumnWidth& width, const QString& screenId)
 {
     // Exported library boundary: the strip stores intent verbatim by contract

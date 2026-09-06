@@ -165,6 +165,36 @@ QString ScrollTabIndicatorPainter::pillAt(KWin::LogicalOutput* output, const QPo
     return {};
 }
 
+QString ScrollTabIndicatorPainter::neighbourPill(KWin::LogicalOutput* output, const QString& windowId, int delta) const
+{
+    if (windowId.isEmpty() || (delta != -1 && delta != 1)) {
+        return {};
+    }
+    const PerOutput* const entry = find(output);
+    if (!entry) {
+        return {};
+    }
+    for (const ScrollTabIndicator& indicator : entry->indicators) {
+        for (int i = 0; i < indicator.tabs.size(); ++i) {
+            if (indicator.tabs.at(i).windowId != windowId) {
+                continue;
+            }
+            // A single-tab indicator has nowhere to step: answer empty so the
+            // caller passes the event through instead of consuming a wheel
+            // that visibly does nothing.
+            if (indicator.tabs.size() < 2) {
+                return {};
+            }
+            // Wrap, matching the engine's own cycleTab verb: the tabs of one
+            // column are a ring, and stopping at the end would leave the
+            // wheel dead over half the run.
+            const int next = (i + delta + indicator.tabs.size()) % indicator.tabs.size();
+            return indicator.tabs.at(next).windowId;
+        }
+    }
+    return {};
+}
+
 QRect ScrollTabIndicatorPainter::boundsFor(KWin::LogicalOutput* output) const
 {
     const PerOutput* const entry = find(output);

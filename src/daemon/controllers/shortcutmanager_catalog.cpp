@@ -116,6 +116,24 @@ struct CatalogMeta
     int rowOrder = 0;
 };
 
+// The scrolling category word needs the "tiling mode name" disambiguation or
+// it inherits the scrollbar-sense translation. QT_TRANSLATE_NOOP3 makes the
+// extraction self-contained: relying on another file's live tr() call would
+// silently orphan the whole category translation if that call were reworded
+// or removed.
+//
+// At namespace scope rather than inside the table lambda below because the
+// prefix-keyed families at the end of catalogMetaForId need it too, and a
+// second QT_TRANSLATE_NOOP3 of the same words is a definition that can drift.
+constexpr struct
+{
+    const char* source;
+    const char* comment;
+} kScrollingCategory = QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
+constexpr const char* kModeNameContext = kScrollingCategory.comment;
+// Every scrolling row is authored with this category order.
+constexpr int kScrollingCategoryOrder = 10;
+
 CatalogMeta catalogMetaForId(const QString& id)
 {
     static const QHash<QString, CatalogMeta> kMeta = [] {
@@ -128,17 +146,6 @@ CatalogMeta catalogMetaForId(const QString& id)
                 QLatin1String(id),
                 {category, order, mode, categoryDisambiguation, shortLabel, explanation, templatesExplanation, seq++});
         };
-        // The scrolling category word needs the "tiling mode name"
-        // disambiguation or it inherits the scrollbar-sense translation.
-        // QT_TRANSLATE_NOOP3 makes the extraction self-contained: relying
-        // on another file's live tr() call would silently orphan the whole
-        // category translation if that call were reworded or removed.
-        static constexpr struct
-        {
-            const char* source;
-            const char* comment;
-        } kScrollingCategory = QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
-        constexpr const char* kModeNameContext = kScrollingCategory.comment;
         add(kIdOpenEditor, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
@@ -343,6 +350,14 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "A window alone in its column merges into the next column instead."));
         add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
+        add(kIdScrollCycleTab, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Shows the next tab of the focused column, wrapping round to the first one at the end. "
+                              "In a column that is not tabbed it focuses the next window down the stack."));
+        add(kIdScrollCycleTabBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Shows the previous tab of the focused column, wrapping round to the last one at the "
+                              "start."));
         // ── Column width ──
         add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Grows the focused column along the strip by the configured step."));
@@ -484,6 +499,20 @@ CatalogMeta catalogMetaForId(const QString& id)
                 nullptr,
                 nullptr,
                 QT_TRANSLATE_NOOP("plasmazones", "Sends the focused window to the numbered slot on this screen."),
+                nullptr,
+                9000};
+    }
+    if (id.startsWith(QLatin1String(kScrollFocusTabPrefix))) {
+        // Scrolling only, unlike the mode-neutral zone digits above: the
+        // ordinal addresses a TAB of the focused column, which is a concept
+        // the other two engines have nothing to map onto. Ships unbound, so
+        // the family never compresses and each slot keeps its own row.
+        return {kScrollingCategory.source,
+                kScrollingCategoryOrder,
+                "scrolling",
+                kModeNameContext,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Shows the numbered tab of the focused column."),
                 nullptr,
                 9000};
     }

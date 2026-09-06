@@ -261,6 +261,9 @@ Q_SIGNALS:
     void scrollConsumeOrExpelRequested(int delta);
     void scrollCenterColumnRequested();
     void scrollToggleColumnTabbedRequested();
+    void scrollCycleTabRequested(int delta);
+    /// One of the tab-ordinal slots fired; @p ordinal is 1-based.
+    void scrollFocusTabRequested(int ordinal);
     void scrollToggleWindowedFullscreenRequested();
     void scrollCycleColumnWidthRequested(int delta);
     void scrollAdjustColumnWidthRequested(int deltaPercent);

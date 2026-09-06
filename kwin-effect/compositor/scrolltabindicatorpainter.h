@@ -249,6 +249,17 @@ public:
     /// rects overlap, the one drawn LAST (topmost) wins, matching the raster.
     QString pillAt(KWin::LogicalOutput* output, const QPointF& pos, const QPointF& viewOffset) const;
 
+    /// The windowId @p delta (-1/+1) tabs away from @p windowId within the
+    /// indicator that owns it, wrapping at either end. Empty when the id
+    /// names no tab here, when its indicator has only one tab, or when
+    /// @p delta is not -1/+1.
+    ///
+    /// Answers from the MODEL rather than from the hit rects: a tab clipped
+    /// away by a too-short indicator draws and hit-tests as nothing, but it
+    /// is still a tab of the column and a wheel step must reach it — the
+    /// alternative is a run the user can never scroll past.
+    QString neighbourPill(KWin::LogicalOutput* output, const QString& windowId, int delta) const;
+
     /// Union of @p output's indicator rects, absolute logical and WITHOUT
     /// the view offset. At rest the offset is zero, so this is exactly the
     /// on-screen rect and the right damage region; while a view leg is in

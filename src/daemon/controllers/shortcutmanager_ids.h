@@ -79,6 +79,8 @@ inline constexpr auto kIdScrollConsumeOrExpelLeft = "scroll_consume_or_expel_lef
 inline constexpr auto kIdScrollConsumeOrExpelRight = "scroll_consume_or_expel_right";
 inline constexpr auto kIdScrollCenterColumn = "scroll_center_column";
 inline constexpr auto kIdScrollToggleColumnTabbed = "scroll_toggle_column_tabbed";
+inline constexpr auto kIdScrollCycleTab = "scroll_cycle_tab";
+inline constexpr auto kIdScrollCycleTabBack = "scroll_cycle_tab_back";
 inline constexpr auto kIdScrollToggleWindowedFullscreen = "scroll_toggle_windowed_fullscreen";
 inline constexpr auto kIdScrollCycleColumnWidth = "scroll_cycle_column_width";
 inline constexpr auto kIdScrollCycleColumnWidthBack = "scroll_cycle_column_width_back";
@@ -116,6 +118,7 @@ inline constexpr auto kIdScrollMinimizeWindowHeight = "scroll_minimize_window_he
 // the family into the "Other" bucket.
 inline constexpr auto kQuickLayoutPrefix = "quick_layout_";
 inline constexpr auto kSnapToZonePrefix = "snap_to_zone_";
+inline constexpr auto kScrollFocusTabPrefix = "scroll_focus_tab_";
 
 /// How many slots each indexed family has. Both families are 1-9 (the digit
 /// row), and the number appears in the default-getter array bounds, the
@@ -134,6 +137,11 @@ inline QString quickLayoutId(int slotZeroBased)
 inline QString snapToZoneId(int slotZeroBased)
 {
     return QLatin1String(kSnapToZonePrefix) + QString::number(slotZeroBased + 1);
+}
+
+inline QString scrollFocusTabId(int slotZeroBased)
+{
+    return QLatin1String(kScrollFocusTabPrefix) + QString::number(slotZeroBased + 1);
 }
 
 } // namespace ShortcutIds

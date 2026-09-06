@@ -80,6 +80,7 @@ private Q_SLOTS:
     void heightAdjustAndEqualize();
     void heightMaximizeMinimizeAndExpand();
     void tabbedColumnLayout();
+    void focusTileByOrdinalCountsDrawnTabs();
     void tabbedColumnBehavesLikeNormalStructurally();
     void reconcileAppResize();
     void reconcileGuardsAndEmptyAck();
@@ -581,6 +582,45 @@ void TestScrollStripOps::tabbedColumnLayout()
     QVERIFY(!r.columns.first().tabbed);
     QVERIFY(resolveContains(r, QStringLiteral("a")));
     QVERIFY(!isHidden(r, QStringLiteral("a")));
+}
+
+void TestScrollStripOps::focusTileByOrdinalCountsDrawnTabs()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // 1-based, in stack order.
+    QVERIFY(strip.focusTileByOrdinal(1));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
+    QVERIFY(strip.focusTileByOrdinal(3));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+
+    // Already there, and out of range past the end: both refuse without
+    // moving focus. A refusal that silently landed somewhere else would
+    // reach the user as a chord that jumps to the wrong tab.
+    QVERIFY(!strip.focusTileByOrdinal(3));
+    QVERIFY(!strip.focusTileByOrdinal(4));
+    QVERIFY(!strip.focusTileByOrdinal(0));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+
+    // Ordinals count the tabs the indicator DRAWS, not the raw slots: with
+    // the middle tile minimized, ordinal 2 is the THIRD slot. Step off c
+    // first — ordinal 2 already names it, and the already-there refusal above
+    // would otherwise hide whether the skip happened at all.
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
+    QVERIFY(strip.focusTileByOrdinal(1));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
+    QVERIFY(strip.focusTileByOrdinal(2));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+    QVERIFY(strip.focusTileByOrdinal(1));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
+    // Only two tabs are drawn now, so the old third ordinal is out of range.
+    QVERIFY(!strip.focusTileByOrdinal(3));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
 }
 
 void TestScrollStripOps::tabbedColumnBehavesLikeNormalStructurally()

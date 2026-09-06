@@ -946,6 +946,17 @@ Q_SIGNALS:
     void snapToZone8ShortcutChanged();
     void snapToZone9ShortcutChanged();
 
+    // Focus Tab by Number Shortcuts
+    void scrollFocusTab1ShortcutChanged();
+    void scrollFocusTab2ShortcutChanged();
+    void scrollFocusTab3ShortcutChanged();
+    void scrollFocusTab4ShortcutChanged();
+    void scrollFocusTab5ShortcutChanged();
+    void scrollFocusTab6ShortcutChanged();
+    void scrollFocusTab7ShortcutChanged();
+    void scrollFocusTab8ShortcutChanged();
+    void scrollFocusTab9ShortcutChanged();
+
     // Rotate Windows Shortcuts
     void rotateWindowsClockwiseShortcutChanged();
     void rotateWindowsCounterclockwiseShortcutChanged();
@@ -1111,6 +1122,8 @@ Q_SIGNALS:
     void scrollingConsumeOrExpelRightShortcutChanged();
     void scrollingCenterColumnShortcutChanged();
     void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingCycleTabShortcutChanged();
+    void scrollingCycleTabBackShortcutChanged();
     void scrollingToggleWindowedFullscreenShortcutChanged();
     void scrollingCycleColumnWidthShortcutChanged();
     void scrollingCycleColumnWidthBackShortcutChanged();

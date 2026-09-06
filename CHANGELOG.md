@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Scrolling has shortcuts for cycling a column's tabs**: switching tabs meant reaching for the focus keys that move up and down the stack, and those stop at the last tab and hop to the next monitor instead of coming back round to the first one. Next Tab in Column on Meta+Alt+Tab and Previous Tab in Column on Meta+Alt+Shift+Tab walk the focused column's tabs and wrap at either end, so a column of tabs cycles the way tabs do everywhere else. In a column that is not tabbed they focus the next and previous window down the stack. There are also nine Focus Tab shortcuts that go straight to a numbered tab, counted the way the indicator draws them. Those ship with no keys set, because both digit rows a Meta chord can reach already belong to the layout and zone slots, so set your own under Settings → Shortcuts if you want them.
+- **The wheel switches tabs while the pointer is over a tab indicator**: the indicator answered clicks but not the wheel, so picking a tab from a run of them meant one click each. Scrolling over the indicator now steps through that column's tabs and wraps at either end, matching the new shortcuts. Holding a modifier still gives the wheel to whatever it was already doing, so the wheel chords that move the strip keep working over an indicator and an application's own Ctrl+wheel is never swallowed.
+
 ## [3.4.13] - 2026-09-06
 
 ### Added

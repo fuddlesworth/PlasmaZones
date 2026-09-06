@@ -122,6 +122,7 @@ private Q_SLOTS:
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
     void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
+    void cycleTabWrapsInsteadOfLeavingTheColumn();
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate
@@ -2383,6 +2384,50 @@ void TestScrollEngineSmoke::contextSwitchFlagRidesChangedScreenSets()
     QCOMPARE(screensSpy.last().at(1).toBool(), true);
     engine->setActiveScreens({QStringLiteral("S1")});
     QCOMPARE(screensSpy.count(), 4);
+}
+
+void TestScrollEngineSmoke::cycleTabWrapsInsteadOfLeavingTheColumn()
+{
+    // The whole reason this verb exists beside the generic directional focus:
+    // focusAdjacentTile refuses at the stack edge, and focusInDirection turns
+    // that refusal into a CROSS-OUTPUT hop. A user cycling tabs must land back
+    // on the first tab instead. Two screens, so a leak off the column would
+    // have somewhere to go and the test can see it.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // Seed a known end so the wrap arm is the one under test rather than a
+    // plain adjacent step that happens to succeed.
+    engine->focusWindowTop(QStringLiteral("S1"));
+    const QString first = state->strip().activeWindowId();
+    QVERIFY(!first.isEmpty());
+
+    // Forward off the first tab is an ordinary step.
+    engine->cycleTab(1, QStringLiteral("S1"));
+    const QString second = state->strip().activeWindowId();
+    QVERIFY2(second != first, "precondition: the column must have a second tab to step onto");
+
+    // Forward off the LAST tab wraps to the first, and stays on this screen.
+    engine->cycleTab(1, QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), first);
+
+    // Backward off the first wraps the other way.
+    engine->cycleTab(-1, QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), second);
+
+    // Out-of-contract deltas are refused outright: a zero must not read as a
+    // press, and must not short-circuit into the wrap fallback.
+    engine->cycleTab(0, QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), second);
+    engine->cycleTab(7, QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), second);
 }
 
 // GUILESS (not APPLESS): a QCoreApplication provides the event

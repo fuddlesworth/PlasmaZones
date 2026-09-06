@@ -365,6 +365,19 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollToggleColumnTabbedRequested();
      }},
+    // POLARITY CONTRACT: -1 walks toward the first tab and +1 toward the
+    // last, matching the delta the engine's cycleTab takes. Swapping these
+    // compiles clean and only shows up as a backwards chord in the field.
+    {kIdScrollCycleTab, &ConfigDefaults::scrollingCycleTabShortcut, &Settings::scrollingCycleTabShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Next Tab in Column"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollCycleTabRequested(1);
+     }},
+    {kIdScrollCycleTabBack, &ConfigDefaults::scrollingCycleTabBackShortcut, &Settings::scrollingCycleTabBackShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Previous Tab in Column"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollCycleTabRequested(-1);
+     }},
     {kIdScrollToggleWindowedFullscreen, &ConfigDefaults::scrollingToggleWindowedFullscreenShortcut,
      &Settings::scrollingToggleWindowedFullscreenShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Toggle Windowed Fullscreen"),
@@ -551,6 +564,14 @@ constexpr DefaultGetter kSnapToZoneDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::snapToZone1Shortcut, &ConfigDefaults::snapToZone2Shortcut, &ConfigDefaults::snapToZone3Shortcut,
     &ConfigDefaults::snapToZone4Shortcut, &ConfigDefaults::snapToZone5Shortcut, &ConfigDefaults::snapToZone6Shortcut,
     &ConfigDefaults::snapToZone7Shortcut, &ConfigDefaults::snapToZone8Shortcut, &ConfigDefaults::snapToZone9Shortcut,
+};
+
+constexpr DefaultGetter kScrollFocusTabDefaults[kIndexedSlotCount] = {
+    &ConfigDefaults::scrollFocusTab1Shortcut, &ConfigDefaults::scrollFocusTab2Shortcut,
+    &ConfigDefaults::scrollFocusTab3Shortcut, &ConfigDefaults::scrollFocusTab4Shortcut,
+    &ConfigDefaults::scrollFocusTab5Shortcut, &ConfigDefaults::scrollFocusTab6Shortcut,
+    &ConfigDefaults::scrollFocusTab7Shortcut, &ConfigDefaults::scrollFocusTab8Shortcut,
+    &ConfigDefaults::scrollFocusTab9Shortcut,
 };
 
 // QKeySequence(QString) silently returns an empty sequence on malformed
@@ -1076,7 +1097,7 @@ QStringList ShortcutManager::staticShortcutIds()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 2 * kIndexedSlotCount);
+    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 3 * kIndexedSlotCount);
 
     Settings* s = m_settings;
     ShortcutManager* sm = this;
@@ -1131,6 +1152,25 @@ void ShortcutManager::buildEntries()
         const int zoneNumber = i + 1;
         e.fire = [this, zoneNumber] {
             Q_EMIT snapToZoneRequested(zoneNumber);
+        };
+        m_entries.push_back(std::move(e));
+    }
+
+    // Scrolling tab ordinals. Third instance of the same shape; every slot's
+    // default is empty, which parseSequence maps to an unbound entry rather
+    // than a warning (it short-circuits on an empty string).
+    for (int i = 0; i < kIndexedSlotCount; ++i) {
+        Entry e;
+        e.id = scrollFocusTabId(i);
+        e.defaultSeq = parseSequence(kScrollFocusTabDefaults[i](), e.id);
+        e.description = PhosphorI18n::tr("Focus Tab %1").arg(i + 1);
+        const QString idCopy = e.id;
+        e.currentSeq = [s, i, idCopy] {
+            return parseSequence(s->scrollFocusTabShortcut(i), idCopy);
+        };
+        const int ordinal = i + 1;
+        e.fire = [this, ordinal] {
+            Q_EMIT scrollFocusTabRequested(ordinal);
         };
         m_entries.push_back(std::move(e));
     }

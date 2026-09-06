@@ -773,6 +773,22 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingCenterColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingToggleColumnTabbedShortcut", scrollingToggleColumnTabbedShortcut,
                                  setScrollingToggleColumnTabbedShortcut)
+        // The tab ordinals. Registered here with the rest of the scrolling
+        // vocabulary even though their config keys live in Shortcuts.Global
+        // (where every indexed family lives) — the registry is split by what
+        // a property MEANS, not by its config group.
+        REGISTER_CONCRETE_STRING("scrollFocusTab1Shortcut", scrollFocusTab1Shortcut, setScrollFocusTab1Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab2Shortcut", scrollFocusTab2Shortcut, setScrollFocusTab2Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab3Shortcut", scrollFocusTab3Shortcut, setScrollFocusTab3Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab4Shortcut", scrollFocusTab4Shortcut, setScrollFocusTab4Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab5Shortcut", scrollFocusTab5Shortcut, setScrollFocusTab5Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab6Shortcut", scrollFocusTab6Shortcut, setScrollFocusTab6Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab7Shortcut", scrollFocusTab7Shortcut, setScrollFocusTab7Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab8Shortcut", scrollFocusTab8Shortcut, setScrollFocusTab8Shortcut)
+        REGISTER_CONCRETE_STRING("scrollFocusTab9Shortcut", scrollFocusTab9Shortcut, setScrollFocusTab9Shortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleTabShortcut", scrollingCycleTabShortcut, setScrollingCycleTabShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleTabBackShortcut", scrollingCycleTabBackShortcut,
+                                 setScrollingCycleTabBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingToggleWindowedFullscreenShortcut", scrollingToggleWindowedFullscreenShortcut,
                                  setScrollingToggleWindowedFullscreenShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthShortcut", scrollingCycleColumnWidthShortcut,

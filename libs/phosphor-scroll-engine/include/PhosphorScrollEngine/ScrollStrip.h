@@ -225,6 +225,10 @@ public:
     /// Focus the first (@p last false) or last non-minimized tile of the
     /// active column (niri focus-window-top/bottom). False when already there.
     bool focusTileAtEnd(bool last);
+    /// Focus the @p ordinal'th (1-based) non-minimized tile of the active
+    /// column — the tab that ordinal's indicator segment draws. False when
+    /// the column has no such tile or it is already the active one.
+    bool focusTileByOrdinal(int ordinal);
     /// Make @p windowId the active tile of its (newly active) column.
     /// Externally-driven focus (compositor activation). Returns false when
     /// untracked or already the focused window.
