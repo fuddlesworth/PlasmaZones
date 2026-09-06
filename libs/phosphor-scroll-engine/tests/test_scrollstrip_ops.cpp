@@ -80,7 +80,7 @@ private Q_SLOTS:
     void heightAdjustAndEqualize();
     void heightMaximizeMinimizeAndExpand();
     void tabbedColumnLayout();
-    void focusTileByOrdinalCountsDrawnTabs();
+    void focusTileByOrdinalSkipsUndrawnTiles();
     void tabbedColumnBehavesLikeNormalStructurally();
     void reconcileAppResize();
     void reconcileGuardsAndEmptyAck();
@@ -584,7 +584,7 @@ void TestScrollStripOps::tabbedColumnLayout()
     QVERIFY(!isHidden(r, QStringLiteral("a")));
 }
 
-void TestScrollStripOps::focusTileByOrdinalCountsDrawnTabs()
+void TestScrollStripOps::focusTileByOrdinalSkipsUndrawnTiles()
 {
     const auto params = defaultParams();
     ScrollStrip strip;

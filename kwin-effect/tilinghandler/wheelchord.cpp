@@ -242,9 +242,13 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // One verb per notch. The engine owns the step SIZE, so a two-notch event
     // is two single steps rather than one double-sized one, which keeps the
     // strip's own animation identical to scrolling those notches separately.
+    // Built once rather than twice per iteration: this is the pointer input
+    // path, and a coalesced high-resolution frame can carry the full
+    // kMaxWheelStepsPerEvent, all of them naming the same verb.
+    const QString verbName(verb);
     for (int i = 0; i < steps; ++i) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
-                                                       QString(verb), {screenId, step}, QString(verb));
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling, verbName,
+                                                       {screenId, step}, verbName);
     }
     return true;
 }

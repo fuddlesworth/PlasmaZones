@@ -112,6 +112,12 @@ bool ScrollStrip::focusTileByOrdinal(int ordinal)
             continue;
         }
         if (++seen == ordinal) {
+            // Compared against activeTileIdx rather than activeWindowId(),
+            // matching focusAdjacentTile and focusTileAtEnd. The two differ
+            // only when activeTileIdx points at a MINIMIZED tile, which
+            // production never produces (the compositor reports a minimize as
+            // a float toggle, so the window leaves the column instead). The
+            // family stays consistent rather than one verb diverging here.
             if (i == col->activeTileIdx) {
                 return false;
             }

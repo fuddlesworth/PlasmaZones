@@ -92,8 +92,11 @@ private Q_SLOTS:
     void scheduledRetileRunsUnderEventLoop();
     void columnMaximizeFlagRidesEveryTileOfTheColumn();
     void columnMaximizeTargetsTheNamedWindowsColumn();
-    void minSizeOutgrowingWorkAreaFloatsTheWindow();
+    // minPinned... is declared before minSize... to match DEFINITION order,
+    // which is what a reader following this list as a table of contents
+    // needs. The two had drifted apart.
     void minPinnedFullWidthColumnDoesNotPublishMaximized();
+    void minSizeOutgrowingWorkAreaFloatsTheWindow();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
@@ -1907,6 +1910,12 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     // The POSITIVE half: the work area genuinely changes, so the same retile
     // call that was silent above must now deliver. Without this the whole slot
     // is satisfied by an apply path that never emits at all.
+    //
+    // Not transposed, unlike the axis-sensitive slots elsewhere in this file:
+    // any change to the work area moves the tile rects, so shrinking the raw
+    // width discriminates on the vertical arm too, where it takes the CROSS
+    // extent. Transpose this if the assertion is ever narrowed to the main
+    // axis.
     sharedRect->setWidth(sharedRect->width() - 200);
     engine->retile(QStringLiteral("S1"));
     QCoreApplication::processEvents();

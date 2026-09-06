@@ -148,6 +148,15 @@ public:
     }
     static QString scrollingCycleTabBackShortcut()
     {
+        // The Shift twin of the above, and covered by the same live-session
+        // check: KWin's Walk Through Windows (Reverse) owns Alt+Shift+Tab and
+        // Meta+Shift+Tab, and nothing stock claims Meta+Alt+Shift+Tab.
+        //
+        // Worth knowing if this ever misbehaves: X11 delivers Shift+Tab as
+        // the ISO_Left_Tab keysym rather than as a Shift-modified Tab, so a
+        // Shift'd Tab chord is not the same shape as the Shift'd letter
+        // chords elsewhere in this file. KGlobalAccel handles it for KWin's
+        // own reverse binding, which is why this spelling is safe to ship.
         return QStringLiteral("Meta+Alt+Shift+Tab");
     }
     static QString scrollingToggleWindowedFullscreenShortcut()
