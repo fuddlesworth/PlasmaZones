@@ -25,8 +25,10 @@ decelerated), **settle** (the last 20 % of an enter, no overshoot), **hold**,
 to engine geometry, no easing). Shared-element chip-to-drawer morphs and springs are
 deliberately not used as signatures.
 
-Everything below names real engine/D-Bus surfaces. Where a surface does not exist yet it
-is marked **[NEW]** with the interface it belongs on.
+Everything below names real engine/D-Bus surfaces. **[NEW]** marked a surface that did
+not exist when this document was written, against the interface it belongs on. All of
+them have since been built and shipped in phases 1 to 6, so the marker is now a record
+of what this document asked for rather than a list of work outstanding.
 
 ---
 

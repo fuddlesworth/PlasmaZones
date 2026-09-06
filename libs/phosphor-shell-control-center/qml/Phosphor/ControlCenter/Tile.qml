@@ -59,7 +59,7 @@ Item {
 
     Accessible.role: Accessible.Button
     Accessible.name: root.label
-    Accessible.description: root.available ? root.sublabel : (root.sublabel.length > 0 ? qsTr("%1 — unavailable").arg(root.sublabel) : qsTr("Unavailable"))
+    Accessible.description: root.available ? root.sublabel : (root.sublabel.length > 0 ? qsTr("%1, unavailable").arg(root.sublabel) : qsTr("Unavailable"))
     Accessible.onPressAction: root._activate()
 
     Keys.onSpacePressed: event => root._activateFromKey(event)
