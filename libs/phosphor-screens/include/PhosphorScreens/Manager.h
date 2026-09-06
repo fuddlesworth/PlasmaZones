@@ -147,6 +147,43 @@ public:
     QRect actualAvailableGeometry(QScreen* screen) const;
 
     /**
+     * @brief The compositor's LOGICAL scale for @p screen (1.15, 1.5, 2.0…).
+     *
+     * Read from the screen's layer-shell geometry sensor window, because on
+     * Wayland that is the only place a client can see the real number.
+     * @c QScreen::devicePixelRatio() reports the @c wl_output INTEGER buffer
+     * scale, which a compositor advertises as the ceiling of the true scale
+     * for the benefit of clients that cannot scale fractionally — KWin says
+     * 2 for a 1.15 output. @c QWindow::devicePixelRatio() instead carries the
+     * per-surface value Qt derives from @c wp_fractional_scale_v1, which is
+     * the 1.15 itself.
+     *
+     * Falls back to @c QScreen::devicePixelRatio() when the screen has no
+     * sensor (a synthetic test screen never gets one — see
+     * @c createGeometrySensor) or the sensor has not been mapped yet, and to
+     * 1.0 when there is no QScreen either. The fallback is the OLD, coarse
+     * answer rather than a wrong-by-construction guess.
+     *
+     * DIAGNOSTIC USE ONLY today (the support report and the getScreenInfo
+     * reply). Nothing in placement reads a scale: PlasmaZones works in
+     * logical coordinates throughout, and the compositor owns the conversion.
+     * Do not introduce a device-pixel calculation on the strength of this
+     * accessor without checking that the surface in question is actually
+     * scaled the same way.
+     */
+    qreal logicalScale(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Bridge overload for consumers holding a live @c QScreen*.
+     *
+     * Mirrors the @ref actualAvailableGeometry(QScreen*) convention: resolve
+     * through the tracked set so the sensor lookup is keyed the same way, and
+     * fall back to the QScreen's own (coarse, integer) ratio for a connector
+     * the manager does not track — a hotplug race — or a null pointer.
+     */
+    qreal logicalScale(QScreen* screen) const;
+
+    /**
      * @brief Has the panel source produced its first reading?
      *
      * Components that compute initial zone geometry at startup gate on this

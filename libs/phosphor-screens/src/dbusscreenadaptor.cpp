@@ -421,7 +421,12 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
         physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
     }
     info[kKeyPhysicalSize] = QJsonObject{{kKeyWidth, physSize.width()}, {kKeyHeight, physSize.height()}};
-    info[kKeyDevicePixelRatio] = screen->devicePixelRatio();
+    // The compositor's logical scale, not QScreen's wl_output buffer scale
+    // (which is the ceiling of it — 2 for a 1.15 output). Only the manager
+    // can answer, because only its per-screen layer-shell sensor window
+    // carries the fractional-scale-v1 value; without one, this falls back to
+    // the same coarse QScreen number it always reported.
+    info[kKeyDevicePixelRatio] = m_screenManager ? m_screenManager->logicalScale(screen) : screen->devicePixelRatio();
     info[kKeyRefreshRate] = screen->refreshRate();
     info[kKeyDepth] = screen->depth();
     info[kKeyScreenId] = screenId;
