@@ -410,6 +410,7 @@ void TilingHandler::resetTabWheelAccumulators()
     // relay in rebuildScrollTabIndicators when the column's active tab turns
     // out to have moved by something other than the wheel.
     m_tabWheelAnchor.clear();
+    m_tabWheelAnchorPending = false;
 }
 
 bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 deltaV120, Qt::Orientation orientation,
@@ -541,6 +542,7 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
     // The activation the click path uses. One owner of "which tab is active":
     // focus the tab's window and let the strip learn through windowFocused.
     m_tabWheelAnchor = target;
+    m_tabWheelAnchorPending = true;
     slotFocusWindowRequested(target);
     return true;
 }

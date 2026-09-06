@@ -289,12 +289,8 @@ void PlasmaZonesEffect::pointerAxis(KWin::PointerAxisEvent* event)
     // wherever the cursor sits, including over a pill. What reaches here is
     // an unmodified wheel, so an application's own Ctrl+wheel is never
     // swallowed either.
-    if (m_tilingHandler->handleTabWheel(event->position, event->delta, event->deltaV120, event->orientation,
-                                        event->modifiers, event->buttons)) {
-        if (m_overhangInputFilter) {
-            m_overhangInputFilter->resetScrollFactorStream();
-        }
-    }
+    m_tilingHandler->handleTabWheel(event->position, event->delta, event->deltaV120, event->orientation,
+                                    event->modifiers, event->buttons);
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

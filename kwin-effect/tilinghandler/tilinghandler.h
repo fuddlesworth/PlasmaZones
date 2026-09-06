@@ -2130,6 +2130,12 @@ private:
     // routinely arrives first. Cleared with the accumulators, so it lives
     // exactly as long as the gesture that set it.
     QString m_tabWheelAnchor;
+    // True while the anchor names a step the daemon has not relayed back yet.
+    // The retirement guard needs it: during a fast gesture a relay for an
+    // EARLIER step arrives while the anchor already names a later one, and
+    // without this marker that mismatch reads as a foreign focus change and
+    // retires an anchor the gesture is still using.
+    bool m_tabWheelAnchorPending = false;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

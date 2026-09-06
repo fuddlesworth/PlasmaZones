@@ -732,10 +732,24 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         // the relay is simply the wheel's own step coming back, the active
         // tab IS the anchor and it survives, which is what lets the anchor
         // outrun the model within a gesture.
+        //
+        // The pending marker is what makes this safe during a FAST gesture.
+        // The anchor is written per event, but the relays come back one step
+        // at a time, so a relay for an earlier step routinely arrives while
+        // the anchor already names a later one. Without the marker that
+        // mismatch reads as a foreign change and retires an anchor the
+        // gesture is still walking, which puts back the stick the anchor
+        // exists to prevent. A relay that AGREES with the anchor means the
+        // wheel's own last step has landed, so the marker drops and any later
+        // disagreement is genuinely someone else's.
         if (!m_tabWheelAnchor.isEmpty()) {
             const QString activeNow = painter->activePillFor(out, m_tabWheelAnchor);
-            if (!activeNow.isEmpty() && activeNow != m_tabWheelAnchor) {
-                m_tabWheelAnchor.clear();
+            if (!activeNow.isEmpty()) {
+                if (activeNow == m_tabWheelAnchor) {
+                    m_tabWheelAnchorPending = false;
+                } else if (!m_tabWheelAnchorPending) {
+                    m_tabWheelAnchor.clear();
+                }
             }
         }
         // The pill under a parked pointer may have moved or vanished: a
