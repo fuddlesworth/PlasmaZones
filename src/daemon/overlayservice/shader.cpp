@@ -72,12 +72,13 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 // empty payload (no zones) is fine — the render node binds the 1×1 transparent
 // fallback.
 PhosphorRendering::ZoneLabelTexture buildLabelsPayloadForPreviewZones(const QVariantList& zones, const QSize& size,
+                                                                      qreal devicePixelRatio,
                                                                       const IZoneVisualizationSettings* settings)
 {
     const LabelFontSettings lfs = extractLabelFontSettings(settings);
-    return ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor, lfs.fontFamily,
-                                          lfs.fontSizeScale, lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline,
-                                          lfs.fontStrikeout);
+    return ZoneLabelTextureBuilder::build(zones, size, devicePixelRatio, lfs.fontColor, true, lfs.backgroundColor,
+                                          lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight, lfs.fontItalic,
+                                          lfs.fontUnderline, lfs.fontStrikeout);
 }
 
 } // namespace
@@ -476,7 +477,10 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
 
     const QSize size(qMax(1, width), qMax(1, height));
-    const PhosphorRendering::ZoneLabelTexture labels = buildLabelsPayloadForPreviewZones(zones, size, m_settings);
+    // Same ratio the preview's own shader pass runs at — see the note in
+    // updateLabelsTextureForWindow.
+    const qreal dpr = m_shaderPreviewWindow ? m_shaderPreviewWindow->effectiveDevicePixelRatio() : 1.0;
+    const PhosphorRendering::ZoneLabelTexture labels = buildLabelsPayloadForPreviewZones(zones, size, dpr, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
                      QVariant::fromValue(labels));
 
@@ -530,8 +534,8 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
 
         const int w = qMax(1, m_shaderPreviewWindow->width());
         const int h = qMax(1, m_shaderPreviewWindow->height());
-        const PhosphorRendering::ZoneLabelTexture labels =
-            buildLabelsPayloadForPreviewZones(zones, QSize(w, h), m_settings);
+        const PhosphorRendering::ZoneLabelTexture labels = buildLabelsPayloadForPreviewZones(
+            zones, QSize(w, h), m_shaderPreviewWindow->effectiveDevicePixelRatio(), m_settings);
         writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
                          QVariant::fromValue(labels));
     }

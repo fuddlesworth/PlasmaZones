@@ -1330,10 +1330,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     continue;
                 }
                 if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenIt.key())) {
-                    const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(out);
-                    if (bounds.isValid()) {
-                        KWin::effects->addRepaint(KWin::Rect(bounds));
-                    }
+                    damageScrollTabBand(out, m_effect->m_scrollTabPainter->boundsFor(out));
                 }
             }
         }

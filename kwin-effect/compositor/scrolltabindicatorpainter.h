@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPoint>
+#include <QPointF>
 #include <QRect>
 #include <QString>
 #include <QVector>
@@ -164,19 +165,30 @@ struct ScrollTabHitRect
 namespace ScrollTabRaster {
 
 /// Hit rects for every tab of @p indicator, in absolute logical coordinates,
-/// in the same order the tabs are drawn. Both this and rasterise() derive
+/// in the same order the tabs are drawn. Both this and rasterisePatch() derive
 /// their rects from the same internal tab-rect list (these are that list
 /// clipped to the indicator; the raster draws the unclipped list under a
 /// clip to the same rect), so hit-testing and drawing cannot drift apart.
 QVector<ScrollTabHitRect> layoutPills(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style);
 
-/// Rasterise @p indicators into an ARGB32-premultiplied image covering
-/// @p bounds at @p devicePixelRatio. Drawing happens in image-local
-/// coordinates (absolute minus bounds.topLeft()).
+/// Rasterise @p indicators into an ARGB32-premultiplied image of exactly
+/// @p deviceSize DEVICE pixels, looking at the logical plane from
+/// @p logicalOrigin. Drawing happens in absolute logical coordinates, which
+/// the image's device-pixel ratio and that origin are the window onto.
+///
+/// Addressed in device pixels rather than by a logical rect because both
+/// callers pick their size there: the band's texture covers the device-
+/// aligned box KWin's damage alignment produces, and the hover sub-update
+/// has to start on a whole device pixel (that is the space glTexSubImage2D
+/// addresses). On a fractionally-scaled output the logical origin that lands
+/// on such a boundary sits BETWEEN logical pixels, so @p logicalOrigin is a
+/// QPointF and the same region of two different rasters comes out
+/// pixel-identical.
 ///
 /// @p hoveredWindowId marks that window's pill hovered.
-QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
-                 const QRect& bounds, qreal devicePixelRatio, const QString& hoveredWindowId);
+QImage rasterisePatch(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
+                      const QPointF& logicalOrigin, const QSize& deviceSize, qreal devicePixelRatio,
+                      const QString& hoveredWindowId);
 
 } // namespace ScrollTabRaster
 
@@ -348,6 +360,21 @@ private:
         /// for. A change in either is a re-rasterise, not just a re-upload.
         QRect textureBounds;
         qreal textureScale = 0.0;
+        /// The texture's top-left in DEVICE pixels, measured from the render
+        /// viewport's own corner rather than the absolute logical origin:
+        /// `textureBounds`'s origin, taken relative to `textureRenderOrigin`,
+        /// floored onto the device grid. On a fractionally-scaled output that
+        /// is NOT textureBounds.topLeft() * textureScale, and the difference
+        /// is the whole point — the texture covers the same device-aligned box
+        /// KWin's damage alignment produces, so the blit and the damage cannot
+        /// disagree about a border column. Both the quad's placement and the
+        /// hover patch's sub-upload offset are measured from here.
+        QPoint textureDeviceOrigin;
+        /// The render viewport's logical top-left that `textureDeviceOrigin`
+        /// was measured from. Part of the geometry the texture was rasterised
+        /// for, so a viewport whose corner moved re-rasterises: the alignment
+        /// is only meaningful against the corner it was computed against.
+        QPointF textureRenderOrigin;
         /// Bounds/scale pair for which rasterising or uploading FAILED (an
         /// image too large for GL, an allocation failure). While it matches
         /// the current pair the paint does not retry every frame; any model,

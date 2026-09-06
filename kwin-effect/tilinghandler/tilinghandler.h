@@ -1520,6 +1520,20 @@ private:
     /// later re-tab re-queries instead of painting a verdict the daemon's
     /// strip-gated title relay could not have refreshed meanwhile.
     void dropScrollTabColorsForUnindexed(const QList<QString>& indexedBefore);
+    /// Damage @p bounds on @p out WHERE THE BAND IS ACTUALLY DRAWN, i.e.
+    /// shifted by the strip view spring's live offset for that output.
+    ///
+    /// The painter stores the band offset-free (the model does not move during
+    /// a scroll; the blit adds the offset), so damaging the raw bounds is only
+    /// correct at rest. Mid-leg it damages where the band WAS, and the pills
+    /// are drawn somewhere else — visible as a hover highlight that does not
+    /// appear until the leg ends, on any frame the spring's own full-output
+    /// repaint does not happen to cover. A no-op at rest, where offsetFor
+    /// returns a null point.
+    ///
+    /// Silently does nothing for an invalid @p bounds, so callers can hand it
+    /// a boundsFor() result straight from an output with no pills.
+    void damageScrollTabBand(KWin::LogicalOutput* out, const QRect& bounds) const;
     /// The engine retracted @p screenId's strips ("[]"): drop the payload,
     /// the index entries and the painter output, releasing a hover it held.
     void dropScrollTabScreen(const QString& screenId);

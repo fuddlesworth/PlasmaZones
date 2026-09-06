@@ -343,9 +343,9 @@ QString EditorController::shaderParamPreamble(const QString& shaderId) const
     return m_shaderPreview->shaderParamPreamble(shaderId);
 }
 
-QImage EditorController::buildLabelsTexture(const QVariantList& zones, int width, int height) const
+QImage EditorController::buildLabelsTexture(const QVariantList& zones, QQuickItem* target) const
 {
-    return m_shaderPreview->buildLabelsTexture(zones, width, height);
+    return m_shaderPreview->buildLabelsTexture(zones, target);
 }
 
 QImage EditorController::loadWallpaperTexture() const
