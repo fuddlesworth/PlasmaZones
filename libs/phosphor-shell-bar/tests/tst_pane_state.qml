@@ -27,6 +27,15 @@ TestCase {
         QtObject {
             property string focused: "cell-a"
 
+            // The fake has to carry the parts of PlacementMapScreen that the
+            // bar actually reads, or it silently exercises a different
+            // contract than production. The overflow counters are ints on the
+            // real type; leaving them off makes every binding that reads them
+            // assign `undefined` to an int.
+            property int overflowLeft: 0
+            property int overflowRight: 0
+            property int mode: 0
+
             // PlacementMapScreen emits this whenever its cells move; BarHost
             // has a Connections block on it, which warns if the target does
             // not carry the signal.

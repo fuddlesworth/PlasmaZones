@@ -149,7 +149,10 @@ SessionLock::~SessionLock()
     const bool wasLive = s_live == this;
     if (wasLive)
         s_live = nullptr;
-    if (d->lockObj && wasLive) {
+    // Severing is unconditional: it is what keeps a queued locked/finished
+    // event from dispatching into this freed Private, and that hazard does not
+    // care whether this was the live instance.
+    if (d->lockObj) {
         // Sever the listener's back-pointer so any still-queued locked/finished
         // event dispatches with data == nullptr and is dropped (the Private is
         // being freed). We deliberately do NOT destroy the proxy: if the
@@ -163,7 +166,9 @@ SessionLock::~SessionLock()
         // SessionLock built after a hot reload can adopt it (see the
         // constructor). Retracting it here would strand the lock: nothing
         // could then release it and the session would be stuck locked.
-        if (auto* integration = LayerShellIntegration::instance()) {
+        // Only the live instance owns the published state. A second one
+        // recording its own grant here would overwrite the real lock's.
+        if (auto* integration = wasLive ? LayerShellIntegration::instance() : nullptr) {
             integration->setActiveSessionLockGranted(d->isLocked);
         }
     }
@@ -179,6 +184,15 @@ void SessionLock::lock()
 {
     if (d->lockObj)
         return; // a lock is already in flight or held.
+    if (s_live != this) {
+        // The constructor already warned. Going further would create a second
+        // lock object and publish it over the live one, so the surfaces of the
+        // real lock would start being parented to this one instead. The caller
+        // still gets its one finished() rather than waiting forever.
+        qCWarning(lcSessionLock) << "refusing to lock from a second SessionLock instance";
+        d->reportLockUnavailable();
+        return;
+    }
     auto* integration = LayerShellIntegration::instance();
     if (!integration) {
         qCWarning(lcSessionLock) << "No Wayland integration; cannot lock";
