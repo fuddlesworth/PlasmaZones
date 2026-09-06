@@ -144,7 +144,7 @@ Kirigami.Dialog {
             root.hideShaderPreview();
             return;
         }
-        var labelsImg = editorController.buildLabelsTexture(zones, w, h);
+        var labelsImg = editorController.buildLabelsTexture(zones, previewBackground);
         var useWallpaper = info.wallpaper || false;
         var wallpaperImg = useWallpaper ? editorController.loadWallpaperTexture() : null;
         var bsPaths = info.bufferShaderPaths || [];

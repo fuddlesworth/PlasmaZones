@@ -27,6 +27,7 @@
 #include <QTimer>
 #include <QUuid>
 #include <QScreen>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QSize>
 #include "core/types/constants.h"
@@ -559,7 +560,7 @@ public:
      * @param height Texture height in pixels
      * @return QImage with zone numbers rendered, or null image if no zones
      */
-    Q_INVOKABLE QImage buildLabelsTexture(const QVariantList& zones, int width, int height) const;
+    Q_INVOKABLE QImage buildLabelsTexture(const QVariantList& zones, QQuickItem* target) const;
 
     /**
      * @brief Load the current Plasma desktop wallpaper as a QImage

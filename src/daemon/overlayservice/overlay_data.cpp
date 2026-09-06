@@ -46,8 +46,8 @@ constexpr QLatin1String ShaderBorderWidth{"shaderBorderWidth"};
 // - they're consumed downstream by the shader uniforms - so they're
 // deliberately excluded from the cache key. Including them would churn the
 // cache on every highlight change and defeat the whole optimization.
-quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, bool showNumbers,
-                                const LabelFontSettings& lfs)
+quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, qreal devicePixelRatio,
+                                bool showNumbers, const LabelFontSettings& lfs)
 {
     // NOTE: inside `namespace PlasmaZones {}` the unqualified name `qHash`
     // resolves to user-defined overloads (TilingStateKey, PhosphorZones::LayoutAssignmentKey)
@@ -67,6 +67,11 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     };
     mix(::qHash(static_cast<int>(size.width())));
     mix(::qHash(static_cast<int>(size.height())));
+    // The ratio the payload is rasterised at. Without it, moving the overlay
+    // to a differently-scaled output at the same logical size reuses the old
+    // texture at the old resolution — the labels stay soft (or over-sharp)
+    // until something else in the key happens to change.
+    mix(::qHash(devicePixelRatio));
     mix(::qHash(static_cast<uint>(showNumbers)));
     mix(::qHash(static_cast<uint>(lfs.fontColor.rgba())));
     mix(::qHash(static_cast<uint>(lfs.backgroundColor.rgba())));
@@ -115,6 +120,13 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     // Slot is anchors.fill: parent on the shell window, so its size
     // matches the shell - which has been sized to the per-screen rect.
     const QSize size(qMax(1, static_cast<int>(slot->width())), qMax(1, static_cast<int>(slot->height())));
+    // The ratio the zone shader samples this texture at: ShaderEffect binds
+    // iResolution as logical x effectiveDevicePixelRatio for the overlay path
+    // (it reports requiresPhysicalResolution), so the labels must be rasterised
+    // at the same ratio or they arrive upscaled. Window-derived rather than
+    // screen-derived on purpose — on Wayland QScreen::devicePixelRatio is the
+    // wl_output INTEGER buffer scale, which is 2 on a 1.15 output.
+    const qreal dpr = slot->window() ? slot->window()->effectiveDevicePixelRatio() : 1.0;
 
     PerScreenOverlayState* state = nullptr;
     QString screenId;
@@ -139,7 +151,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     const bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings ? m_settings->showZoneNumbers() : true)
         && (!screenLayout || screenLayout->showZoneNumbers());
 
-    const quint64 newHash = hashLabelsTextureInputs(patched, size, showNumbers, lfs);
+    const quint64 newHash = hashLabelsTextureInputs(patched, size, dpr, showNumbers, lfs);
     if (state && state->labelsTextureHash == newHash) {
         return;
     }
@@ -149,7 +161,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     // An empty payload (numbers off / no zones) is fine: the node binds a 1×1
     // transparent fallback, so no full-screen texture is allocated.
     const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
-        patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor, lfs.fontFamily, lfs.fontSizeScale,
+        patched, size, dpr, lfs.fontColor, showNumbers, lfs.backgroundColor, lfs.fontFamily, lfs.fontSizeScale,
         lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
     slot->setProperty("labelsTexture", QVariant::fromValue(labels));
     if (state) {
