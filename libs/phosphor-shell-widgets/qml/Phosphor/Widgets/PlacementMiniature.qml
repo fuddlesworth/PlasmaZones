@@ -591,8 +591,13 @@ Item {
             readonly property color _hue: Spectrum.at(_v ? pos : (start + end) / 2)
             readonly property real _target: occupied ? 0.8 : 0.3
 
-            x: _v ? Math.round(pos * root.width) : Math.round(start * root.width)
-            y: _v ? Math.round(start * root.height) : Math.round(pos * root.height)
+            // Clamped to the last pixel: `pos` is a fraction and a cell that
+            // reaches the far side emits pos == 1, which rounds to exactly
+            // root.width (or root.height) and would draw the 1 px edge
+            // entirely OUTSIDE the item, so the map's right and bottom
+            // boundaries simply went missing.
+            x: _v ? Math.max(0, Math.min(root.width - 1, Math.round(pos * root.width))) : Math.round(start * root.width)
+            y: _v ? Math.round(start * root.height) : Math.max(0, Math.min(root.height - 1, Math.round(pos * root.height)))
             width: _v ? 1 : Math.max(1, Math.round((end - start) * root.width))
             height: _v ? Math.max(1, Math.round((end - start) * root.height)) : 1
             color: _hue

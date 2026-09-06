@@ -58,15 +58,27 @@ function _cellEdges(c) {
 }
 
 // Reading order: top to bottom, then left to right, by the edge's
-// top-left end.
-function _readingKey(e) {
-    var yy = e.o === "h" ? e.pos : e.start;
-    var xx = e.o === "h" ? e.start : e.pos;
-    return yy * 4 + xx;
+// top-left end. Both coordinates are fractions of the map, so a single
+// packed key needs the y multiplier to outrank the whole x range — the
+// earlier `yy * 4 + xx` let x win whenever two rows sat closer than 0.25
+// apart, which is any map of four or more rows and every staggered one.
+// Compared field by field instead, so there is no multiplier to get wrong.
+// Positions are quantised to Quantum, so anything closer than that is the
+// same row and falls through to x.
+function _readingY(e) {
+    return e.o === "h" ? e.pos : e.start;
+}
+
+function _readingX(e) {
+    return e.o === "h" ? e.start : e.pos;
 }
 
 function _byReading(a, b) {
-    return _readingKey(a) - _readingKey(b);
+    var dy = _readingY(a) - _readingY(b);
+    if (Math.abs(dy) > Quantum) {
+        return dy;
+    }
+    return _readingX(a) - _readingX(b);
 }
 
 // Reduce a cell list ({x, y, w, h, occupied} each) to merged edges in

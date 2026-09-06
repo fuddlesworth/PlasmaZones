@@ -58,6 +58,11 @@ void RetintController::setRunner(QObject* runner)
         disconnect(m_runner, nullptr, this, nullptr);
     }
     m_runner = runner;
+    // The in-flight run belonged to the OLD runner. Nothing will answer for it
+    // now, so drop the state that waits on it rather than leave preview()
+    // refusing against a run that cannot land.
+    m_pendingPath.clear();
+    setBusy(false);
     if (m_runner) {
         // By signature rather than by type so a test's fake runner
         // (any QObject with MatugenRunner's two signals) connects too.
@@ -76,6 +81,15 @@ void RetintController::setStore(QObject* store)
 {
     if (m_store == store) {
         return;
+    }
+    // The snapshot was taken FROM the old store, so it must not survive the
+    // swap: the next clearPreview() would otherwise merge the previous store's
+    // tokens into the new one. Dropped rather than restored, because the old
+    // store is no longer ours to write to.
+    if (m_hasSnapshot) {
+        m_snapshot.clear();
+        m_hasSnapshot = false;
+        Q_EMIT previewingChanged();
     }
     m_store = store;
     Q_EMIT storeChanged();
@@ -219,10 +233,15 @@ void RetintController::clearPreview()
 {
     m_debounce->stop();
     m_pendingPath.clear();
+    // Cancel only if there is still a runner to cancel, but clear busy
+    // UNCONDITIONALLY. m_runner is a QPointer: a runner destroyed mid-run, or
+    // a host that swapped it out, would otherwise leave busy latched true and
+    // preview() would refuse through both of its guards for the life of the
+    // controller — the strip stuck reading "retinting".
     if (m_busy && m_runner) {
         QMetaObject::invokeMethod(m_runner, "cancel");
-        setBusy(false);
     }
+    setBusy(false);
     if (m_hasSnapshot) {
         // The snapshot carries every key the store had, so the merge
         // puts each one back and nothing a preview changed survives.

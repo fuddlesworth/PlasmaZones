@@ -44,8 +44,18 @@ BarWidget {
         height: 16
 
         onPercentChanged: {
-            if (percent >= peak) {
+            if (percent > peak) {
+                // A new high jumps instantly; nothing to decay toward yet.
+                // Strictly greater, or an idle metric (0 == 0) restarts the
+                // 4 s release on every tick and it never actually runs.
+                peakRelease.stop();
                 peak = percent;
+            } else if (peak > percent) {
+                // Re-target the decay at the new, lower live value. The `to`
+                // binding is read when the animation STARTS, so without a
+                // restart here the mark holds at the peak forever: the only
+                // previous restart was at the instant peak == percent, where
+                // from == to and the run was a no-op.
                 peakRelease.restart();
             }
         }

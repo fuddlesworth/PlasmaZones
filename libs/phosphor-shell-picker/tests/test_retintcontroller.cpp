@@ -298,6 +298,57 @@ private Q_SLOTS:
         QSignalSpy failed(&retint, &RetintController::previewFailed);
         retint.preview(QStringLiteral("/w.png"));
         QTRY_COMPARE(failed.count(), 1);
+        // The refusal must not leave the strip reading "retinting".
+        QVERIFY(!retint.isBusy());
+    }
+
+    // A runner that goes away with a run in flight. `busy` drives a
+    // user-visible label and both preview() guards, so latching it true
+    // strands the strip: it reads "retinting" for the life of the controller
+    // and every later hover is refused.
+    void aRunnerLostMidRunDoesNotLatchBusy()
+    {
+        PaletteStore store;
+        RetintController retint;
+        retint.setStore(&store);
+        retint.setDebounceMs(kDebounce);
+
+        {
+            FakeRunner runner;
+            retint.setRunner(&runner);
+            retint.preview(QStringLiteral("/a.png"));
+            QTRY_COMPARE(runner.runs.size(), 1);
+            QVERIFY(retint.isBusy());
+        }
+        // The runner is gone; m_runner is a QPointer and is now null.
+        retint.clearPreview();
+        QVERIFY(!retint.isBusy());
+
+        // And the controller is still usable: a new runner takes a run.
+        FakeRunner replacement;
+        retint.setRunner(&replacement);
+        QVERIFY(!retint.isBusy());
+        retint.preview(QStringLiteral("/b.png"));
+        QTRY_COMPARE(replacement.runs.size(), 1);
+    }
+
+    // Swapping the store must drop the snapshot taken from the previous one,
+    // or clearPreview() writes the old store's tokens into the new store.
+    void swappingTheStoreDropsTheOldSnapshot()
+    {
+        PaletteStore first;
+        PaletteStore second;
+        FakeRunner runner;
+        RetintController retint;
+        retint.setRunner(&runner);
+        retint.setStore(&first);
+        retint.setDebounceMs(kDebounce);
+
+        retint.previewTokens({{QStringLiteral("primary"), QColor(Qt::red)}}, QStringLiteral("Ember"));
+        QVERIFY(retint.isPreviewing());
+
+        retint.setStore(&second);
+        QVERIFY(!retint.isPreviewing());
     }
 };
 

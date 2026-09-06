@@ -18,6 +18,31 @@ Item {
     property date today: new Date()
     readonly property var locale: Qt.locale()
 
+    // `today` is captured once at construction, so a dashboard left open
+    // across midnight would keep highlighting yesterday and, on the last day
+    // of a month, keep drawing the wrong month entirely. Re-read exactly when
+    // the date rolls rather than polling: the interval is the time remaining
+    // until the next local midnight, plus a second of slack so the new Date()
+    // lands unambiguously on the new day.
+    Timer {
+        id: midnight
+
+        function untilNextMidnight(): int {
+            const now = new Date();
+            const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+            return Math.max(1000, next.getTime() - now.getTime());
+        }
+
+        running: true
+        repeat: false
+        interval: untilNextMidnight()
+        onTriggered: {
+            root.today = new Date();
+            interval = untilNextMidnight();
+            restart();
+        }
+    }
+
     readonly property int year: today.getFullYear()
     readonly property int month: today.getMonth()
     readonly property int daysInMonth: new Date(year, month + 1, 0).getDate()
