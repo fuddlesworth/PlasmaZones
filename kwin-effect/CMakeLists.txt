@@ -60,6 +60,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/lifecycle_wiring.cpp
     plasmazoneseffect/lifecycle_wiring_daemon.cpp
     plasmazoneseffect/lifecycle_wiring_drag.cpp
+    plasmazoneseffect/gestures.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_teardown.cpp

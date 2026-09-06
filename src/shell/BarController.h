@@ -6,7 +6,9 @@
 #include <PhosphorRegistry/Registry.h>
 
 #include <QList>
+#include <QMultiHash>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -73,6 +75,13 @@ public:
     // is not heard; triggers must emit in response to input, not at birth.
     [[nodiscard]] Q_INVOKABLE QQuickItem* createWidgetFor(const QString& id, QQuickItem* parent);
 
+    /// Press the widget `id` as a pointer would: emits widgetActivated with
+    /// the first live widget built for that id (the primary bar's, in the
+    /// shell's mount order). For a keybind or `phosphorctl call
+    /// bar.activate`, and for a harness that cannot inject pointer input.
+    /// False when no live widget carries the id or the id is not a trigger.
+    Q_INVOKABLE bool activateWidget(const QString& id);
+
     // The registered widget ids, sorted for a deterministic order. Exposed
     // for introspection and a future layout/config editor; the default bar
     // layout drives slots from explicit ordered id lists, not this set.
@@ -110,6 +119,9 @@ private Q_SLOTS:
 
 private:
     void registerBuiltins();
+    // Every trigger widget built through createWidgetFor, by id, so
+    // activateWidget can press one. QPointer: the bars own the items.
+    QMultiHash<QString, QPointer<QQuickItem>> m_triggers;
     // Re-reads the registry and emits factoryIdsChanged only when the id
     // set actually differs from the last emission.
     void refreshFactoryIds();

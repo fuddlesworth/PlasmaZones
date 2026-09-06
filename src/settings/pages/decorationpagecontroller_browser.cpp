@@ -62,6 +62,18 @@ QString surfacePathLabel(const QString& path)
             return PhosphorI18n::tr("Panels");
         if (token == QLatin1String("appletPopup"))
             return PhosphorI18n::tr("Applet Popups");
+        if (token == QLatin1String("phosphor"))
+            return PhosphorI18n::tr("Phosphor Shell");
+        if (token == QLatin1String("bar"))
+            return PhosphorI18n::tr("Bar");
+        if (token == QLatin1String("popout"))
+            return PhosphorI18n::tr("Popouts");
+        if (token == QLatin1String("notification"))
+            return PhosphorI18n::tr("Notifications");
+        if (token == QLatin1String("picker"))
+            return PhosphorI18n::tr("Wallpaper Picker");
+        if (token == QLatin1String("lock"))
+            return PhosphorI18n::tr("Lock Screen");
         return token;
     };
     const QStringList tokens = path.split(QLatin1Char('.'), Qt::SkipEmptyParts);

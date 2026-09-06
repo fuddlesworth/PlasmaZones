@@ -166,6 +166,17 @@ private Q_SLOTS:
         QVERIFY(decorationLeafSurfacePaths().contains(decorationShellPanelPath()));
         QVERIFY(decorationLeafSurfacePaths().contains(decorationShellAppletPopupPath()));
         QCOMPARE(decorationShellRootPath(), QStringLiteral("shell"));
+        // The Phosphor shell's own family sits under the same root, so it is
+        // baseline-isolated with the plasmashell leaves and every leaf is a
+        // supported path with `shell.phosphor` as its ancestor.
+        QVERIFY(supported.contains(decorationShellPhosphorRootPath()));
+        const QStringList phosphorLeaves = decorationShellPhosphorLeafPaths();
+        QCOMPARE(phosphorLeaves.size(), 6);
+        for (const QString& leaf : phosphorLeaves) {
+            QVERIFY2(decorationLeafSurfacePaths().contains(leaf), qPrintable(leaf));
+            QVERIFY2(decorationPathIsBaselineIsolated(leaf), qPrintable(leaf));
+            QCOMPARE(decorationParentPath(leaf), decorationShellPhosphorRootPath());
+        }
     }
 
     void resolve_outside_the_taxonomy_differs_by_isolation_arm()

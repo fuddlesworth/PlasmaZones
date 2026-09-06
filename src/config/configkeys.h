@@ -699,6 +699,23 @@ public:
         return snapToZoneKeyPattern().arg(n);
     }
 
+    // Scrolling's tab ordinals. In Shortcuts.Global rather than
+    // Shortcuts.Scrolling because that is where every INDEXED family lives
+    // (the quick-layout and snap-to-zone digits are equally mode-specific and
+    // sit here): the Shortcuts.Scrolling parity canary derives one action id
+    // per schema key by snake-casing it, which a pattern key has no spelling
+    // for, and the indexed families are registered outside the static table
+    // that canary reads.
+    P_CONFIG_KEY(scrollFocusTabKeyPattern, "ScrollFocusTab%1")
+    static QString scrollFocusTabKey(int n)
+    {
+        // Same guard and same protocol bound as snapToZoneKey above.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+            qFatal("scrollFocusTabKey: n out of range: %d", n);
+        }
+        return scrollFocusTabKeyPattern().arg(n);
+    }
+
     P_CONFIG_KEY(rotateWindowsClockwiseKey, "RotateWindowsClockwise")
     P_CONFIG_KEY(rotateWindowsCounterclockwiseKey, "RotateWindowsCounterclockwise")
     P_CONFIG_KEY(cycleWindowForwardKey, "CycleWindowForward")

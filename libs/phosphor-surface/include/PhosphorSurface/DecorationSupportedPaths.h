@@ -29,6 +29,73 @@ inline QString decorationShellAppletPopupPath()
     return QStringLiteral("shell.appletPopup");
 }
 
+/// The OSD surface and the three transient overlays invoked by user action.
+/// Accessors rather than literals because the seed tree in
+/// configdefaults_shaders.h writes overrides at these exact paths, and a
+/// typo there is a seed that silently decorates nothing.
+inline QString decorationOsdPath()
+{
+    return QStringLiteral("osd");
+}
+inline QString decorationPopupLayoutPickerPath()
+{
+    return QStringLiteral("popup.layoutPicker");
+}
+inline QString decorationPopupZoneSelectorPath()
+{
+    return QStringLiteral("popup.zoneSelector");
+}
+inline QString decorationPopupCheatsheetPath()
+{
+    return QStringLiteral("popup.cheatsheet");
+}
+inline QString decorationPopupSnapAssistPath()
+{
+    return QStringLiteral("popup.snapAssist");
+}
+
+/// The Phosphor shell's own surfaces, a family under `shell` beside the
+/// plasmashell leaves. The shell process resolves these itself (it hosts
+/// the chain in QML, the daemon's overlay pattern), so the same tree the
+/// Decoration pages edit styles the bar, the popouts, the OSD bands, the
+/// toasts, the wallpaper picker and the lock screen. Baseline-isolated
+/// like the rest of `shell.*`: a global window chain never leaks onto
+/// chrome, and the shell's defaults ride the seed tree.
+inline QString decorationShellPhosphorRootPath()
+{
+    return QStringLiteral("shell.phosphor");
+}
+inline QString decorationShellPhosphorBarPath()
+{
+    return QStringLiteral("shell.phosphor.bar");
+}
+inline QString decorationShellPhosphorPopoutPath()
+{
+    return QStringLiteral("shell.phosphor.popout");
+}
+inline QString decorationShellPhosphorOsdPath()
+{
+    return QStringLiteral("shell.phosphor.osd");
+}
+inline QString decorationShellPhosphorNotificationPath()
+{
+    return QStringLiteral("shell.phosphor.notification");
+}
+inline QString decorationShellPhosphorPickerPath()
+{
+    return QStringLiteral("shell.phosphor.picker");
+}
+inline QString decorationShellPhosphorLockPath()
+{
+    return QStringLiteral("shell.phosphor.lock");
+}
+inline QStringList decorationShellPhosphorLeafPaths()
+{
+    return {decorationShellPhosphorBarPath(),    decorationShellPhosphorPopoutPath(),
+            decorationShellPhosphorOsdPath(),    decorationShellPhosphorNotificationPath(),
+            decorationShellPhosphorPickerPath(), decorationShellPhosphorLockPath()};
+}
+
 /// Leaf surface paths a per-surface decoration profile actually resolves
 /// against. Each names a concrete surface PlasmaZones decorates: the three
 /// window placement states (tiled / snapped / floating), the OSD, the
@@ -44,33 +111,34 @@ inline QString decorationShellAppletPopupPath()
 inline QStringList decorationLeafSurfacePaths()
 {
     return QStringList{
-        // window.* — per-placement window decoration (border / corners /
-        // titlebar appearance + surface-pack chain) for each placement state.
-        QStringLiteral("window.tiled"),
-        QStringLiteral("window.snapped"),
-        QStringLiteral("window.floating"),
-        // osd — the notification surface.
-        QStringLiteral("osd"),
-        // popup.* — the four transient overlays invoked by user action.
-        QStringLiteral("popup.snapAssist"),
-        QStringLiteral("popup.zoneSelector"),
-        QStringLiteral("popup.layoutPicker"),
-        QStringLiteral("popup.cheatsheet"),
-        // shell.* — surfaces owned by plasmashell rather than by us or by an
-        // application. Unlike every path above, these are FOREIGN windows the
-        // KWin effect decorates in place. The subtree is baseline-isolated
-        // (decorationPathIsBaselineIsolated below): a shell surface never
-        // inherits the tree baseline, so it stays undecorated until a chain is
-        // engaged at `shell` or one of its leaves — engaging that chain IS the
-        // opt-in (applying a decoration set that carries shell paths engages
-        // the chain the same way, and counts as the same opt-in: the user
-        // chose to apply the set). It also resolves chain-only: the
-        // config-backed border /
-        // opacity-tint "easy mode" layers never apply to it, so a shell
-        // surface is styled by an explicit pack chain here or not at all.
-        decorationShellPanelPath(),
-        decorationShellAppletPopupPath(),
-    };
+               // window.* — per-placement window decoration (border / corners /
+               // titlebar appearance + surface-pack chain) for each placement state.
+               QStringLiteral("window.tiled"),
+               QStringLiteral("window.snapped"),
+               QStringLiteral("window.floating"),
+               // osd — the notification surface.
+               decorationOsdPath(),
+               // popup.* — the four transient overlays invoked by user action.
+               decorationPopupSnapAssistPath(),
+               decorationPopupZoneSelectorPath(),
+               decorationPopupLayoutPickerPath(),
+               decorationPopupCheatsheetPath(),
+               // shell.* — surfaces owned by plasmashell rather than by us or by an
+               // application. Unlike every path above, these are FOREIGN windows the
+               // KWin effect decorates in place. The subtree is baseline-isolated
+               // (decorationPathIsBaselineIsolated below): a shell surface never
+               // inherits the tree baseline, so it stays undecorated until a chain is
+               // engaged at `shell` or one of its leaves — engaging that chain IS the
+               // opt-in (applying a decoration set that carries shell paths engages
+               // the chain the same way, and counts as the same opt-in: the user
+               // chose to apply the set). It also resolves chain-only: the
+               // config-backed border /
+               // opacity-tint "easy mode" layers never apply to it, so a shell
+               // surface is styled by an explicit pack chain here or not at all.
+               decorationShellPanelPath(),
+               decorationShellAppletPopupPath(),
+           }
+    + decorationShellPhosphorLeafPaths();
 }
 
 /// Walk @p path up one level in the dot-hierarchy ("window.floating" ->

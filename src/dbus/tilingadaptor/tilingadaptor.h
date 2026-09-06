@@ -350,6 +350,35 @@ public Q_SLOTS:
      */
     QVariantMap scrollTabColors(const QString& windowId);
 
+    /**
+     * @brief Replay of the last tile batch that named a screen
+     *
+     * The placement map's bring-up read: a JSON array of the last
+     * windowsTileRequested batch's entries for @p screenId, with the keys
+     * relayTileRequestsJson parses (windowId, x, y, width, height, screenId,
+     * monocle, floating, zoneId). One batch per screen, replaced by each
+     * newer batch naming it; entries are pruned when their window closes or
+     * is released, and the screen's batch is dropped when it leaves the
+     * managed set. "[]" when nothing is held. Implemented in mapmodel.cpp.
+     *
+     * @param screenId Screen whose last batch to replay
+     * @return JSON array string
+     */
+    QString currentTilesJson(const QString& screenId) const;
+
+    /**
+     * @brief The engine-managed focused window on a screen
+     *
+     * Routed to whichever pipeline engine claims @p screenId (strict
+     * ownership, no primary fallback: a screen nobody owns has no managed
+     * focus). Empty for a snapping screen, which is outside this pipeline.
+     * The live answer, not the broadcast memory. Implemented in mapmodel.cpp.
+     *
+     * @param screenId Screen to ask about
+     * @return Window id, or empty
+     */
+    QString managedFocusedWindow(const QString& screenId) const;
+
     // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
     // all float operations are now routed through the unified methods —
     // org.plasmazones.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
@@ -488,6 +517,18 @@ Q_SIGNALS:
      * @param screenId Screen where the window is located
      */
     void windowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
+
+    /**
+     * @brief The engine-managed focused window on a screen changed
+     *
+     * Emit-on-change per screen (refreshFocusedWindow owns the gate and the
+     * memory). Empty @p windowId means nothing engine-managed holds focus
+     * there any more, including a screen that left the managed set.
+     *
+     * @param screenId Screen whose focused window changed
+     * @param windowId The window now focused there, or empty
+     */
+    void focusedWindowChanged(const QString& screenId, const QString& windowId);
 
 private Q_SLOTS:
     /**
@@ -650,7 +691,53 @@ private:
     /// panelGeometryReady.
     void removePendingOpen(const QString& windowId);
 
+    // ── Placement map state (mapmodel.cpp) ───────────────────────────────
+    /// Keep @p requests as the last batch of every screen it names, one
+    /// entry list per screen. Called at both windowsTileRequested emit sites
+    /// so the replay and the wire can never disagree about what went out.
+    void recordTileBatch(const PhosphorProtocol::TileRequestList& requests);
+    /// Drop @p windowId from every screen's retained batch: the window is
+    /// gone, and a replay must not resurrect it. Every close path calls it
+    /// beside the dedup-cache evictions.
+    void forgetTileEntriesForWindow(const QString& windowId);
+    /// The strict-ownership focus read behind managedFocusedWindow: the
+    /// engine whose live set claims @p screenId, or nobody (empty answer).
+    /// Deliberately NOT engineOwningScreen's primary fallback, whose whole
+    /// point is delivering a report to an engine that might repair itself;
+    /// a query has nothing to repair and must not report the primary
+    /// engine's focus for a screen it does not own.
+    QString ownerFocusedWindow(const QString& screenId) const;
+    /// The screen whose engine tracks @p windowId, or empty. Strict, for
+    /// the same reason as ownerFocusedWindow.
+    QString trackedScreenForWindow(const QString& windowId) const;
+    /// Per-screen map state that follows the managed set: every screen the
+    /// coalesced announce dropped loses its retained batch and, if it had a
+    /// broadcast focus, announces the empty one; every announced screen is
+    /// re-read. Called from the announce lambda after the wire emission.
+    void reconcileMapStateWithAnnounce(const QStringList& announced);
+
+    /// Last batch entries per screen, the currentTilesJson replay cache.
+    QHash<QString, PhosphorProtocol::TileRequestList> m_lastTileBatchPerScreen;
+    /// Last focused window broadcast per screen: refreshFocusedWindow's
+    /// change gate. Absent and empty read the same, so a screen never
+    /// broadcast for stays silent when its answer is empty.
+    QHash<QString, QString> m_lastFocusedBroadcast;
+
 public:
+    /**
+     * @brief Re-read a screen's managed focused window and announce a change
+     *
+     * The one writer of focusedWindowChanged. Compares the owning engine's
+     * live answer against the last value broadcast for @p screenId and emits
+     * only on a difference, so every hook that calls it (the focus report,
+     * the engine-driven activation relay, the tilingChanged relay, the close
+     * paths, the coalesced announce) coalesces to one emission per actual
+     * change. Plain method, not a slot: it is an in-process hook point, not
+     * a D-Bus surface. Empty @p screenId is ignored. Implemented in
+     * mapmodel.cpp.
+     */
+    void refreshFocusedWindow(const QString& screenId);
+
     /**
      * @brief Clear the engine list during shutdown
      *

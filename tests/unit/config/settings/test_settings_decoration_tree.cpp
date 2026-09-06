@@ -31,6 +31,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+
 #include <QTest>
 
 #include <PhosphorSurface/DecorationProfile.h>
@@ -63,6 +65,17 @@ PhosphorSurfaceShaders::DecorationProfileTree makeBaselinePlusLeafTree()
     return tree;
 }
 
+/// The Phosphor shell's own surfaces live under the baseline-isolated
+/// `shell.*` root, so their seeds are injected even when the user engaged a
+/// global baseline chain (that is the isolation's purpose: a window chain
+/// must never veto the chrome's defaults). Every read of the settings tree
+/// therefore carries them; a user tree compares equal to its read-back only
+/// once it wears the same seeds.
+PhosphorSurfaceShaders::DecorationProfileTree withShellSeeds(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
+{
+    return tree.withSeedDefaults(ConfigDefaults::decorationProfileTree());
+}
+
 } // namespace
 
 class TestSettingsDecorationTree : public QObject
@@ -92,7 +105,8 @@ private Q_SLOTS:
         QVERIFY2(!tree.baseline().chain.has_value(), "default baseline must carry no chain (fully neutral)");
         QCOMPARE(tree.overriddenPaths(),
                  (QStringList{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
-                              QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")}));
+                              QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")}
+                  + PhosphorSurfaceShaders::decorationShellPhosphorLeafPaths()));
 
         // Every card surface resolves to the same border + theme-tinted shadow.
         const QStringList cardSurfaces{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
@@ -200,7 +214,7 @@ private Q_SLOTS:
         const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isObject());
         const auto parsed = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
-        QCOMPARE(parsed, tree);
+        QCOMPARE(parsed, withShellSeeds(tree));
     }
 
     /// setDecorationProfileTreeJson("") resets to the canonical default
@@ -234,7 +248,7 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::decorationProfileTreeChanged);
         settings.setDecorationProfileTreeJson(QStringLiteral("{ this is not valid json"));
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(settings.decorationProfileTree(), tree);
+        QCOMPARE(settings.decorationProfileTree(), withShellSeeds(tree));
     }
 
     /// committedDecorationProfileTree() is the baseline the per-surface

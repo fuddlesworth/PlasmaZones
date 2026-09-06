@@ -1465,6 +1465,15 @@ void Daemon::initEnginesAndWiring()
     m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
                                           m_layoutManager.get(), autotileEngine, m_screenManager.get(),
                                           m_compositorBridge, m_scrollEngine.get(), m_screenModeRouter.get(), this);
+    // The shortcut catalog behind Control.getShortcutsJson. ShortcutManager
+    // outlives every adaptor rebuild (constructed in the Daemon ctor), so the
+    // provider reads it through the member; the relay is scoped to the
+    // adaptor so a rebuilt one never receives a stale connection.
+    m_controlAdaptor->setShortcutCatalogProvider([this]() -> QVariantList {
+        return m_shortcutManager ? m_shortcutManager->shortcutCatalog() : QVariantList();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, m_controlAdaptor,
+            &ControlAdaptor::notifyShortcutsChanged);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all

@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 <node>
     <!-- Window Drag Interface (KWin script -> Daemon) -->
     <interface name="org.plasmazones.WindowDrag">
-        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin effect calls beginDrag / updateDragCursor / endDrag; daemon returns a DragPolicy and a DragOutcome that drive the compositor's drag streaming, keyboard grab, snap geometry, and snap-assist follow-on. Uses int for cursor / modifier flags and the typed DragPolicy / DragOutcome structs for the typed payloads."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin effect calls beginDrag / updateDragCursor / endDrag; daemon returns a DragPolicy and a DragOutcome that drive the compositor's drag streaming, keyboard grab, snap geometry, and snap-assist follow-on. A shell registers a drop proxy (registerDropProxy / unregisterDropProxy) so a drag dropped on its miniature of a snapping screen lands in the real zone. Uses int for cursor / modifier flags and the typed DragPolicy / DragOutcome structs for the typed payloads."/>
         <method name="beginDrag">
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative begin. Returns a DragPolicy that the compositor plugin uses to decide streaming, keyboard grab, and immediate-float behavior. Replaces dragStarted as the canonical drag-begin entry point. Single source of truth — no effect-side cache to go stale after settings reloads."/>
             <arg name="windowId" type="s" direction="in">
@@ -60,6 +60,21 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="registerDropProxy">
+            <annotation name="org.gtk.GDBus.DocString" value="Register, or replace, a screen's drop proxy: a miniature of that screen's snapping zones that a real compositor drag can be dropped on. The Phosphor shell registers its placement map here. During a snap-path drag with the activation trigger held (the same condition under which the real zones light up), a cursor inside the proxy's rect is treated as being over the real zone of the cell under it: the daemon highlights that zone through the overlay, emits its geometry through zoneGeometryDuringDragChanged, and endDrag inside the cell snaps the dragged window to it, all through the path a real zone takes. Inside the rect but over no cell, or over a cell whose zone the screen's current layout no longer has, is no target. Zone-span painting ignores the proxy. One proxy per screen; registering again replaces it, and the registration outlives any drag until unregisterDropProxy. Snapping screens only: on a tiling or scrolling screen the proxy is accepted and ignored, because the snap path never runs there. A malformed proxy is refused silently and any earlier registration stands."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Physical screen the miniature is drawn on. A virtual screen on that output resolves to it. An empty string is ignored."/>
+            </arg>
+            <arg name="proxyJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object {rect, cells}: rect is the miniature's [x, y, w, h] and cells an array of {id, rect}, where id is the snapping zone id (braces included) and rect the cell's [x, y, w, h]. Every rect is in the screen's own pixels with its top-left corner as origin and must have a positive size; every cell needs a non-empty id."/>
+            </arg>
+        </method>
+        <method name="unregisterDropProxy">
+            <annotation name="org.gtk.GDBus.DocString" value="Drop the proxy registered for a screen. A screen with no proxy is a silent no-op."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose proxy to drop."/>
+            </arg>
+        </method>
         <method name="selectorScrollWheel">
             <annotation name="org.gtk.GDBus.DocString" value="Forward scroll delta to the zone selector during drag. Reserved for future use when KWin exposes pointer axis events to effects."/>
             <arg name="angleDeltaY" type="i" direction="in">

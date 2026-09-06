@@ -261,6 +261,34 @@ public:
     /// rects overlap, the one drawn LAST (topmost) wins, matching the raster.
     QString pillAt(KWin::LogicalOutput* output, const QPointF& pos, const QPointF& viewOffset) const;
 
+    /// The indicator whose tab run contains @p windowId, or nullptr when no
+    /// indicator on @p output draws that window as a tab.
+    ///
+    /// Answers from the MODEL rather than from the hit rects, and so do the
+    /// two queries below it: a tab clipped away by a too-short indicator
+    /// draws and hit-tests as nothing, but it is still a tab of the column
+    /// and a wheel step must reach it. The alternative is a run the user can
+    /// never scroll past.
+    ///
+    /// The returned pointer is owned by the painter and is invalidated by
+    /// the next setIndicators/clearOutput/clearAll on that output. Callers
+    /// use it within one synchronous input event and never store it.
+    const ScrollTabIndicator* indicatorFor(KWin::LogicalOutput* output, const QString& windowId) const;
+
+    /// The windowId of the tab drawn ACTIVE in the indicator that owns
+    /// @p windowId. Empty when the id names no tab here or when the run has
+    /// no active tab.
+    ///
+    /// This is the model's view of which tab the column is showing, so it
+    /// trails a focus change until the daemon relays the new strip back.
+    QString activePillFor(KWin::LogicalOutput* output, const QString& windowId) const;
+
+    /// The windowId @p delta (-1/+1) tabs away from @p windowId within the
+    /// indicator that owns it, wrapping at either end. Empty when the id
+    /// names no tab here, when its indicator has only one tab, or when
+    /// @p delta is not -1/+1.
+    QString neighbourPill(KWin::LogicalOutput* output, const QString& windowId, int delta) const;
+
     /// Union of @p output's indicator rects, absolute logical and WITHOUT
     /// the view offset. At rest the offset is zero, so this is exactly the
     /// on-screen rect and the right damage region; while a view leg is in

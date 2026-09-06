@@ -470,6 +470,26 @@ QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(c
     return out;
 }
 
+ScrollStripModel ScrollEngine::stripModelForScreen(const QString& screenId) const
+{
+    // Non-creating lookup, like visibleTilesWithRects. Unlike that walk an
+    // owned screen with no state still answers: the map draws an empty strip
+    // for it, and it needs the axis and viewport to know which way to draw.
+    // The params are resolved once and handed down; the strip runs the one
+    // relayout inside stripModel.
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state) {
+        ScrollStripModel empty;
+        if (params.workArea.isValid()) {
+            empty.axis = params.axis;
+            empty.viewportPx = params.axis.mainSize(params.workArea);
+        }
+        return empty;
+    }
+    return state->strip().stripModel(params);
+}
+
 QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
 {
     // A projection over visibleTilesWithRects, not a second copy of its
