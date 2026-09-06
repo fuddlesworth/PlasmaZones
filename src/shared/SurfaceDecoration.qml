@@ -192,9 +192,29 @@ Item {
     // non-finite value would take the entire placement set with it.
     readonly property real outerPad: isFinite(decorationOuterPadding) ? Math.max(0, decorationOuterPadding) : 0
 
-    /// Logical→device scale for the decorated surface. The OSD shell tracks the
-    /// active output's devicePixelRatio; Screen.devicePixelRatio is the live
-    /// value for the window this item lives in.
+    /// Logical→device scale for the decorated surface, and the unit of the
+    /// pixel space every surface pack works in.
+    ///
+    /// NOT the window's real device-pixel ratio on Wayland, despite the name:
+    /// QML's `Screen.devicePixelRatio` is QScreen's, which is the wl_output
+    /// INTEGER buffer scale a compositor advertises for clients that cannot
+    /// scale fractionally. KWin says 2 for a 1.15 output. The per-surface
+    /// value lives on QQuickWindow, whose `devicePixelRatio` property is Qt
+    /// 6.11 and so out of reach at this project's 6.10 floor.
+    ///
+    /// That is survivable here, and deliberately left alone, because the value
+    /// CANCELS. It sets `uSurfaceSize` (which `surfacePixel` multiplies uv by,
+    /// defining the px space) and `uSurfaceScale` (which packs multiply their
+    /// logical-px widths and radii by), so every geometric ratio a pack
+    /// computes is scale-free — the border lands in the same place at any
+    /// value. Only the AA feather, held in "device px" on purpose so it stays
+    /// constant across scales, is off by the ratio between this and the true
+    /// one: about 0.4 real device px instead of 0.7 at scale 1.15, which is
+    /// a marginally crisper edge and nothing more.
+    ///
+    /// So do not "fix" this to a real per-surface ratio in isolation. Both
+    /// uniforms have to move together or the packs' geometry breaks, and the
+    /// only thing gained is a sub-pixel feather width.
     readonly property real surfaceScale: Screen.devicePixelRatio
 
     /// The area the bound `backdropTexture` covers, in this item's coordinates.
