@@ -107,6 +107,57 @@ FocusScope {
         const placed = Layout.place(cells, focused, rows, mode);
         spatial = placed.spatial.filter(l => Layout.matches(l, filter));
         column = placed.column.filter(l => Layout.matches(l, filter));
+        _syncSpatial(spatial);
+    }
+
+    // Reconcile the pill rows in place, keyed by the row's id. Handing the
+    // Repeater a fresh array destroys and rebuilds every delegate, which both
+    // discards the x/y Behaviors below (the labels jump instead of riding the
+    // rects, contradicting this file's own header) and re-runs the staggered
+    // enter from `Component.onCompleted` — in live mode that is every window
+    // move. Same shape FullMap and PlacementMiniature use.
+    //
+    // Role names are suffixed because ChordPill already declares `chord`,
+    // `label`, `description` and `assigned`; a role of the same name would
+    // collide with the property it is meant to feed.
+    function _syncSpatial(rows): void {
+        for (let i = 0; i < rows.length; ++i) {
+            const r = rows[i];
+            let at = -1;
+            for (let j = i; j < spatialModel.count; ++j) {
+                if (spatialModel.get(j).rowId === r.id) {
+                    at = j;
+                    break;
+                }
+            }
+            if (at === -1) {
+                spatialModel.insert(i, _spatialRow(r));
+                continue;
+            }
+            if (at !== i)
+                spatialModel.move(at, i, 1);
+            const row = _spatialRow(r);
+            for (const key in row)
+                spatialModel.setProperty(i, key, row[key]);
+        }
+        while (spatialModel.count > rows.length)
+            spatialModel.remove(spatialModel.count - 1);
+    }
+
+    function _spatialRow(r) {
+        return {
+            "rowId": String(r.id),
+            "chordText": String(r.chord),
+            "labelText": String(r.label),
+            "descriptionText": String(r.description),
+            "assignedFlag": !!r.assigned,
+            "px": Number(r.x) || 0,
+            "py": Number(r.y) || 0
+        };
+    }
+
+    ListModel {
+        id: spatialModel
     }
 
     onCatalogChanged: relayout()
@@ -237,26 +288,34 @@ FocusScope {
     Repeater {
         id: spatialLabels
 
-        model: root.spatial
+        model: spatialModel
         delegate: ChordPill {
             id: pill
 
             required property int index
-            required property var modelData
+            required property string chordText
+            required property string labelText
+            required property string descriptionText
+            required property bool assignedFlag
+            required property real px
+            required property real py
 
-            chord: modelData.chord
-            label: modelData.label
-            description: modelData.description
-            assigned: modelData.assigned
-            x: Math.round(modelData.x - width / 2)
-            y: Math.round(modelData.y - height / 2)
+            chord: pill.chordText
+            label: pill.labelText
+            description: pill.descriptionText
+            assigned: pill.assignedFlag
+            x: Math.round(pill.px - width / 2)
+            y: Math.round(pill.py - height / 2)
 
             opacity: 0
             Component.onCompleted: opacity = 1
             Behavior on opacity {
                 SequentialAnimation {
                     PauseAnimation {
-                        duration: Motion.reducedMotion ? 0 : Math.min(150, pill.index * 6)
+                        // `index` is -1 while the delegate is still being
+                        // incubated, and a negative duration is a QML error
+                        // that discards the whole animation. Clamp at zero.
+                        duration: Motion.reducedMotion ? 0 : Math.max(0, Math.min(150, pill.index * 6))
                     }
                     NumberAnimation {
                         duration: Motion.duration_enter_content

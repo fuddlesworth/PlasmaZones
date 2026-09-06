@@ -194,7 +194,13 @@ bool WallpaperService::setPreview(const QString& path, const QString& screenName
         qCWarning(lcWallpaperService) << "Refusing to preview wallpaper" << path;
         return false;
     }
-    if (m_preview.value(screenName) == absolute) {
+    // The all-screens case is only a no-op when it is ALSO the only entry.
+    // Otherwise setPreview(A, "") -> setPreview(B, "DP-1") -> setPreview(A, "")
+    // returns early here and leaves DP-1 previewing B, contradicting the
+    // replace-everything rule below.
+    const bool alreadyShowing =
+        m_preview.value(screenName) == absolute && (!screenName.isEmpty() || m_preview.size() == 1);
+    if (alreadyShowing) {
         return true;
     }
     if (screenName.isEmpty()) {

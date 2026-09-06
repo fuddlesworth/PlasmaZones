@@ -190,16 +190,25 @@ StripParse parseVisibleStrip(const QString& stripJson)
     }
     const QJsonArray tiles = doc.array();
     parse.cells.reserve(tiles.size());
+    int index = -1;
     for (const QJsonValue& value : tiles) {
+        ++index;
         const QJsonObject tile = value.toObject();
         const QRectF rect = clampUnit(readRect(tile));
         if (!usable(rect)) {
             continue;
         }
-        const int zoneNumber = tile[ZoneNumber].toInt(0);
         // visibleStripJson carries no window id; the zone number is the only
-        // stable handle the payload offers, so it keys the cell.
-        Cell cell = makeCell(QStringLiteral("strip:%1").arg(zoneNumber), rect);
+        // stable handle the payload offers, so it keys the cell. It defaults
+        // to 0 when absent, though, and two such tiles would both key
+        // "strip:0" — cellById returns the first, so a click on the second
+        // acts on the first, and the change gate sees a list that looks
+        // legitimate. Fall back to the position in the payload, which is
+        // unique by construction.
+        const int zoneNumber = tile[ZoneNumber].toInt(0);
+        const QString cellId =
+            zoneNumber > 0 ? QStringLiteral("strip:%1").arg(zoneNumber) : QStringLiteral("strip:@%1").arg(index);
+        Cell cell = makeCell(cellId, rect);
         cell.occupied = true;
         cell.stack = std::max(1, tile[PhosphorProtocol::Service::StripPreviewKey::TabCount].toInt(0));
         parse.cells.append(cell);
