@@ -32,21 +32,30 @@ GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
 
 GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget)
 {
-    switch (captureFormatFor(outputTarget)) {
-    // Float and wide (10-bit and up) targets: keep the precision, add the
-    // alpha channel. GL_RGB10_A2 is listed here on purpose: it is what KWin
-    // hands a 10-bit SDR output, and its 2-bit alpha cannot carry coverage.
-    case GL_RGBA16F:
-    case GL_RGB16F:
-    case GL_RGBA32F:
-    case GL_RGB32F:
-    case GL_R11F_G11F_B10F:
-    case GL_RGB10_A2:
-    case GL_RGBA16:
-    case GL_RGB16:
-        return GL_RGBA16F;
-    default:
-        return GL_RGBA8;
+    return alphaCaptureFormatForInternalFormat(captureFormatFor(outputTarget));
+}
+
+void clearAlpha(float alpha)
+{
+    // KWin's renderer leaves the scissor test off between windows, but a
+    // third-party effect ordered after us may not, and a scissored clear
+    // would stamp only a window's rect of the target. Save and restore what
+    // is touched; the colour mask is restored to the all-on state KWin's
+    // renderer expects rather than read back, because nothing in the paint
+    // chain runs with a partial mask.
+    const GLboolean scissorWas = glIsEnabled(GL_SCISSOR_TEST);
+    GLfloat clearWas[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clearWas);
+    if (scissorWas) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, alpha);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(clearWas[0], clearWas[1], clearWas[2], clearWas[3]);
+    if (scissorWas) {
+        glEnable(GL_SCISSOR_TEST);
     }
 }
 
@@ -86,17 +95,7 @@ void drawOutputQuad(const KWin::RenderViewport& viewport)
 
 const char* outputQuadVertexSource()
 {
-    static constexpr const char* kSource =
-        "#version 450\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n";
-    return kSource;
+    return kOutputQuadVertexSource;
 }
 
 void translatePackParams(

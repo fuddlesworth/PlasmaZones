@@ -21,19 +21,19 @@
 #include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 
 #include <scene/itemrenderer.h>
 #include <scene/windowitem.h>
 #include <scene/workspacescene.h>
 
+#include <QList>
 #include <QPoint>
 #include <QRectF>
 #include <QScopeGuard>
 #include <QSize>
 #include <QVector2D>
-
-#include <cmath>
 
 // The drive part of StripTransitionManager: arm from the tiling batch path,
 // capture the live scene, run the pack over it. The pack-source → GLShader
@@ -98,6 +98,10 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
             // thread; the erase frees the entry's capture texture.
             ensureGlContextCurrent();
             m_active.erase(it);
+            // The erased pass may hold the cursor hide; nothing paints the
+            // cursor for this output again until the repaint below, so give
+            // it back now rather than blink a frame (see updateCursorHiding).
+            updateCursorHiding();
             if (wasPresenting && KWin::effects) {
                 KWin::effects->addRepaint(output->geometry());
             }
@@ -194,6 +198,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     }
     auto it = m_active.find(screen);
     if (it == m_active.end()) {
+        // Reached on the repaint an erase (notifyLeg's disarm, outputRemoved)
+        // scheduled while the hide was still held: the erase site releases
+        // the hide itself, so this is the no-op path of the same release.
+        updateCursorHiding();
         return false;
     }
     // POINTER, not a reference, and re-seated after the capture below: the
@@ -244,8 +252,12 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // this frame and every later one (the sentinel keeps notifyLeg's
         // re-arms pointless but harmless: we end here again before any
         // capture). `it` and `pass` are DEAD after endOutput — return
-        // immediately, do not add reads between these two lines.
+        // immediately, do not add reads between these two lines. The hide
+        // release after it is for a pack hot-reloaded into a compile failure
+        // MID-LEG: the previous frame painted with the cursor hidden, and the
+        // normal scene about to paint this one honours the item's visibility.
         endOutput(screen);
+        updateCursorHiding();
         return false;
     }
 
@@ -286,8 +298,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             // frame. A later wheel batch re-arms via notifyLeg and retries
             // the allocation once per batch, which is the wanted behaviour
             // for a transient failure and bounded for a persistent one.
-            // `it`/`pass` are DEAD after endOutput — return immediately.
+            // `it`/`pass` are DEAD after endOutput — return immediately. The
+            // hide release covers a size or format change mid-leg whose
+            // reallocation failed: the previous frame held the hide.
             endOutput(screen);
+            updateCursorHiding();
             return false;
         }
     }
@@ -297,9 +312,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // into uStrip is smeared by the pack and never redrawn sharp, since this
     // pass replaces the output's paint. Hidden here, blitted by drawCursor
     // at the tail. Placed AFTER the compile and allocation checks above so
-    // no return-false path between the hide and the tail exists: a pass
-    // that abandons this frame paints the normal scene with the cursor
-    // still shown.
+    // no reachable return-false path between the hide and the tail exists
+    // (the re-seat miss after the capture is structural and releases the
+    // hide itself): a pass that abandons this frame paints the normal scene
+    // with the cursor still shown, and a pass that abandons a LATER frame
+    // releases the hide it took (the abort arms above).
     hideCursorForPass(screen);
 
     // Render the live scene into the capture. This is the downstream chain
@@ -330,10 +347,19 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // is cut out of it at BOTH ends, each end by a different mechanism:
         //
         //   BELOW the strip (the desktop background, keep-below windows) is
-        //   painted into the capture NORMALLY, because the compositor's own
-        //   per-window effects (blur, translucency) read their backdrop from
-        //   the framebuffer they are drawn into, and a column painted over
-        //   nothing would lose its blur for the length of the leg. At the
+        //   painted into the capture NORMALLY, because the effect's own
+        //   backdrop capture (captureWindowBackdrop, the frost and glass
+        //   decoration packs) reads the scene beneath a column out of the
+        //   framebuffer the column is drawn into, and a column painted over
+        //   nothing would lose its frost for the length of the leg. KWin's
+        //   own Blur effect is NOT a consumer here: paintWindow forwards
+        //   PAINT_WINDOW_TRANSFORMED for every window inside the band, and
+        //   BlurEffect::shouldBlur refuses a transformed window, so a
+        //   blur-behind column shows plain translucency for the pass, exactly
+        //   as it already did while the spring translated it (blur is off on
+        //   any translated window). Without that refusal the blur would read
+        //   the zeroed alpha below and, on a rounded-corner window, ADD its
+        //   blur over the wallpaper instead of replacing it. At the
         //   band's bottom edge paintWindow calls snapshotBelowCapture(): the
         //   capture (below-strip content only, at that point) is copied into
         //   belowTex and its ALPHA is zeroed. The columns then paint over it
@@ -511,8 +537,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // it ever happens the recorded list must not outlive the frame — the
         // unwind guard was dismissed on the assumption the tail consumes it,
         // and that tail is now skipped. No framebuffer has been pushed yet at
-        // this point, so there is nothing else to unwind.
+        // this point, so there is nothing else to unwind. The hide taken
+        // above is released too: the normal scene paints this frame.
         m_effect->m_stripCaptureSkippedWindows.clear();
+        updateCursorHiding();
         return false;
     }
     pass = &it->second;
@@ -724,19 +752,18 @@ void StripTransitionManager::snapshotBelowCapture()
     // A copy rather than a blit: it needs no framebuffer for the
     // destination and is supported everywhere KWin's GL is.
     const QSize size = pass.captureTex->size();
+    // Unit 0 is the ambient unit everywhere in this codebase, but a
+    // GLTexture::bind is a bare glBindTexture on whatever unit is active, so
+    // pin it rather than clobber a unit a third-party effect left selected.
+    glActiveTexture(GL_TEXTURE0);
     pass.belowTex->bind();
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, size.width(), size.height());
     glBindTexture(GL_TEXTURE_2D, 0);
     // Zero the capture's ALPHA and keep its colour: the strip band paints
     // over this with its real coverage, so from here on the capture's alpha
     // is exactly the strip layer's, while the colour beneath the columns
-    // stays for the compositor's blur to read. KWin's renderer leaves the
-    // scissor test off between windows, so the clear reaches the whole
-    // capture.
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    // stays for the effect's own backdrop capture to read.
+    TransitionPass::clearAlpha(0.0f);
 }
 
 void StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarget,
@@ -765,12 +792,15 @@ void StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarg
         // the ref is kept for the one that stops being so mid-leg (a
         // notification starting its close) while still in our list.
         KWin::ItemEffect keepRenderable(w->windowItem());
+        // Paint-data opacity stays at its default 1.0, the value the desktop
+        // pass's composite and the window-snapshot captures set. The window's
+        // own opacity lives on its WindowItem (KWin's WindowItem tracks
+        // Window::opacity), and the renderer multiplies that item opacity
+        // into the paint data's, so seeding the paint data with
+        // w->opacity() here applied it TWICE: a notification mid-fade at
+        // 0.5 was composited at 0.25 for every frame of the leg. A client
+        // with per-window opacity keeps it through the item.
         KWin::WindowPaintData data;
-        // The window's OWN opacity, not 1.0: unlike the desktop pass's
-        // composite (which reconstructs windows into a static capture),
-        // this draws live on screen every frame, so a client with
-        // per-window opacity or a notification mid-fade must keep it.
-        data.setOpacity(w->opacity());
         const int paintMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
         // infinite() rather than the injected-paint deviceRegion clip: the
         // shader quad repaints the whole output, so this pass damages
@@ -819,6 +849,20 @@ void StripTransitionManager::updateCursorHiding()
         if (live && cursorOnOutput(entry.first)) {
             return; // a live pass still paints the cursor itself
         }
+    }
+    if (KWin::effects) {
+        KWin::effects->showCursor();
+    }
+    m_cursorHidden = false;
+}
+
+void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen)
+{
+    // Unconditional for THIS output, unlike updateCursorHiding: a live pass
+    // on it does not keep the hide, because the caller is about to paint the
+    // output without this pass, and nothing else would draw the cursor.
+    if (!m_cursorHidden || !cursorOnOutput(screen)) {
+        return;
     }
     if (KWin::effects) {
         KWin::effects->showCursor();

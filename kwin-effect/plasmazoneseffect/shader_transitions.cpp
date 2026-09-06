@@ -349,14 +349,15 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         return false;
     }
     // Same unbound-sampler shape as the desktop refusal: a strip-contract pack
-    // samples uStrip (the full-output scene capture), which only the strip
-    // post-process pass binds. On a per-window surface it is unbound garbage,
+    // samples uStrip and uBelow (the strip-layer capture and the below-strip
+    // snapshot), which only the strip post-process pass binds. On a
+    // per-window surface they are unbound garbage,
     // so refuse it at the same chokepoint. scrolling.view itself never routes
     // here (StripTransitionManager owns that pass); this catches hand-edited
     // configs assigning a strip pack at window/global scope.
     if (eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassStrip)) {
         qCWarning(lcEffect) << "beginShaderTransition: refusing strip-contract shader" << effectId
-                            << "on a per-window event — strip packs sample the unbound uStrip scene capture";
+                            << "on a per-window event — strip packs sample the unbound uStrip/uBelow strip capture";
         return false;
     }
 

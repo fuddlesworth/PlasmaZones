@@ -45,7 +45,11 @@ class PlasmaZonesEffect;
 /// anchor's slot — is rendered into a per-output capture whose ALPHA is the
 /// strip layer's coverage alone. The windows stacked BELOW the strip (the
 /// desktop background, keep-below windows) paint into it first, so the
-/// compositor's blur and translucency have their backdrop; at the band's
+/// effect's own backdrop capture (the frost and glass decoration packs)
+/// and plain translucency have their backdrop; KWin's Blur effect is
+/// refused on every window inside the band for the pass (paintWindow
+/// forwards PAINT_WINDOW_TRANSFORMED, which BlurEffect::shouldBlur
+/// honours), as it already is on any translated window. At the band's
 /// bottom edge paintWindow calls snapshotBelowCapture(), which copies that
 /// below-strip content into a second texture (uBelow) and zeroes the
 /// capture's alpha before the columns paint over it. Windows stacked ABOVE
@@ -168,6 +172,31 @@ public:
         return m_cursorHidden;
     }
 
+    /// Release this manager's cursor hide for @p screen when ANOTHER pass
+    /// took the output's frame. While a desktop transition is live,
+    /// paintScreen never reaches paintOutput for that output, so the hide
+    /// taken for a still-live strip leg (its spring keeps integrating under
+    /// the blend) is neither drawn by us nor released: updateCursorHiding
+    /// keeps it for a live pass under the pointer, and nothing else runs.
+    /// A no-op unless this manager holds the hide and the pointer is on
+    /// @p screen, so a strip leg on another output keeps its hide and no
+    /// per-frame hide/show flap arises. The next strip frame after the
+    /// foreign pass ends re-hides through hideCursorForPass, so the pair
+    /// stays balanced. Restores the cursor plane; a software cursor is
+    /// still not drawn by the foreign pass, exactly as it is not for any
+    /// desktop transition without a strip leg.
+    void releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen);
+
+    /// Called by PlasmaZonesEffect::paintWindow, inside the capture walk,
+    /// for the first window that is not below the strip band: copies the
+    /// capture (below-strip content only at that point) into the pass's
+    /// belowTex and zeroes the capture's alpha, so the columns that paint
+    /// next leave the capture's alpha equal to the strip layer's coverage.
+    /// Idempotent per capture through m_stripCaptureBelowSnapshotted; a
+    /// no-op outside a capture. Requires the capture framebuffer to be the
+    /// current one, which is true for the whole walk.
+    void snapshotBelowCapture();
+
     /// Paint one output's strip pass. Returns true when the decorated scene
     /// was drawn (the caller must then SKIP the normal scene paint for this
     /// output); false when the output is not armed, its spring has settled,
@@ -286,7 +315,15 @@ private:
     /// while a pass paints the output under the pointer the compositor's
     /// cursor is hidden (KWin then neither composites it nor puts it on a
     /// cursor plane) and the pass blits the cursor image itself as its last
-    /// draw, above the composited above-strip windows.
+    /// draw, above the composited above-strip windows. The overlay item's
+    /// OTHER child, the drag-and-drop icon, is deliberately not covered:
+    /// no hide hook exists for it, and no accessor hands the effect the
+    /// item to blit. KWin's drag filter runs ahead of the effects filter
+    /// and handles pointer buttons and motion, touch, keys and tablet
+    /// input, but has no pointerAxis override, so a wheel chord DOES reach
+    /// the strip during a Wayland drag; the icon then rides in the capture
+    /// and is smeared with the columns for the leg. An accepted exclusion,
+    /// not a contract.
     ///
     /// Hides when @p screen's pass is about to capture (its shader compiled
     /// and its capture target allocated, so the pass WILL replace this
@@ -300,7 +337,12 @@ private:
     /// settle frame, so that frame's normal scene paints the cursor rather
     /// than blinking it for a frame, and from every postPaintScreen, so a
     /// pointer crossing to a quiet output gets its cursor back within a
-    /// frame even though the hidden cursor damages nothing there.
+    /// frame even though the hidden cursor damages nothing there. Also run
+    /// on every abort path that erases or abandons a pass (notifyLeg's
+    /// disarm, a compile sentinel or allocation failure mid-leg), so a
+    /// hide taken on the previous frame is not carried into a frame the
+    /// normal scene paints. The one path that shows while a pass is still
+    /// live is releaseCursorHideForForeignPaint.
     void updateCursorHiding();
     /// Render the scene's own cursor item into the pass, at the pointer.
     /// Only meaningful while hideCursorForPass has the cursor hidden: the
@@ -315,18 +357,6 @@ private:
     void compositeSharp(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                         const QList<KWin::EffectWindow*>& windows);
 
-public:
-    /// Called by PlasmaZonesEffect::paintWindow, inside the capture walk,
-    /// for the first window that is not below the strip band: copies the
-    /// capture (below-strip content only at that point) into the pass's
-    /// belowTex and zeroes the capture's alpha, so the columns that paint
-    /// next leave the capture's alpha equal to the strip layer's coverage.
-    /// Idempotent per capture through m_stripCaptureBelowSnapshotted; a
-    /// no-op outside a capture. Requires the capture framebuffer to be the
-    /// current one, which is true for the whole walk.
-    void snapshotBelowCapture();
-
-private:
     /// Erase one entry, freeing its GL resources. Caller ensures a current
     /// GL context (paintOutput is on the paint thread; the off-thread
     /// mutators call ensureGlContextCurrent first).

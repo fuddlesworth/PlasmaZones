@@ -59,7 +59,7 @@ vec3 fluxGradient(float t) {
 }
 
 // One edge's gate, applied to `col` in place. q is the edge-distance field
-// coordinate (0 at the screen edge, 1 at the gate's inner boundary), A and P
+// coordinate (0 at the work-area edge, 1 at the gate's inner boundary), A and P
 // the arrival/departure role weights (each already folded with amp and the
 // work-area mask). Every term carries `kill`, which is EXACTLY 0.0 beyond
 // q = 1.2 — that factor is the bit-exact-identity guarantee for the middle
@@ -67,10 +67,14 @@ vec3 fluxGradient(float t) {
 // the strip layer alone with transparent gaps between the columns
 // (strip_transition.glsl), so every ADDITIVE term is scaled by it. Light is
 // only ever emitted where there is content to emit it — the family's
-// content-is-the-medium rule — and the premultiplied invariant rgb <= a
-// holds in the gaps, where the gate must leave the wallpaper behind the
-// capture untouched. The silhouette mixes are already premultiplied by the
-// caller and the drain is multiplicative, so neither needs the factor.
+// content-is-the-medium rule — and rgb stays 0 in the gaps, where the gate
+// must leave the wallpaper behind the capture untouched. The silhouette
+// mixes are already premultiplied by the caller and the drain is
+// multiplicative, so neither needs the factor. `lumW` is built on `lum`,
+// which the caller takes on PREMULTIPLIED rgb, so along a fractional edge
+// the glow terms carry coverage twice on their 0.65 part and fade a little
+// faster than coverage-linear; intended, an edge glow that dies into the
+// gap slightly ahead of the content reads cleaner than one that lingers.
 vec3 applyGate(vec3 col, float lum, vec3 sil, float cov, float q, float m, float A, float P, float glow,
                float dimK, float sparkle, float timeSec, float uvAcross) {
     float kill = 1.0 - smoothstep(1.0, 1.2, q);
@@ -224,12 +228,12 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // the unreachable range no longer suggests headroom that is not there.
     float mask = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
     // Zero-mask fragments are the strut/margin band outside the work area,
-    // where every additive term below carries a factor of A or P (both mask
-    // a) and the embers gate on A — the output is exactly `base` there. Bail
-    // before resolveStops(), the fbm meander and the two applyGate bodies pay
-    // their full per-fragment cost for it; on a full-canvas pass of a
-    // GPU-bound effect that band runs every frame. The three sibling strip
-    // packs already bail on the mask the same way.
+    // where every additive term below carries a factor of A or P (both
+    // carry mask) and the embers gate on A — the output is exactly `base`
+    // there. Bail before resolveStops(), the fbm meander and the two
+    // applyGate bodies pay their full per-fragment cost for it; on a
+    // full-canvas pass of a GPU-bound effect that band runs every frame.
+    // The four sibling strip packs already bail on the mask the same way.
     if (mask < 1.0e-3) {
         return base;
     }
@@ -251,8 +255,11 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // partly covered pixel would push rgb past a and bleed navy onto the
     // wallpaper composited beneath. lum is taken on premultiplied rgb, so
     // the shaping term already carries coverage; the tint base does not.
+    // The min() caps the shaping factor at 1 so a bright user tint cannot
+    // push sil past cov either (white at lum 1 would reach 2.1 times cov);
+    // the default navy peaks at 0.395 and never reaches it.
     float cov = base.a;
-    vec3 sil = tint * (0.5 + 1.6 * lum) * cov;
+    vec3 sil = min(tint * (0.5 + 1.6 * lum), vec3(1.0)) * cov;
     float glow = clamp(p_glow, 0.0, 2.0);
     float dimK = clamp(p_unlitDim, 0.0, 1.0);
     // The family sparkle grain, verbatim. iFrame grows without bound over a

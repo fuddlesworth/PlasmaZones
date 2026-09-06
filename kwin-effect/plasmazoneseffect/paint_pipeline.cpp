@@ -116,17 +116,17 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // output-filling surface with the band painted over it. A frame that
     // went to a hardware plane would drop that band, so composition is
     // forced — but only on outputs that actually carry indicators.
-    if (m_scrollTabPainter) {
-        if (m_currentPassOutput) {
-            if (m_scrollTabPainter->hasIndicators(m_currentPassOutput)) {
-                return true;
-            }
-        } else if (m_scrollTabPainter->hasAnyIndicators()) {
-            // Asked outside any bracket (a path this effect has not seen):
-            // fall back to the conservative global answer rather than a
-            // wrong per-output one.
+    // The painter is constructed unconditionally with the effect, so no null
+    // arm: every other site dereferences it the same way.
+    if (m_currentPassOutput) {
+        if (m_scrollTabPainter->hasIndicators(m_currentPassOutput)) {
             return true;
         }
+    } else if (m_scrollTabPainter->hasAnyIndicators()) {
+        // Asked outside any bracket (a path this effect has not seen):
+        // fall back to the conservative global answer rather than a
+        // wrong per-output one.
+        return true;
     }
     // Deliberately NO clause for m_scrollVisualDelta (parked columns
     // relocated with no spring live, the edge auto-scroll's immediate path).
@@ -536,6 +536,12 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // chain straight through to the standard scene — this override is a no-op for
     // every non-transitioning frame.
     if (m_desktopTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
+        // A desktop switch replaces this output's frame and draws no cursor
+        // of its own, and the strip pass below is never reached for it while
+        // the switch plays, so a hide the strip pass took for a still-live
+        // leg on this output has to be given back here or the pointer stays
+        // invisible for the whole switch.
+        m_stripTransition.releaseCursorHideForForeignPaint(screen);
         return;
     }
     // The strip pass sits BELOW the desktop transition on purpose: a desktop
@@ -1481,7 +1487,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // one of them marks the strip band's bottom edge: the manager snapshots
     // the capture there (snapshotBelowCapture), which is what keeps the
     // wallpaper out of the pack's reach while leaving it in the capture as
-    // the backdrop the compositor's blur reads.
+    // the backdrop the effect's own frost capture reads.
+    //
+    // Every window INSIDE the band (not below, not above) is then handed
+    // down the chain with PAINT_WINDOW_TRANSFORMED added (stripBandWindow,
+    // consumed where the chain continues below). KWin's Blur effect refuses
+    // a transformed window (BlurEffect::shouldBlur), and it must: its
+    // onscreen pass reads the framebuffer beneath the window, which after
+    // the snapshot carries alpha 0, and writes that alpha back (or, on a
+    // rounded-corner window, blends over it and ADDS the blur to the
+    // wallpaper). Blur is already off on any window the spring translates,
+    // which is every column mid-leg; this covers the untranslated ones (a
+    // float stacked between columns, and every column for the settle fade
+    // once the offset has reached zero). A window carrying
+    // WindowForceBlurRole (a KWin animation in flight on it) still blurs
+    // regardless of the bit; clearing another effect's role is not ours to
+    // do, and the coverage side channel is disturbed under that window only
+    // for that animation's duration.
     //
     // Membership in m_stripCaptureAboveStrip / m_stripCaptureBelowStrip IS
     // the predicate: the manager prebuilds both from KWin's stacking order
@@ -1511,6 +1533,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // Insurance rather than an observed fault: nothing drives a window through
     // this function twice inside one strip capture today. Cheap to keep correct
     // either way.
+    bool stripBandWindow = false;
     if (!m_capturingSnapshot && m_stripCaptureExclusionOutput) {
         if (m_stripCaptureAboveStrip.contains(w)) {
             if (!m_stripCaptureSkippedWindows.contains(w)) {
@@ -1518,16 +1541,29 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             }
             return;
         }
+        stripBandWindow = !m_stripCaptureBelowStrip.contains(w);
         // The walk paints in stacking order, so the first window here that
         // is not below the band is the band's bottom edge, and every
         // below-strip window has already painted. Sits BELOW the two culls
         // above on purpose: a parked or foreign column paints nothing, so
         // letting it fire the snapshot early would gain nothing, and the
         // manager snapshots after the walk if no band window ever arrives.
-        if (!m_stripCaptureBelowSnapshotted && !m_stripCaptureBelowStrip.contains(w)) {
+        if (!m_stripCaptureBelowSnapshotted && stripBandWindow) {
             m_stripTransition.snapshotBelowCapture();
         }
     }
+    // The mask handed down the chain for this window. The transformed bit is
+    // read by nothing in this file and by no KWin renderer path that is not
+    // already transformed under the capture's PAINT_SCREEN_TRANSFORMED; its
+    // one consumer is BlurEffect::shouldBlur (see the block above). Both
+    // draw entries a band window can take inside the capture carry it: the
+    // shader-transition draw and the chain continuation at the tail. The
+    // snapshot-capture arm is unreachable inside the capture by the latch's
+    // predicate; the direct-drive raw draw is unreachable by sequencing,
+    // since both direct-drive callers run outside the capture walk
+    // (compositeSharp after the latch scope has closed, the desktop capture
+    // before the strip pass is consulted).
+    const int chainMask = stripBandWindow ? (mask | KWin::Effect::PAINT_WINDOW_TRANSFORMED) : mask;
 
     // Compositor-drawn tab indicators: blit them at the ANCHOR's slot — right
     // after the topmost strip window this pass draws — so they sit above every
@@ -1948,7 +1984,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 
     auto* st = m_shaderManager.findTransition(w);
     if (st && st->cached && st->cached->shader) {
-        const PaintWindowContext ctx{renderTarget, viewport, w, mask, deviceRegion, data, frameNowMs};
+        const PaintWindowContext ctx{renderTarget, viewport, w, chainMask, deviceRegion, data, frameNowMs};
         if (paintShaderTransitionWindow(ctx, st) == ShaderBranchOutcome::Handled) {
             return;
         }
@@ -1961,7 +1997,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // KWin's iterator mid-walk (crash in the following
     // OffscreenEffect::drawWindow). The override then only BINDS the ready
     // composite for the present blit. The pre-gate short-circuits the whole thing on a
-    // desktop with no decorations at all, before any map lookup.
+    // desktop with no decorations at all, before any map lookup. The
+    // transition is looked up AGAIN rather than reusing `st`: the branch
+    // above may have torn an expired leg down on its Continue path, so `st`
+    // can be dangling here.
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const auto bit = m_windowDecorations.constFind(windowId);
         if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
@@ -2015,7 +2054,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // through our drawWindow override from inside that chain. This path also
     // covers redirected windows in their post-transition expiry frame, which
     // are still offscreen-backed.
-    KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    KWin::effects->paintWindow(renderTarget, viewport, w, chainMask, deviceRegion, data);
 }
 
 void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& renderTarget,
