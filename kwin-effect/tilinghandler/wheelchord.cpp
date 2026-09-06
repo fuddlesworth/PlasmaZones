@@ -404,8 +404,11 @@ void TilingHandler::resetTabWheelAccumulators()
 {
     m_tabWheelAccumVertical = 0.0;
     m_tabWheelAccumHorizontal = 0.0;
-    // The walk anchor is gesture state too: it must not survive to re-anchor
-    // a later gesture on a tab the user has since navigated away from.
+    // The walk anchor is gesture state too. Note this covers only the paths
+    // that REJECT an event; a gesture that simply stops sending them ends
+    // without reaching here, so the anchor is also retired from the model
+    // relay in rebuildScrollTabIndicators when the column's active tab turns
+    // out to have moved by something other than the wheel.
     m_tabWheelAnchor.clear();
 }
 

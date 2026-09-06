@@ -51,9 +51,10 @@ namespace PhosphorScrollEngine {
 /// caller: the COLUMN-focus and move verbs, the inserts, an active column
 /// that vanished), the Always policy's own re-centering, or either centering
 /// verb re-attaches it and the policy takes the view back. The TILE-focus
-/// verbs never re-anchor, so ScrollEngine clears the latch for them instead
-/// (see P_SCROLL_TILE_FOCUS_VERB), which is the same hand-back windowFocused
-/// performs when the pointer picks the same tab. A bystander's removal
+/// ops here never re-anchor, so ScrollEngine clears the latch on their behalf
+/// instead: cycleTab, focusTab, focusWindowTop, focusWindowBottom and the
+/// cross-axis leg of a directional focus press all hand the view back the way
+/// windowFocused does when the pointer picks the same tab. A bystander's removal
 /// that leaves focus where it was does not. One re-attach lives OUTSIDE this
 /// class, in ScrollEngine::windowFocused: a compositor report naming the
 /// window the strip already calls active reaches no re-anchor at all (it is

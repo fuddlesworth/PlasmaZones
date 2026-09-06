@@ -122,8 +122,7 @@ inline constexpr auto kScrollFocusTabPrefix = "scroll_focus_tab_";
 
 /// How many slots each indexed family has. All three families are 1-9 (the
 /// digit row), and the number appears in the default-getter array bounds, the
-/// registration loops and, for the two families that compress, the
-/// cheatsheet's expected-token lists. Exported for
+/// registration loops and the cheatsheet's expected-token lists. Exported for
 /// the same reason as the prefixes above: those sites live in two translation
 /// units, and a bare literal in each lets them drift apart silently — the
 /// cheatsheet's malformed-spec guard cannot catch it, because both sides of

@@ -5,7 +5,7 @@
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Thirteen siblings carry the rest of the suite (enumerated below),
+// been done. Fourteen siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -13,7 +13,7 @@
 // engine regression would then have to know which half to open.
 //
 // Reviewed at the same time as the file's other exception-worthy neighbours;
-// a further concern takes a sibling rather than growing this.
+// if a further concern emerges, it takes a sibling rather than growing this.
 
 // Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
 // context teardown, and handoff semantics.
@@ -24,7 +24,7 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Thirteen siblings carry the rest of the suite, split off at this file's size
+// Fourteen siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
@@ -44,8 +44,10 @@
 // strip IDENTITY across the seam (the announced epoch, its lifecycle drops,
 // and the context-switch force-emit that rides the same transitions),
 // test_scrollengine_focusreport.cpp owns the compositor focus-report
-// contract, and test_scrollengine_grouping.cpp owns same-application and
-// named tab grouping.
+// contract, test_scrollengine_grouping.cpp owns same-application and
+// named tab grouping, and test_scrollengine_tabfocus.cpp owns the tile-focus
+// family (cycleTab, focusTab, and the float refusal and view hand-back they
+// share with the stack-end verbs).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -128,10 +130,6 @@ private Q_SLOTS:
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
     void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
-    void cycleTabWrapsInsteadOfLeavingTheColumn();
-    void focusTabAddressesTabsByOrdinal();
-    void floatingATabRenumbersTheOrdinals();
-    void tabVerbsRefuseWhileFloatingHoldsFocus();
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate
@@ -2400,252 +2398,6 @@ void TestScrollEngineSmoke::contextSwitchFlagRidesChangedScreenSets()
     QCOMPARE(screensSpy.last().at(1).toBool(), true);
     engine->setActiveScreens({QStringLiteral("S1")});
     QCOMPARE(screensSpy.count(), 4);
-}
-
-void TestScrollEngineSmoke::cycleTabWrapsInsteadOfLeavingTheColumn()
-{
-    // The whole reason this verb exists beside the generic directional focus:
-    // focusAdjacentTile refuses at the stack edge, and focusInDirection turns
-    // that refusal into a CROSS-OUTPUT hop. A user cycling tabs must land back
-    // on the first tab instead. Two screens, and S2 is POPULATED and asserted
-    // on: an empty second screen cannot show a leak, because focus landing
-    // nowhere and focus landing on an unoccupied output look identical.
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
-    engine->windowOpened(QStringLiteral("other|z"), QStringLiteral("S2"), 0, 0);
-    engine->windowFocused(QStringLiteral("other|z"), QStringLiteral("S2"));
-    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    // THREE tiles, so a middle position exists. With only two, "step forward
-    // off tile 1" and "wrap forward off tile 2" both land on the same tile
-    // and the adjacent arm is never separated from the wrap arm.
-    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->toggleColumnTabbed(QStringLiteral("S1"));
-
-    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
-    QVERIFY(state);
-    ScrollState* other = stateFor(engine, QStringLiteral("S2"));
-    QVERIFY(other);
-    const QString s2Before = other->strip().activeWindowId();
-    QVERIFY2(!s2Before.isEmpty(), "precondition: S2 must hold a window for a leak to be visible");
-
-    // Seed a known end so the wrap arm is the one under test rather than a
-    // plain adjacent step that happens to succeed.
-    engine->focusWindowTop(QStringLiteral("S1"));
-    const QString first = state->strip().activeWindowId();
-    QVERIFY(!first.isEmpty());
-    QVERIFY(state->strip().activeColumn());
-    QCOMPARE(state->strip().activeColumn()->tiles.size(), 3);
-
-    // A successful verb must APPLY, not merely move activeTileIdx: the
-    // relayout and the announce are what raise the tab and redraw the
-    // indicator, so a cycleTab that skipped them would reach the user as a
-    // chord that does visibly nothing while this test still passed.
-    QSignalSpy placementSpy(engine, &ScrollEngine::placementChanged);
-    QSignalSpy feedbackSpy(engine, &ScrollEngine::navigationFeedback);
-
-    // Forward off the first tab is an ordinary step, onto the MIDDLE tab.
-    engine->cycleTab(1, QStringLiteral("S1"));
-    const QString second = state->strip().activeWindowId();
-    QVERIFY2(second != first, "precondition: the column must have a second tab to step onto");
-    QCOMPARE(placementSpy.count(), 1);
-    QCOMPARE(feedbackSpy.count(), 1);
-    QCOMPARE(feedbackSpy.takeFirst().at(0).toBool(), true);
-
-    // Forward off the MIDDLE tab reaches the third rather than wrapping: the
-    // adjacent arm short-circuits the wrap fallback.
-    engine->cycleTab(1, QStringLiteral("S1"));
-    const QString third = state->strip().activeWindowId();
-    QVERIFY2(third != first && third != second, "a middle step must reach the third tab, not wrap to the first");
-
-    // Forward off the LAST tab wraps to the first, and stays on this screen.
-    engine->cycleTab(1, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), first);
-    QCOMPARE(other->strip().activeWindowId(), s2Before);
-
-    // Backward off the first wraps the other way, to the LAST tab.
-    engine->cycleTab(-1, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), third);
-    QCOMPARE(other->strip().activeWindowId(), s2Before);
-
-    // Out-of-contract deltas are refused outright: a zero must not read as a
-    // press, and must not short-circuit into the wrap fallback. A refusal
-    // emits nothing at all, since the verb returns before the macro runs.
-    placementSpy.clear();
-    feedbackSpy.clear();
-    engine->cycleTab(0, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), third);
-    engine->cycleTab(7, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), third);
-    QCOMPARE(placementSpy.count(), 0);
-    QCOMPARE(feedbackSpy.count(), 0);
-    QCOMPARE(other->strip().activeWindowId(), s2Before);
-}
-
-void TestScrollEngineSmoke::focusTabAddressesTabsByOrdinal()
-{
-    // The verb behind all nine Focus Tab shortcuts. Its refusal arms matter
-    // as much as its success one: an out-of-range ordinal that silently
-    // landed somewhere else would reach the user as a chord that jumps to the
-    // wrong tab, which is worse than one that does nothing.
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
-    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->toggleColumnTabbed(QStringLiteral("S1"));
-
-    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
-    QVERIFY(state);
-    QVERIFY(state->strip().activeColumn());
-    QCOMPARE(state->strip().activeColumn()->tiles.size(), 3);
-    engine->focusWindowTop(QStringLiteral("S1"));
-    const QString first = state->strip().activeWindowId();
-    QVERIFY(!first.isEmpty());
-
-    // Ordinals are 1-based and count the column's tiles in order.
-    engine->focusTab(3, QStringLiteral("S1"));
-    const QString third = state->strip().activeWindowId();
-    QVERIFY2(third != first, "ordinal 3 must not resolve to the first tab");
-    engine->focusTab(2, QStringLiteral("S1"));
-    const QString second = state->strip().activeWindowId();
-    QVERIFY2(second != first && second != third, "ordinal 2 must name the middle tab");
-    engine->focusTab(1, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), first);
-
-    // A successful ordinal applies and announces, like every other focus verb.
-    QSignalSpy placementSpy(engine, &ScrollEngine::placementChanged);
-    QSignalSpy feedbackSpy(engine, &ScrollEngine::navigationFeedback);
-    engine->focusTab(2, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), second);
-    QCOMPARE(placementSpy.count(), 1);
-    QCOMPARE(feedbackSpy.count(), 1);
-    const QList<QVariant> ok = feedbackSpy.takeFirst();
-    QCOMPARE(ok.at(0).toBool(), true);
-    // "tab", not an empty reason: the OSD's arrow default points right, so an
-    // empty reason on the focus action would draw a glyph for a verb that has
-    // no direction.
-    QCOMPARE(ok.at(2).toString(), QStringLiteral("tab"));
-
-    // Already there refuses rather than re-announcing a move that did not
-    // happen.
-    placementSpy.clear();
-    feedbackSpy.clear();
-    engine->focusTab(2, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), second);
-    QCOMPARE(placementSpy.count(), 0);
-    QCOMPARE(feedbackSpy.count(), 1);
-    QCOMPARE(feedbackSpy.takeFirst().at(0).toBool(), false);
-
-    // Past the tab count refuses and leaves focus alone. It still ANNOUNCES,
-    // because the strip answered false rather than the verb rejecting the
-    // ordinal outright.
-    engine->focusTab(4, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), second);
-    QCOMPARE(placementSpy.count(), 0);
-    QCOMPARE(feedbackSpy.count(), 1);
-    QCOMPARE(feedbackSpy.takeFirst().at(0).toBool(), false);
-
-    // Non-positive ordinals are out of contract and refused BEFORE the macro,
-    // so unlike the case above they announce nothing at all.
-    feedbackSpy.clear();
-    engine->focusTab(0, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), second);
-    engine->focusTab(-3, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), second);
-    QCOMPARE(placementSpy.count(), 0);
-    QCOMPARE(feedbackSpy.count(), 0);
-}
-
-void TestScrollEngineSmoke::floatingATabRenumbersTheOrdinals()
-{
-    // The PRODUCTION way a tab leaves a column. The strip's own `minimized`
-    // flag has no daemon caller: the compositor reports a minimize as a float
-    // toggle, which takes the window out of the column entirely. So this, not
-    // the strip-level minimize, is what decides whether a user's numbered
-    // chord still matches the pills they can see.
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
-    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->toggleColumnTabbed(QStringLiteral("S1"));
-
-    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
-    QVERIFY(state);
-    QVERIFY(state->strip().activeColumn());
-    QCOMPARE(state->strip().activeColumn()->tiles.size(), 3);
-
-    // Name the three in stack order before anything leaves.
-    engine->focusTab(1, QStringLiteral("S1"));
-    const QString one = state->strip().activeWindowId();
-    engine->focusTab(2, QStringLiteral("S1"));
-    const QString two = state->strip().activeWindowId();
-    engine->focusTab(3, QStringLiteral("S1"));
-    const QString three = state->strip().activeWindowId();
-    QVERIFY(one != two && two != three && one != three);
-
-    // Float the MIDDLE one out.
-    engine->setWindowFloat(two, true, QStringLiteral("S1"));
-    QVERIFY(state->strip().activeColumn());
-    QCOMPARE(state->strip().activeColumn()->tiles.size(), 2);
-
-    // Ordinal 2 now names what used to be the third tab, which is exactly
-    // what the indicator draws second. Ordinal 3 is out of range.
-    state->setFloatingHasFocus(false);
-    engine->focusTab(1, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), one);
-    engine->focusTab(2, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), three);
-    engine->focusTab(3, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), three);
-}
-
-void TestScrollEngineSmoke::tabVerbsRefuseWhileFloatingHoldsFocus()
-{
-    // Both verbs move focus WITHIN a column, so a floating window holding
-    // focus owns no column for them to act on. Acting anyway would move the
-    // strip's stale active tile and drag focus off the window the user is
-    // looking at.
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
-    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
-    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->toggleColumnTabbed(QStringLiteral("S1"));
-
-    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
-    QVERIFY(state);
-    engine->focusWindowTop(QStringLiteral("S1"));
-    const QString parked = state->strip().activeWindowId();
-    QVERIFY(!parked.isEmpty());
-
-    state->setFloatingHasFocus(true);
-    QSignalSpy placementSpy(engine, &ScrollEngine::placementChanged);
-    QSignalSpy feedbackSpy(engine, &ScrollEngine::navigationFeedback);
-
-    engine->cycleTab(1, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), parked);
-    engine->focusTab(2, QStringLiteral("S1"));
-    QCOMPARE(state->strip().activeWindowId(), parked);
-
-    // Both refusals are audible, and neither relayouts.
-    QCOMPARE(placementSpy.count(), 0);
-    QCOMPARE(feedbackSpy.count(), 2);
-    for (const QList<QVariant>& args : feedbackSpy) {
-        QCOMPARE(args.at(0).toBool(), false);
-        QCOMPARE(args.at(2).toString(), QStringLiteral("no_target"));
-    }
 }
 
 // GUILESS (not APPLESS): a QCoreApplication provides the event

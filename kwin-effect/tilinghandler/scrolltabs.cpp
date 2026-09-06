@@ -724,6 +724,20 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         if (damage.isValid()) {
             KWin::effects->addRepaint(KWin::Rect(damage));
         }
+        // A gesture ends by events stopping, so nothing else can retire the
+        // tab wheel's walk anchor. Retire it here instead: if the anchor's
+        // column now shows a DIFFERENT tab, the change came from something
+        // other than the wheel (a pill click, a keyboard cycle, the daemon)
+        // and the next gesture must start from what the user can see. When
+        // the relay is simply the wheel's own step coming back, the active
+        // tab IS the anchor and it survives, which is what lets the anchor
+        // outrun the model within a gesture.
+        if (!m_tabWheelAnchor.isEmpty()) {
+            const QString activeNow = painter->activePillFor(out, m_tabWheelAnchor);
+            if (!activeNow.isEmpty() && activeNow != m_tabWheelAnchor) {
+                m_tabWheelAnchor.clear();
+            }
+        }
         // The pill under a parked pointer may have moved or vanished: a
         // stale hover would keep the hand (and the interception) over
         // whatever is there now until the next motion. Re-evaluate at the

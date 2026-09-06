@@ -14,7 +14,6 @@
 #include <PhosphorShortcuts/Registry.h>
 
 #include <QHash>
-#include <QSet>
 #include <QStringList>
 #include <QTimer>
 

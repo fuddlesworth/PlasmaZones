@@ -160,3 +160,7 @@ pse_add_test(test_scrollengine_focusreport test_scrollengine_focusreport.cpp)
 # flag means, which column the window-scoped verbs act on, and what survives
 # the transitions that discard the pre-maximize slot.
 pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
+# The tile-focus family: cycleTab and focusTab, plus the float refusal and the
+# panned-view hand-back they share with focusWindowTop/Bottom. Its own file
+# rather than more of the smoke suite, which is past the size ceiling.
+pse_add_test(test_scrollengine_tabfocus test_scrollengine_tabfocus.cpp)

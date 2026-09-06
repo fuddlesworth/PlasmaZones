@@ -22,6 +22,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 // Ids are compared against the STATIC table and the indexed slot prefixes

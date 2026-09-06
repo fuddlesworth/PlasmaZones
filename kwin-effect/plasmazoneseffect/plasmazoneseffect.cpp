@@ -272,15 +272,16 @@ void PlasmaZonesEffect::pointerAxis(KWin::PointerAxisEvent* event)
     if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
         return;
     }
-    // The client never sees a claimed tick, so end the ScrollFactor stream
-    // exactly as the filter's own branches do. Skipping this would leave a
-    // fractional v120 remainder to be applied to the next tick the client
-    // DOES see.
+    // Under the interception the client sees NO tick at all, claimed or not,
+    // so the ScrollFactor stream ends here unconditionally rather than once
+    // per claiming branch. Doing it per branch would leave a fractional v120
+    // remainder from an unclaimed tick (a Ctrl+wheel over a pill, say) to be
+    // applied to the next tick the client does see.
+    if (m_overhangInputFilter) {
+        m_overhangInputFilter->resetScrollFactorStream();
+    }
     if (m_tilingHandler->handleWheelChord(event->delta, event->deltaV120, event->orientation, event->modifiers,
                                           event->buttons)) {
-        if (m_overhangInputFilter) {
-            m_overhangInputFilter->resetScrollFactorStream();
-        }
         return;
     }
     // Tab indicators next, and AFTER the chords, matching the filter: a chord

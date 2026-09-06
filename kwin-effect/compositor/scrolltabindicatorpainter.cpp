@@ -113,14 +113,22 @@ bool ScrollTabIndicatorPainter::setIndicators(KWin::LogicalOutput* output,
     entry.hoverDirtyRects.clear();
     entry.failedBounds = QRect();
     entry.failedScale = 0.0;
-    // The input gate answers for the PIXELS, and the pixels for this model
-    // have not been drawn yet. Leaving it set would let a click or a wheel
-    // arriving before the next paint pass be answered from the NEW hit rects
-    // while the gate still vouches for the OLD model's pixels, so a press
-    // could activate a tab whose pill has never been on screen. notePassOutcome
-    // re-arms it one frame later, and the cost of clearing is that one frame
-    // of declined pill input after a model change.
-    entry.paintedLastPass = false;
+    // DELIBERATELY does not touch paintedLastPass, and it must not: that flag
+    // is not only the click gate. TilingHandler::updateScrollTabHover reads it
+    // to decide whether the pointer is over a pill, and this function's caller
+    // re-runs that hover synchronously on every change. Clearing the flag here
+    // therefore collapses the hover to "not over a pill" on every caption
+    // tick, colour reply and focus relay, which drops the mouse interception,
+    // and the interception is what routes an unmodified wheel over a pill to
+    // PlasmaZonesEffect::pointerAxis in the first place. The tab wheel would
+    // die on its own first step.
+    //
+    // The risk that argues for clearing it is one frame in which a press could
+    // be answered from the NEW hit rects while the pixels on screen are still
+    // the old model's. That is real but strictly smaller, and the rects and
+    // the model are replaced together here, so the press lands on the tab the
+    // user is about to see rather than on an unrelated one. If it ever needs
+    // covering, it needs a SEPARATE flag read only by activateScrollTabAt.
     return true;
 }
 
