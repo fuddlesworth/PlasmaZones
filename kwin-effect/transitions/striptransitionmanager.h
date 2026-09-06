@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 namespace KWin {
+class EffectWindow;
 class GLFramebuffer;
 class GLShader;
 class GLTexture;
@@ -39,18 +40,32 @@ class PlasmaZonesEffect;
 /// no from/to endpoint pair and no progress: wheel scrolling retargets the
 /// view spring with PreserveVelocity on every batch (StripViewAnimator), so
 /// there are no discrete legs for a crossfade to play. Instead, every frame
-/// while the spring is live, the strip layer — columns already translated
-/// by the spring's offset, parked columns relocated, the tab pills blitted
-/// at the anchor's slot, the desktop background beneath — is rendered into
-/// a per-output capture (windows stacked ABOVE the strip are excluded and
-/// composited sharp on top after the pass, so an OSD popped mid-scroll is
-/// never smeared; see PlasmaZonesEffect::m_stripCaptureAboveStrip and the
-/// record-and-return in paintWindow that consumes it), and one
-/// full-screen quad runs the assigned strip pack (data/animations/<id>,
-/// appliesTo ["strip"], sampling uStrip via strip_transition.glsl) over it,
-/// driven by offset/velocity uniforms (iStripMotion). The pack DECORATES the
-/// motion; the spring still owns it, so the curve/duration settings on
-/// `scrolling.view` behave identically with or without a pack.
+/// while the spring is live, the scene — columns already translated by the
+/// spring's offset, parked columns relocated, the tab pills blitted at the
+/// anchor's slot — is rendered into a per-output capture whose ALPHA is the
+/// strip layer's coverage alone. The windows stacked BELOW the strip (the
+/// desktop background, keep-below windows) paint into it first, so the
+/// effect's own backdrop capture (the frost and glass decoration packs)
+/// and plain translucency have their backdrop; KWin's Blur effect is
+/// refused on every window inside the band for the pass (paintWindow
+/// forwards PAINT_WINDOW_TRANSFORMED, which BlurEffect::shouldBlur
+/// honours), as it already is on any translated window. At the band's
+/// bottom edge paintWindow calls snapshotBelowCapture(), which copies that
+/// below-strip content into a second texture (uBelow) and zeroes the
+/// capture's alpha before the columns paint over it. Windows stacked ABOVE
+/// the strip (OSDs, notifications, floats, panels) are skipped and
+/// composited sharp over the pass, so an OSD popped mid-scroll is never
+/// smeared; see PlasmaZonesEffect::m_stripCaptureBelowStrip /
+/// m_stripCaptureAboveStrip and the trigger and record-and-return in
+/// paintWindow that consume them. One full-screen quad then runs the
+/// assigned strip pack (data/animations/<id>, appliesTo ["strip"], sampling
+/// uStrip via strip_transition.glsl, which subtracts uBelow out of every
+/// sample so the pack only ever displaces the strip layer, and whose entry
+/// point re-composites the result over the UNDISPLACED uBelow), driven by
+/// offset/velocity uniforms (iStripMotion). The wallpaper therefore never
+/// moves with the columns. The pack DECORATES the motion; the spring still
+/// owns it, so the curve/duration settings on `scrolling.view` behave
+/// identically with or without a pack.
 ///
 /// The tiling batch path resolves the `scrolling.view` shader beside its
 /// motion-profile resolve and calls notifyLeg() for every output it seeds a
@@ -138,6 +153,50 @@ public:
     /// entry check.
     bool isRunningForOutput(KWin::LogicalOutput* screen) const;
 
+    /// True while this manager holds the compositor's cursor hidden (see
+    /// hideCursorForPass). Feeds PlasmaZonesEffect::isActive() SEPARATELY
+    /// from isRunning(): on the settle path the hide is released only from
+    /// the effect's paint hooks (paintOutput's settle frame, postPaintScreen's
+    /// reap; the off-paint kill paths outputRemoved and reset release it
+    /// themselves), and isRunning() goes false the instant the settle fade's
+    /// window closes.
+    /// When that happens between the last fade frame and the next frame's
+    /// chain build, an isActive() built on isRunning() alone drops the
+    /// effect from the chain with the cursor still hidden and no hook left
+    /// to show it again — the pointer stays invisible until a later leg
+    /// happens to run the release. This keeps the effect in the chain for
+    /// the one extra frame (the last fade frame always damages the output)
+    /// that runs updateCursorHiding.
+    bool holdsCursorHide() const
+    {
+        return m_cursorHidden;
+    }
+
+    /// Release this manager's cursor hide for @p screen when ANOTHER pass
+    /// took the output's frame. While a desktop transition is live,
+    /// paintScreen never reaches paintOutput for that output, so the hide
+    /// taken for a still-live strip leg (its spring keeps integrating under
+    /// the blend) is neither drawn by us nor released: updateCursorHiding
+    /// keeps it for a live pass under the pointer, and nothing else runs.
+    /// A no-op unless this manager holds the hide and the pointer is on
+    /// @p screen, so a strip leg on another output keeps its hide and no
+    /// per-frame hide/show flap arises. The next strip frame after the
+    /// foreign pass ends re-hides through hideCursorForPass, so the pair
+    /// stays balanced. Restores the cursor plane; a software cursor is
+    /// still not drawn by the foreign pass, exactly as it is not for any
+    /// desktop transition without a strip leg.
+    void releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen);
+
+    /// Called by PlasmaZonesEffect::paintWindow, inside the capture walk,
+    /// for the first window that is not below the strip band: copies the
+    /// capture (below-strip content only at that point) into the pass's
+    /// belowTex and zeroes the capture's alpha, so the columns that paint
+    /// next leave the capture's alpha equal to the strip layer's coverage.
+    /// Idempotent per capture through m_stripCaptureBelowSnapshotted; a
+    /// no-op outside a capture. Requires the capture framebuffer to be the
+    /// current one, which is true for the whole walk.
+    void snapshotBelowCapture();
+
     /// Paint one output's strip pass. Returns true when the decorated scene
     /// was drawn (the caller must then SKIP the normal scene paint for this
     /// output); false when the output is not armed, its spring has settled,
@@ -191,6 +250,10 @@ private:
         // settle, so a new burst of scrolling pays one allocation.
         std::unique_ptr<KWin::GLTexture> captureTex;
         std::unique_ptr<KWin::GLFramebuffer> captureFbo;
+        // The below-strip snapshot (uBelow): a copy of the capture taken at
+        // the strip band's bottom edge, before any column paints. Same
+        // size and format as captureTex, allocated and freed with it.
+        std::unique_ptr<KWin::GLTexture> belowTex;
         // Velocity estimation, painted-frame iTime accumulation, batch-jump
         // compensation and the settle fade, extracted into a plain-numbers
         // struct so the arithmetic is unit-testable without a compositor
@@ -218,6 +281,7 @@ private:
     {
         std::unique_ptr<KWin::GLShader> shader; // null == compile failed (sentinel, don't retry)
         int uStripLoc = -1;
+        int uBelowLoc = -1;
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
         int iFrameLoc = -1;
@@ -251,7 +315,15 @@ private:
     /// while a pass paints the output under the pointer the compositor's
     /// cursor is hidden (KWin then neither composites it nor puts it on a
     /// cursor plane) and the pass blits the cursor image itself as its last
-    /// draw, above the composited above-strip windows.
+    /// draw, above the composited above-strip windows. The overlay item's
+    /// OTHER child, the drag-and-drop icon, is deliberately not covered:
+    /// no hide hook exists for it, and no accessor hands the effect the
+    /// item to blit. KWin's drag filter runs ahead of the effects filter
+    /// and handles pointer buttons and motion, touch, keys and tablet
+    /// input, but has no pointerAxis override, so a wheel chord DOES reach
+    /// the strip during a Wayland drag; the icon then rides in the capture
+    /// and is smeared with the columns for the leg. An accepted exclusion,
+    /// not a contract.
     ///
     /// Hides when @p screen's pass is about to capture (its shader compiled
     /// and its capture target allocated, so the pass WILL replace this
@@ -265,7 +337,12 @@ private:
     /// settle frame, so that frame's normal scene paints the cursor rather
     /// than blinking it for a frame, and from every postPaintScreen, so a
     /// pointer crossing to a quiet output gets its cursor back within a
-    /// frame even though the hidden cursor damages nothing there.
+    /// frame even though the hidden cursor damages nothing there. Also run
+    /// on every abort path that erases or abandons a pass (notifyLeg's
+    /// disarm, a compile sentinel or allocation failure mid-leg), so a
+    /// hide taken on the previous frame is not carried into a frame the
+    /// normal scene paints. The one path that shows while a pass is still
+    /// live is releaseCursorHideForForeignPaint.
     void updateCursorHiding();
     /// Render the scene's own cursor item into the pass, at the pointer.
     /// Only meaningful while hideCursorForPass has the cursor hidden: the
@@ -273,6 +350,12 @@ private:
     /// child items), so hiding it from KWin does not hide it from us.
     void drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
+
+    /// Draw @p windows sharp onto the current target, bottom to top, each
+    /// through the effect's own paintWindow with m_directPaintCapture set.
+    /// Used for the above-strip set after the pack's quad.
+    void compositeSharp(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                        const QList<KWin::EffectWindow*>& windows);
 
     /// Erase one entry, freeing its GL resources. Caller ensures a current
     /// GL context (paintOutput is on the paint thread; the off-thread

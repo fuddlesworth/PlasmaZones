@@ -198,8 +198,8 @@ inline constexpr QLatin1StringView DropIndicatorBorderWidth{"drop-indicator-bord
 inline constexpr QLatin1StringView DropIndicatorBorderRadius{"drop-indicator-border-radius"};
 // Per-window scrolling open slots (one per property so independent rules
 // cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
-// OpenColumnPlacement / OpenWindowHeight / OpenMaximized / OpenFocused, read
-// on the open path by the scrolling engine.
+// OpenColumnPlacement / OpenWindowHeight / OpenMaximized / OpenFocused /
+// OpenTabGroup, read on the open path by the scrolling engine.
 //
 // Two ids in this block are NOT scrolling-engine open slots and sit here only
 // because their actions are authored alongside the family: OpenFullscreen is
@@ -222,6 +222,7 @@ inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 inline constexpr QLatin1StringView OpenMaximized{"open-maximized"};
 inline constexpr QLatin1StringView OpenFocused{"open-focused"};
+inline constexpr QLatin1StringView OpenTabGroup{"open-tab-group"};
 inline constexpr QLatin1StringView OpenFullscreen{"open-fullscreen"};
 inline constexpr QLatin1StringView ScrollFactor{"scroll-factor"};
 // Per-context overlay-property slots (one per property so independent rules

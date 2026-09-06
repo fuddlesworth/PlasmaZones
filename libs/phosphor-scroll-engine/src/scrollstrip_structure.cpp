@@ -282,7 +282,8 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
 }
 
 bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
-                                           const ScrollLayoutParams& params, int minWidth, int minHeight)
+                                           const ScrollLayoutParams& params, int minWidth, int minHeight,
+                                           std::optional<ColumnDisplay> displayOverride)
 {
     if (windowId.isEmpty() || containsWindow(windowId) || columnIndex < 0 || columnIndex >= m_columns.size()) {
         return false;
@@ -290,6 +291,12 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
     const int prevIdx = m_activeColumnIdx;
     const int oldViewOffset = viewOffsetFor(params);
     Column& col = m_columns[columnIndex];
+    // Before the join, for insertWindowIntoActiveColumn's reason: a column
+    // turning tabbed hands its extent to the tab on show, and after the
+    // append that would be the arrival, whose height is the context default.
+    if (displayOverride) {
+        applyColumnDisplay(col, *displayOverride);
+    }
     Tile tile;
     tile.windowId = windowId;
     tile.minWidth = minWidth;

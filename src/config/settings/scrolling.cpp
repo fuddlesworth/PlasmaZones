@@ -27,13 +27,14 @@ namespace PlasmaZones {
 using settings_detail::clampColumnWidthForKind;
 using settings_detail::reseedColumnWidthForKind;
 
-// ISettings gives four scrolling getters a defaulted body returning a
+// ISettings gives five scrolling getters a defaulted body returning a
 // hardcoded value, so a stub or a partial implementer answers without
 // reaching a Settings instance. That header cannot call ConfigDefaults (the
 // interface layer does not depend on the config layer), so the agreement is
-// pinned here, in a TU that sees both: three of the four just below, and the
+// pinned here, in a TU that sees both: three of the five just below, the
+// same-app tab-grouping toggle after the crop-straddlers pin, and the
 // drop-indicator default with its paint block further down. See the note
-// above the four defaults in isettings.h.
+// above the five defaults in isettings.h.
 static_assert(ConfigDefaults::scrollingTabIndicatorEnabled(),
               "ISettings::scrollingTabIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
@@ -51,6 +52,13 @@ static_assert(ConfigDefaults::scrollingKeepFloatingAbove() == ConfigDefaults::au
 // same pin, different interface and direction.
 static_assert(!ConfigDefaults::scrollingCropStraddlers(),
               "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
+// Same-app tab grouping carries the defaulted getter on BOTH interfaces
+// (ISettings for the D-Bus registry, IScrollSettings for the engine), each
+// answering false; one pin covers both because Settings overrides them with
+// a single body.
+static_assert(
+    !ConfigDefaults::scrollingGroupSameAppAsTabs(),
+    "ISettings/IScrollSettings::scrollingGroupSameAppAsTabs default to false — update them with this default");
 // The strip-axis tri-state gets the identical pin: IScrollSettings'
 // defaulted getter answers 0 (Auto), and an implementor that has not heard
 // of the option must resolve the axis from its work area, never force one.
@@ -581,6 +589,10 @@ P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositi
 P_STORE_GET(bool, scrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
 P_STORE_SET_BOOL(setScrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey,
                  scrollingFocusNewWindowsChanged)
+
+P_STORE_GET(bool, scrollingGroupSameAppAsTabs, scrollingBehaviorGroup, groupSameAppAsTabsKey, bool)
+P_STORE_SET_BOOL(setScrollingGroupSameAppAsTabs, scrollingBehaviorGroup, groupSameAppAsTabsKey,
+                 scrollingGroupSameAppAsTabsChanged)
 
 P_STORE_GET(bool, scrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey, bool)
 P_STORE_SET_BOOL(setScrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,

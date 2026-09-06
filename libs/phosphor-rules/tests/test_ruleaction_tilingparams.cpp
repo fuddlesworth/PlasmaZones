@@ -730,6 +730,48 @@ private Q_SLOTS:
                 }
             }
         }
+        // OpenTabGroup: a free-form name, the second plain-string Value in the
+        // vocabulary after the font family and the OPPOSITE contract on
+        // empty: a group with no name names nothing, so empty and
+        // whitespace-only are rejected, non-strings are rejected, and the
+        // cap is measured on the TRIMMED value (so a padded-to-cap name is
+        // accepted where the font family's padded case is too). Swap the
+        // descriptor's validator for hasStringAllowingEmpty, or drop its
+        // trimmed(), and the rows below catch it.
+        {
+            rejectsMissingValue(ActionType::OpenTabGroup);
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::OpenTabGroup));
+            const auto rejectsValue = [&o](const QJsonValue& value) {
+                o.insert(QStringLiteral("value"), value);
+                QVERIFY(!RuleAction::fromJson(o).has_value());
+            };
+            const auto acceptsValue = [&o](const QJsonValue& value) {
+                o.insert(QStringLiteral("value"), value);
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY(loaded.has_value());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenTabGroup));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY(roundTripped.has_value());
+                QCOMPARE(*roundTripped, *loaded);
+            };
+            rejectsValue(QString());
+            rejectsValue(QStringLiteral("   "));
+            rejectsValue(true);
+            rejectsValue(1);
+            rejectsValue(QString(MaxTabGroupNameLength + 1, QLatin1Char('x')));
+            acceptsValue(QStringLiteral("work"));
+            acceptsValue(QString(MaxTabGroupNameLength, QLatin1Char('x')));
+            const QString paddedGroup = QString(2, QLatin1Char(' ')) + QString(MaxTabGroupNameLength, QLatin1Char('x'));
+            acceptsValue(paddedGroup);
+            // The descriptor publishes the cap so the editor's text field can
+            // bound input at the same number the validator enforces.
+            const auto desc = ActionRegistry::instance().descriptor(QString(ActionType::OpenTabGroup));
+            QVERIFY(desc.has_value());
+            QCOMPARE(desc->params.size(), 1);
+            QVERIFY(desc->params.first().max.has_value());
+            QCOMPARE(static_cast<int>(*desc->params.first().max), MaxTabGroupNameLength);
+        }
         // ScrollFactor: numeric multiplier, reject-not-clamp against the
         // shared Min/MaxScrollFactor bounds — an out-of-range hand-edit must
         // fail load, not saturate into a 10x scroll.

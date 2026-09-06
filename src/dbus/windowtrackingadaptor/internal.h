@@ -323,6 +323,10 @@ inline QString focused()
 {
     return QStringLiteral("focused");
 }
+inline QString tabGroup()
+{
+    return QStringLiteral("tabGroup");
+}
 } // namespace ScrollOpenKeys
 
 /// Keys of the per-window colour-override maps: tabColorRuleParams (consumed by

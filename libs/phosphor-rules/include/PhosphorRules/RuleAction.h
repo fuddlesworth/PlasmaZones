@@ -108,6 +108,9 @@ struct PHOSPHORRULES_EXPORT RuleAction
  *     offers; labels for each are translated upstream.
  *   - `bool` is a toggle (wire value is a JSON bool); may carry
  *     `defaultDisplay` (1.0 → seed true, 0.0 → seed false).
+ *   - `string` may carry `max` as a CHARACTER cap on the trimmed value (not
+ *     a display-unit bound): the editor's text field reads it as
+ *     maximumLength and the validator rejects longer values at load.
  *   - `color` is a `#AARRGGBB` hex string (alpha-first, matching
  *     QColor::HexArgb); seeded by the settings layer's `defaultPayloadFor`
  *     "color" branch (defaultDisplay is a double, so it cannot carry a colour

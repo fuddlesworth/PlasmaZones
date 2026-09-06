@@ -733,6 +733,24 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Open (invalid)")
                                                        : PhosphorI18n::tr("Open: %1").arg(shown);
         }
+        if (action.type == ActionType::OpenTabGroup) {
+            // Three states, the SetTabIndicatorFontFamily shape below, except
+            // that empty is a reject here: a group with no name names nothing,
+            // and the descriptor refuses it. The length cap mirrors the
+            // descriptor's too, so a hand-edited over-long name reads as
+            // invalid rather than as a value the loader will drop.
+            if (raw.isUndefined() || raw.isNull()) {
+                return PhosphorI18n::tr("Tab group");
+            }
+            if (!raw.isString()) {
+                return PhosphorI18n::tr("Tab group (invalid)");
+            }
+            const QString name = raw.toString().trimmed();
+            if (name.isEmpty() || name.size() > PhosphorRules::MaxTabGroupNameLength) {
+                return PhosphorI18n::tr("Tab group (invalid)");
+            }
+            return PhosphorI18n::tr("Tab group: %1").arg(name);
+        }
         // ── tab-indicator overrides ──
         // The three bool actions are already returned by boolActionStateLabel,
         // like OpenTabbed. Every summary here says "tab" so a rule list mixing

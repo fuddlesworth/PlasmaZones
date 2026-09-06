@@ -952,10 +952,11 @@ private:
      * decoration (the ~30fps backdrop refold and the animated-pack pump),
      * prePaintScreen's tab-anchor election skips a parked column so an
      * anchor that will never paint cannot win, StripTransitionManager's
-     * above-strip election skips one when picking the stacking boundary its
-     * capture composites around (falling back to the topmost PARKED member
-     * when every column on the output is parked, rather than capturing the
-     * whole scene), the desktop-transition capture excludes one from the
+     * two band-boundary elections (the bottommost column, which gates the
+     * below-strip snapshot, and the topmost, above which the capture
+     * composites sharp) skip one, falling back to the parked members when
+     * every column on the output is parked rather than capturing the
+     * whole scene, the desktop-transition capture excludes one from the
      * outgoing scene, and the tab-strip builder skips one when deciding which
      * members still warrant a pill. Note the anchor election runs BEFORE the strip view
      * animator advances for the frame, so its answer is one advance behind
@@ -1793,6 +1794,10 @@ private:
     /// texture stays canvas-ALIGNED (same padded rect, same normalized
     /// backdropRect space) at reduced density; only the blit's destination
     /// arithmetic scales.
+    /// After the blits the texture's alpha is stamped to 1 across its whole
+    /// extent: the strip pass zeroes its capture's alpha as a coverage side
+    /// channel, so a blit taken inside that walk arrives with alpha 0 under
+    /// scene-coloured texels. Packs may treat uBackdrop as opaque.
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                KWin::EffectWindow* w, const WindowDecoration& wb,
                                const KWin::Region& paintedDeviceRegion, const QRectF& animatedFrame = QRectF(),
@@ -1836,6 +1841,12 @@ private:
     /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
     /// warns again.
     bool m_opacityTintFallbackWarned = false;
+    /// Once-latched journal warning for a backdrop texture or framebuffer
+    /// that failed to allocate (captureWindowBackdrop). The capture retries
+    /// every paint and the pane is absent meanwhile, so an unlatched
+    /// warning would spam at vsync rate. Never reset: an allocation that
+    /// fails is a VRAM state, not a pack state, and the first line says it.
+    bool m_backdropAllocWarned = false;
 
     /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
     /// scan runs on the compositor paint path, and a fresh per-scan QByteArray
@@ -2491,26 +2502,38 @@ private:
 
     /// Latched by StripTransitionManager around its capture's paintScreen:
     /// while set, paintWindow skips every window in the above-strip set
-    /// below and records it, so the pass can composite exactly that set
-    /// sharp on top of the shader output. Null outside a capture. The
-    /// stored value is the capture's output; the record site only tests it
-    /// for truthiness (membership in the set already encodes the output),
+    /// and records it, so the pass can composite exactly that set sharp
+    /// over the shader output; fires the below-strip snapshot on the first
+    /// window outside the below-strip set; and forwards the transformed
+    /// bit for every window in between (the band). Null outside a capture.
+    /// The stored value is the capture's output; the record site only tests
+    /// it for truthiness (membership in a set already encodes the output),
     /// so treat the pointer as a latch with a debugging-friendly value, not
     /// as something compared against.
     KWin::LogicalOutput* m_stripCaptureExclusionOutput = nullptr;
-    /// Which windows the current capture excludes: everything ABOVE the
-    /// topmost strip member (a column managed by the capture output) in
-    /// KWin's stacking order that also intersects
-    /// the capture output. Prebuilt by StripTransitionManager::paintOutput
+    /// Which windows the current capture excludes ABOVE the strip:
+    /// everything above the topmost strip member (a column managed by the
+    /// capture output) in KWin's stacking order that also intersects the
+    /// capture output. Prebuilt by StripTransitionManager::paintOutput
     /// right before its capture and cleared by the same scope guard as the
     /// latch — a stacking FACT, where the old role-based predicate promoted
     /// below-strip floats and closing columns above the shader output.
     QSet<KWin::EffectWindow*> m_stripCaptureAboveStrip;
-    /// The windows skipped by the current capture, in paint (bottom-to-top
-    /// stacking) order. Filled while the latch above is set; consumed by
-    /// the same paintOutput call on the normal path, and cleared by an
-    /// unwind guard when the capture's scene walk throws — either way
-    /// entries never outlive the frame.
+    /// Every window BELOW the strip band in the stacking order, whether or
+    /// not it touches the capture output; gates the snapshot trigger and
+    /// the transformed-bit forward (a window in neither set is a band
+    /// window). Built and documented beside the above set in
+    /// StripTransitionManager::paintOutput; same lifetime.
+    QSet<KWin::EffectWindow*> m_stripCaptureBelowStrip;
+    /// Set once per capture at the strip band's bottom edge by
+    /// StripTransitionManager::snapshotBelowCapture (see its declaration);
+    /// reset with the latch.
+    bool m_stripCaptureBelowSnapshotted = false;
+    /// The above-strip windows skipped by the current capture, in paint
+    /// (bottom-to-top stacking) order. Filled while the latch above is set;
+    /// consumed by the same paintOutput call on the normal path, and
+    /// cleared by an unwind guard when the capture's scene walk throws —
+    /// either way entries never outlive the frame.
     QList<KWin::EffectWindow*> m_stripCaptureSkippedWindows;
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);

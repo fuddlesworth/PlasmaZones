@@ -352,15 +352,16 @@ public:
         return false;
     }
 
-    // The four defaults below are spelled as literals rather than calling
+    // The five defaults below are spelled as literals rather than calling
     // their ConfigDefaults twins, because this interface header deliberately
     // does not depend on the config layer. A stub answering the opposite of
     // what the real Settings would is a silent behaviour split, so each is
     // pinned from the other side: settings/scrolling.cpp — a TU that sees
     // both — static_asserts the tab-indicator default, the drop-indicator
-    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() and
-    // ConfigDefaults::scrollingKeepFloatingAbove() against the literals here,
-    // and names this comment. Change any of them and fix both places.
+    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
+    // ConfigDefaults::scrollingKeepFloatingAbove() and
+    // ConfigDefaults::scrollingGroupSameAppAsTabs() against the literals
+    // here, and names this comment. Change any of them and fix both places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default because two readers reach it through this interface
@@ -596,6 +597,25 @@ public:
     /// Writer for the toggle above, same no-op-default rationale as
     /// setScrollingRestoreFloatedWindowsOnLogin.
     virtual void setScrollingKeepFloatingAbove(bool /*keep*/)
+    {
+    }
+
+    /// Open a fresh scrolling window as a tab of a column that already holds
+    /// a window of the same application (Scrolling.Behavior.GroupSameAppAsTabs).
+    /// Defaulted like the two toggles above so the D-Bus settings registry
+    /// registers the key through the interface (the preferred shape for new
+    /// keys). The engine reads it through IScrollSettings, which declares the
+    /// same defaulted getter; Settings overrides both with one body. Pinned to
+    /// ConfigDefaults::scrollingGroupSameAppAsTabs() by the static_assert in
+    /// settings/scrolling.cpp.
+    virtual bool scrollingGroupSameAppAsTabs() const
+    {
+        return false;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingRestoreFloatedWindowsOnLogin.
+    virtual void setScrollingGroupSameAppAsTabs(bool /*group*/)
     {
     }
 
@@ -1067,6 +1087,7 @@ Q_SIGNALS:
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();
     void scrollingFocusNewWindowsChanged();
+    void scrollingGroupSameAppAsTabsChanged();
     void scrollingFocusFollowsMouseChanged();
     void scrollingFocusFollowsMouseMaxScrollChanged();
     void scrollingStickyWindowHandlingChanged();

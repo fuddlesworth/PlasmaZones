@@ -21,6 +21,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -422,6 +423,42 @@ private Q_SLOTS:
         surface.insert(QStringLiteral("geometryGrid"), 8);
         const PackResult ok = validate(tmp, QStringLiteral("surface-vert"), surface);
         QVERIFY(!ok.report.contains(QStringLiteral("geometryGrid is ignored")));
+    }
+
+    /// The screen-level passes bind only their own scene captures, so a
+    /// declared `textures` array is dead on them, and on the preview branch
+    /// it would alias the capture slots. A strip pack is told; a single
+    /// surface pack, whose textures are real, is not.
+    void screenLevelPacksAreToldTheirTexturesAreIgnored()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        const auto declareTexture = [&tmp](QJsonObject& obj, const QString& id) {
+            const QString dir = tmp.filePath(id);
+            QDir().mkpath(dir);
+            QImage px(1, 1, QImage::Format_RGBA8888);
+            px.fill(Qt::white);
+            QVERIFY(px.save(dir + QStringLiteral("/tile.png")));
+            QJsonObject tex;
+            tex.insert(QStringLiteral("path"), QStringLiteral("tile.png"));
+            obj.insert(QStringLiteral("textures"), QJsonArray{tex});
+        };
+
+        QJsonObject strip = basePack(QStringLiteral("strip-tex"));
+        strip.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("strip")}));
+        declareTexture(strip, QStringLiteral("strip-tex"));
+        const PackResult r = validate(tmp, QStringLiteral("strip-tex"), strip);
+        QVERIFY2(r.report.contains(QStringLiteral("textures are ignored for desktop/strip packs")),
+                 qPrintable(r.report));
+
+        QJsonObject surface = basePack(QStringLiteral("surface-tex"));
+        surface.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("appearance")}));
+        declareTexture(surface, QStringLiteral("surface-tex"));
+        const PackResult ok = validate(tmp, QStringLiteral("surface-tex"), surface);
+        QVERIFY2(!ok.report.contains(QStringLiteral("textures are ignored")), qPrintable(ok.report));
     }
 
     /// A multipass pack's BUFFER shaders are compiled, not just existence
