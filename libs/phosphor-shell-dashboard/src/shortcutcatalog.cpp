@@ -43,7 +43,11 @@ ShortcutCatalog::ShortcutCatalog(QObject* parent)
     // means an open sheet reflects a rebind on its next open.
     QDBusConnection::sessionBus().connect(Name, ObjectPath, PhosphorProtocol::Service::Interface::Control,
                                           QStringLiteral("shortcutsChanged"), this, SLOT(refresh()));
-    setAvailable(QDBusConnection::sessionBus().interface()->isServiceRegistered(Name));
+    // interface() is null when the session bus is not connected, which a
+    // headless or bus-less environment reaches. Dereferencing it there turns
+    // a degraded catalog into a construction-time crash.
+    auto* bus = QDBusConnection::sessionBus().interface();
+    setAvailable(bus && bus->isServiceRegistered(Name));
 }
 
 ShortcutCatalog::~ShortcutCatalog() = default;

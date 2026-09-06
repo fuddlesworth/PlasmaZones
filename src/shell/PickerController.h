@@ -38,11 +38,15 @@ public:
     Q_INVOKABLE void toggle(const QString& screenName = QString());
     Q_INVOKABLE void hide();
 
-    // What shell.qml mounts: per output the bar, the OSD overlay, the
-    // toast overlay, the polkit dim and the picker strip; shared, the
-    // launcher, the control center and the power menu.
-    static constexpr int kSurfacesPerScreen = 5;
-    static constexpr int kSharedSurfaces = 3;
+    // What the shell mounts, and therefore how many surfaces a palette
+    // change repaints. This feeds a user-visible figure ("N targets" on the
+    // picker strip), so it has to match the host: per output the wallpaper,
+    // the bar, the OSD overlay, the toast overlay, the picker strip, the
+    // polkit dim and the lock surface; shared, the power menu, the control
+    // centre, the launcher, the polkit prompt, the dashboard and the
+    // cheatsheet.
+    static constexpr int kSurfacesPerScreen = 7;
+    static constexpr int kSharedSurfaces = 6;
 
 Q_SIGNALS:
     void openScreenChanged();

@@ -34,9 +34,6 @@ Item {
     // the registry (and, later, from the user's tile arrangement); a test
     // passes a literal list.
     property list<string> tileIds: []
-    // Kept for hosts that still set it; rails always span the pane, so
-    // this no longer changes the layout.
-    property int columns: 1
     // Detail view currently open, or "" for the grid. Read-only for
     // consumers; drive it through openDetail() / closeDetail().
     readonly property alias detailTileId: priv.detailTileId
@@ -156,9 +153,12 @@ Item {
             if (item) {
                 built[id] = item;
                 // Layout is the host's job, not the tile's: a tile would
-                // otherwise have to know the column count to span a row.
-                // It declares the intent via `spansRow` and this applies it.
-                item.Layout.fillWidth = true;
+                // otherwise have to know the pane's width to span it. It
+                // declares the intent via `spansRow` and this applies it.
+                // Tiles come from a provider, so a third-party one may
+                // legitimately not span; a tile that declares nothing gets
+                // the rail default, which is to span.
+                item.Layout.fillWidth = item.spansRow === undefined || item.spansRow;
                 // The tile chrome carries no id of its own; bind the
                 // detail request here so Tile.qml stays a pure view.
                 if (item.detailRequested !== undefined)

@@ -61,9 +61,6 @@ Item {
     property real edgeMargin: Tokens.spacing_s
     // Room the bar takes at the top, so a top-edge band sits under it.
     property real topInset: Tokens.bar_thickness
-    // Kept for hosts that set it; bands no longer float.
-    property real bottomMargin: 0
-
     readonly property alias currentKind: priv.currentKind
     // Whether the current band sits on a window edge rather than the
     // screen edge.

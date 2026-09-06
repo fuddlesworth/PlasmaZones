@@ -54,6 +54,12 @@ FocusScope {
     readonly property real cellW: Math.max(160, Math.round(width * cellFraction))
     readonly property real cellH: Math.round(cellW / _aspect)
     readonly property real _aspect: height > 0 && width > 0 ? width / height : 16 / 9
+    // n cells need n*cellW + (n-1)*gap, and the grid is centred with a
+    // gap-sized margin reserved on each side, so the usable width is
+    // width - 2*gap and the +gap turns (n-1) gaps into n. Written out rather
+    // than folded to `width - gap`, which reads like an off-by-one: dropping
+    // the margin would fit one more column and let the grid touch the
+    // screen edges.
     readonly property int columns: Math.max(1, Math.floor((width - 2 * gap + gap) / (cellW + gap)))
     readonly property int rows: Math.ceil(cellCount / columns)
 

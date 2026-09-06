@@ -79,7 +79,6 @@ TestCase {
         const cc = createTemporaryObject(controlCenterComp, testCase);
         verify(cc, "ControlCenter instantiates");
         compare(cc.detailTileId, "", "no detail view at rest");
-        compare(cc.columns, 1, "rails span the pane; one column");
     }
 
     function test_materialises_each_tile_id_in_order() {

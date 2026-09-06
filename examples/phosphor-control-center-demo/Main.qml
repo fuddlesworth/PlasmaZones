@@ -82,7 +82,6 @@ Window {
                     anchors.fill: parent
                     provider: controlCenterController
                     tileIds: controlCenterController.tileIds
-                    columns: 2
 
                     onTileResolved: (tileId, created) => {
                         if (!created)
