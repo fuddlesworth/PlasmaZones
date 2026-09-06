@@ -7,7 +7,7 @@
 # the queue, per-toast lifecycle, and add/remove/reflow transitions) plus
 # the Toast card (image + rich text + hover-to-pause auto-dismiss).
 # Themed through phosphor-theme (tokens, Motion, StateLayer) and the
-# phosphor-shell-widgets ElevationShadow atom.
+# phosphor-shell-widgets atoms (SpectrumStroke, SettleAnimation, DecorationSlot).
 #
 # Phase 3.4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -29,7 +29,7 @@ endif()
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # Toast imports Phosphor.Theme (tokens) and Phosphor.Widgets
-# (ElevationShadow). The import scanner needs them visible at build time,
+# (the atoms). The import scanner needs them visible at build time,
 # and consumers need their runtime plugins linked. In-tree builds always
 # have the sibling targets; fall back to installed packages.
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
@@ -37,6 +37,13 @@ if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
 endif()
 if(NOT TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)
     find_package(PhosphorShellWidgets CONFIG QUIET)
+endif()
+# ToastHost imports Phosphor.Shell for the PlacementMap singleton (the
+# concerned window's rect, A3 §3). The module's own registrar only carries
+# PerScreen; the singleton is registered by ShellEngine at runtime, and
+# ToastHost probes for it, so a host without it (demo, test) still loads.
+if(NOT TARGET PhosphorShell::PhosphorShellQml)
+    find_package(PhosphorShell CONFIG QUIET)
 endif()
 
 if(COMMAND qt_policy)
@@ -75,6 +82,11 @@ qt_add_qml_module(PhosphorShellNotificationsQml
         Phosphor.Widgets
         QtQuick.Shapes
         QtQuick.Layouts
+    # DEPENDENCIES rather than IMPORTS: Phosphor.Shell's runtime types are
+    # registered imperatively and the qmldir only lists PerScreen, so the
+    # scanner just needs the module named, not its names injected.
+    DEPENDENCIES
+        Phosphor.Shell
     SOURCES
         src/phosphorshellnotifications_qml_plugin.cpp
     QML_FILES ${_phosphor_notifications_qml_files}
@@ -105,6 +117,14 @@ if(TARGET PhosphorTheme::PhosphorThemeQml)
 endif()
 if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorShellNotificationsQml PUBLIC PhosphorThemeQmlplugin)
+endif()
+# The Phosphor.Shell module + registrar, so `import Phosphor.Shell` in
+# ToastHost resolves in every host, singleton or not.
+if(TARGET PhosphorShell::PhosphorShellQml)
+    target_link_libraries(PhosphorShellNotificationsQml PUBLIC PhosphorShell::PhosphorShellQml)
+endif()
+if(TARGET PhosphorShellQmlplugin)
+    target_link_libraries(PhosphorShellNotificationsQml PUBLIC PhosphorShellQmlplugin)
 endif()
 
 # No install rules: STATIC, in-tree-only QML module (like the sibling

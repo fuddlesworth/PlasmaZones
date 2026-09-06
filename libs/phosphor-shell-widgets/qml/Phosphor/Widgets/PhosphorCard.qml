@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Widgets.PhosphorCard, M3 elevated surface container.
+// Phosphor.Widgets.PhosphorCard, a rounded surface container.
 //
-// A rounded surface-container panel with an M3 elevation shadow and a
-// padded content area. Children declared inside the card land in the
-// padded area via the default property:
+// A rounded surface-container panel with a spectrum stroke for depth (05
+// R2: no shadow on chrome) and a padded content area. Children declared
+// inside the card land in the padded area via the default property:
 //
 //   PhosphorCard {
 //       elevation: 2
@@ -13,7 +13,8 @@
 //
 // Size follows the content's implicit size plus padding, so a card wraps
 // its contents by default; give the card an explicit width / height to
-// override. `elevation` maps to the M3 tiers in ElevationShadow.
+// override. `elevation` picks the M3 tint tier from Tokens and, above 1,
+// lights the stroke.
 
 import QtQuick
 import Phosphor.Theme
@@ -25,25 +26,44 @@ Item {
     // root, so the elevation surface stays behind them.
     default property alias content: contentArea.data
 
-    // M3 elevation tier (0..5). Drives both halves of elevation: the
-    // shadow (forwarded to ElevationShadow) and the surface tint overlay
-    // (the colour shift below).
+    // M3 elevation tier (0..5). Drives the surface tint overlay (the
+    // colour shift below) and whether the stroke is lit.
     property int elevation: 1
-    property real radius: Tokens.radius_l
+    property real radius: Tokens.radius_container
+    // Rail-axis hue of the card's stroke.
+    property real t: 0.5
     property real padding: Tokens.spacing_l
 
-    implicitWidth: contentArea.implicitWidth + padding * 2
-    implicitHeight: contentArea.implicitHeight + padding * 2
+    // Measured from the children's IMPLICIT sizes, never from childrenRect.
+    // childrenRect reads each child's actual width, and a child that fills
+    // the content area takes that width from the card, which takes it from
+    // this binding: a loop by construction, silent until someone puts a
+    // fillWidth child in a card. Reading implicitWidth breaks the cycle and
+    // is what the header has always promised. A child that carries no
+    // implicit size contributes nothing, so give such a card an explicit
+    // width.
+    implicitWidth: {
+        let w = 0;
+        const kids = contentArea.children;
+        for (let i = 0; i < kids.length; ++i)
+            w = Math.max(w, kids[i].implicitWidth);
+        return w + root.padding * 2;
+    }
+    implicitHeight: {
+        let h = 0;
+        const kids = contentArea.children;
+        for (let i = 0; i < kids.length; ++i)
+            h = Math.max(h, kids[i].implicitHeight);
+        return h + root.padding * 2;
+    }
 
     // Clamp once so the M3 tint ramp below never indexes out of range.
     readonly property int _level: Math.max(0, Math.min(5, elevation))
 
     // M3 surface tint overlay: an elevated surface is tinted with the
     // surface-tint colour at an elevation-dependent opacity, layered over
-    // the base container colour. This is the colour half of elevation;
-    // ElevationShadow is the shadow half. The per-tier tint opacity is the
-    // `tint` field of the Tokens.elevation_* tiers (the same tier objects
-    // ElevationShadow reads for its shadow), so the whole elevation ramp
+    // the base container colour. The per-tier tint opacity is the `tint`
+    // field of the Tokens.elevation_* tiers, so the whole elevation ramp
     // lives in Tokens.qml. Theme.surface_tint defaults to the primary
     // accent (M3 default) but honours an explicit surface_tint palette
     // token when present.
@@ -63,11 +83,15 @@ Item {
         anchors.fill: parent
         radius: root.radius
         color: root._tintedSurface
-        // Only pay for the layer + shadow pass when actually elevated; a
-        // flat card (elevation 0) renders as a plain rounded surface.
-        layer.enabled: root.elevation > 0
-        layer.effect: ElevationShadow {
-            level: root.elevation
+        opacity: 0.92
+
+        // Depth on chrome is a stroke, not a shadow (05 R2). `elevation`
+        // still tints the ground; it no longer casts.
+        SpectrumStroke {
+            anchors.fill: parent
+            radius: root.radius
+            t: root.t
+            active: root.elevation > 1
         }
 
         Behavior on color {
@@ -83,7 +107,5 @@ Item {
 
         anchors.fill: parent
         anchors.margins: root.padding
-        implicitWidth: childrenRect.width
-        implicitHeight: childrenRect.height
     }
 }

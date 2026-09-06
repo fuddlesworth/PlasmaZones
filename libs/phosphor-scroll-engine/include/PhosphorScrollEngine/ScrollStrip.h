@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/ScrollEngineTypes.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <phosphorscrollengine_export.h>
 
@@ -247,6 +248,12 @@ public:
     /// Move the active column directly to @p target (one list move + one
     /// reanchor — a positional move must not pay per-step swap costs).
     bool moveActiveColumnTo(int target, const ScrollLayoutParams& params);
+    /// Move the column at strip index @p from to strip index @p to and make
+    /// it the active column (a placement map dragging one column past the
+    /// others). Unlike focusColumn, @p from is NOT clamped: an index past the
+    /// end names no column, and moving the last column in its place would be
+    /// a drag nobody made. False for either index out of range or equal.
+    bool moveColumnTo(int from, int to, const ScrollLayoutParams& params);
     bool moveActiveColumnToFirst(const ScrollLayoutParams& params);
     bool moveActiveColumnToLast(const ScrollLayoutParams& params);
     /// Reorder the active tile within its column by @p delta positions.
@@ -752,6 +759,17 @@ public:
     /// Resolve every non-minimized tile's absolute pixel rect against
     /// @p params. Pure function of the current model state; does not mutate.
     ResolvedStrip relayout(const ScrollLayoutParams& params) const;
+
+    /// The whole strip as a renderer of a strip MAP reads it: every column's
+    /// strip position and main extent, every tile's cross extent, the
+    /// viewport's offset and extent on the same axis, and the active column
+    /// (ScrollStripModel documents each field). ONE relayout pass plus one
+    /// cumulative walk over the columns, so the cost is the same as a
+    /// relayout rather than a columnStripPos per column. Pure function of the
+    /// current model state; does not mutate. On a degenerate work area the
+    /// columns still carry their positions and extents while every tile's
+    /// cross extent is 0, since the relayout resolves nothing there.
+    ScrollStripModel stripModel(const ScrollLayoutParams& params) const;
 
     /// True when the whole strip already fits the viewport, i.e. there is
     /// nothing off screen to scroll to. A degenerate work area counts as

@@ -1,12 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Notifications.Toast, a single notification toast card.
+// Phosphor.Notifications.Toast, a single notification card under its band.
 //
-// An elevated card with an optional image/avatar, the app name, a
-// summary, and a rich-text body, plus a close affordance. It owns its
-// own auto-dismiss timer, which pauses while the pointer hovers (so a
-// toast the user is reading does not vanish). Position/stacking is the
-// host's job (ToastHost); this is just the card.
+// A toast is a 2 px spectrum band on the top edge of the window it
+// concerns, or of the work area when it has none (purple; rose while
+// critical, breathing), with the card hanging 8 px under it (A3 §3). The
+// band spans the toast's full width and the card is at most 360 px,
+// centred, so a host that sizes the toast to a window's width gets the
+// band across the window's edge with the card under its middle. The
+// card is abyss glass with a 1 px spectrum stroke, no shadow. It owns its
+// auto-dismiss timer, which pauses while the pointer hovers. Position
+// and stacking are the host's job (ToastHost).
 //
 //   Toast {
 //       appName: "Mail"; summary: "New message"
@@ -26,25 +30,26 @@ Item {
 
     property string appName: ""
     property string summary: ""
-    // Rich text (StyledText subset), matching the freedesktop notification
-    // body markup.
     property string body: ""
     property url imageSource: ""
-    // 0 low, 1 normal, 2 critical. Critical gets an error accent stripe.
+    // 0 low, 1 normal, 2 critical. Critical is rose and breathes.
     property int urgency: 1
-    // Auto-dismiss after this many ms; 0 disables (sticky).
     property int timeout: 5000
+    // Rail-axis hue of the card's stroke, set by the host from its x.
+    property real t: 0.5
+    // The surface pack on the card (A1 §2.4, `shell.phosphor.notification`),
+    // handed down by ToastHost from the composition root. With a chain
+    // engaged the card's own stroke steps aside for the pack's.
+    property Component decoration: null
 
     signal dismissed
 
-    // Exposed so a host can coordinate; also gates the dismiss timer.
     readonly property bool hovered: hover.hovered
+    readonly property bool critical: toast.urgency >= 2
 
     implicitWidth: 360
-    implicitHeight: Math.max(72, row.implicitHeight + 2 * Tokens.spacing_m)
+    implicitHeight: 2 + Tokens.spacing_s + card.implicitHeight
 
-    // Announce the toast to assistive tech. Use the plain-text app name and
-    // summary only; body is StyledText markup and would read its tags aloud.
     Accessible.role: Accessible.Notification
     Accessible.name: [toast.appName, toast.summary].filter(s => s !== "").join(", ")
 
@@ -52,155 +57,213 @@ Item {
         id: hover
     }
 
-    Rectangle {
-        anchors.fill: parent
-        radius: Tokens.radius_l
-        color: Theme.surface_container_high
-        layer.enabled: true
-        layer.effect: ElevationShadow {
-            level: 3
-        }
-    }
+    // The band: purple pending, rose hot. Enters from its centre outward
+    // (the host animates `bandReveal`), and breathes while critical.
+    property real bandReveal: 1
 
-    // Critical-urgency accent stripe.
     Rectangle {
-        visible: toast.urgency >= 2
-        width: Tokens.spacing_xs
-        radius: width / 2
-        anchors.left: parent.left
+        id: band
+
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.margins: Tokens.spacing_s
-        color: Theme.error
+        width: parent.width * Math.max(0, Math.min(1, toast.bandReveal))
+        height: 2
+        color: toast.critical ? Spectrum.hot : Spectrum.pending
+
+        SequentialAnimation on opacity {
+            running: toast.critical && !Motion.reducedMotion
+            loops: Animation.Infinite
+            NumberAnimation {
+                to: 0.55
+                duration: 600
+                easing: Motion.release
+            }
+            NumberAnimation {
+                to: 1
+                duration: 600
+                easing: Motion.reveal
+            }
+        }
     }
 
-    RowLayout {
-        id: row
+    // Swipe to dismiss (A3 §3): a two-finger or one-finger drag to the
+    // right past the threshold dismisses; short of it the card settles
+    // back. Only the x axis, so the stack above never scrolls by mistake.
+    readonly property int swipeThreshold: 72
+    readonly property bool swiping: swipe.active
+
+    DecorationSlot {
+        id: decorationSlot
 
         anchors.fill: parent
-        anchors.margins: Tokens.spacing_m
-        anchors.leftMargin: toast.urgency >= 2 ? Tokens.spacing_xl : Tokens.spacing_m
-        spacing: Tokens.spacing_m
+        component: toast.decoration
+        contentItem: card
+        surfacePath: "shell.phosphor.notification"
+        focused: toast.hovered || toast.critical
+    }
 
-        // Image / avatar, shown only when a source is set.
+    Item {
+        id: card
+
+        // The pack's capture item: the card with its text, re-rendered
+        // through the chain.
+        property bool shaderAnchor: true
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.horizontalCenterOffset: swipe.active ? Math.max(0, swipe.translation.x) : 0
+        anchors.top: parent.top
+        anchors.topMargin: 2 + Tokens.spacing_s
+        width: Math.min(360, toast.width)
+        implicitHeight: Math.max(64, row.implicitHeight + 2 * Tokens.spacing_m)
+        height: implicitHeight
+        // The card fades as it travels, and settles back on release.
+        opacity: swipe.active ? Math.max(0.2, 1 - Math.max(0, swipe.translation.x) / (2 * toast.swipeThreshold)) : 1
+
+        Behavior on anchors.horizontalCenterOffset {
+            enabled: !swipe.active
+            SettleAnimation {}
+        }
+
+        DragHandler {
+            id: swipe
+
+            target: null
+            yAxis.enabled: false
+            xAxis.minimum: 0
+            onActiveChanged: {
+                if (!active && translation.x >= toast.swipeThreshold)
+                    toast.dismissed();
+            }
+        }
+
         Rectangle {
-            visible: String(toast.imageSource) !== ""
-            Layout.preferredWidth: 40
-            Layout.preferredHeight: 40
-            Layout.alignment: Qt.AlignTop
-            radius: Tokens.radius_s
-            clip: true
-            color: Theme.surface_variant
-
-            Image {
-                anchors.fill: parent
-                source: toast.imageSource
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-            }
+            anchors.fill: parent
+            radius: Tokens.radius_container
+            color: Theme.surface_container
+            opacity: 0.92
+        }
+        SpectrumStroke {
+            anchors.fill: parent
+            radius: Tokens.radius_container
+            t: toast.t
+            active: toast.hovered
+            visible: !decorationSlot.active
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: Tokens.spacing_xxs
+        RowLayout {
+            id: row
 
-            Text {
-                visible: toast.appName !== ""
-                text: toast.appName
-                color: Theme.on_surface_variant
-                font.pixelSize: Tokens.font_size_label_s
-                font.weight: Tokens.font_weight_medium
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-
-            Text {
-                visible: toast.summary !== ""
-                text: toast.summary
-                color: Theme.on_surface
-                font.pixelSize: Tokens.font_size_body_l
-                font.weight: Tokens.font_weight_demibold
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-
-            Text {
-                visible: toast.body !== ""
-                text: toast.body
-                color: Theme.on_surface_variant
-                font.pixelSize: Tokens.font_size_body_m
-                textFormat: Text.StyledText
-                wrapMode: Text.WordWrap
-                maximumLineCount: 4
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-        }
-
-        // Close affordance.
-        Item {
-            id: closeButton
-
-            Layout.preferredWidth: 22
-            Layout.preferredHeight: 22
-            Layout.alignment: Qt.AlignTop
-
-            // A real button to assistive tech: named, and activatable via the
-            // AT press action (the pointer path goes through the TapHandler).
-            Accessible.role: Accessible.Button
-            Accessible.name: qsTr("Dismiss notification")
-            Accessible.onPressAction: toast.dismissed()
+            anchors.fill: parent
+            anchors.margins: Tokens.spacing_m
+            spacing: Tokens.spacing_m
 
             Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                color: Theme.on_surface
-                opacity: closeHover.hovered ? StateLayer.hover : 0
+                visible: String(toast.imageSource) !== ""
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 40
+                Layout.alignment: Qt.AlignTop
+                radius: Tokens.radius_edge
+                clip: true
+                color: Theme.surface_variant
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Motion.duration_short_2
-                    }
+                Image {
+                    anchors.fill: parent
+                    source: toast.imageSource
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
                 }
             }
 
-            Shape {
-                anchors.centerIn: parent
-                width: 12
-                height: 12
-                preferredRendererType: Shape.CurveRenderer
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: Tokens.spacing_xxs
 
-                ShapePath {
-                    fillColor: "transparent"
-                    strokeColor: Theme.on_surface_variant
-                    strokeWidth: 1.6
-                    capStyle: ShapePath.RoundCap
+                Text {
+                    visible: toast.appName !== ""
+                    text: toast.appName
+                    // Sender-controlled. The fdo spec allows the markup subset
+                    // in the body only, so everything else stays plain.
+                    textFormat: Text.PlainText
+                    color: Theme.on_surface_variant
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: Tokens.font_size_label_s
+                    font.weight: Tokens.font_weight_medium
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
 
-                    PathSvg {
-                        path: "M 1 1 L 11 11 M 11 1 L 1 11"
-                    }
+                Text {
+                    visible: toast.summary !== ""
+                    text: toast.summary
+                    // Sender-controlled, and plain text per the fdo spec.
+                    textFormat: Text.PlainText
+                    color: Theme.on_surface
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: Tokens.font_size_body_l
+                    font.weight: Tokens.font_weight_demibold
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    visible: toast.body !== ""
+                    text: toast.body
+                    color: Theme.on_surface_variant
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: Tokens.font_size_body_m
+                    textFormat: Text.StyledText
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 4
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
                 }
             }
 
-            HoverHandler {
-                id: closeHover
-            }
+            Item {
+                id: closeButton
 
-            TapHandler {
-                onTapped: toast.dismissed()
+                Layout.preferredWidth: 22
+                Layout.preferredHeight: 22
+                Layout.alignment: Qt.AlignTop
+
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Dismiss notification")
+                Accessible.onPressAction: toast.dismissed()
+
+                Shape {
+                    anchors.centerIn: parent
+                    width: 12
+                    height: 12
+                    preferredRendererType: Shape.CurveRenderer
+                    opacity: closeHover.hovered ? 1 : 0.6
+
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: Theme.on_surface
+                        strokeWidth: 1.4
+                        capStyle: ShapePath.RoundCap
+
+                        PathSvg {
+                            path: "M 1 1 L 11 11 M 11 1 L 1 11"
+                        }
+                    }
+                }
+
+                HoverHandler {
+                    id: closeHover
+                }
+
+                TapHandler {
+                    onTapped: toast.dismissed()
+                }
             }
         }
     }
 
-    // Auto-dismiss. Hovering stops the timer; leaving restarts the full
-    // timeout (a simple, lossless-enough "hover keeps it open"). A zero
-    // timeout is sticky (the user must close it).
     Timer {
-        // Floor a stray negative timeout to a valid interval; running still
-        // gates on timeout > 0, so 0 and negative both mean sticky.
         interval: Math.max(0, toast.timeout)
         running: toast.timeout > 0 && !toast.hovered
         repeat: false

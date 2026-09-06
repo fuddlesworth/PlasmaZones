@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorShell/ShellEngine.h>
+
 #include <PhosphorShell/Environment.h>
 #include <PhosphorShell/FileView.h>
 #include <PhosphorShell/FloatingWindow.h>
 #include <PhosphorShell/LazyLoader.h>
 #include <PhosphorShell/Toplevels.h>
+#include <PhosphorShell/PlacementMap.h>
 #include <PhosphorShell/Workspaces.h>
 #include <PhosphorShell/PanelWindow.h>
 #include <PhosphorShell/PerScreenPanels.h>
 #include <PhosphorShell/PersistentProperties.h>
 #include <PhosphorShell/PopupWindow.h>
+#include <PhosphorShell/QmlRegistration.h>
 #include <PhosphorShell/Process.h>
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellGlobal.h>
@@ -32,6 +35,8 @@
 #include <QPointer>
 #include <QRect>
 #include <QRegion>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLoggingCategory>
@@ -66,6 +71,64 @@ Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 } // namespace
 
 namespace PhosphorShell {
+
+void registerQmlTypes()
+{
+    // QML type registration is process-global (Qt's registry, not per-
+    // engine). Guard with std::call_once so multiple ShellEngines in
+    // the same process (sequential tests, future multi-shell daemon)
+    // don't trip Qt's "type already registered" warning on the second
+    // construction. The registrations themselves are unchanged.
+    static std::once_flag s_qmlRegistered;
+    std::call_once(s_qmlRegistered, [] {
+        qmlRegisterType<PanelWindow>("Phosphor.Shell", 1, 0, "PanelWindow");
+        qmlRegisterType<PopupWindow>("Phosphor.Shell", 1, 0, "PopupWindow");
+        qmlRegisterType<FloatingWindow>("Phosphor.Shell", 1, 0, "FloatingWindow");
+        qmlRegisterType<Variants>("Phosphor.Shell", 1, 0, "Variants");
+        // One panel per screen. Distinct from Variants and PerScreen
+        // because materializePanels() takes ownership of what it finds:
+        // instances must be QObject children to be discovered at all, and
+        // their creator must never destroy them afterwards. See the class
+        // docs for why the stock instantiators cannot satisfy both.
+        qmlRegisterType<PerScreenPanels>("Phosphor.Shell", 1, 0, "PerScreenPanels");
+        qmlRegisterType<LazyLoader>("Phosphor.Shell", 1, 0, "LazyLoader");
+        qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
+        qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
+        qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
+        qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
+        // ForeignToplevel is uncreatable from QML — it's only ever vended by
+        // Toplevels via the toplevelAdded signal / toplevels list. Registering
+        // it as uncreatable lets QML resolve `PhosphorWayland.ForeignToplevel`
+        // type names in delegates (`required property var modelData` doesn't
+        // need the registration, but `as ForeignToplevel` casts do).
+        qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
+            "Phosphor.Shell", 1, 0, "ForeignToplevel",
+            QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
+        qmlRegisterType<SystemClock>("Phosphor.Shell", 1, 0, "SystemClock");
+        // CPU / memory sampling. Kept in C++ rather than parsed from
+        // /proc in QML: the jiffy-delta arithmetic and the malformed-layout
+        // handling are logic, not presentation.
+        qmlRegisterType<SystemUsage>("Phosphor.Shell", 1, 0, "SystemUsage");
+        // Surface-bound idle inhibition (zwp-idle-inhibit-v1): a QML window keeps
+        // its own output awake while visible. This stays a foundation primitive.
+        // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:
+        // it is owned by Phosphor.Service.Idle's IdleService (a multi-stage timeout
+        // policy + surface-less inhibition), registered in src/shell/main.cpp, so a
+        // single monitor arms each timeout.
+        qmlRegisterType<PhosphorWayland::IdleInhibitor>("Phosphor.Shell", 1, 0, "IdleInhibitor");
+        qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
+        // Compositor workspaces (KWin's virtual desktops today). A
+        // singleton for the same reason Toplevels is one: the underlying
+        // manager holds one D-Bus subscription per process.
+        qmlRegisterSingletonType<Workspaces>("Phosphor.Shell", 1, 0, "Workspaces", &Workspaces::create);
+        // The placement engine's geometry per screen (the bar's live map).
+        // One set of daemon subscriptions per engine, screens vended by
+        // forScreen() under C++ ownership.
+        qmlRegisterSingletonType<PlacementMap>("Phosphor.Shell", 1, 0, "PlacementMap", &PlacementMap::create);
+        qmlRegisterUncreatableType<PlacementMapScreen>("Phosphor.Shell", 1, 0, "PlacementMapScreen",
+                                                       QStringLiteral("Vended by PlacementMap.forScreen()"));
+    });
+}
 
 ShellEngine::ShellEngine(Deps deps, QObject* parent)
     : QObject(parent)
@@ -129,54 +192,7 @@ bool ShellEngine::load(const QUrl& shellUrl)
             << "screenProvider exposes no notifier — shell will not reload on screen-topology changes";
     }
 
-    // QML type registration is process-global (Qt's registry, not per-
-    // engine). Guard with std::call_once so multiple ShellEngines in
-    // the same process (sequential tests, future multi-shell daemon)
-    // don't trip Qt's "type already registered" warning on the second
-    // construction. The registrations themselves are unchanged.
-    static std::once_flag s_qmlRegistered;
-    std::call_once(s_qmlRegistered, [] {
-        qmlRegisterType<PanelWindow>("Phosphor.Shell", 1, 0, "PanelWindow");
-        qmlRegisterType<PopupWindow>("Phosphor.Shell", 1, 0, "PopupWindow");
-        qmlRegisterType<FloatingWindow>("Phosphor.Shell", 1, 0, "FloatingWindow");
-        qmlRegisterType<Variants>("Phosphor.Shell", 1, 0, "Variants");
-        // One panel per screen. Distinct from Variants and PerScreen
-        // because materializePanels() takes ownership of what it finds:
-        // instances must be QObject children to be discovered at all, and
-        // their creator must never destroy them afterwards. See the class
-        // docs for why the stock instantiators cannot satisfy both.
-        qmlRegisterType<PerScreenPanels>("Phosphor.Shell", 1, 0, "PerScreenPanels");
-        qmlRegisterType<LazyLoader>("Phosphor.Shell", 1, 0, "LazyLoader");
-        qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
-        qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
-        qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
-        qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
-        // ForeignToplevel is uncreatable from QML — it's only ever vended by
-        // Toplevels via the toplevelAdded signal / toplevels list. Registering
-        // it as uncreatable lets QML resolve `PhosphorWayland.ForeignToplevel`
-        // type names in delegates (`required property var modelData` doesn't
-        // need the registration, but `as ForeignToplevel` casts do).
-        qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
-            "Phosphor.Shell", 1, 0, "ForeignToplevel",
-            QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
-        qmlRegisterType<SystemClock>("Phosphor.Shell", 1, 0, "SystemClock");
-        // CPU / memory sampling. Kept in C++ rather than parsed from
-        // /proc in QML: the jiffy-delta arithmetic and the malformed-layout
-        // handling are logic, not presentation.
-        qmlRegisterType<SystemUsage>("Phosphor.Shell", 1, 0, "SystemUsage");
-        // Surface-bound idle inhibition (zwp-idle-inhibit-v1): a QML window keeps
-        // its own output awake while visible. This stays a foundation primitive.
-        // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:
-        // it is owned by Phosphor.Service.Idle's IdleService (a multi-stage timeout
-        // policy + surface-less inhibition), registered in src/shell/main.cpp, so a
-        // single monitor arms each timeout.
-        qmlRegisterType<PhosphorWayland::IdleInhibitor>("Phosphor.Shell", 1, 0, "IdleInhibitor");
-        qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
-        // Compositor workspaces (KWin's virtual desktops today). A
-        // singleton for the same reason Toplevels is one: the underlying
-        // manager holds one D-Bus subscription per process.
-        qmlRegisterSingletonType<Workspaces>("Phosphor.Shell", 1, 0, "Workspaces", &Workspaces::create);
-    });
+    PhosphorShell::registerQmlTypes();
 
     // Watch BEFORE building. A failed initial load still leaves the watcher
     // armed, so editing the offending shell.qml recovers the process rather
@@ -329,6 +345,16 @@ void ShellEngine::teardown()
         m_shellGlobal->clearSingletons();
     }
     m_rootObject.reset();
+    // Everything the reload drained (popouts, panes, per-screen delegates,
+    // surfaces) went through deleteLater / destroy(), and this function
+    // runs synchronously into the engine's destructor before the event
+    // loop would ever process those deletes. Left alone they outlive the
+    // engine's singletons: ~QQmlEngine destroys PlacementMap first, that
+    // fires bindings on the still-alive delegates, a Behavior then
+    // deferred-creates its animation on a dying engine, and the shell
+    // segfaults (one reload in three, depending on what was open). Flush
+    // the deferred deletes now, while the engine can still do it cleanly.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     m_engine.reset();
 }
 
@@ -951,6 +977,40 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
         if (!guardedPanel) {
             return;
         }
+        // An explicit region replaces the band. Its empty case means
+        // click-through, which a mask cannot say: QWaylandWindow treats an
+        // empty mask as "no input region", the whole surface. So the empty
+        // case goes through Qt::WindowTransparentForInput instead, which
+        // is the same flag phosphor-layer's hide path uses, and which
+        // QWaylandWindow::updateInputRegion tests before the mask.
+        //
+        // The flag is only touched while the window is visible, so an
+        // ordinary hide (which does not keep the surface mapped) is left
+        // alone. Note this guard is NOT sufficient for a panel configured
+        // with SurfaceConfig::keepMappedOnHide: that hide sets the same flag
+        // while the QQuickWindow stays Qt-visible, so any later apply() here
+        // would clear it and a hidden-but-mapped panel would eat clicks
+        // again. No shell panel sets keepMappedOnHide today; adopting it for
+        // one means gating these writes on the surface's own shown state
+        // rather than on QWindow::isVisible().
+        if (guardedPanel->hasExplicitInputRegion()) {
+            const QRegion region = PanelWindow::explicitInputRegion(guardedPanel->inputRegion(), window->size());
+            if (window->isVisible()) {
+                window->setFlag(Qt::WindowTransparentForInput, region.isEmpty());
+            }
+            if (!region.isEmpty()) {
+                window->setMask(region);
+            }
+            window->requestUpdate();
+            return;
+        }
+        // Reverting from an explicit region back to the band rule has to clear
+        // the flag the explicit branch may have set. QWaylandWindow tests it
+        // before the mask, so leaving it set would keep the panel click-through
+        // for the life of the surface no matter what mask is applied below.
+        if (window->isVisible()) {
+            window->setFlag(Qt::WindowTransparentForInput, false);
+        }
         const QRect visible = PanelWindow::visibleBand(edge, guardedPanel->effectiveInputThickness(), window->size());
         if (visible.isEmpty()) {
             return;
@@ -1020,6 +1080,9 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // zone — which is why the depth is a separate property rather than a
     // relaxation of the rule below.
     connect(panel, &PanelWindow::interactiveThicknessChanged, window, apply);
+    // The explicit region is live for the same reason: a toast surface
+    // re-shapes its input to the cards as they come and go.
+    connect(panel, &PanelWindow::inputRegionChanged, window, apply);
 
     // Deliberately NOT connected to thicknessChanged / edgeChanged.
     //

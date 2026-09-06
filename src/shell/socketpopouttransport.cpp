@@ -43,18 +43,25 @@ SocketPopoutTransport::SocketPopoutTransport(ControlCenterController* controller
     // otherwise stay set forever, swallowing the next toggle and leaving the
     // IPC show verb permanently inert.
     if (auto* app = qGuiApp) {
-        QObject::connect(app, &QGuiApplication::screenRemoved, app, [this](QScreen* screen) {
-            if (!screen || m_openHandle.isEmpty() || screen->name() != m_openScreenName) {
-                return;
-            }
-            qCInfo(lcSocketTransport) << "output" << m_openScreenName << "went away with the socket open; dismissing";
-            selfDismiss();
-        });
+        m_screenRemovedConnection =
+            QObject::connect(app, &QGuiApplication::screenRemoved, app, [this](QScreen* screen) {
+                if (!screen || m_openHandle.isEmpty() || screen->name() != m_openScreenName) {
+                    return;
+                }
+                qCInfo(lcSocketTransport)
+                    << "output" << m_openScreenName << "went away with the socket open; dismissing";
+                selfDismiss();
+            });
     }
 }
 
 SocketPopoutTransport::~SocketPopoutTransport()
 {
+    // The lambda above captures `this` but is contexted on qGuiApp, which
+    // outlives this transport (main declares the application first). Without
+    // this disconnect a screenRemoved during teardown would run against freed
+    // memory.
+    QObject::disconnect(m_screenRemovedConnection);
     drain();
 }
 

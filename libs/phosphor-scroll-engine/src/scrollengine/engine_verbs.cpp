@@ -537,6 +537,27 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // same guard the drag auto-scroll tick applies to its public qreal: no
     // in-tree caller can pass one, but this is exported library API.
     const int deltaPx = std::isfinite(percent) ? qRound(percent / 100.0 * params.axis.mainSize(params.workArea)) : 0;
+    scrollViewResolved(deltaPx, screen, state, params);
+}
+
+void ScrollEngine::scrollViewByPx(int px, const QString& screenId)
+{
+    // Same shape as the percent verb minus the conversion: the caller
+    // already holds strip pixels (the placement map pans by the distance it
+    // was dragged), and converting them to a percent only to convert back
+    // would round twice.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("scroll"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    scrollViewResolved(px, screen, state, params);
+}
+
+void ScrollEngine::scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state,
+                                      const ScrollLayoutParams& params)
+{
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
     const QString refusal = deltaPx == 0 ? QStringLiteral("no_movement") : QStringLiteral("no_target");
@@ -581,6 +602,54 @@ void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
     }
     P_SCROLL_VERB(screenId, state->strip().focusAdjacentColumn(delta, params), "focus", true,
                   Detail::physicalTokenForMain(delta, params.axis));
+}
+
+void ScrollEngine::focusColumnAtIndex(int index, const QString& screenId)
+{
+    // A negative index is out of contract (the strip would clamp it to the
+    // first column, which is a press nobody made); refused with the same
+    // deliberate silence as focusColumnPlain's delta check. An index past the
+    // end clamps to the last column, ScrollStrip::focusColumn's own rule.
+    if (index < 0) {
+        return;
+    }
+    // Spelled out rather than through P_SCROLL_VERB because the OSD arrow
+    // needs the PREVIOUS active index, which the macro's op expression would
+    // have overwritten by the time the success reason is evaluated.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const int previous = state->strip().activeColumnIndex();
+    const bool changed = state->strip().focusColumn(index, params);
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(
+        changed, QStringLiteral("focus"),
+        changed ? Detail::physicalTokenForMain(state->strip().activeColumnIndex() > previous ? 1 : -1, params.axis)
+                : QStringLiteral("no_target"),
+        sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+}
+
+void ScrollEngine::moveColumnToIndex(int from, int to, const QString& screenId)
+{
+    // Same silence for a negative index as focusColumnAtIndex. Anything else
+    // out of range reaches the strip, which refuses it, and that refusal is
+    // reported as no_target: the caller named a column, so unlike a negative
+    // index it is a real (if unanswerable) request.
+    if (from < 0 || to < 0) {
+        return;
+    }
+    // The OSD arrow points the way the column travelled, so the direction is
+    // the sign of (to - from) rather than the previous active index the
+    // focus twin reads; P_SCROLL_VERB can express that directly.
+    P_SCROLL_VERB(screenId, state->strip().moveColumnTo(from, to, params), "move", true,
+                  Detail::physicalTokenForMain(to > from ? 1 : -1, params.axis));
 }
 
 void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)

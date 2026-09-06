@@ -2,10 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowdragadaptor.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusServiceWatcher>
 #include <QScreen>
+#include <QUuid>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/interfaces/interfaces.h"
+#include "core/platform/logging.h"
 #include "core/utils/geometryutils.h"
 
 /**
@@ -106,6 +112,26 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 
     m_zoneDetector->setLayout(layout);
 
+    // Drop proxy first: a shell-registered miniature of this screen's zones
+    // (registerDropProxy) stands in for the real zones while the cursor is
+    // inside it. The cell under the cursor resolves to its real zone and
+    // takes the single-zone arm below unchanged, so the overlay lights the
+    // full-size zone and the drop commits there; inside the miniature but
+    // over no cell, or over a cell whose zone the current layout does not
+    // have (a stale registration), is no target. Multi-zone detection never
+    // runs over the proxy: the miniature draws single cells only.
+    const DropProxyRegistry::Resolution proxied = resolveDropProxyAt(screen, screenId, x, y);
+    if (proxied.hit != DropProxyRegistry::Hit::Outside) {
+        PhosphorZones::Zone* zone =
+            proxied.hit == DropProxyRegistry::Hit::Cell ? layout->zoneById(QUuid(proxied.zoneId)) : nullptr;
+        if (zone) {
+            applySingleZoneTarget(zone, screen, screenId, layout);
+        } else {
+            clearZoneTarget();
+        }
+        return;
+    }
+
     // Convert cursor position to screen-relative coordinates for detection
     QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
 
@@ -152,32 +178,106 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
         }
     } else if (result.primaryZone) {
         // Single zone detected (fallback from multi-zone detection)
-        QString zoneId = result.primaryZone->id().toString();
-        if (zoneId != m_currentZoneId || screenId != m_currentZoneScreenId || m_isMultiZoneMode) {
-            m_currentZoneId = zoneId;
-            m_currentZoneScreenId = screenId;
-            m_currentAdjacentZoneIds.clear();
-            m_isMultiZoneMode = false;
-            m_zoneDetector->highlightZone(result.primaryZone);
-            m_overlayService->highlightZone(zoneId);
-
-            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(
-                m_screenManager, result.primaryZone, screen, screenId, layout, m_settings, m_layoutManager);
-            m_currentMultiZoneGeometry = QRect();
-        }
+        applySingleZoneTarget(result.primaryZone, screen, screenId, layout);
     } else {
-        // No zone detected
-        if (!m_currentZoneId.isEmpty() || m_isMultiZoneMode) {
-            m_currentZoneId.clear();
-            m_currentZoneScreenId.clear();
-            m_currentAdjacentZoneIds.clear();
-            m_isMultiZoneMode = false;
-            m_currentZoneGeometry = QRect();
-            m_currentMultiZoneGeometry = QRect();
-            m_zoneDetector->clearHighlights();
-            m_overlayService->clearHighlight();
-        }
+        clearZoneTarget();
     }
+}
+
+void WindowDragAdaptor::applySingleZoneTarget(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
+                                              PhosphorZones::Layout* layout)
+{
+    const QString zoneId = zone->id().toString();
+    if (zoneId != m_currentZoneId || screenId != m_currentZoneScreenId || m_isMultiZoneMode) {
+        m_currentZoneId = zoneId;
+        m_currentZoneScreenId = screenId;
+        m_currentAdjacentZoneIds.clear();
+        m_isMultiZoneMode = false;
+        m_zoneDetector->highlightZone(zone);
+        m_overlayService->highlightZone(zoneId);
+
+        m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout,
+                                                                        m_settings, m_layoutManager);
+        m_currentMultiZoneGeometry = QRect();
+    }
+}
+
+void WindowDragAdaptor::clearZoneTarget()
+{
+    // No zone under the cursor: drop the target only when there was one, so
+    // an idle tick does not re-clear the overlay every frame.
+    if (!m_currentZoneId.isEmpty() || m_isMultiZoneMode) {
+        m_currentZoneId.clear();
+        m_currentZoneScreenId.clear();
+        m_currentAdjacentZoneIds.clear();
+        m_isMultiZoneMode = false;
+        m_currentZoneGeometry = QRect();
+        m_currentMultiZoneGeometry = QRect();
+        m_zoneDetector->clearHighlights();
+        m_overlayService->clearHighlight();
+    }
+}
+
+DropProxyRegistry::Resolution WindowDragAdaptor::resolveDropProxyAt(QScreen* screen, const QString& screenId, int x,
+                                                                    int y) const
+{
+    if (!screen || m_dropProxies.count() == 0) {
+        return {};
+    }
+    // Proxies are registered per physical output (the shell's bar lives on
+    // one), in that output's own pixels. A virtual-screen id resolves to its
+    // physical output, and the cursor is re-based onto the output's origin.
+    const QString physicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    return m_dropProxies.resolve(physicalId, QPoint(x, y) - screen->geometry().topLeft());
+}
+
+void WindowDragAdaptor::watchDropProxyOwner(const QString& service)
+{
+    // At most ONE watcher per peer, never one per registration. The shell
+    // re-sends registerDropProxy whenever the miniature's JSON changes — every
+    // bar geometry or cell-rect change (PlacementMapScreen::sendDropProxy) —
+    // so allocating here per call would add a bus match rule per geometry
+    // change and leak them for the daemon's lifetime. (An unchanged repaint
+    // sends nothing: the shell suppresses an identical payload.)
+    if (m_dropProxyWatchers.contains(service)) {
+        return;
+    }
+    auto* watcher = new QDBusServiceWatcher(service, QDBusConnection::sessionBus(),
+                                            QDBusServiceWatcher::WatchForUnregistration, this);
+    QObject::connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this](const QString& gone) {
+        // The registry owns the screen-equivalence rule and stores the owner
+        // in the same slot as the proxy, so this cannot retire a proxy that
+        // now belongs to a different peer under an alternate spelling of the
+        // same output.
+        const QStringList dropped = m_dropProxies.unregisterProxiesOwnedBy(gone);
+        for (const QString& screenId : dropped) {
+            qCInfo(lcDbusWindow) << "drop proxy owner" << gone << "went away; retired the proxy on" << screenId;
+        }
+        if (auto* stale = m_dropProxyWatchers.take(gone)) {
+            stale->deleteLater();
+        }
+    });
+    m_dropProxyWatchers.insert(service, watcher);
+}
+
+void WindowDragAdaptor::registerDropProxy(const QString& screenId, const QString& proxyJson)
+{
+    // A proxy outlives every individual drag, so it is tied to the life of the
+    // peer that asked for it. Direct (non-D-Bus) calls — the unit tests invoke
+    // this slot through QMetaObject — have no peer, and register unowned.
+    const QString sender = calledFromDBus() ? message().service() : QString();
+    if (!m_dropProxies.registerProxy(screenId, proxyJson, sender)) {
+        return;
+    }
+    qCDebug(lcDbusWindow) << "registerDropProxy: screen" << screenId;
+    if (!sender.isEmpty()) {
+        watchDropProxyOwner(sender);
+    }
+}
+
+void WindowDragAdaptor::unregisterDropProxy(const QString& screenId)
+{
+    m_dropProxies.unregisterProxy(screenId);
 }
 
 } // namespace PlasmaZones
