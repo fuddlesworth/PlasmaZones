@@ -22,8 +22,11 @@ import org.kde.kirigami as Kirigami
  * "Inheriting from: …" breadcrumb.
  * CATEGORY paths (window, popup) and the standalone osd surface inherit
  * from the tree's BASELINE (empty by default), so their toggle doubles as
- * the category's decoration master switch: OFF renders the whole category
- * undecorated, matching the animations pages' top-level toggles. The
+ * the category's decoration master switch: OFF renders undecorated every
+ * child that has no override of its own, matching the animations pages'
+ * top-level toggles. A child that DOES shadow the parent keeps its own look
+ * — the warning below offers to clear those — and so do the popup leaves
+ * that ship seed chrome, each of which has its own toggle. The
  * `shell` subtree is the exception: it is baseline-isolated
  * (DecorationSupportedPaths.h), inherits nothing, and stays undecorated
  * until a chain is engaged inside it. A category root additionally shows
@@ -241,8 +244,11 @@ Item {
                     // breadcrumb below would be a false claim. Once a chain IS
                     // engaged at an ancestor (e.g. at "shell"), the resolved
                     // chain is non-empty and the breadcrumb is the truth again.
+                    // A surface switched off with the explicit empty chain is
+                    // the same story for the same reason: it inherits nothing,
+                    // it draws nothing.
                     var resolvedChain = (root._resolved && root._resolved.chain) ? root._resolved.chain : [];
-                    if (root._baselineIsolated && resolvedChain.length === 0)
+                    if (root._undecorated || (root._baselineIsolated && resolvedChain.length === 0))
                         return i18n("Not decorated. Add a decoration pack to style this surface.");
                     if (root._parentChainText.length > 0)
                         return i18n("Inheriting from: %1", root._parentChainText);

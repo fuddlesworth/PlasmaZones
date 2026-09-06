@@ -275,12 +275,19 @@ private Q_SLOTS:
 
         const QString path = QStringLiteral("popup.zoneSelector");
         QVERIFY(c.clearOverride(path));
-        // The override survives the round trip through the seed overlay
-        // precisely because it is engaged-and-empty.
-        const auto seeded = settings.decorationProfileTree();
-        QVERIFY(seeded.hasOverride(path));
-        QVERIFY(seeded.directOverride(path).chain.has_value());
-        QVERIFY(seeded.directOverride(path).chain->isEmpty());
+        const auto stored = settings.decorationProfileTree();
+        QVERIFY(stored.hasOverride(path));
+        QVERIFY(stored.directOverride(path).chain.has_value());
+        QVERIFY(stored.directOverride(path).chain->isEmpty());
+        // The marker survives the read-side seed overlay — the whole point of
+        // writing it rather than clearing. TreeStubSettings stores the tree
+        // raw, so the overlay Settings::decorationProfileTree() applies on
+        // every read is applied here explicitly; without it this case would
+        // only prove the marker was written, not that it holds.
+        const auto merged = stored.withSeedDefaults(ConfigDefaults::decorationProfileTree());
+        QVERIFY(merged.directOverride(path).chain.has_value());
+        QVERIFY(merged.directOverride(path).chain->isEmpty());
+        QVERIFY(merged.resolve(path).effectiveChain().isEmpty());
         QVERIFY(c.isExplicitlyUndecorated(path));
         QVERIFY(c.chainAt(path).isEmpty());
 
@@ -307,6 +314,50 @@ private Q_SLOTS:
 
         c.setChain(QStringLiteral("popup.layoutPicker"), QStringList{QStringLiteral("glow")});
         QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 1);
+    }
+
+    /// The overlay injects a seed field only where the tree engages that field
+    /// nowhere on the walk-up, so an engagement at an ANCESTOR gates part of
+    /// the seed off and the injection arrives partial (chain only). That is
+    /// still an untouched seed at the leaf, and a whole-profile compare
+    /// against the shipped seed would miscount all three popups as shadowing
+    /// their parent — the exact phantom warning this exclusion removes.
+    void overrideDescendantCount_ignoresPartiallyGatedSeeds()
+    {
+        TreeStubSettings settings;
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        // Parameters engaged at the baseline gate the seed's parameters off
+        // everywhere, so each seeded popup is injected with its chain alone.
+        PhosphorSurfaceShaders::DecorationProfile baseline;
+        baseline.parameters = QVariantMap{};
+        tree.setBaseline(baseline);
+        PhosphorSurfaceShaders::DecorationProfile chainOnly;
+        chainOnly.chain =
+            ConfigDefaults::decorationProfileTree().directOverride(QStringLiteral("popup.zoneSelector")).chain;
+        tree.setOverride(QStringLiteral("popup.zoneSelector"), chainOnly);
+        settings.setDecorationProfileTree(tree);
+
+        DecorationPageController c(nullptr, &settings);
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 0);
+    }
+
+    /// An engaged-but-empty chain at an UNSEEDED path is a real user look —
+    /// the documented way for a leaf to disable an ancestor's chain — not the
+    /// OFF marker. Reading it as undecorated would mislabel the card and let
+    /// the toggle's ON path delete the user's choice.
+    void isExplicitlyUndecorated_onlyAtSeededPaths()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString leaf = QStringLiteral("window.tiled");
+        c.setChain(QStringLiteral("window"), QStringList{QStringLiteral("glow")});
+        c.setChain(leaf, QStringList{});
+        QVERIFY(c.hasOverride(leaf));
+        QVERIFY(!c.isExplicitlyUndecorated(leaf));
+        QVERIFY(!c.clearUndecorated(leaf));
+        // Still overriding to "no packs", so the ancestor's chain stays out.
+        QVERIFY(c.chainAt(leaf).isEmpty());
     }
 
     /// An unseeded surface keeps the plain clear-to-inherit behaviour: no

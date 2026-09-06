@@ -28,6 +28,49 @@ using PhosphorSurfaceShaders::DecorationProfileTree;
 
 namespace {
 
+/// The built-in seed layer `Settings::decorationProfileTree()` overlays on
+/// every read. Built once: it is a pure function of compiled-in literals, and
+/// the readers below run for every visible card on every tree write (each
+/// slider drag tick), where rebuilding four profiles and their parameter maps
+/// per call is pure waste.
+const DecorationProfileTree& decorationSeeds()
+{
+    static const DecorationProfileTree seeds = ConfigDefaults::decorationProfileTree();
+    return seeds;
+}
+
+/// True when the read-side seed overlay would inject an override at @p path
+/// were @p tree to carry none there — the path ships card chrome AND nothing
+/// on its walk-up vetoes the seed. This, not "the chain is engaged and empty",
+/// is what makes a path one whose OFF state has to be persisted as the
+/// explicit empty chain.
+bool seedWouldInjectAt(const DecorationProfileTree& tree, const QString& path)
+{
+    DecorationProfileTree without = tree;
+    without.clearOverride(path);
+    return without.withSeedDefaults(decorationSeeds()).hasOverride(path);
+}
+
+/// True when the override @p tree stores at @p path is nothing but an
+/// untouched seed injection. Compared PER FIELD against the seed rather than
+/// whole-profile: the overlay injects a seed field only where this tree
+/// engages that field nowhere on the walk-up, so a seed whose parameters were
+/// gated off by an engagement at an ancestor arrives as a chain-only
+/// injection, which is still untouched AT THIS PATH. A whole-profile compare
+/// would read that as a user override.
+bool isUntouchedSeedInjection(const DecorationProfileTree& tree, const QString& path)
+{
+    if (!decorationSeeds().hasOverride(path))
+        return false;
+    const DecorationProfile seed = decorationSeeds().directOverride(path);
+    const DecorationProfile mine = tree.directOverride(path);
+    if (mine.chain && mine.chain != seed.chain)
+        return false;
+    if (mine.parameters && mine.parameters != seed.parameters)
+        return false;
+    return !(mine.disabledPacks && mine.disabledPacks != seed.disabledPacks);
+}
+
 /// Overridden paths strictly BELOW @p path (its descendants), e.g. for
 /// "window" → every overridden "window.*". Excludes @p path itself. These are
 /// the surfaces that shadow the parent node.
@@ -36,7 +79,6 @@ QStringList overrideDescendantsOf(const DecorationProfileTree& tree, const QStri
     QStringList out;
     if (path.isEmpty())
         return out;
-    const auto seeds = ConfigDefaults::decorationProfileTree();
     const QString prefix = path + QLatin1Char('.');
     const QStringList overridden = tree.overriddenPaths();
     for (const QString& p : overridden) {
@@ -49,7 +91,7 @@ QStringList overrideDescendantsOf(const DecorationProfileTree& tree, const QStri
         // ever edited, with a Clear action that cannot clear it (the overlay
         // re-injects on the next read). A seeded path the user HAS edited no
         // longer matches the seed and counts normally.
-        if (seeds.hasOverride(p) && tree.directOverride(p) == seeds.directOverride(p))
+        if (isUntouchedSeedInjection(tree, p))
             continue;
         out.append(p);
     }
@@ -473,13 +515,16 @@ bool DecorationPageController::clearOverride(const QString& path)
     // turned off at all. Persist the explicit empty chain the overlay's master
     // gate honours instead, which IS what OFF means for a seeded surface:
     // undecorated. Nothing to inherit is lost, since the seed was the only
-    // thing this path was getting.
-    DecorationProfile undecorated;
-    undecorated.chain = QStringList{};
-    if (tree.withSeedDefaults(ConfigDefaults::decorationProfileTree()).hasOverride(path))
+    // thing this path was getting. The whole override goes, parameters
+    // included, exactly as it does on an unseeded path — OFF is a clear, not a
+    // retune.
+    if (seedWouldInjectAt(tree, path)) {
+        DecorationProfile undecorated;
+        undecorated.chain = QStringList{};
         tree.setOverride(path, undecorated);
-    else if (!removed)
+    } else if (!removed) {
         return false;
+    }
     m_settings->setDecorationProfileTree(tree);
     return true;
 }
@@ -492,7 +537,14 @@ bool DecorationPageController::isExplicitlyUndecorated(const QString& path) cons
     if (!t.hasOverride(path))
         return false;
     const DecorationProfile direct = t.directOverride(path);
-    return direct.chain && direct.chain->isEmpty();
+    if (!direct.chain || !direct.chain->isEmpty())
+        return false;
+    // Only at a path the seed overlay would re-inject. An engaged empty chain
+    // ANYWHERE else is a real user look — the documented way for a leaf to
+    // disable an ancestor's pack chain (DecorationProfile's "explicitly-empty
+    // chain" contract) — and reading it as OFF would both mislabel the card
+    // and let the ON path (clearUndecorated) delete the user's choice.
+    return seedWouldInjectAt(t, path);
 }
 
 bool DecorationPageController::clearUndecorated(const QString& path)
@@ -501,9 +553,11 @@ bool DecorationPageController::clearUndecorated(const QString& path)
         return false;
     DecorationProfileTree tree = this->tree();
     DecorationProfile profile = tree.directOverride(path);
-    // Disengage only the chain slot: a parameters-only retune the user made
-    // before switching the surface off survives, and the seed chain flows in
-    // under it again (the overlay gates parameters on their own engagement).
+    // Disengage only the chain slot, so the seed chain flows in again while
+    // any parameters or disable set still engaged at this path stay put (the
+    // overlay gates those on their own engagement). clearOverride writes a
+    // chain-only marker, so in practice there is nothing else to keep; this is
+    // the slot-scoped write regardless, not a whole-override drop.
     profile.chain.reset();
     if (!profile.parameters && !profile.disabledPacks)
         tree.clearOverride(path);
