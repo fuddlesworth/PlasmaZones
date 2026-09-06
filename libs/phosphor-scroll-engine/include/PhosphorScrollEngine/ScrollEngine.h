@@ -1485,8 +1485,14 @@ private:
     /// openColumnPlacement rule and remembered positions outrank it).
     ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
 
-    /// The exact rect last APPLIED per window while strip-managed (float-back
-    /// poison guard; see PlacementEngineBase::lastManagedRect).
+    /// The rect the compositor is currently believed to show per window while
+    /// strip-managed: the exact rect applyLayout last APPLIED, or, between an
+    /// accepted user resize and the next relayout, the frame the user
+    /// settled on (onWindowResized's accepted arm rewrites the entry to
+    /// newFrame, since the window sits there now and the emit-on-change gate
+    /// must compare the corrective relayout against that, not against the
+    /// rect it displaced). Also the float-back poison guard's comparand; see
+    /// PlacementEngineBase::lastManagedRect.
     QHash<QString, QRect> m_lastAppliedRect;
     /// Windows whose last EMITTED batch entry carried windowedFullscreen —
     /// the flag's own leg of applyLayout's emit-on-change gate (a toggle
