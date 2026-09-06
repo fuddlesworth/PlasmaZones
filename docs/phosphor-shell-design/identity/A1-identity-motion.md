@@ -102,7 +102,7 @@ Interruptibility (R7): every primitive retargets. Bezier primitives restart only
 | M5 | **follow** | Focus or active-workspace moves from A to B | B runs **enter**; A runs **release**; the *gleam* on both strokes runs from A's position toward B's over 220 ms (`widget-out`) | `gleamPhase` on each stroke, `strokeOpacity` | Switching workspace 2→3: pip 3 lights, pip 2 releases, and the gleam on the bar stroke slides right, so the eye reads the direction. |
 | M6 | **reveal** | A surface opens | `widget-out` (`0.33, 1.00, 0.68, 1.00`), 220 ms driving a gradient-mask `x` from the anchor edge across the surface, layered with **enter** on the stroke. Fill opacity uses a fast 120 ms `cubic-out` | mask position, `opacity` | The popout is not scaled in. It is drawn in from the widget it belongs to, so its origin is legible. |
 | M7 | **dismiss** | A surface closes | `osd-in` (`0.32, 0.00, 0.67, 0.00`), 140 ms on `opacity`, no scale, then **release** on the stroke | `opacity`, `strokeOpacity` | Close is shorter than open. The visible mass leaves fast, the stroke lingers a little. |
-| M8 | **breathe** | Only while a *hot* state persists (critical notification, battery critical, recording) | New `phosphor-breathe.json`: `spring` `omega: 4.2, zeta: 0.0` used as an oscillator, or a `SequentialAnimation` of two `phosphor-release` halves if the registry rejects an undamped spring | `strokeOpacity` between 0.55 and 1.0 | The only looping primitive. Everything else is event-driven. |
+| M8 | **breathe** | Only while a *hot* state persists (critical notification, battery critical, recording) | A `SequentialAnimation` of two `phosphor-release` halves. The undamped spring this originally proposed is not expressible as a curve — see below | `strokeOpacity` between 0.55 and 1.0 | The only looping primitive. Everything else is event-driven. |
 | M9 | **tick** | A discrete value step (scroll notch on the OSD, clock minute, download %) | `widget-pop` (`0.34, 1.56, 0.64, 1.00`), 60 ms on enter, then **release** | `strokeOpacity`, `borderWidth` +1 px, changed-digit `opacity` | Each volume notch flashes the stroke, so repeated notches read as separate events, not a smooth fade. |
 | M10 | **pulse** | Audio bass when a `border-audio`/`spectrum-*` pack is active | Pack-driven; the shell only passes the audio uniform through | Pack uniforms | The bar, OSD and window frames pulse together because they share the pack. |
 
@@ -117,10 +117,15 @@ Interruptibility (R7): every primitive retargets. Bezier primitives restart only
 ```json
 { "name": "phosphor-release", "displayName": "Phosphor release (fast head, long tail)", "typeId": "cubic-bezier", "parameters": { "x1": 0.05, "y1": 0.60, "x2": 0.15, "y2": 1.00 } }
 { "name": "phosphor-settle",  "displayName": "Phosphor settle (spring, one overshoot)",  "typeId": "spring",       "parameters": { "omega": 22,  "zeta": 0.85 } }
-{ "name": "phosphor-breathe", "displayName": "Phosphor breathe (undamped oscillator)",   "typeId": "spring",       "parameters": { "omega": 4.2, "zeta": 0.0 } }
 ```
 
-`phosphor-breathe` at `zeta: 0` needs checking against the registry's zeta validation and `Curve.h` `MaxSettleSeconds`; the fallback is stated in M8.
+`phosphor-breathe` was checked and dropped. The curve registry models a
+*settling* spring: `Spring::settleTime()` divides by `max(1e-3, zeta*omega)`,
+so `zeta: 0` yields about 5298 s and clamps to `Spring::MaxSettleSeconds`
+(30 s). It passes validation and is useless — a 30-second animation, not a
+1.2 s loop. An undamped oscillator never settles, so it cannot be a curve at
+all. Breathe uses the M8 fallback: two `phosphor-release` halves in a
+`SequentialAnimation`.
 
 ### 3.4 Motion.qml consequences
 

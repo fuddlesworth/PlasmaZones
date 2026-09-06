@@ -125,7 +125,7 @@ when resting, one pass per 9 s idle on the rail) → optional margin dust → co
 | **dismiss** | 140 ms | `osd-in` 0.32,0,0.67,0 | Surface close: opacity only, then the stroke releases. Close is shorter than open. |
 | **tick** | 60 ms + release | `widget-pop` 0.34,1.56,0.64,1.00 | Discrete steps: volume notch, clock minute. Underline enters under the changed digit. |
 | **retract** | 600 ms short, 1.4–2.5 s long | `phosphor-release` | Edge bands (toast, OSD, polkit) shrink back toward their source point. |
-| **breathe** | 1.2 s period | `phosphor-breathe` spring ω 4.2 ζ 0 (fallback: two `phosphor-release` halves) | Only while a hot state persists. |
+| **breathe** | 1.2 s period | Two `phosphor-release` halves in a `SequentialAnimation` (an undamped spring is not expressible as a curve — A1 §3.3) | Only while a hot state persists. |
 | **pulse** | 90 ms | settle | Live update on an already-open surface; rate-limited to one per 120 ms. |
 | **dim** | 600 ms out, 350 ms back | `phosphor-release` | Compositor dims the desktop to 35% brightness / 40% saturation (power menu); polkit 20%. |
 | **placement** | the mode's own | | Engine-placed panes are moved by the engine's window animation, never by the shell. |
@@ -134,9 +134,11 @@ Envelope ratio is the feel: enter : release ≈ 1 : 4. Stagger 6–30 ms per ite
 outward from the focus point, never top-to-bottom for its own sake. Reduced motion: release
 180 ms, enter loses overshoot, reveal becomes a 120 ms opacity enter, breathe stops.
 
-Curve files to add under `data/curves/`: `phosphor-release.json`, `phosphor-settle.json`,
-`phosphor-breathe.json` (A1 §3.3). `Motion.qml` gains `enter` / `release` / `settle` and the
-four durations; `standard` / `emphasized` are retired from shell chrome.
+Curve files to add under `data/curves/`: `phosphor-release.json` and
+`phosphor-settle.json`. Breathe is not among them — an undamped spring is not
+expressible as a curve, so it is built from two release halves (A1 §3.3).
+`Motion.qml` gains `enter` / `release` / `settle` and the four durations;
+`standard` / `emphasized` are retired from shell chrome.
 
 ## 7. Typography
 

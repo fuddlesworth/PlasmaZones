@@ -170,6 +170,23 @@ public:
     void setActiveSessionLock(struct ext_session_lock_v1* lock)
     {
         m_activeSessionLock = lock;
+        if (!lock) {
+            m_activeSessionLockGranted = false;
+        }
+    }
+
+    /// Whether the compositor has already sent `locked` for
+    /// `activeSessionLock()`. Kept beside the object because it decides which
+    /// destructor the protocol allows (unlock_and_destroy once granted,
+    /// destroy before), and a SessionLock rebuilt by a QML hot reload has to
+    /// recover it along with the object — see adoptActiveSessionLock().
+    bool activeSessionLockGranted() const
+    {
+        return m_activeSessionLockGranted;
+    }
+    void setActiveSessionLockGranted(bool granted)
+    {
+        m_activeSessionLockGranted = granted;
     }
 
     /// Access the Wayland display for explicit flushing after surface creation.
@@ -219,6 +236,7 @@ private:
     uint32_t m_sessionLockManagerId = 0;
     bool m_sessionLockManagerAvailable = false;
     struct ext_session_lock_v1* m_activeSessionLock = nullptr;
+    bool m_activeSessionLockGranted = false;
 
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;

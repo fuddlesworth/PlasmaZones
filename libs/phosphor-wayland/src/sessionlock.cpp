@@ -64,6 +64,9 @@ public:
         if (!self || self->isLocked)
             return;
         self->isLocked = true;
+        if (auto* integration = LayerShellIntegration::instance()) {
+            integration->setActiveSessionLockGranted(true);
+        }
         Q_EMIT self->owner->lockedChanged();
         Q_EMIT self->owner->locked();
     }
@@ -98,6 +101,28 @@ SessionLock::SessionLock(QObject* parent)
     , d(std::make_unique<Private>())
 {
     d->owner = this;
+
+    // Re-adopt a lock this process already holds. The shell builds its
+    // LockService from QML, so a hot reload destroys this object and builds a
+    // new one — and ~SessionLock deliberately does NOT destroy a live lock,
+    // because the protocol requires the session to stay locked when the client
+    // goes away. Without adoption the new instance starts at nullptr, nothing
+    // can ever call unlock_and_destroy on the old object, and a fresh lock()
+    // is answered with `finished` (this client already holds one): the session
+    // stays locked at the compositor and the password can no longer release
+    // it.
+    //
+    // Only the listener's user_data was severed on teardown, not the listener
+    // itself, so adoption re-points it rather than calling add_listener twice
+    // (which wl_proxy refuses).
+    if (auto* integration = LayerShellIntegration::instance()) {
+        if (auto* existing = integration->activeSessionLock()) {
+            d->lockObj = existing;
+            d->isLocked = integration->activeSessionLockGranted();
+            wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(existing), d.get());
+            qCInfo(lcSessionLock) << "adopted the session lock this process already holds; locked =" << d->isLocked;
+        }
+    }
 }
 
 SessionLock::~SessionLock()
@@ -112,8 +137,13 @@ SessionLock::~SessionLock()
         // locked event into the same error. The proxy is reclaimed when the
         // wl_display tears down.
         wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(d->lockObj), nullptr);
-        // No lock surface may be created against a proxy whose owner is gone.
-        Private::publishLock(nullptr);
+        // The object STAYS published, along with whether it was granted, so a
+        // SessionLock built after a hot reload can adopt it (see the
+        // constructor). Retracting it here would strand the lock: nothing
+        // could then release it and the session would be stuck locked.
+        if (auto* integration = LayerShellIntegration::instance()) {
+            integration->setActiveSessionLockGranted(d->isLocked);
+        }
     }
 }
 

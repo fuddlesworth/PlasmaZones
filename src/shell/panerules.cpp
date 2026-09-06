@@ -75,22 +75,43 @@ PhosphorRules::Rule controlCenterRule(const QString& appId, int zoneNumber)
     return rule;
 }
 
+// True when the call reached the daemon and it answered `true`.
+bool callAcceptedRule(const char* method, const QString& json)
+{
+    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Rules,
+                                                                         QString::fromLatin1(method), {json});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcPaneRules) << method << "failed:" << reply.errorMessage();
+        return false;
+    }
+    return !reply.arguments().isEmpty() && reply.arguments().first().toBool();
+}
+
 bool updateControlCenterZone(const QString& appId, int zoneNumber)
 {
     const PhosphorRules::Rule rule = controlCenterRule(appId, zoneNumber);
     const QString json = QString::fromUtf8(QJsonDocument(rule.toJson()).toJson(QJsonDocument::Compact));
     // Synchronous on purpose: the toplevel maps right after, and the rule
     // has to be in the daemon's store before the effect reads it.
-    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Rules,
-                                                                         QStringLiteral("updateRule"), {json});
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()
-        || !reply.arguments().first().toBool()) {
-        qCWarning(lcPaneRules) << "daemon refused the pane rule's zone" << zoneNumber
-                               << (reply.type() == QDBusMessage::ErrorMessage ? reply.errorMessage() : QString());
-        return false;
+    if (callAcceptedRule("updateRule", json)) {
+        qCDebug(lcPaneRules) << "pane rule now snaps to zone" << zoneNumber;
+        return true;
     }
-    qCDebug(lcPaneRules) << "pane rule now snaps to zone" << zoneNumber;
-    return true;
+
+    // updateRule does NOT upsert — RuleSet::updateRule returns false for an id
+    // it does not hold. seed() is a two-round-trip async chain (getAllRules
+    // then addRule), so the FIRST open can beat it, or the daemon can have
+    // started after the shell. Without this the rewrite is refused and the
+    // seed then installs the rule at defaultZone(), putting the pane in zone 1
+    // no matter which chip was clicked. Adding it here carries the right zone
+    // immediately, and is idempotent with the seed: addRule refuses a
+    // colliding id, so whichever loses the race is a no-op.
+    if (callAcceptedRule("addRule", json)) {
+        qCInfo(lcPaneRules) << "pane rule seeded on demand, snapping to zone" << zoneNumber;
+        return true;
+    }
+    qCWarning(lcPaneRules) << "daemon accepted neither an update nor an add of the pane rule for zone" << zoneNumber;
+    return false;
 }
 
 void seed(QObject* parent, const PhosphorRules::Rule& rule)
