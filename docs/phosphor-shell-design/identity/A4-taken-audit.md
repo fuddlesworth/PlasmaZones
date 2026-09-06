@@ -152,7 +152,7 @@ width but visually attached (concave/"gothic" corners); none.
 4. **Window animation and shell animation on one clock/curve family.** niri comes closest (springs everywhere) but its layer-shell shells cannot join the spring; everyone else has two motion systems (compositor beziers vs shell QML/GTK). Phosphor can make a popout's spring the same object as a window's snap-in spring.
 5. **Shared-element morph between a *window* and a shell surface** (e.g. a window collapsing into its bar entry, a notification unfolding into the app window). Shells cannot capture window textures with layout intent; a compositor can.
 6. **Drag feedback in the bar during a window drag** (zone highlights mirrored in the bar; the bar becoming a drop target that maps to zones). Requires drag state, which only the compositor has.
-7. **Afterglow / persistence as a *state* signal** (a surface that was just active decays rather than snapping off): nobody uses temporal decay as UI semantics; CRT projects use it purely as a filter.
+7. **Afterglow / persistence as a *state* signal** (surveyed as untaken; not adopted, see A1 §7.2 and §6 below) (a surface that was just active decays rather than snapping off): nobody uses temporal decay as UI semantics; CRT projects use it purely as a filter.
 8. **Non-blur depth.** With glass contested (Tahoe legibility, GNOME's flat stance), a depth language built on emissive edges and decay instead of backdrop blur is untaken by any shell.
 9. **Per-output overlays that are true compositor render passes** (niri does this for its own dialogs; no third-party shell can). Phosphor can render OSD/lock/picker without layer-shell round trips.
 10. **Gesture drawers that scrub the strip itself** (a swipe on the bar pans the scrolling strip with 1:1 coupling). Requires owning the scroll engine.
@@ -188,5 +188,11 @@ width but visually attached (concave/"gothic" corners); none.
 Where the field clusters: **150–300 ms ease-out for enter, faster accelerate for exit, symmetric in/out, and (2025–26) critically damped or lightly overshooting springs for anything spatial.** Untaken territory is *asymmetric temporal envelopes*: near-instant rise (≤ 60 ms) with a long, shaped decay (600–1200 ms) that is not a spring settle but an exponential/phosphor fall-off, and exits that are slower than entries. Nobody in the survey makes the exit the expressive half.
 
 ## 6. Phosphor / CRT-afterglow: three sentences on what to avoid
+
+> **Superseded by A1 §7.2.** The CRT metaphor was considered as the naming
+> layer for the motion system and dropped: the packs never use it as a visual
+> device, and it drags the design toward retro pastiche. The asymmetric
+> envelopes below are kept on their own merits (05 R6); the lore is not.
+> This section stands as a record of the survey, not as direction to follow.
 
 The metaphor must be carried entirely by *time* (rise-fast, decay-slow luminance envelopes on state changes) and never by *texture*, because scanlines, curvature, RGB fringing, noise and monochrome green/amber are exactly the five signals cool-retro-term, Cathode and the ctr-glitch-overlay use, and any one of them reclassifies the shell as a retro-terminal theme. Colour has to remain full-gamut and wallpaper-neutral so the afterglow reads as a material property of the interface rather than as a 1983 palette, which means the "glow" is a brief luminance lift of the element's own colour, not a fixed phosphor hue. Finally, persistence must be strictly bounded and semantic (a surface that just left leaves a sub-second trace; nothing burns in), because the CRT projects treat decay as decoration whereas Phosphor's claim to it is that decay tells the user what just changed and in which placement mode.

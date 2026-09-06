@@ -163,8 +163,10 @@ Item {
         anchors.fill: parent
         radius: Tokens.radius_edge
         focused: root.activeFocus
+        // `visible` is what keeps the resting spectrum stroke off an unfocused
+        // rail. It must not be paired with `opacity: 0`, which would multiply
+        // the focus ring away too and leave this painting nothing at all.
         visible: root.activeFocus
-        opacity: 0
     }
 
     Item {

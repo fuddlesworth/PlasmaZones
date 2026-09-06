@@ -86,6 +86,15 @@ void CompositorBridgeAdaptor::reportModifierState(int modifiers, int mouseButton
 
 void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& direction, uint fingerCount)
 {
+    // The interface documents this as firing "only for gestures the bridge
+    // registered under the 'gestures' capability", and that gate has to be
+    // real: the session bus is an untrusted boundary and gestureReported
+    // drives the shell's launcher and dashboard, so without it any peer on
+    // the bus could open those surfaces at will.
+    if (!isBridgeRegistered() || !hasCapability(QStringLiteral("gestures"))) {
+        qCWarning(lcDbusWindow) << "reportGesture dropped: caller is not a bridge registered for gestures";
+        return;
+    }
     // Boundary validation: the vocabulary is closed, so anything else is a
     // bridge bug and is dropped rather than relayed to the shell.
     static const QStringList kSwipeDirections{QStringLiteral("up"), QStringLiteral("down"), QStringLiteral("left"),

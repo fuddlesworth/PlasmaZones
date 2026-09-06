@@ -3,6 +3,9 @@
 
 #include "windowdragadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusServiceWatcher>
 #include <QScreen>
 #include <QUuid>
 #include <PhosphorZones/Layout.h>
@@ -228,16 +231,46 @@ DropProxyRegistry::Resolution WindowDragAdaptor::resolveDropProxyAt(QScreen* scr
     return m_dropProxies.resolve(physicalId, QPoint(x, y) - screen->geometry().topLeft());
 }
 
+void WindowDragAdaptor::watchDropProxyOwner(const QString& service, const QString& screenId)
+{
+    m_dropProxyOwners.insert(screenId, service);
+    // One watcher per registering peer. Registering again for the same screen
+    // replaces the owner entry above, and the stale watcher then finds no
+    // screen still attributed to it and retires quietly.
+    auto* watcher = new QDBusServiceWatcher(service, QDBusConnection::sessionBus(),
+                                            QDBusServiceWatcher::WatchForUnregistration, this);
+    QObject::connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this, watcher](const QString& gone) {
+        const QStringList orphaned = m_dropProxyOwners.keys(gone);
+        for (const QString& screenId : orphaned) {
+            qCInfo(lcDbusWindow) << "drop proxy owner" << gone << "went away; retiring the proxy on" << screenId;
+            m_dropProxies.unregisterProxy(screenId);
+            m_dropProxyOwners.remove(screenId);
+        }
+        watcher->deleteLater();
+    });
+}
+
 void WindowDragAdaptor::registerDropProxy(const QString& screenId, const QString& proxyJson)
 {
-    if (m_dropProxies.registerProxy(screenId, proxyJson)) {
-        qCDebug(lcDbusWindow) << "registerDropProxy: screen" << screenId;
+    if (!m_dropProxies.registerProxy(screenId, proxyJson)) {
+        return;
+    }
+    qCDebug(lcDbusWindow) << "registerDropProxy: screen" << screenId;
+    // A proxy outlives every individual drag, so it has to be tied to the life
+    // of the peer that asked for it. Direct (non-D-Bus) calls — the unit tests
+    // invoke this slot through QMetaObject — have no peer to watch.
+    if (calledFromDBus()) {
+        const QString sender = message().service();
+        if (!sender.isEmpty()) {
+            watchDropProxyOwner(sender, screenId);
+        }
     }
 }
 
 void WindowDragAdaptor::unregisterDropProxy(const QString& screenId)
 {
     m_dropProxies.unregisterProxy(screenId);
+    m_dropProxyOwners.remove(screenId);
 }
 
 } // namespace PlasmaZones

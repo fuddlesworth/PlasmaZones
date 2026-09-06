@@ -151,16 +151,26 @@ PanelWindow {
     property string _focusAtOpen: ""
     property int _mapEpoch: 0
 
-    on_PaneOpenEffChanged: {
+    // Re-capture the focus latch for whatever pane is showing now. This has to
+    // run on every edge that changes WHICH pane is up, not only on
+    // `_paneOpenEff`: on a map-pane -> host-pane swap the surface stays up so
+    // `_paneOpenEff` never moves, and the external pane would otherwise start
+    // life holding the focus captured when the MAP pane opened and latch the
+    // wrong cell on its first `changed()`.
+    function _recaptureFocusLatch(): void {
         panel._paneCellId = "";
         panel._focusAtOpen = panel._paneOpenEff && panel.placementMap ? panel.placementMap.focusedCellId() : "";
     }
+
+    on_PaneOpenEffChanged: panel._recaptureFocusLatch()
     // A second pane replaces the first (A2 §4.7): the host's pane opening
     // closes the map pane.
     onPaneOpenChanged: {
         if (panel.paneOpen)
             panel.mapPaneOpen = false;
+        panel._recaptureFocusLatch();
     }
+    onPaneExternalChanged: panel._recaptureFocusLatch()
 
     Connections {
         target: panel.placementMap
@@ -584,10 +594,20 @@ PanelWindow {
                 target: panel
 
                 function onMapPaneOpenChanged(): void {
-                    if (panel.mapPaneOpen)
+                    if (panel.mapPaneOpen) {
                         mapContent.showing = true;
+                    } else if (panel.paneOpen) {
+                        // A host pane is replacing the map pane (A2 §4.7). The
+                        // surface stays up, so `_paneProgress` never moves and
+                        // the release below would never fire: without this the
+                        // map's content stays latched over the host's, and
+                        // opening the control center shows the map instead.
+                        mapContent.showing = false;
+                    }
                 }
                 function on_PaneProgressChanged(): void {
+                    // The ordinary close: hold the content until the surface
+                    // has collapsed so it releases behind the animation.
                     if (!panel.mapPaneOpen && panel._paneProgress <= 0.001)
                         mapContent.showing = false;
                 }

@@ -3,8 +3,8 @@
 
 # Mockups v2 (spectrum identity)
 
-Drawn from [`../05-visual-identity.md`](../05-visual-identity.md). The v1 set in
-[`../mockups/`](../mockups/) is kept for comparison and is superseded.
+Drawn from [`../05-visual-identity.md`](../05-visual-identity.md). The v1 set was
+removed in phase 6.
 
 ## Conventions
 

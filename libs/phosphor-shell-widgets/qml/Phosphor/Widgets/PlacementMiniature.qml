@@ -79,7 +79,11 @@ Item {
     readonly property int _overflowLeft: model ? model.overflowLeft : 0
     readonly property int _overflowRight: model ? model.overflowRight : 0
     readonly property bool _scrolling: model ? model.mode === 2 : false
-    readonly property var _lens: model && model.lens ? model.lens : null
+    // The C++ side sends an EMPTY map, not a null, when the strip has no
+    // valid lens. An empty object is truthy in JS, so this has to key off
+    // content: a bare `model.lens` test leaves a zero-width rect whose
+    // 1 px border still paints a stray line down the left edge.
+    readonly property var _lens: model && model.lens && Number(model.lens.w) > 0 ? model.lens : null
     // Live cell count, for hosts and tests. Retiring cells are excluded.
     readonly property int liveCount: cellModel.count - _retiring.length
     // Ids currently releasing, kept out of `liveCount` and re-adopted if

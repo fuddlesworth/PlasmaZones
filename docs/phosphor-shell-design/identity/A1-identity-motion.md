@@ -51,7 +51,7 @@ Phosphor is a spectrum laid over a deep navy field. Cyan, blue, purple and rose 
 |-------|-------|---------|
 | `radius_edge` | 6 px | Bar capsule, workspace pips, buttons, OSD, tray items, any chrome carrying a stroke |
 | `radius_container` | 10 px | Popouts, control-centre tiles, launcher, notifications |
-| `radius_window` | inherits the decoration pack's `cornerRadius` (8 px default) | Windows |
+| `radius_tile` | inherits the decoration pack's `cornerRadius` (8 px default) | Windows |
 | `radius_full` | circular controls only (toggles, avatar) | |
 
 `radius_l`/`radius_xl`/`radius_xxl` in `Tokens.qml` remain for settings pages and are forbidden on shell chrome. Why: a gradient stroke is the identity carrier (R2), and a 1 px stroke around a 24 px corner loses about a quarter of its visible length to the arc, where the gradient sample changes fastest and the line looks blurry. At 6 to 10 px the stroke reads as a drawn line and matches the frames the packs already draw.

@@ -31,15 +31,15 @@ none of them is a candidate for removal, not for polish.
 | Surface | Module | Claim | Spec | Mock |
 |---|---|---|---|---|
 | Bar (rail + band + placement map) | `Phosphor.Bar` | 1 | A2 | `bar-modes.svg`, `bar-widgets.svg` |
-| Control center (engine-placed pane) | `Phosphor.ControlCenter` + `PanePopoutTransport` | 2 | A3 §5 | `control-center.svg` |
-| Launcher with viewfinder | `Phosphor.Launcher` | 1 | A3 §2 | `launcher.svg` |
+| Control center (engine-placed pane) | `Phosphor.ControlCenter` + `PanePopoutTransport` | 2 | A3 §2 | `control-center.svg` |
+| Launcher with viewfinder | `Phosphor.Launcher` | 1 | A3 §1 | `launcher.svg` |
 | OSD edge bands | `Phosphor.OSD` | 3 | A3 §4 | `osd.svg` |
 | Toasts under a window band | `Phosphor.Notifications` | 3 | A3 §3 | `notifications.svg` |
-| Power word column | `Phosphor.Power` | – | A3 §6 | `power-menu.svg` |
-| Lock screen (session lock) | `Phosphor.Lock` | 1 | A3 §9 | `lockscreen.svg` |
+| Power word column | `Phosphor.Power` | – | A3 §5 | `power-menu.svg` |
+| Lock screen (session lock) | `Phosphor.Lock` | 1 | A3 §6 | `lockscreen.svg` |
 | Dashboard (every desktop's map) | `Phosphor.Dashboard` | 1 | A3 §7 | `dashboard.svg` |
 | Cheatsheet on the map | `Phosphor.Dashboard` | 1 | A3 §10 | `polkit-cheatsheet.svg` |
-| Polkit prompt on the window edge | `Phosphor.Polkit` | 3 | A3 §11 | `polkit-cheatsheet.svg` |
+| Polkit prompt on the window edge | `Phosphor.Polkit` | 3 | A3 §9 | `polkit-cheatsheet.svg` |
 | Wallpaper and theme picker | `Phosphor.Picker` | – | A3 §8 | `wallpaper-theme-picker.svg` |
 | Wallpaper surface (background layer) | `Phosphor.Picker` `WallpaperSurface` | – | A3 §8 | – |
 
@@ -64,8 +64,8 @@ the notification server are ours.
 
 `phosphor-service-*` provide the data every surface binds: SNI tray, UPower,
 MPRIS, PipeWire, NetworkManager, BlueZ, brightness (backlight and DDC/CI),
-notifications (the server), polkit (the agent), idle, clipboard, lock (PAM),
-session (logind). The daemon (`plasmazonesd`) provides the placement state
+notifications (the server), polkit (the agent), idle, clipboard, icon theme,
+lock (PAM), session (logind). The daemon (`plasmazonesd`) provides the placement state
 over D-Bus: `WindowTracking`, `Tiling`, `Scrolling`, `LayoutRegistry`,
 `Control` (shortcuts), `Settings` (the decoration tree), `WindowDrag` (drop
 proxies), `CompositorBridge` (gestures).

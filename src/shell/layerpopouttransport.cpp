@@ -420,7 +420,12 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (!QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()))) {
         qCWarning(lcPopoutTransport) << "refusing" << request.popoutId
                                      << "— PopoutHost has no dismissed() signal to connect";
-        hostItem->deleteLater();
+        // Past create() the Surface owns the host, through the window it
+        // wraps, so the host must NOT be deleted separately here — that is
+        // the double free destroyEntry() warns about. Destroy the surface and
+        // the host goes with it. The surface is not in m_entries yet, so
+        // nothing else would ever reap it.
+        surface->deleteLater();
         return {};
     }
 

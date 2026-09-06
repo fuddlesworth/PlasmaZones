@@ -89,8 +89,8 @@ rewritten for the shell that exists.
 ## What is next
 
 See `02-gap-analysis.md`. The first three items there (compositor-drawn
-chrome packs, the two missing decoration slots, gesture progress) are the
-ones that extend the identity; the surface gaps are ordinary feature work.
+chrome packs, touchpad gesture progress, bundled faces) are the ones that
+extend the identity; the surface gaps are ordinary feature work.
 
 ## Keeping this record honest
 

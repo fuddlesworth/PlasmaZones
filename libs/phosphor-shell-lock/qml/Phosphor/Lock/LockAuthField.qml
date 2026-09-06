@@ -26,6 +26,12 @@ Rectangle {
     // Abyss `#070F22` (A3 consistency table, the floating-card ground).
     readonly property color groundColor: "#070F22"
 
+    // Pinned for the same reason as the ground: this field sits on the lock's
+    // fixed dark field, so palette-driven ink would go dark-on-dark under a
+    // light palette. Values are the dark palette's on_surface / variant.
+    readonly property color inkColor: "#E6EDFF"
+    readonly property color inkMutedColor: "#94A3B8"
+
     implicitWidth: 320
     implicitHeight: 44
     radius: Tokens.radius_edge
@@ -89,7 +95,7 @@ Rectangle {
         visible: root.dotCount === 0
         text: root.placeholder
         elide: Text.ElideRight
-        color: Theme.on_surface_variant
+        color: root.inkMutedColor
         font.family: Tokens.font_family_ui
         font.pixelSize: Tokens.font_size_body_m
         opacity: 0.7
@@ -110,7 +116,7 @@ Rectangle {
                 width: 6
                 height: 6
                 radius: 3
-                color: Theme.on_surface
+                color: root.inkColor
                 // Each dot lands as it is typed.
                 opacity: 0
                 Component.onCompleted: opacity = 1
@@ -131,7 +137,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 1
         height: 18
-        color: Theme.on_surface
+        color: root.inkColor
         visible: root.dotCount > 0 && root.phase === "idle"
         SequentialAnimation on opacity {
             running: root.dotCount > 0 && root.phase === "idle"

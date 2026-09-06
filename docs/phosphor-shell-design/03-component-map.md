@@ -31,7 +31,7 @@ libs/
                              RetintController, ThemePresets
   phosphor-shell-polkit/     Phosphor.Polkit: PolkitPrompt, PolkitAnchor, PolkitDim
   phosphor-popout/           PopoutController, transports, PaneHost, PaneTether
-  phosphor-shell-patterns/   Layer roles (panel, toast, modal, floating, background, fullscreen)
+  phosphor-shell-patterns/   Layer roles (Wallpaper, Hud, Modal, Floating, plus Panel(edge) and Toast(corner))
   phosphor-layer/ phosphor-surfaces/ phosphor-wayland/
                              Layer-shell and session-lock surfaces, the QPA plugin
   phosphor-ipc/ phosphor-registry/
@@ -97,7 +97,7 @@ bound onto `Motion.reducedMotion`.
 
 **Theme.** `PaletteStore` is a per-engine singleton; the picker's
 `RetintController` previews and commits palettes into it (and to
-`~/.local/share/plasmazones/palette/current.json`), `MatugenRunner` derives
+`~/.local/share/plasmazones/palettes/current.json`), `MatugenRunner` derives
 one from a wallpaper, `TemplateEngine` fans it out to other applications.
 `Spectrum` exposes the four brand stops as a coordinate.
 

@@ -8,7 +8,9 @@
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
+#include <QDBusContext>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QObject>
 #include <QPoint>
 #include <QString>
@@ -62,8 +64,14 @@ class WindowTrackingAdaptor;
  * - PhosphorZones::Zone detection and highlighting
  * - Overlay visibility based on modifiers
  * - Window snapping via KWin D-Bus
+ *
+ * Inherits @c QDBusContext so registerDropProxy can identify the peer that
+ * registered a proxy and drop the registration when that peer dies. A proxy
+ * outlives every individual drag by design, so without owner tracking a shell
+ * that crashes rather than unregistering would keep hijacking snap drops over
+ * its old rect for the daemon's whole lifetime.
  */
-class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor, public QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowDrag")
@@ -617,7 +625,13 @@ private:
     void applySingleZoneTarget(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
                                PhosphorZones::Layout* layout);
     void clearZoneTarget();
+    // Arm a one-shot watcher that unregisters this peer's proxies when its bus
+    // name goes away, so a shell that crashes cannot leave a proxy standing.
+    void watchDropProxyOwner(const QString& service, const QString& screenId);
     DropProxyRegistry m_dropProxies;
+    // Bus name of the peer that registered each screen's proxy, so a peer's
+    // death only retires the screens it actually owns.
+    QHash<QString, QString> m_dropProxyOwners;
 
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;

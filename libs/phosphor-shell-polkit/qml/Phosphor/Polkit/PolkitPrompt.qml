@@ -36,6 +36,11 @@ FocusScope {
 
     property var agent: null
     property var request: null
+    // A partly-typed secret belongs to the request it was typed for. The host
+    // binds `request` live and the prompt outlives a transition between two of
+    // them, so without this the entry would carry over and could be submitted
+    // against a different action.
+    onRequestChanged: field.text = ""
     property string requester: ""
     property string errorText: ""
     // The band spans the requester's window when anchored, else the card.
@@ -175,6 +180,10 @@ FocusScope {
 
             Text {
                 text: prompt.message
+                // The action's message comes from a .policy file the shell does
+                // not control. AutoText would sniff it and render markup, so an
+                // action could forge UI inside the authentication card.
+                textFormat: Text.PlainText
                 color: Theme.on_surface
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_body_l
@@ -186,6 +195,8 @@ FocusScope {
 
             TabularText {
                 text: prompt.requester !== "" ? prompt.requester + " · " + prompt.actionId : prompt.actionId
+                // Both halves are derived from the requesting process.
+                textFormat: Text.PlainText
                 color: Theme.on_surface_variant
                 font.pixelSize: Tokens.font_size_label_m
                 elide: Text.ElideMiddle
@@ -204,12 +215,19 @@ FocusScope {
                 Rectangle {
                     id: fieldEdge
 
+                    // The pulse animates this, not `opacity` itself: animating
+                    // a bound property severs the binding for good, so the edge
+                    // would stop tracking focus after the first wrong password.
+                    // Folding it in through max() also means the pulse settles
+                    // back onto whatever the binding currently says.
+                    property real pulseBoost: 0
+
                     anchors.fill: parent
                     radius: Tokens.radius_edge
                     color: "transparent"
                     border.width: 1
                     border.color: prompt.errorText !== "" ? Spectrum.hot : (field.activeFocus ? Spectrum.focus : Theme.outline)
-                    opacity: field.activeFocus || prompt.errorText !== "" ? Tokens.stroke_active : Tokens.stroke_resting
+                    opacity: Math.max(field.activeFocus || prompt.errorText !== "" ? Tokens.stroke_active : Tokens.stroke_resting, fieldEdge.pulseBoost)
 
                     Behavior on border.color {
                         ColorAnimation {
@@ -225,15 +243,15 @@ FocusScope {
 
                     NumberAnimation {
                         target: fieldEdge
-                        property: "opacity"
+                        property: "pulseBoost"
                         to: 1.4
                         duration: Motion.duration_tick
                         easing: Motion.tick
                     }
                     NumberAnimation {
                         target: fieldEdge
-                        property: "opacity"
-                        to: Tokens.stroke_active
+                        property: "pulseBoost"
+                        to: 0
                         duration: Motion.duration_release
                         easing: Motion.release
                     }
@@ -266,6 +284,8 @@ FocusScope {
                     anchors.right: field.right
                     anchors.verticalCenter: field.verticalCenter
                     text: prompt.fieldPrompt
+                    // PAM supplies this string.
+                    textFormat: Text.PlainText
                     color: Theme.on_surface_variant
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_l
@@ -277,6 +297,8 @@ FocusScope {
             Text {
                 visible: prompt.errorText !== ""
                 text: prompt.errorText
+                // PAM supplies this string.
+                textFormat: Text.PlainText
                 color: Spectrum.hot
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_m

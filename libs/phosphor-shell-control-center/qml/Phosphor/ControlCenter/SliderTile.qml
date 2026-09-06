@@ -245,8 +245,9 @@ Item {
         anchors.fill: parent
         radius: Tokens.radius_edge
         focused: root.activeFocus
+        // See Tile.qml: `visible` suppresses the resting stroke; an added
+        // `opacity: 0` would suppress the focus ring along with it.
         visible: root.activeFocus
-        opacity: 0
     }
 
     Item {

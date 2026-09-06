@@ -4,6 +4,7 @@
 
 #include <PhosphorPopout/IPopoutTransport.h>
 
+#include <QObject>
 #include <QString>
 #include <QtCore/qtclasshelpermacros.h>
 
@@ -79,6 +80,11 @@ private:
     QString m_openHandle;
     int m_counter = 0;
     std::function<void(const QString&)> m_dismissed;
+    // The screenRemoved subscription. This class is not a QObject, so the
+    // connection cannot die with it automatically, and it is contexted on
+    // qGuiApp, which outlives the transport. Held so the destructor can
+    // sever it before the captured `this` dangles.
+    QMetaObject::Connection m_screenRemovedConnection;
 };
 
 } // namespace PhosphorShellApp

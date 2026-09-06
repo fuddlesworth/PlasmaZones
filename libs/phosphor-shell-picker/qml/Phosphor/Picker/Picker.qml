@@ -58,6 +58,13 @@ FocusScope {
     signal applied(string path, bool allScreens)
     signal closed
 
+    // Wallpaper filenames are user-chosen and routinely carry spaces, and
+    // sometimes `#` or `?`, which a bare "file://" + path turns into a
+    // fragment or query and the thumbnail then silently fails to load.
+    function _encodeFilePath(path: string): string {
+        return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
+    }
+
     // The surface pack on the strip (A1 §2.4, `shell.phosphor.picker`),
     // set by the composition root.
     property Component decoration: null
@@ -292,7 +299,7 @@ FocusScope {
                     required property var modelData
                     required property int index
 
-                    source: "file://" + modelData.path
+                    source: "file://" + picker._encodeFilePath(modelData.path)
                     name: modelData.name
                     current: modelData.path === priv.currentPath
                     selected: modelData.path === priv.selectedPath && priv.selectedPreset === ""

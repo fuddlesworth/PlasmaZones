@@ -54,6 +54,14 @@ FocusScope {
     // lock is the one surface that takes it at 100 %).
     readonly property color voidColor: "#050916"
 
+    // The ink is pinned for the same reason the ground is. The lock surface
+    // is a fixed dark field, so reading the ink from the palette would put
+    // a light palette's dark `on_surface` on top of this near-black ground
+    // and leave the clock unreadable. These are the dark palette's own
+    // on_surface / on_surface_variant, so the usual appearance is unchanged.
+    readonly property color inkColor: "#E6EDFF"
+    readonly property color inkMutedColor: "#94A3B8"
+
     // Room the content block needs: the field's width plus the inset on
     // both sides, and the clock, date and field stacked, plus the inset.
     readonly property int blockInset: Tokens.spacing_xl
@@ -143,7 +151,9 @@ FocusScope {
         id: wallpaper
 
         anchors.fill: parent
-        source: root.wallpaperPath.length > 0 ? "file://" + encodeURI(root.wallpaperPath) : ""
+        // encodeURI alone leaves `#` and `?`, which become a fragment and a
+        // query: the wallpaper then silently fails to load on the lock screen.
+        source: root.wallpaperPath.length > 0 ? "file://" + encodeURI(root.wallpaperPath).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
@@ -203,7 +213,7 @@ FocusScope {
             id: clock
 
             text: Qt.formatTime(root.now, "HH:mm")
-            color: Theme.on_surface
+            color: root.inkColor
             font.family: Tokens.font_family_ui
             font.pixelSize: 96
             font.weight: Font.ExtraLight
@@ -217,7 +227,7 @@ FocusScope {
             id: date
 
             text: Qt.formatDate(root.now, "dddd d MMMM").toUpperCase()
-            color: Theme.on_surface_variant
+            color: root.inkMutedColor
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_title_m
             font.letterSpacing: 1.5
@@ -250,7 +260,7 @@ FocusScope {
         anchors.margins: Tokens.spacing_xl
         visible: hasBattery
         text: hasBattery ? Math.round(device.percentage) + "%" : ""
-        color: Theme.on_surface_variant
+        color: root.inkMutedColor
         font.pixelSize: Tokens.font_size_body_m
         opacity: block.opacity
     }

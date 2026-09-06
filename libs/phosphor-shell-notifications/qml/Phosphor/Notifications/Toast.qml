@@ -182,6 +182,9 @@ Item {
                 Text {
                     visible: toast.appName !== ""
                     text: toast.appName
+                    // Sender-controlled. The fdo spec allows the markup subset
+                    // in the body only, so everything else stays plain.
+                    textFormat: Text.PlainText
                     color: Theme.on_surface_variant
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_label_s
@@ -193,6 +196,8 @@ Item {
                 Text {
                     visible: toast.summary !== ""
                     text: toast.summary
+                    // Sender-controlled, and plain text per the fdo spec.
+                    textFormat: Text.PlainText
                     color: Theme.on_surface
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_l

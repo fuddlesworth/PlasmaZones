@@ -42,6 +42,20 @@ public:
             integration->setActiveSessionLock(lock);
     }
 
+    // A lock() that never reached the compositor still owes the caller the one
+    // reply the contract promises. `finished` is the correct verdict: the
+    // session will not lock. Queued, so a caller that set its own state before
+    // calling lock() is not re-entered from inside the call.
+    void reportLockUnavailable()
+    {
+        QMetaObject::invokeMethod(
+            owner,
+            [owner = this->owner] {
+                Q_EMIT owner->finished();
+            },
+            Qt::QueuedConnection);
+    }
+
     static void handleLocked(void* data, struct ext_session_lock_v1*)
     {
         auto* self = static_cast<Private*>(data);
@@ -114,16 +128,21 @@ void SessionLock::lock()
     if (d->lockObj)
         return; // a lock is already in flight or held.
     auto* integration = LayerShellIntegration::instance();
-    if (!integration)
+    if (!integration) {
+        qCWarning(lcSessionLock) << "No Wayland integration; cannot lock";
+        d->reportLockUnavailable();
         return;
+    }
     auto* manager = integration->sessionLockManager();
     if (!manager) {
         qCWarning(lcSessionLock) << "Compositor does not advertise ext_session_lock_manager_v1; cannot lock";
+        d->reportLockUnavailable();
         return;
     }
     d->lockObj = ext_session_lock_manager_v1_lock(manager);
     if (!d->lockObj) {
         qCWarning(lcSessionLock) << "Failed to create the session lock object";
+        d->reportLockUnavailable();
         return;
     }
     static const struct ext_session_lock_v1_listener listener = {

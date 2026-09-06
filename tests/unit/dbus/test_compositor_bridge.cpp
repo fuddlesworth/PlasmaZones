@@ -304,8 +304,18 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(1).toInt(), 0x00000001);
     }
 
+    // Register a bridge that declares "gestures", the way the bundled KWin
+    // bridge does. reportGesture only relays for such a bridge, so every
+    // positive gesture case has to go through this first.
+    void registerGestureBridge()
+    {
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless"), QStringLiteral("gestures")});
+    }
+
     void testReportGesture_relaysValidGestures()
     {
+        registerGestureBridge();
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::gestureReported);
 
         m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3);
@@ -322,6 +332,7 @@ private Q_SLOTS:
 
     void testReportGesture_dropsOutOfVocabulary()
     {
+        registerGestureBridge();
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::gestureReported);
 
         m_bridgeAdaptor->reportGesture(QStringLiteral("tap"), QStringLiteral("up"), 3); // unknown kind
@@ -329,6 +340,30 @@ private Q_SLOTS:
         m_bridgeAdaptor->reportGesture(QStringLiteral("pinch"), QStringLiteral("up"), 4); // swipe word
         m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 0); // no fingers
         m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 6); // too many
+
+        QCOMPARE(spy.count(), 0);
+    }
+
+    // The interface documents reportGesture as firing only for a bridge
+    // registered under "gestures". gestureReported drives the shell's
+    // launcher and dashboard and the session bus is an untrusted boundary,
+    // so an unregistered peer must not be able to reach them.
+    void testReportGesture_dropsWhenNoBridgeRegistered()
+    {
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::gestureReported);
+
+        m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3);
+
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testReportGesture_dropsWhenBridgeLacksGesturesCapability()
+    {
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless")});
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::gestureReported);
+
+        m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3);
 
         QCOMPARE(spy.count(), 0);
     }

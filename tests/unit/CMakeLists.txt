@@ -2315,11 +2315,18 @@ add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 # ═══════════════════════════════════════════════════════════════════════════════
 # Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. These targets compile the
 # src/shell sources they need directly rather than linking the gated
-# phosphor-shell binary, those sources are unconditional files on disk, and
-# the only non-Qt dependency (PhosphorRegistry) is added unconditionally at
-# the top level. Gating would make these guard tests vanish from the default
-# configuration, where BUILD_PHOSPHOR_SHELL is OFF, which is precisely the
-# build that most needs them.
+# phosphor-shell binary, and those sources are unconditional files on disk.
+# Gating would make these guard tests vanish from the default configuration,
+# where BUILD_PHOSPHOR_SHELL is OFF, which is precisely the build that most
+# needs them.
+#
+# That holds only while a target's non-Qt dependencies are themselves added
+# unconditionally at the top level (PhosphorRegistry, PhosphorProtocol,
+# PhosphorSurface, PhosphorAnimation all are). A target needing a shell-tier
+# library gets its own `if(TARGET ...)` guard instead, as test_shell_chrome
+# does for PhosphorTheme below. Check that before adding a target here: an
+# ungated link to a gated library fails the default configure at generate
+# time, which takes down the whole suite rather than one test.
 #
 # The classes live in the GPL shell binary, so they are tested here rather
 # than from the LGPL bar module's own QuickTest suite (which covers the QML
@@ -2406,24 +2413,32 @@ add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 
 # The chrome decoration resolver: tree JSON + the bundled packs to a stage
 # list per shell surface path.
-add_executable(test_shell_chrome
-    shell/test_shell_chrome.cpp
-    ${CMAKE_SOURCE_DIR}/src/shell/ShellChrome.h
-    ${CMAKE_SOURCE_DIR}/src/shell/shellchrome.cpp
-)
-target_link_libraries(test_shell_chrome
-    PRIVATE
-        Qt6::Test
-        Qt6::Core
-        Qt6::DBus
-        Qt6::Gui
-        PhosphorProtocol::PhosphorProtocol
-        PhosphorSurface::PhosphorSurface
-        PhosphorTheme::PhosphorTheme
-)
-target_compile_definitions(test_shell_chrome PRIVATE PZ_BUNDLED_SURFACE_DIR="${CMAKE_SOURCE_DIR}/data/surface")
-target_include_directories(test_shell_chrome PRIVATE ${CMAKE_SOURCE_DIR}/src)
-add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
+#
+# Gated on the theme target, unlike its siblings in this group. shellchrome.cpp
+# includes PhosphorTheme/PaletteStore.h and connects paletteChanged, and
+# libs/phosphor-theme is only added under BUILD_PHOSPHOR_SHELL, so this is the
+# one file here whose dependencies are not all unconditional. Without the guard
+# the default BUILD_TESTING=ON configure fails at generate and no test builds.
+if(TARGET PhosphorTheme::PhosphorTheme)
+    add_executable(test_shell_chrome
+        shell/test_shell_chrome.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ShellChrome.h
+        ${CMAKE_SOURCE_DIR}/src/shell/shellchrome.cpp
+    )
+    target_link_libraries(test_shell_chrome
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            Qt6::Gui
+            PhosphorProtocol::PhosphorProtocol
+            PhosphorSurface::PhosphorSurface
+            PhosphorTheme::PhosphorTheme
+    )
+    target_compile_definitions(test_shell_chrome PRIVATE PZ_BUNDLED_SURFACE_DIR="${CMAKE_SOURCE_DIR}/data/surface")
+    target_include_directories(test_shell_chrome PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
+endif()
 
 # The toast broker behind the `notify` IpcTarget.
 add_executable(test_toast_controller

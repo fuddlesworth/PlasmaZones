@@ -16,7 +16,7 @@ are drawn from this file.
 
 ## 1. Why the previous design failed
 
-The first design (`01`–`04`, `mockups/`) was a parity checklist against DankMaterialShell,
+The first design (`01`–`04`, plus mockups since removed) was a parity checklist against DankMaterialShell,
 Noctalia and HyprPanel. It produced a competent clone: navy slab, 16–24 px pills, tile-grid
 control center, Spotlight launcher, drop shadows, symmetric M3 fades. Its one named
 differentiator, the connected-corner popout, is a DMS port. The live build had drifted

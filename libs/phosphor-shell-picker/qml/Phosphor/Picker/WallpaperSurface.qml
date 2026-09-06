@@ -78,8 +78,12 @@ PanelWindow {
         property string frontPath: ""
         property string pendingPath: ""
 
+        // Wallpaper paths are filenames the user chose, so they routinely
+        // carry spaces and occasionally `#` or `?`. Bare concatenation both
+        // breaks the load and breaks `settle()`, which compares this against
+        // the Image's own already-normalised `source` and would never match.
         function urlFor(path: string): string {
-            return path === "" ? "" : "file://" + path;
+            return path === "" ? "" : "file://" + encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
         }
 
         // Ask for `path`. Same as the front: forget anything pending, so a

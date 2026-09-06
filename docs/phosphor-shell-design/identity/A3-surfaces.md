@@ -5,7 +5,7 @@
 
 Behaviour, layout and choreography for every non-bar surface. Written against what
 the tree ships today in `libs/phosphor-shell-{launcher,control-center,notifications,osd,power}`
-and `docs/phosphor-shell-design/mockups/*.svg`, which are DMS / Noctalia parity
+and the v1 mockups (removed in phase 6), which were DMS / Noctalia parity
 clones. Everything below is designed *away* from those.
 
 ## Visual anchor

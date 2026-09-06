@@ -14,9 +14,10 @@ gap withholds, not by effort.
 | Compositor-drawn chrome packs | A1 §2.4 wants the compositor to draw a pack on the bar exactly as on a window frame. Today the shell hosts the chain itself, with the same packs and the same tree, so the look is right but the renderer differs. | Needs a per-surface content rect the effect can decorate (a bar's band is a strip of a taller surface). Revisit when Phosphor is the compositor. |
 | Touchpad gesture progress | Gestures are events. A 1:1 drawer (the launcher following the fingers) needs progress forwarded from the effect. | `registerTouchpadSwipeShortcut` takes a progress callback; the relay would need a rate limit. |
 | Bundled faces | Manrope and JetBrains Mono are resolved, not shipped; most machines fall back to Noto Sans. | Bundling means binaries in the repo. Decide with packaging. |
-| Bar keyboard navigation | The placement map is pointer-only. | A3 §1 lists the chords. |
-| Filmstrip drag between desktops, Shift-drop as tab, double-click verbs on the map | Listed in A2 §5, unbuilt. | `moveWindowToDesktop` exists on the daemon; the UI does not. |
+| Bar keyboard navigation | The placement map is pointer-only. | A2 §1.5 lists the chords. |
+| Filmstrip drag between desktops, Shift-drop as tab, double-click verbs on the map | Listed in A2 §1.5–1.6, unbuilt. | `moveWindowToDesktop` exists on the daemon; the UI does not. |
 | Tiling and scrolling drop proxies | The bar's drop proxy is snapping-only. | `WindowDrag.registerDropProxy` takes any cell list. |
+| Decoration slots on the dashboard, cheatsheet and power menu | Eight surfaces host a `DecorationSlot`; these three do not, so a surface pack stops at their edge. | Layer-routed popouts get no slot from `PopoutHost` the way pane-routed ones do from `PaneHost`; each content surface carries its own. |
 
 ## Surface gaps
 
@@ -25,7 +26,7 @@ gap withholds, not by effort.
 | Notification center (history, rules editor) | The toast host has the rules seam; the history popout is unbuilt. |
 | Theme browser | `ThemePresets` reads `~/.local/share/plasmazones/palettes`; there is no browser beyond the picker strip. |
 | Dock | Not planned for the identity; the bar's map is the window list. |
-| Control-center tiles: night mode, dark mode, airplane, power profile, wallpaper | Five tiles deferred with service blockers; see the control-center README. |
+| Control-center tiles: night mode, dark mode, airplane, power profile, wallpaper | Five tiles deferred with service blockers. |
 | Emoji provider in the launcher | Deferred. |
 | Weather cell on the dashboard | No service. |
 

@@ -18,7 +18,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Protocol API version as a decimal integer string (PhosphorProtocol::Service::ApiVersion) — NOT the compositor's release version. Peers below the daemon's minimum are rejected."/>
             </arg>
             <arg name="capabilities" type="as" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, animation, borders, modifiers."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, animation, borders, modifiers, gestures."/>
             </arg>
             <arg name="result" type="(sss)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::BridgeRegistrationResult"/>
@@ -44,7 +44,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Swipe: 'up', 'down', 'left', 'right'. Pinch: 'expanding', 'contracting'."/>
             </arg>
             <arg name="fingerCount" type="u" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Finger count of the recognised gesture (3 or 4)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Finger count of the recognised gesture. The bundled KWin bridge sends 3 or 4; the daemon accepts 1 to 5 and drops anything outside that."/>
             </arg>
         </method>
 
