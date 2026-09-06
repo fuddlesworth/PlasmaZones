@@ -184,7 +184,7 @@ StripAxis ScrollEngine::effectiveStripAxis(const QVariantMap& overrides, const Q
 }
 
 // ── behaviour toggles ──
-// One shape for all eight callers (the five behaviour toggles plus the three
+// One shape for all nine callers (the six behaviour toggles plus the three
 // tab-indicator bools): a rule-written per-screen key wins, an absent key
 // falls back to the member the global config seeded. The value is taken only
 // when it is a real bool — a hand-edited string would otherwise coerce to

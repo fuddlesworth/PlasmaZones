@@ -899,11 +899,12 @@ public:
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
     /// openWindowHeight / openTabbed / openColumnPlacement / openMaximized /
-    /// openFocused), returned as a loose map so the header stays free of
-    /// scroll-engine types. Keys, present only when the slot matched, and
-    /// spelled by the ScrollOpenKeys namespace in internal.h rather than
-    /// literals: widthFraction (double), heightFraction (double), tabbed
-    /// (bool), consume (bool), maximized (bool), focused (bool).
+    /// openFocused / openTabGroup), returned as a loose map so the header
+    /// stays free of scroll-engine types. Keys, present only when the slot
+    /// matched, and spelled by the ScrollOpenKeys namespace in internal.h
+    /// rather than literals: widthFraction (double), heightFraction (double),
+    /// tabbed (bool), consume (bool), maximized (bool), focused (bool),
+    /// tabGroup (trimmed non-empty string).
     /// Resolves UNCACHED, like shouldFloatByRule and unlike the
     /// Restore predicates: the query carries ScreenId and Mode stamps, and the
     /// evaluator cache is keyed on windowId and rule revision alone, so a hit

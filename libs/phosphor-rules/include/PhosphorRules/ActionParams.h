@@ -50,8 +50,10 @@ inline constexpr QLatin1StringView DurationMs{"durationMs"};
 // hand-written 8.5 loads and lands on the consumer's rounding), a bool for
 // the on/off overrides, a
 // `#AARRGGBB` hex string (or the `BorderColorToken::Accent` sentinel, resolved
-// to the live system accent) for the colour actions, and an enum wire token for
-// the token-valued ones.
+// to the live system accent) for the colour actions, an enum wire token for
+// the token-valued ones, and a free-form string for the two name-like slots
+// (the tab label font family and the openTabGroup name), bounded by
+// MaxFontFamilyLength / MaxTabGroupNameLength on the trimmed value.
 inline constexpr QLatin1StringView Value{"value"};
 // SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
@@ -141,6 +143,13 @@ inline constexpr int MaxZoneNameLength = 128;
 /// and the `value` ParamSchema `max`, which the rule editor's text field reads
 /// so it cannot author a value the validator would then drop.
 inline constexpr int MaxFontFamilyLength = 128;
+
+/// Length cap on an `OpenTabGroup` group name, on the same terms as the font
+/// family above (checked on the trimmed value; the descriptor validator and
+/// the rule editor's text field both read it). Empty is NOT legal here: a
+/// group with no name names nothing, so the validator rejects it rather than
+/// letting an unnamed group silently gather every matched window.
+inline constexpr int MaxTabGroupNameLength = 64;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px, mirroring the

@@ -1181,9 +1181,17 @@ private:
     /// the per-window open-rule verdict resolved inside (default-constructed
     /// on the early FLOAT exits, which return before the resolver runs) so
     /// the caller's focus arm can read the openFocused override without a
-    /// second rule resolve.
+    /// second rule resolve. @p migration is true when windowOpened is
+    /// re-entering the open path for a window that moved context (screen or
+    /// desktop): a migration is a move, not an open, so the tab-grouping arm
+    /// is skipped for it the way the height re-stamp is. @p outDisplacedTab,
+    /// when given, receives the id of the tab the host column was SHOWING
+    /// before a grouped join made the arrival its shown tab (empty on every
+    /// other arm), so the caller's focus-new-windows rewind can put that tab
+    /// back on show when the arrival declines focus.
     bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
-                            int minHeightIn, ScrollOpenParams* outOpenParams = nullptr);
+                            int minHeightIn, ScrollOpenParams* outOpenParams = nullptr, bool migration = false,
+                            QString* outDisplacedTab = nullptr);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -1626,15 +1634,18 @@ private:
     /// instead of re-looking it up per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
-    /// The six scrolling BEHAVIOUR toggles, rule-only per-screen keys layered
-    /// over the config-seeded members. Four of them (always-center-single-
-    /// column, respect-minimum-size, smart gaps and the straddler clamp) are
-    /// consumed inside layoutParamsForScreen and exist ONLY in map-taking
-    /// form, since that is the one call site and it has already fetched the
-    /// map. The other two (the open-path focus arm and the sticky gate) are
-    /// consumed outside it and carry a screenId wrapper; the sticky gate also
-    /// keeps a map-taking form, because the open path resolves several values
-    /// for one screen off a single fetch.
+    /// The six scrolling BEHAVIOUR toggles with a per-screen rule channel,
+    /// rule-only per-screen keys layered over the config-seeded members. Five
+    /// of them (always-center-single-column, center-short-columns,
+    /// respect-minimum-size, smart gaps and the straddler clamp) are consumed
+    /// inside layoutParamsForScreen and exist ONLY in map-taking form, since
+    /// that is the one call site and it has already fetched the map. The
+    /// sixth (the open-path focus arm) is consumed outside it and carries a
+    /// screenId wrapper. The sticky gate is their int-valued sibling, not one
+    /// of the six bools: it carries both forms because the open path resolves
+    /// several values for one screen off a single fetch. groupSameAppAsTabs
+    /// below is not one of the six either: it is a global-only live read
+    /// with no per-screen key.
     bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
     bool effectiveCenterShortColumns(const QVariantMap& overrides) const;
     bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
@@ -1644,13 +1655,55 @@ private:
     /// once per window on the relayout path.
     bool effectiveCropStraddlers(const QVariantMap& overrides) const;
     /// Falls back to the LIVE IScrollSettings read rather than a cached
-    /// member: focus-new-windows is the one behaviour the engine never
-    /// cached, and reading it live keeps a settings change effective without
-    /// waiting for a settings-reload pass.
+    /// member: focus-new-windows is one of the two behaviours the engine
+    /// never caches (groupSameAppAsTabs below is the other), and reading it
+    /// live keeps a settings change effective without waiting for a
+    /// settings-reload pass.
     bool effectiveFocusNewWindows(const QString& screenId) const;
+    /// Live IScrollSettings read, for effectiveFocusNewWindows's reason: the
+    /// verdict is consulted once per fresh open and a settings change should
+    /// take effect on the very next one. Global only: there is no per-screen
+    /// rule key for it (see IScrollSettings).
+    bool groupSameAppAsTabs() const;
+    /// Index of the column a grouped open would join: the active column when
+    /// it holds a tile @p inGroup accepts, else the first column along the
+    /// strip that does, else -1. Only strip TILES are offered (a floated
+    /// sibling is not a column to join), a MINIMIZED tile is skipped (it
+    /// would be named the tabbed extent owner and never resolve), and a
+    /// column holding the interactive-drag window is never offered (the
+    /// dragged window's rect is frozen and it must not become a hidden tab
+    /// under the arrival). The predicate is the grouping key: same
+    /// registry-aware appId for the settings default, same resolved
+    /// openTabGroup name for the rule.
+    int tabGroupColumnIndex(const ScrollStrip& strip, const std::function<bool(const QString&)>& inGroup) const;
+    /// The grouping verdict for a fresh open: which column @p windowId joins
+    /// as a tab, and by which key. Rule first (an engaged, non-empty
+    /// openTabGroup name), else the same-app default when
+    /// IScrollSettings::scrollingGroupSameAppAsTabs is on, @p appId is stable
+    /// and the window's own rules did not opt it out with openTabbed=false.
+    /// Sibling tiles are resolved through the open-params resolver at most
+    /// ONCE per call (memoised), so a strip of N tiles costs at most N rule
+    /// walks per open rather than one per probe. columnIdx is -1 when nothing
+    /// applies; named says which key matched (the diagnostics label reads it).
+    struct GroupedOpenHost
+    {
+        int columnIdx = -1;
+        bool named = false;
+    };
+    GroupedOpenHost groupedOpenHost(const ScrollStrip& strip, const QString& windowId, const QString& appId,
+                                    const QString& screenId, const ScrollOpenParams& openParams) const;
+    /// The grouped-open join itself: resolve the host through groupedOpenHost
+    /// and append @p windowId to it as a tab, turning the column tabbed.
+    /// Returns false when nothing applies or the strip refuses the insert,
+    /// leaving the caller's fresh-open block to place the window.
+    /// @p outDisplacedTab receives the tab the host was showing before the
+    /// join; @p outNamed says whether the rule key or the app key matched.
+    bool insertGroupedOpen(ScrollState* state, const QString& windowId, const QString& appId, const QString& screenId,
+                           const ScrollLayoutParams& params, int minWidth, int minHeight,
+                           const ScrollOpenParams& openParams, QString* outDisplacedTab, bool* outNamed);
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QString& screenId) const;
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QVariantMap& overrides) const;
-    /// Shared bool-override reader for the five toggles above: takes the
+    /// Shared bool-override reader for the six toggles above: takes the
     /// override only when it is a real bool, so a hand-edited string cannot
     /// coerce to false and silently disable a behaviour.
     static bool effectiveBoolOverride(const QVariantMap& overrides, const QString& key, bool fallback);

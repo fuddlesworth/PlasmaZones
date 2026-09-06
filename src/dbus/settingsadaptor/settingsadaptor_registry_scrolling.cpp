@@ -327,6 +327,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // Effect-only consumer (reconcileRuleWindowLayer): keep scroll-floated
     // windows stacked above the strip.
     REGISTER_BOOL_SETTING("scrollingKeepFloatingAbove", scrollingKeepFloatingAbove, setScrollingKeepFloatingAbove)
+    // Same-app tab grouping: an ISettings defaulted pair too, so it registers
+    // through the interface rather than in the concrete block below with its
+    // Scrolling.Behavior neighbours.
+    REGISTER_BOOL_SETTING("scrollingGroupSameAppAsTabs", scrollingGroupSameAppAsTabs, setScrollingGroupSameAppAsTabs)
     REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
     REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
                           setScrollingDropIndicatorEnabled)
@@ -711,6 +715,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
         };
         m_schemas[QStringLiteral("scrollingInsertPosition")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingFocusNewWindows", scrollingFocusNewWindows, setScrollingFocusNewWindows)
+        // scrollingGroupSameAppAsTabs registers through the ISettings-level
+        // block above.
         REGISTER_CONCRETE_BOOL("scrollingFocusFollowsMouse", scrollingFocusFollowsMouse, setScrollingFocusFollowsMouse)
         REGISTER_CONCRETE_INT("scrollingFocusFollowsMouseMaxScroll", scrollingFocusFollowsMouseMaxScroll,
                               setScrollingFocusFollowsMouseMaxScroll)

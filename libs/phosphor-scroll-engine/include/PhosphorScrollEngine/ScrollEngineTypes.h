@@ -59,6 +59,12 @@ struct ScrollOpenParams
     /// insert itself; the engine's FLOAT exits ignore it (a floated open
     /// keeps the compositor's own focus verdict).
     std::optional<bool> focused;
+    /// Named tab group (openTabGroup rule), trimmed and non-empty when
+    /// engaged. The open joins, as a tab, a column holding a window whose own
+    /// resolved params carry the same name; an engaged name outranks the
+    /// app-keyed IScrollSettings::scrollingGroupSameAppAsTabs default and
+    /// never falls back to it. A consume open outranks both.
+    std::optional<QString> tabGroup;
 };
 
 /// One visible tile of a strip: the unit of the scroll "zone number" space.
