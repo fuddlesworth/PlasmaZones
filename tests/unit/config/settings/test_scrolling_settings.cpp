@@ -1277,6 +1277,24 @@ private Q_SLOTS:
                  ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
         QCOMPARE(capSpy.count(), 3);
         QCOMPARE(changedSpy.count(), preCapChanged + 3);
+
+        // Same-app tab grouping: a plain bool with the same emit-once
+        // contract, plus a save/reload round trip because the default is
+        // false and a sparse store that dropped a true would silently read
+        // back as the default.
+        QSignalSpy groupSpy(&settings, &Settings::scrollingGroupSameAppAsTabsChanged);
+        const int preGroupChanged = changedSpy.count();
+        QCOMPARE(settings.scrollingGroupSameAppAsTabs(), ConfigDefaults::scrollingGroupSameAppAsTabs());
+        settings.setScrollingGroupSameAppAsTabs(true);
+        QVERIFY(settings.scrollingGroupSameAppAsTabs());
+        QCOMPARE(groupSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preGroupChanged + 1);
+        settings.setScrollingGroupSameAppAsTabs(true); // unchanged: silent
+        QCOMPARE(groupSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preGroupChanged + 1);
+        settings.save();
+        Settings reloaded;
+        QVERIFY(reloaded.scrollingGroupSameAppAsTabs());
     }
 
     /// Preset lists canonicalize to numeric proportions in (0, 1]: junk and

@@ -51,6 +51,13 @@ static_assert(ConfigDefaults::scrollingKeepFloatingAbove() == ConfigDefaults::au
 // same pin, different interface and direction.
 static_assert(!ConfigDefaults::scrollingCropStraddlers(),
               "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
+// Same-app tab grouping carries the defaulted getter on BOTH interfaces
+// (ISettings for the D-Bus registry, IScrollSettings for the engine), each
+// answering false; one pin covers both because Settings overrides them with
+// a single body.
+static_assert(
+    !ConfigDefaults::scrollingGroupSameAppAsTabs(),
+    "ISettings/IScrollSettings::scrollingGroupSameAppAsTabs default to false — update them with this default");
 // The strip-axis tri-state gets the identical pin: IScrollSettings'
 // defaulted getter answers 0 (Auto), and an implementor that has not heard
 // of the option must resolve the axis from its work area, never force one.

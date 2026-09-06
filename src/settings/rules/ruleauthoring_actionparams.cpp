@@ -612,8 +612,10 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // screenId) and plain strings all start empty. The tab-indicator
             // font family is a plain string rather than a picker, and empty is
             // a meaningful value for it (it means the system font), so unlike
-            // the pickers its seeded rule is already savable. Four kinds are
-            // seeded above instead:
+            // the pickers its seeded rule is already savable. The openTabGroup
+            // name is the other plain string, and there empty is the reject
+            // case, so like the pickers it stays unsavable until named. Four
+            // kinds are seeded above instead:
             // zoneOrdinals and virtualDesktop because their validators reject an
             // empty value, zoneNames and decorationChain because an empty ARRAY
             // (not an empty string) is their valid starting shape. The

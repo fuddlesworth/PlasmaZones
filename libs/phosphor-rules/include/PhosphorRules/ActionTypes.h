@@ -546,6 +546,13 @@ inline constexpr QLatin1StringView OpenFocused{"openFocused"};
 /// group name never falls back to same-app grouping. An OpenColumnPlacement
 /// consume rule on the same window outranks it, the way every explicit
 /// placement outranks a grouping verdict.
+///
+/// Names compare exactly after trimming, case included ("Work" and "work"
+/// are two groups). Membership is resolved LIVE: on every open the engine
+/// re-evaluates each existing tile's rules against that tile's current
+/// metadata, so a group keyed on a title condition follows the live title,
+/// and a tile can enter or leave a group between two opens without moving.
+/// Nothing is remembered per window.
 inline constexpr QLatin1StringView OpenTabGroup{"openTabGroup"};
 /// Fullscreen at open — niri's `open-fullscreen`. Boolean `ActionParam::Value`:
 /// true puts the opening window into real KWin fullscreen, false vetoes the

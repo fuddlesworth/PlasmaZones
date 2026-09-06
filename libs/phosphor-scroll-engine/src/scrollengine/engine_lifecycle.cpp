@@ -92,7 +92,8 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
-                                      int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams)
+                                      int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams, bool migration,
+                                      QString* outDisplacedTab)
 {
     // Public-API belt at the one boundary the update path already guards:
     // windowMinSizeUpdated clamps because "a negative floor flows into
@@ -360,60 +361,24 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             consumePendingInitialOrder(screenId, windowId);
         }
     }
-    // Tab grouping: a fresh open joins, as a tab, a column that already holds
-    // a window of its GROUP. Two keys, rule first: an openTabGroup rule names
-    // the group outright, and every tile whose own rules resolve to that name
-    // is a sibling (resolved live through the same resolver, so a rule edit
-    // takes effect on the next open and nothing has to be remembered per
-    // window); with no rule, Scrolling.Behavior.GroupSameAppAsTabs keys the
-    // group on the registry-aware appId. Ordered deliberately: BELOW the
-    // stash restore, the consume rule and the order seed, because a
+    // Tab grouping (engine_grouping.cpp): a fresh open joins, as a tab, a
+    // column that already holds a window of its group. Ordered deliberately:
+    // BELOW the stash restore, the consume rule and the order seed, because a
     // remembered shape or an explicit placement outranks a grouping verdict
     // (the same precedence the insert-position setting has), and ABOVE the
     // fresh-open block, because that block is where a column is CREATED and
     // this arm creates none. A join spends no blueprint entry for the same
-    // reason the IntoActiveColumn arm spends none. The host column is turned
-    // tabbed through the engaged override, so a Normal stack becomes tabs on
-    // the first grouped arrival and a column that is already tabbed keeps its
-    // owner (applyColumnDisplay no-ops on a same-display write). The arriving
-    // window becomes the tab on show and takes the strip focus, which the
-    // focus arm in windowOpened rewinds when focus-new-windows says no,
-    // exactly as it does for insertWindow's focus.
-    if (!inserted) {
-        int hostIdx = -1;
-        if (openParams.tabGroup && !openParams.tabGroup->isEmpty()) {
-            const QString group = *openParams.tabGroup;
-            hostIdx = tabGroupColumnIndex(state->strip(), [&](const QString& tileId) {
-                const ScrollOpenParams tileParams =
-                    m_openParamsResolver ? m_openParamsResolver(tileId, screenId) : ScrollOpenParams{};
-                return tileParams.tabGroup && *tileParams.tabGroup == group;
-            });
-        } else if (PhosphorEngine::hasStableAppIdFor(appId, windowId) && groupSameAppAsTabs()) {
-            // Lazy on the settings read, which qobject_casts the settings
-            // object: the appId gate is the cheap half.
-            //
-            // A tile a rule has NAMED into a group belongs to that group
-            // only: it is not an app-group sibling, or an unnamed window of
-            // the app would be pulled into a "work" column because one of
-            // its kind happens to be tabbed there. The two keys are disjoint
-            // in both directions (the named arm above never reads the app).
-            hostIdx = tabGroupColumnIndex(state->strip(), [&](const QString& tileId) {
-                if (currentAppIdFor(tileId) != appId) {
-                    return false;
-                }
-                const ScrollOpenParams tileParams =
-                    m_openParamsResolver ? m_openParamsResolver(tileId, screenId) : ScrollOpenParams{};
-                return !tileParams.tabGroup || tileParams.tabGroup->isEmpty();
-            });
-        }
-        if (hostIdx >= 0) {
-            const int tileIdx = state->strip().columns().at(hostIdx).tiles.size();
-            inserted = state->strip().insertWindowIntoColumnAt(hostIdx, tileIdx, windowId, params, minWidth, minHeight,
-                                                               ColumnDisplay::Tabbed);
-            if (inserted) {
-                insertArm = "same-app-tab";
-                consumePendingInitialOrder(screenId, windowId);
-            }
+    // reason the IntoActiveColumn arm spends none. Never on a MIGRATION: a
+    // migration is a move, not an open, the rule the height re-stamp in
+    // windowOpened already follows, so a window that changes screen keeps a
+    // column of its own.
+    if (!inserted && !migration) {
+        bool named = false;
+        if (insertGroupedOpen(state, windowId, appId, screenId, params, minWidth, minHeight, openParams,
+                              outDisplacedTab, &named)) {
+            inserted = true;
+            insertArm = named ? "tab-group-rule" : "same-app-tab";
+            consumePendingInitialOrder(screenId, windowId);
         }
     }
     if (!inserted) {
@@ -823,7 +788,9 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // parked right now.
     const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
     ScrollOpenParams openParams;
-    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, &openParams)) {
+    QString displacedTab;
+    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, &openParams, oldState != nullptr,
+                            &displacedTab)) {
         // Every insert refused (the strip already holds the window). On a
         // fresh open nothing moved; on the MIGRATION path above the old
         // context already released the window and announced its own retile,
@@ -901,6 +868,18 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {
         const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+        // A grouped join made the arrival its host column's shown tab. When
+        // that host is NOT the prior-active column, rewinding the strip's
+        // active column alone would leave the host showing the arrival: the
+        // user working in kate would see the firefox column behind them flip
+        // to the new firefox window, which is the disturbance an OFF setting
+        // exists to prevent. Put the displaced tab back on show first (a
+        // same-column focus, so no re-anchor), then move the column focus.
+        // When the host IS the prior-active column the second call re-points
+        // the tile to priorActive anyway.
+        if (!displacedTab.isEmpty() && state->strip().containsWindow(displacedTab)) {
+            state->strip().focusWindow(displacedTab, params);
+        }
         state->strip().focusWindow(priorActive, params);
         // Rewinding the strip is only half of declining focus. The compositor
         // focuses the arriving window on its own, and reports that focus back

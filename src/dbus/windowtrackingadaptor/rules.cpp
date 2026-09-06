@@ -642,8 +642,12 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     // keyed on (windowId, ruleSet revision) alone, so seeding it from this
     // extra-stamped query would hand the screen-only placement resolver a
     // verdict built under a Mode condition it never asked for (and vice
-    // versa, on whichever path resolves first). This is one resolve per
-    // window open on a scrolling screen.
+    // versa, on whichever path resolves first). Per open on a scrolling
+    // screen this runs once for the OPENING window and, when tab grouping is
+    // engaged (an openTabGroup rule or GroupSameAppAsTabs), once more per
+    // candidate sibling TILE on that strip: the engine resolves each tile's
+    // own rules to decide group membership live, memoised for the duration
+    // of that one open so no tile is asked twice.
     const PhosphorRules::ResolvedActions resolved =
         m_ruleEvaluator->resolveFiltered(*query, admitWith(&admitScreenAndModeStamped, *query));
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {

@@ -1535,12 +1535,16 @@ public:
     // Scrolling Behavior Settings (Scrolling.Behavior group)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Store-backed scalars under Scrolling.Behavior; shared leaf key names
-    // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
+    // Store-backed scalars under Scrolling.Behavior; mostly shared leaf key
+    // names (FocusNewWindows, StickyWindowHandling, …) disambiguated by
+    // group, plus the scrolling-only GroupSameAppAsTabs. That pair satisfies
+    // both ISettings (defaulted virtuals, so the D-Bus registry can publish
+    // the key through the interface) and IScrollSettings (the engine's live
+    // read), hence the override on the setter too.
     bool scrollingFocusNewWindows() const override;
     void setScrollingFocusNewWindows(bool focus);
     bool scrollingGroupSameAppAsTabs() const override;
-    void setScrollingGroupSameAppAsTabs(bool group);
+    void setScrollingGroupSameAppAsTabs(bool group) override;
     bool scrollingFocusFollowsMouse() const;
     void setScrollingFocusFollowsMouse(bool follows);
     int scrollingFocusFollowsMouseMaxScroll() const;

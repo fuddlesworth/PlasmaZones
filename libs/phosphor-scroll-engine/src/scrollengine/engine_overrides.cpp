@@ -230,40 +230,6 @@ bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const
     return effectiveBoolOverride(overridesForScreen(screenId), ScrollPerScreenKeys::focusNewWindows(), fallback);
 }
 
-bool ScrollEngine::groupSameAppAsTabs() const
-{
-    if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
-        return settings->scrollingGroupSameAppAsTabs();
-    }
-    return false;
-}
-
-int ScrollEngine::tabGroupColumnIndex(const ScrollStrip& strip,
-                                      const std::function<bool(const QString&)>& inGroup) const
-{
-    const auto columnInGroup = [&](const Column& col) {
-        for (const Tile& tile : col.tiles) {
-            if (inGroup(tile.windowId)) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const QVector<Column>& columns = strip.columns();
-    // The active column first: when several columns hold the group, the one
-    // the user is working in is the one a new window of it belongs with.
-    const int activeIdx = strip.activeColumnIndex();
-    if (activeIdx >= 0 && activeIdx < columns.size() && columnInGroup(columns.at(activeIdx))) {
-        return activeIdx;
-    }
-    for (int i = 0; i < columns.size(); ++i) {
-        if (columnInGroup(columns.at(i))) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 bool ScrollEngine::effectiveSmartGaps(const QVariantMap& overrides) const
 {
     return effectiveBoolOverride(overrides, ScrollPerScreenKeys::smartGaps(), m_smartGaps);

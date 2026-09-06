@@ -599,6 +599,25 @@ public:
     {
     }
 
+    /// Open a fresh scrolling window as a tab of a column that already holds
+    /// a window of the same application (Scrolling.Behavior.GroupSameAppAsTabs).
+    /// Defaulted like the two toggles above so the D-Bus settings registry
+    /// registers the key through the interface (the preferred shape for new
+    /// keys). The engine reads it through IScrollSettings, which declares the
+    /// same defaulted getter; Settings overrides both with one body. Pinned to
+    /// ConfigDefaults::scrollingGroupSameAppAsTabs() by the static_assert in
+    /// settings/scrolling.cpp.
+    virtual bool scrollingGroupSameAppAsTabs() const
+    {
+        return false;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingRestoreFloatedWindowsOnLogin.
+    virtual void setScrollingGroupSameAppAsTabs(bool /*group*/)
+    {
+    }
+
     virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
