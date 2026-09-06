@@ -48,9 +48,13 @@ namespace PhosphorScrollEngine {
 /// positions the group edge to edge on purpose, and a policy that re-centered
 /// the active column afterwards would hand a second press a different group.
 /// Any focus-driven or structural re-anchor (every reanchorAfterFocusChange
-/// caller: the focus and move verbs, the inserts, an active column that
-/// vanished), the Always policy's own re-centering, or either centering verb
-/// re-attaches it and the policy takes the view back. A bystander's removal
+/// caller: the COLUMN-focus and move verbs, the inserts, an active column
+/// that vanished), the Always policy's own re-centering, or either centering
+/// verb re-attaches it and the policy takes the view back. The TILE-focus
+/// ops here never re-anchor, so ScrollEngine clears the latch on their behalf
+/// instead: cycleTab, focusTab, focusWindowTop, focusWindowBottom and the
+/// cross-axis leg of a directional focus press all hand the view back the way
+/// windowFocused does when the pointer picks the same tab. A bystander's removal
 /// that leaves focus where it was does not. One re-attach lives OUTSIDE this
 /// class, in ScrollEngine::windowFocused: a compositor report naming the
 /// window the strip already calls active reaches no re-anchor at all (it is
@@ -219,12 +223,19 @@ public:
     bool focusAdjacentColumn(int delta, const ScrollLayoutParams& params);
     bool focusFirstColumn(const ScrollLayoutParams& params);
     bool focusLastColumn(const ScrollLayoutParams& params);
-    /// Focus the previous/next non-minimized tile within the active column
-    /// (cycles tabs in a tabbed column exactly the same way). @p delta -1/+1.
+    /// Focus the previous/next non-minimized tile within the active column,
+    /// stopping at either end (ScrollEngine::cycleTab wraps instead, by
+    /// falling back to focusTileAtEnd when this refuses). @p delta -1/+1.
     bool focusAdjacentTile(int delta);
     /// Focus the first (@p last false) or last non-minimized tile of the
     /// active column (niri focus-window-top/bottom). False when already there.
     bool focusTileAtEnd(bool last);
+    /// Focus the @p ordinal'th (1-based) non-minimized tile of the active
+    /// column, which is that ordinal's tab when the column is tabbed. Like
+    /// the sibling tile-focus verbs it is NOT gated on the display mode, so
+    /// it addresses the stack the same way. False when the column has no
+    /// such tile or it is already the active one.
+    bool focusTileByOrdinal(int ordinal);
     /// Make @p windowId the active tile of its (newly active) column.
     /// Externally-driven focus (compositor activation). Returns false when
     /// untracked or already the focused window.

@@ -164,6 +164,15 @@ void ScrollEngine::focusInDirectionResolved(const QString& direction, const Phos
     const bool moved = (mainStep != 0) ? state->strip().focusAdjacentColumn(mainStep, params)
                                        : (crossStep != 0 && state->strip().focusAdjacentTile(crossStep));
     if (moved) {
+        if (crossStep != 0) {
+            // The CROSS leg is a tile-focus move, and the strip's tile-focus
+            // ops never re-anchor. Hand the view back to the policy the way
+            // P_SCROLL_TILE_FOCUS_VERB does for the named stack verbs, or a
+            // press after a wheel pan activates a window that is off-screen.
+            // The MAIN leg needs nothing: focusAdjacentColumn re-anchors, and
+            // reanchorAfterFocusChange clears the latch itself.
+            state->strip().setViewDetached(false);
+        }
         applyLayout(screen, true);
         // Focus is PERSISTED state: serializeStripState writes focusedWindow
         // and viewAnchor, and the only thing that marks DirtyScrollStrips is
