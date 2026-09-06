@@ -74,8 +74,14 @@ SessionLockWindow::SessionLockWindow(LayerShellIntegration* integration, QtWayla
 
 SessionLockWindow::~SessionLockWindow()
 {
-    if (m_lockSurface)
+    if (m_lockSurface) {
+        // Sever the listener's back-pointer before destroying the proxy, the
+        // same order clipboarddevice.cpp and foreigntoplevel.cpp use. An event
+        // already queued against this surface would otherwise dispatch into
+        // handleConfigure with `data` pointing at this freed object.
+        wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(m_lockSurface), nullptr);
         ext_session_lock_surface_v1_destroy(m_lockSurface);
+    }
 }
 
 bool SessionLockWindow::isExposed() const

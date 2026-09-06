@@ -10,7 +10,7 @@
 // `lock.state` and the failure signal.
 //
 // `lock` is a LockService, or anything with its surface: `state` (0
-// Unlocked, 1 Locking, 2 Locked, 3 Authenticating), `locked`,
+// Unlocked, 1 Locking, 2 Locked, 3 Authenticating, 4 Releasing), `locked`,
 // `unlock(password)`, and the `stateChanged` / `authenticationFailed(reason)`
 // / `unlocked` signals. Duck-typed so a test can drive it with a fake.
 //
@@ -32,6 +32,9 @@ QtObject {
     readonly property int stateLocking: 1
     readonly property int stateLocked: 2
     readonly property int stateAuthenticating: 3
+    // The surfaces are still up playing their exit while the service releases
+    // the compositor lock. `locked` is still true here.
+    readonly property int stateReleasing: 4
 
     // The password so far. Cleared on failure, on Escape, and after the
     // dismiss; never logged.
@@ -49,9 +52,15 @@ QtObject {
     // "idle", "authenticating", "error" or "dismissing": what the field's
     // edge shows (A3 §6 e).
     readonly property string phase: controller.dismissing ? "dismissing" : (controller.authenticating ? "authenticating" : (controller.errorText !== "" ? "error" : "idle"))
-    // Whether the lock surfaces should exist: while locked, and through
-    // the dismiss.
-    readonly property bool surfacesWanted: controller.locked || controller.dismissing
+    // True from the moment a lock object exists, which is not the same as
+    // `locked`. ext-session-lock expects the surfaces to be created against
+    // the lock right after it is requested; a compositor that withholds
+    // `locked` until every output has one would never send it if we waited
+    // for it first. So the surfaces follow the request, not the grant.
+    readonly property bool lockPending: controller.lock ? controller.lock.state !== controller.stateUnlocked : false
+    // Whether the lock surfaces should exist: from the request, through the
+    // lock, and on through the dismiss.
+    readonly property bool surfacesWanted: controller.lockPending || controller.dismissing
 
     // An unlock attempt was rejected; the field pulses its edge on this.
     signal failed(string reason)

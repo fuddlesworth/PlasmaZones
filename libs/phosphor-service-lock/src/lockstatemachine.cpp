@@ -59,8 +59,18 @@ void LockStateMachine::onFinished()
     // (while Locked / Authenticating). Either way the lock object is gone and we
     // are back to an unlocked session; a fresh requestLock() is needed to retry.
     m_releaseFailsafe.stop();
-    if (m_state != LockService::State::Unlocked)
-        setState(LockService::State::Unlocked);
+    if (m_state == LockService::State::Unlocked)
+        return;
+    // Authentication had already succeeded and the surfaces were playing their
+    // exit, so the compositor ending the lock here IS the unlock completing,
+    // just driven from its side instead of by finishUnlock(). Without this the
+    // signal never arrives and a consumer waiting on it hangs. The other
+    // states are not an authenticated unlock: Locking is a refusal, and
+    // Locked / Authenticating is the lock being ended out from under us.
+    const bool wasReleasing = m_state == LockService::State::Releasing;
+    setState(LockService::State::Unlocked);
+    if (wasReleasing)
+        Q_EMIT unlocked();
 }
 
 void LockStateMachine::authenticate(const QString& password)

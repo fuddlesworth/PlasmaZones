@@ -109,6 +109,19 @@ bool LayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay* display
         qCWarning(lcLayerShellIntegration) << "Compositor does not support zwlr_layer_shell_v1 —"
                                            << "overlays will fall back to xdg_toplevel (wrong stacking/anchoring)."
                                            << "GNOME/Mutter does not implement this protocol.";
+    }
+
+    // Missing layer-shell alone is NOT a failed initialization. This plugin
+    // also carries ext-session-lock-v1, and SessionLock::isSupported() answers
+    // through this singleton, which is published only on success. Failing here
+    // made a compositor that implements ext-session-lock but not
+    // wlr-layer-shell report the session lock unsupported, coupling two
+    // unrelated protocols. createShellSurface already refuses a layer surface
+    // on its own when m_layerShell is null, and routes everything else to the
+    // xdg-shell fallback. Only bind nothing at all is a real failure.
+    if (!m_layerShell && !m_sessionLockManager) {
+        qCWarning(lcLayerShellIntegration) << "Neither zwlr_layer_shell_v1 nor ext_session_lock_manager_v1 is"
+                                           << "advertised; this shell integration has nothing to add.";
         return false;
     }
 

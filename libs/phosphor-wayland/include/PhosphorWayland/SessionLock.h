@@ -26,9 +26,12 @@ namespace PhosphorWayland {
  * per output, presented by the compositor as the locked frame) are QWindows
  * marked through `LockSurface::get()`; the QPA plugin creates them against the
  * lock object this class holds, so they can only exist between `lock()` and
- * the lock's release (`canCreateSurfaces()`). The compositor decides, per its
- * own policy and time limit, when (or whether) to emit `locked()`, and may do
- * so before any surface exists.
+ * the lock's release (`canCreateSurfaces()`). Create them as soon as `lock()`
+ * has been called, NOT after `locked()`: a compositor is free to withhold
+ * `locked()` until every output carries a lock surface, and waiting for the
+ * grant before creating them would then deadlock. `canCreateSurfaces()` is
+ * true for exactly the window in which they may be created, which is why it
+ * is not the same predicate as `isLocked()`.
  *
  * Security guarantee (from the protocol): if the client dies while the session
  * is locked, the compositor must NOT unlock. Accordingly this object never

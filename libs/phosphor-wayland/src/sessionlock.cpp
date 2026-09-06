@@ -13,6 +13,11 @@
 Q_LOGGING_CATEGORY(lcSessionLock, "phosphorwayland.sessionlock")
 
 namespace PhosphorWayland {
+namespace {
+// The single live instance, enforcing the one-per-process invariant the
+// header documents. GUI-thread only, like every method on this class.
+SessionLock* s_live = nullptr;
+} // namespace
 
 class SessionLock::Private
 {
@@ -102,6 +107,20 @@ SessionLock::SessionLock(QObject* parent)
 {
     d->owner = this;
 
+    // "Construct one per process" is a real invariant, not advice, so say so
+    // when it is broken. Two live instances both point the lock's user_data at
+    // their own Private, and whichever is destroyed first severs it for the
+    // object the other owns, leaving that one deaf to locked / finished. The
+    // second instance therefore does not adopt and does not touch user_data.
+    // A hot reload is NOT this case: the old instance is destroyed before the
+    // new one is built, so s_live is null by then and adoption runs.
+    if (s_live) {
+        qCWarning(lcSessionLock) << "a SessionLock already exists in this process; this one will not adopt or "
+                                    "release the session lock. Construct exactly one.";
+    } else {
+        s_live = this;
+    }
+
     // Re-adopt a lock this process already holds. The shell builds its
     // LockService from QML, so a hot reload destroys this object and builds a
     // new one — and ~SessionLock deliberately does NOT destroy a live lock,
@@ -115,7 +134,7 @@ SessionLock::SessionLock(QObject* parent)
     // Only the listener's user_data was severed on teardown, not the listener
     // itself, so adoption re-points it rather than calling add_listener twice
     // (which wl_proxy refuses).
-    if (auto* integration = LayerShellIntegration::instance()) {
+    if (auto* integration = s_live == this ? LayerShellIntegration::instance() : nullptr) {
         if (auto* existing = integration->activeSessionLock()) {
             d->lockObj = existing;
             d->isLocked = integration->activeSessionLockGranted();
@@ -127,7 +146,10 @@ SessionLock::SessionLock(QObject* parent)
 
 SessionLock::~SessionLock()
 {
-    if (d->lockObj) {
+    const bool wasLive = s_live == this;
+    if (wasLive)
+        s_live = nullptr;
+    if (d->lockObj && wasLive) {
         // Sever the listener's back-pointer so any still-queued locked/finished
         // event dispatches with data == nullptr and is dropped (the Private is
         // being freed). We deliberately do NOT destroy the proxy: if the
