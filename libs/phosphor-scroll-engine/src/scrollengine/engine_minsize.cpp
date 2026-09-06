@@ -175,6 +175,19 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
         // reconcileWindowSize returns true only on a genuine change, so
         // emit-on-change holds.
         Q_EMIT placementChanged(key.screenId);
+        // The window now SITS at newFrame, not at the rect this map still
+        // remembers, so the memory is rewritten to where the window truly
+        // is. Without this the accepted arm shared the refused arm's stale-
+        // memory hole from the other direction: a resize the relayout
+        // CLAMPS straight back (a bottom edge dragged into the outer gap, a
+        // lone window pulled past the work area) resolved to exactly the
+        // rect already remembered, applyLayout's emit-on-change gate read
+        // "nothing moved" and stayed silent, and the window was stranded
+        // at the overshoot with the gap swallowed. The stale memory was
+        // only harmless when the retile happened to shift the rect anyway
+        // (a width change recentres, a shrink recentres across), which is
+        // why the report read as intermittent.
+        m_lastAppliedRect.insert(windowId, newFrame);
         if (currentContext) {
             scheduleRetileForScreen(key.screenId);
         }
