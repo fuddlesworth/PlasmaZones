@@ -1,6 +1,17 @@
 {
     "releases": [
         {
+            "version": "3.4.13",
+            "date": "2026-09-06",
+            "highlights": [
+                "New: scrolling can open a window of an application that is already on the strip as a tab in that column, and a window rule can group any windows you match under a name of your own (#1067)",
+                "Changed: the new tab grouping and launcher text is translated in all seven languages (#1069)",
+                "Fixed: a strip shader moves the columns only, so the wallpaper stays still under it and translucent popups above it keep their real opacity (#1064)",
+                "Fixed: a window whose bottom edge is dragged past the work area snaps back instead of sitting over the gap (#1066)",
+                "Fixed: closing the middle column of a strip leaves focus and the centred column on the same window (#1065)"
+            ]
+        },
+        {
             "version": "3.4.12",
             "date": "2026-09-05",
             "highlights": [
