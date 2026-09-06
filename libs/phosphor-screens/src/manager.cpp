@@ -14,6 +14,7 @@
 
 #include <PhosphorWayland/LayerSurface.h>
 
+#include <QEvent>
 #include <QScreen>
 #include <QThread>
 #include <QTimer>
@@ -276,6 +277,12 @@ void ScreenManager::createGeometrySensor(const PhysicalScreen& screen)
     connect(sensor, &QWindow::yChanged, this, [this, screenName]() {
         onSensorGeometryChanged(screenName);
     });
+
+    // The compositor's per-surface scale arrives after the surface is
+    // configured, and QWindow has no changed signal for it, so the event is
+    // the only notice. Installed before show() so the first one is not
+    // missed. See eventFilter.
+    sensor->installEventFilter(this);
 
     m_geometrySensors.insert(screen.name, sensor);
 
@@ -602,6 +609,26 @@ qreal ScreenManager::logicalScale(QScreen* screen) const
     }
     const PhysicalScreen tracked = trackedScreenByName(screen->name());
     return tracked.isValid() ? logicalScale(tracked) : screen->devicePixelRatio();
+}
+
+bool ScreenManager::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event && event->type() == QEvent::DevicePixelRatioChange) {
+        // Reverse-resolve the sensor to its screen rather than capturing the
+        // name: the map is small (one entry per output) and a captured name
+        // would need its own teardown to stay honest.
+        for (auto it = m_geometrySensors.constBegin(); it != m_geometrySensors.constEnd(); ++it) {
+            if (it.value() == watched) {
+                const PhysicalScreen screen = trackedScreenByName(it.key());
+                if (screen.isValid()) {
+                    Q_EMIT logicalScaleChanged(screen);
+                }
+                break;
+            }
+        }
+    }
+    // Never filtered: the sensor still needs the event.
+    return QObject::eventFilter(watched, event);
 }
 
 bool ScreenManager::isPanelGeometryReady() const
