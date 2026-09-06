@@ -92,6 +92,18 @@ public:
     /// toplevel, so this is also the smallest slot they will hand it.
     void setPaneSize(int width, int height);
 
+    /// Answers the snapping zone (1-based) the pane should land in on a
+    /// screen, or 0 for "leave the rule as it is". The host resolves it from
+    /// the placement map and the chip's rect (A2 §4.2).
+    using ZoneResolver = std::function<int(const QString& screenName)>;
+    void setZoneResolver(ZoneResolver resolver);
+
+    /// The zone whose top edge is nearest @p chipCenterX among @p cells
+    /// (PlacementMapScreen.cells entries: x, w, y, zoneNumber). Cells on the
+    /// work area's top edge are preferred; with none there, every cell
+    /// competes. 0 when no cell carries a zone number.
+    [[nodiscard]] static int nearestZone(const QVariantList& cells, const QRect& workArea, int chipCenterX);
+
     /// Tear down every live pane synchronously and silently, for shutdown
     /// and for the moment before a hot reload destroys the engine.
     void drain();
@@ -143,6 +155,8 @@ private:
     std::function<void(const QString&)> m_dismissed;
     int m_paneWidth = 380;
     int m_paneHeight = 460;
+    ZoneResolver m_zoneResolver;
+    int m_ruleZone = 0;
     quint64 m_counter = 0;
 };
 

@@ -301,7 +301,10 @@ PanelWindow {
 
         readonly property Item _cell: leftSlot.hoveredCell || centerSlot.hoveredCell || rightSlot.hoveredCell || _anchorCell
         readonly property Item _anchorCell: panel._paneProgress > 0.01 ? panel._anchorCell : null
-        readonly property real _x: _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0
+        readonly property real _x: {
+            panel._trackCell(_cell);
+            return _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0;
+        }
         readonly property real _w: _cell ? _cell.width : 0
 
         visible: _cell !== null
@@ -338,7 +341,10 @@ PanelWindow {
         property real pulse: 1
 
         visible: height > 0 && _cell !== null
-        x: _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0
+        x: {
+            panel._trackCell(_cell);
+            return _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0;
+        }
         y: 0
         width: _cell ? _cell.width : 0
         height: active ? Tokens.rail_thickness * 2 : 0
@@ -424,12 +430,45 @@ PanelWindow {
         void rightSlot.mountedCount;
         return leftSlot.cellFor(panel._paneAnchorEff) || centerSlot.cellFor(panel._paneAnchorEff) || rightSlot.cellFor(panel._paneAnchorEff);
     }
-    readonly property real _anchorCenterX: {
+    // mapToItem registers no binding dependency, so anything that follows a
+    // chip reads the chip's own geometry chain first: its x and width, its
+    // row's, and the slots' (a clock that grows re-lays out every chip in
+    // its slot, and the centre slot moves with its width).
+    function _trackCell(c: Item): void {
         void panel.width;
+        void leftSlot.x;
+        void leftSlot.width;
+        void centerSlot.x;
+        void centerSlot.width;
+        void rightSlot.x;
+        void rightSlot.width;
+        if (!c)
+            return;
+        void c.x;
+        void c.width;
+        if (c.parent) {
+            void c.parent.x;
+            void c.parent.width;
+        }
+    }
+    readonly property real _anchorCenterX: {
         const c = panel._anchorCell;
+        panel._trackCell(c);
         if (!c)
             return panel.width / 2;
         return c.mapToItem(panel.contentItem, 0, 0).x + c.width / 2;
+    }
+    // The anchor chip's rect in the bar's own coordinates, which are the
+    // screen's (the bar sits at the screen's top-left). Empty until the
+    // chip has mounted. A host reports it to the pane transport, which
+    // asks the engine for the zone nearest the chip (A2 §4.2).
+    readonly property rect paneAnchorRect: {
+        const c = panel._anchorCell;
+        panel._trackCell(c);
+        if (!c || c.width <= 0)
+            return Qt.rect(0, 0, 0, 0);
+        const p = c.mapToItem(panel.contentItem, 0, 0);
+        return Qt.rect(p.x, p.y, c.width, c.height);
     }
     readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width)
     // The map pane is as deep as its content; the host's pane takes the

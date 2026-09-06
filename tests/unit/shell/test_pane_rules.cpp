@@ -34,6 +34,7 @@ private Q_SLOTS:
     void controlCenterRuleIsValidAndManaged();
     void controlCenterRuleMatchesOnlyThePane();
     void controlCenterRuleCarriesThePerModePlacement();
+    void controlCenterRuleTakesTheZoneItIsGiven();
     void roundTripsThroughJson();
 };
 
@@ -91,6 +92,27 @@ void TestPaneRules::controlCenterRuleCarriesThePerModePlacement()
     // Tiling has no per-window insert-position action (it is a context
     // slot), so the rule must not pretend to carry one.
     QVERIFY(!byType.contains(QString(ActionType::SetInsertPosition)));
+}
+
+void TestPaneRules::controlCenterRuleTakesTheZoneItIsGiven()
+{
+    // The open rewrites the rule with the zone nearest the chip (A2 §4.2);
+    // the id stays the same rule, and a nonsense zone floors at 1.
+    const Rule base = PaneRules::controlCenterRule(kAppId);
+    const Rule three = PaneRules::controlCenterRule(kAppId, 3);
+    QCOMPARE(three.id, base.id);
+    QCOMPARE(PaneRules::defaultZone(), 1);
+    for (const RuleAction& action : three.actions) {
+        if (action.type == QString(ActionType::SnapToZone)) {
+            QCOMPARE(action.params.value(ActionParam::Zones).toArray(), QJsonArray{3});
+        }
+    }
+    const Rule floored = PaneRules::controlCenterRule(kAppId, -4);
+    for (const RuleAction& action : floored.actions) {
+        if (action.type == QString(ActionType::SnapToZone)) {
+            QCOMPARE(action.params.value(ActionParam::Zones).toArray(), QJsonArray{1});
+        }
+    }
 }
 
 void TestPaneRules::roundTripsThroughJson()

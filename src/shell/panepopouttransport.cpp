@@ -3,6 +3,8 @@
 
 #include "PanePopoutTransport.h"
 
+#include "PaneRules.h"
+
 #include "ControlCenterController.h"
 
 #include <PhosphorPopout/PopoutRequest.h>
@@ -112,11 +114,52 @@ void PanePopoutTransport::publishOpenState(const QString& screenName)
     if (!m_controller) {
         return;
     }
+    if (screenName.isEmpty()) {
+        // Close: only the screen clears. `paneExternal` stays true through
+        // the bar's release animation; flipping it here would make the bar
+        // show its inline pane (a different surface, a different size,
+        // under the chip) for the whole release. The next open sets it.
+        m_controller->setOpenScreen({});
+        return;
+    }
     // External FIRST on open, so a screen write never lands while
     // `paneExternal` still says false (the bar would flash its inline pane
-    // for a frame); on close the order is harmless either way.
-    m_controller->setPaneExternal(!screenName.isEmpty());
+    // for a frame).
+    m_controller->setPaneExternal(true);
     m_controller->setOpenScreen(screenName);
+}
+
+void PanePopoutTransport::setZoneResolver(ZoneResolver resolver)
+{
+    m_zoneResolver = std::move(resolver);
+}
+
+int PanePopoutTransport::nearestZone(const QVariantList& cells, const QRect& workArea, int chipCenterX)
+{
+    int best = 0;
+    int bestDistance = 0;
+    bool bestOnTop = false;
+    for (const QVariant& v : cells) {
+        const QVariantMap cell = v.toMap();
+        const int zone = cell.value(QStringLiteral("zoneNumber")).toInt();
+        if (zone <= 0) {
+            continue;
+        }
+        const int x = cell.value(QStringLiteral("x")).toInt();
+        const int w = cell.value(QStringLiteral("w")).toInt();
+        const int y = cell.value(QStringLiteral("y")).toInt();
+        const bool onTop = workArea.isNull() || y <= workArea.y();
+        const int distance = qAbs(x + w / 2 - chipCenterX);
+        // A top-edge cell beats any cell below the edge; among equals the
+        // nearer centre wins.
+        const bool better = best == 0 || (onTop && !bestOnTop) || (onTop == bestOnTop && distance < bestDistance);
+        if (better) {
+            best = zone;
+            bestDistance = distance;
+            bestOnTop = onTop;
+        }
+    }
+    return best;
 }
 
 QString PanePopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& request)
@@ -251,6 +294,15 @@ QString PanePopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& re
 
     qCDebug(lcPaneTransport) << "opening" << request.popoutId << "as toplevel" << appIdFor(request.popoutId) << "for"
                              << screenName << (fromRequest ? "(from request)" : "(primary fallback)") << "mode" << mode;
+    // Snapping (A2 §4.2): the zone nearest the chip. The rule is rewritten
+    // before the toplevel maps, so the engine places it there directly and
+    // the pane never hops from the seeded zone.
+    if (mode == 0 && m_zoneResolver) {
+        const int zone = m_zoneResolver(screenName);
+        if (zone > 0 && zone != m_ruleZone && PaneRules::updateControlCenterZone(appIdFor(request.popoutId), zone)) {
+            m_ruleZone = zone;
+        }
+    }
     window->setWindowVisible(true);
     m_entries.insert(handle, Entry{window, hostItem, false, request.popoutId, screenName});
     publishOpenState(screenName);
@@ -267,6 +319,10 @@ QString PanePopoutTransport::openFallback(const PhosphorPopout::PopoutRequest& r
         return {};
     }
     qCInfo(lcPaneTransport) << request.popoutId << "goes to the floating fallback:" << reason;
+    // The fallback is the bar's inline pane, so it must not read as external.
+    if (m_controller) {
+        m_controller->setPaneExternal(false);
+    }
     const QString handle = m_fallback->openSurface(request);
     if (!handle.isEmpty()) {
         m_fallbackHandles.insert(handle);

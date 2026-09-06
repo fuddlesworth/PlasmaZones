@@ -168,6 +168,13 @@ Item {
             // Wayland client is never told where its toplevel went), so it
             // reports the frame back for the pane's own top band.
             onPaneScreenRectChanged: ControlCenterRegistry.reportPaneRect(bar.paneScreenRect)
+            // And where the chip itself is, so the pane lands in the zone
+            // nearest it (A2 §4.2).
+            function reportChip(): void {
+                if (bar.screen)
+                    ControlCenterRegistry.reportChipRect(bar.screen.name, bar.paneAnchorRect);
+            }
+            onPaneAnchorRectChanged: reportChip()
 
             // The pane transport asks which mode this output runs before
             // opening; none means the floating fallback.
@@ -193,6 +200,7 @@ Item {
             onBandRectChanged: applyBlur()
             Component.onCompleted: {
                 reportMode();
+                reportChip();
                 applyBlur();
             }
 

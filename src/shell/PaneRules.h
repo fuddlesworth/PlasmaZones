@@ -41,7 +41,16 @@ namespace PhosphorShellApp::PaneRules {
 
 /// The control center's rule, complete and valid against the action
 /// registry. `appId` is the pane's Wayland app id.
-[[nodiscard]] PhosphorRules::Rule controlCenterRule(const QString& appId);
+/// The zone the seeded rule names before any open has chosen one.
+[[nodiscard]] int defaultZone();
+
+[[nodiscard]] PhosphorRules::Rule controlCenterRule(const QString& appId, int zoneNumber = defaultZone());
+
+/// Rewrite the control center's rule in the daemon so its SnapToZone names
+/// @p zoneNumber, synchronously, so an open that follows maps into that
+/// zone (A2 §4.2: the zone nearest the chip). Returns false when the
+/// daemon refused or is not there, in which case the previous zone stands.
+bool updateControlCenterZone(const QString& appId, int zoneNumber);
 
 /// Install `rule` into the daemon's store if no rule with its id exists.
 /// Asynchronous and best-effort: a daemon that is not running gets nothing

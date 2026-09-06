@@ -169,6 +169,24 @@ void ControlCenterController::reportPaneRect(const QRect& rect)
     Q_EMIT paneRectChanged();
 }
 
+void ControlCenterController::reportChipRect(const QString& screenName, const QRect& rect)
+{
+    if (screenName.isEmpty()) {
+        return;
+    }
+    const QRect normalised = (rect.width() > 0 && rect.height() > 0) ? rect : QRect();
+    if (normalised.isNull()) {
+        m_chipRects.remove(screenName);
+    } else {
+        m_chipRects.insert(screenName, normalised);
+    }
+}
+
+QRect ControlCenterController::chipRectFor(const QString& screenName) const
+{
+    return m_chipRects.value(screenName);
+}
+
 void ControlCenterController::reportScreenMode(const QString& screenName, int mode)
 {
     if (screenName.isEmpty()) {

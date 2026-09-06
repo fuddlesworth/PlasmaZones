@@ -132,6 +132,12 @@ public:
     /// rect clears it (the pane closed, or it could not be located).
     Q_INVOKABLE void reportPaneRect(const QRect& rect);
 
+    /// Each bar reports where its control-center chip sits, in its screen's
+    /// pixels, so the pane transport can ask the engine for the zone nearest
+    /// the chip (A2 §4.2). An empty rect clears it.
+    Q_INVOKABLE void reportChipRect(const QString& screenName, const QRect& rect);
+    [[nodiscard]] QRect chipRectFor(const QString& screenName) const;
+
     /// Each bar reports its screen's placement mode as the map changes
     /// (0 snapping, 1 tiling, 2 scrolling, -1 none). The pane transport
     /// asks before opening: no engine on the output means the floating
@@ -149,6 +155,7 @@ private:
     QStringList m_tileIds;
     QString m_openScreen;
     QRect m_paneRect;
+    QHash<QString, QRect> m_chipRects;
     QHash<QString, int> m_screenModes;
     bool m_paneExternal = false;
 };

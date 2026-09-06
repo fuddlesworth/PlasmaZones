@@ -11,6 +11,7 @@
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 
+#include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QJsonArray>
@@ -41,7 +42,12 @@ QUuid ruleIdFor(const QString& appId)
     return QUuid::createUuidV5(kPaneRuleNamespace, appId);
 }
 
-PhosphorRules::Rule controlCenterRule(const QString& appId)
+int defaultZone()
+{
+    return kControlCenterZone;
+}
+
+PhosphorRules::Rule controlCenterRule(const QString& appId, int zoneNumber)
 {
     using namespace PhosphorRules;
 
@@ -55,7 +61,7 @@ PhosphorRules::Rule controlCenterRule(const QString& appId)
 
     RuleAction snap;
     snap.type = QString(ActionType::SnapToZone);
-    snap.params.insert(ActionParam::Zones, QJsonArray{kControlCenterZone});
+    snap.params.insert(ActionParam::Zones, QJsonArray{qMax(1, zoneNumber)});
 
     RuleAction width;
     width.type = QString(ActionType::OpenColumnWidth);
@@ -67,6 +73,24 @@ PhosphorRules::Rule controlCenterRule(const QString& appId)
 
     rule.actions = {snap, width, placement};
     return rule;
+}
+
+bool updateControlCenterZone(const QString& appId, int zoneNumber)
+{
+    const PhosphorRules::Rule rule = controlCenterRule(appId, zoneNumber);
+    const QString json = QString::fromUtf8(QJsonDocument(rule.toJson()).toJson(QJsonDocument::Compact));
+    // Synchronous on purpose: the toplevel maps right after, and the rule
+    // has to be in the daemon's store before the effect reads it.
+    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Rules,
+                                                                         QStringLiteral("updateRule"), {json});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()
+        || !reply.arguments().first().toBool()) {
+        qCWarning(lcPaneRules) << "daemon refused the pane rule's zone" << zoneNumber
+                               << (reply.type() == QDBusMessage::ErrorMessage ? reply.errorMessage() : QString());
+        return false;
+    }
+    qCDebug(lcPaneRules) << "pane rule now snaps to zone" << zoneNumber;
+    return true;
 }
 
 void seed(QObject* parent, const PhosphorRules::Rule& rule)

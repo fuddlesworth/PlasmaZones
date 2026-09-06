@@ -2553,6 +2553,9 @@ if(TARGET PhosphorShell::PhosphorShell AND TARGET PhosphorPopout::PhosphorPopout
         ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
         ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
         ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+        # The transport rewrites the pane rule's zone before an open.
+        ${CMAKE_SOURCE_DIR}/src/shell/PaneRules.h
+        ${CMAKE_SOURCE_DIR}/src/shell/panerules.cpp
     )
     target_include_directories(test_pane_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_pane_popout_transport
@@ -2572,6 +2575,8 @@ if(TARGET PhosphorShell::PhosphorShell AND TARGET PhosphorPopout::PhosphorPopout
             PhosphorThemeQmlplugin
             PhosphorRegistry::PhosphorRegistry
             PhosphorServiceIdle::PhosphorServiceIdle
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
     )
     add_test(NAME test_pane_popout_transport COMMAND test_pane_popout_transport)
 endif()
