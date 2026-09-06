@@ -10,11 +10,10 @@
 // down rose), each with its one-letter shortcut underlined. A 3 px
 // selection line on the screen's edge slides between words.
 //
-// The column sits on the edge the menu was summoned from: the left edge,
-// vertically centred, for a keybind or `phosphorctl`; the button's edge,
-// starting under the bar, when the bar's power button opened it, so the
-// pointer that pressed the button is already on the words (`alignRight`,
-// `originY`).
+// The column sits on the edge the menu was summoned from, vertically
+// centred either way: the left edge for a keybind or `phosphorctl`; the
+// button's edge when the bar's power button opened it, so the pointer
+// that pressed the button does not cross the screen (`alignRight`).
 //
 // Destructive actions (log out, restart, shut down) take two presses: the
 // first grows the line to 6 px and starts a 3 s countdown that shortens
@@ -52,9 +51,6 @@ FocusScope {
     // the spec's left edge; the host sets true when the summoning button
     // sits in the right half of the bar.
     property bool alignRight: false
-    // Screen y the column's top should start at (the bar's bottom edge
-    // when a bar button opened the menu). Negative centres the block.
-    property real originY: -1
 
     // Id of the selected action, and the id awaiting its second press
     // (or ""). Ids, not indices: rows come and go with logind's answers.
@@ -314,9 +310,7 @@ FocusScope {
         objectName: "powerColumn"
 
         x: root.alignRight ? root.width - 48 - width : 48
-        // Under the summoning button, clamped to the screen; centred when
-        // nothing summoned it from a point.
-        y: root.originY >= 0 ? Math.max(Tokens.spacing_xl, Math.min(root.originY, root.height - height - Tokens.spacing_xl)) : Math.round((root.height - height) / 2)
+        anchors.verticalCenter: parent.verticalCenter
         spacing: 0
 
         // One row per action, hidden (and skipped by the Column) when

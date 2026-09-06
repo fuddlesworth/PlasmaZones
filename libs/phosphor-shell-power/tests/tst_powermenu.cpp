@@ -201,12 +201,12 @@ private Q_SLOTS:
         QVERIFY(column->y() > 200 && column->y() < 700);
 
         // Summoned from the bar's right-hand power button: the words hug the
-        // right edge and start under the bar, where the pointer already is.
+        // right edge, still vertically centred.
+        const qreal centredY = column->y();
         m_menu->setProperty("alignRight", true);
-        m_menu->setProperty("originY", 52);
         QTRY_VERIFY(column->x() > 1920.0 / 2);
         QCOMPARE(column->x() + column->width(), 1920.0 - 48.0);
-        QCOMPARE(column->y(), 52.0);
+        QCOMPARE(column->y(), centredY);
     }
 
     void buildsOneTilePerAction()
