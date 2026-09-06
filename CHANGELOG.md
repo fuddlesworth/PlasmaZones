@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Scrolling has shortcuts for cycling a column's tabs**: switching tabs meant reaching for the focus keys that move up and down the stack, and those stop at the last tab and hop to the next monitor instead of coming back round to the first one. Next Tab in Column on Meta+Alt+Tab and Previous Tab in Column on Meta+Alt+Shift+Tab walk the focused column's tabs and wrap at either end, so a column of tabs cycles the way tabs do everywhere else. In a column that is not tabbed they walk the next and previous window down the stack, wrapping the same way. There are also nine Focus Tab shortcuts that go straight to a numbered tab. Those ship with no keys set, because both digit rows a Meta chord can reach already belong to the layout and zone slots. An action with no keys set never registers with the system, so it does not appear in the system shortcuts editor either. To bind one, set its ScrollFocusTab key under Shortcuts.Global over the settings D-Bus surface, which the daemon picks up straight away. The same key can be written into `~/.config/plasmazones/config.json` by hand, and that is read when the daemon next starts. ([#1071](https://github.com/fuddlesworth/PlasmaZones/pull/1071))
+- **The wheel switches tabs while the pointer is over a tab indicator**: the indicator answered clicks but not the wheel, so picking a tab from a run of them meant one click each. Scrolling over the indicator now steps through that column's tabs and wraps at either end, matching the new shortcuts. Holding a modifier still gives the wheel to whatever it was already doing, so the wheel chords that move the strip keep working over an indicator and an application's own Ctrl+wheel is never swallowed. ([#1071](https://github.com/fuddlesworth/PlasmaZones/pull/1071))
+
+### Changed
+
+- **Focus Window Top and Focus Window Bottom follow the same rules as the new tab shortcuts**: they now say so and do nothing when a floating window has focus, instead of quietly moving the placed window that was focused before it. After you have scrolled the strip away from the focused column, they also bring the window they focus back into view rather than leaving it off-screen. Focusing up or down within a column with the ordinary direction keys does the same. ([#1071](https://github.com/fuddlesworth/PlasmaZones/pull/1071))
+
 ## [3.4.13] - 2026-09-06
 
 ### Added
@@ -2373,7 +2382,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.12...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.13...HEAD
+[3.4.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.12...v3.4.13
 [3.4.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.11...v3.4.12
 [3.4.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.10...v3.4.11
 [3.4.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.9...v3.4.10

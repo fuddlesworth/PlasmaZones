@@ -45,6 +45,51 @@ namespace PhosphorScrollEngine {
                               changed ? (successReasonExpr) : QStringLiteral("no_target"), sourceWindow,               \
                               changed ? state->strip().activeWindowId() : QString(), screen)
 
+// The tile-focus family: the two stack-end verbs, cycleTab and focusTab.
+// Three things separate it from P_SCROLL_VERB, and all three follow from
+// these verbs moving focus WITHIN a column rather than between columns.
+//
+// 1. The float layer holding focus is a REFUSAL, not a cue to act on the
+//    strip's stale active tile. Same guard and same token as
+//    toggleWindowedFullscreen below, whose source slot likewise names the
+//    floating window the user is actually looking at rather than a tile they
+//    cannot see.
+// 2. On success the view-detach latch is cleared. The strip's tile-focus ops
+//    deliberately never touch the anchor (unlike the column-focus family,
+//    which re-anchors), so without this a view the user panned away with the
+//    wheel stays parked and the verb activates a window that is off-screen.
+//    Clearing the latch hands the view back to the configured policy, which
+//    is exactly what windowFocused does when the SAME tab is picked with the
+//    pointer. The two arms have to agree, or clicking a pill re-centres and
+//    pressing the chord does not. Deliberately a latch clear and not a
+//    reanchorAfterFocusChange: re-anchoring clamps away the deliberately
+//    unclamped centering anchors, and the pointer arm does not do it either.
+// 3. The clear is on SUCCESS ONLY. A refused press is not a view event, and
+//    the pointer arm's own hand-back is likewise gated on the report naming
+//    the active window.
+#define P_SCROLL_TILE_FOCUS_VERB(screenIdExpr, opExpr, successReasonExpr)                                              \
+    P_SCROLL_RESOLVE(screenIdExpr);                                                                                    \
+    if (!state || state->strip().isEmpty()) {                                                                          \
+        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_windows"), QString(), QString(),  \
+                                  screen);                                                                             \
+        return;                                                                                                        \
+    }                                                                                                                  \
+    if (state->floatingHasFocus()) {                                                                                   \
+        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_target"),                         \
+                                  state->lastFloatingFocus(), QString(), screen);                                      \
+        return;                                                                                                        \
+    }                                                                                                                  \
+    const QString sourceWindow = state->strip().activeWindowId();                                                      \
+    const bool changed = (opExpr);                                                                                     \
+    if (changed) {                                                                                                     \
+        state->strip().setViewDetached(false);                                                                         \
+        applyLayout(screen, true);                                                                                     \
+        Q_EMIT placementChanged(screen);                                                                               \
+    }                                                                                                                  \
+    Q_EMIT navigationFeedback(changed, QStringLiteral("focus"),                                                        \
+                              changed ? (successReasonExpr) : QStringLiteral("no_target"), sourceWindow,               \
+                              changed ? state->strip().activeWindowId() : QString(), screen)
+
 void ScrollEngine::focusColumnFirst(const QString& screenId)
 {
     // The reason token feeds the OSD's ARROW, so it has to name the direction
@@ -535,14 +580,14 @@ void ScrollEngine::focusWindowTop(const QString& screenId)
     // CROSS-axis ends: the stack runs top-to-bottom on a horizontal strip and
     // left-to-right on a vertical one, so these two swap words with the axis
     // just as the main-axis pair above does.
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus", true,
-                  Detail::physicalTokenForCross(-1, params.axis));
+    P_SCROLL_TILE_FOCUS_VERB(screenId, state->strip().focusTileAtEnd(false),
+                             Detail::physicalTokenForCross(-1, params.axis));
 }
 
 void ScrollEngine::focusWindowBottom(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus", true,
-                  Detail::physicalTokenForCross(1, params.axis));
+    P_SCROLL_TILE_FOCUS_VERB(screenId, state->strip().focusTileAtEnd(true),
+                             Detail::physicalTokenForCross(1, params.axis));
 }
 
 void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
@@ -622,6 +667,46 @@ void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
                   state->strip().focusAdjacentColumn(delta, params)
                       || (delta < 0 ? state->strip().focusLastColumn(params) : state->strip().focusFirstColumn(params)),
                   "focus", true, Detail::physicalTokenForMain(delta, params.axis));
+}
+
+void ScrollEngine::cycleTab(int delta, const QString& screenId)
+{
+    // Same delta contract (and the same deliberate silence) as
+    // focusColumnPlain: a zero must not read as a press, and an
+    // out-of-contract value must not short-circuit into the wrap fallback and
+    // teleport focus to an end of the column.
+    if (delta != -1 && delta != 1) {
+        return;
+    }
+    // The stack twin of focusColumnWrap, and it wraps for the same reason: a
+    // user cycling a column's tabs expects the far end, not the neighbouring
+    // OUTPUT that the generic directional focus crosses onto at the stack
+    // edge. Short-circuit keeps a successful adjacent step from also
+    // wrapping. Deliberately NOT gated on the column being tabbed — the tiles
+    // of a stacked column are the same tiles that become its tabs when it is
+    // flipped, so a gate would make one chord work or not depending on a
+    // display mode this verb does not touch.
+    P_SCROLL_TILE_FOCUS_VERB(screenId,
+                             state->strip().focusAdjacentTile(delta) || state->strip().focusTileAtEnd(delta < 0),
+                             Detail::physicalTokenForCross(delta, params.axis));
+}
+
+void ScrollEngine::focusTab(int ordinal, const QString& screenId)
+{
+    // Ordinals are 1-based and unbounded above: the strip answers false for
+    // an ordinal past the column's tab count, and the macro's refusal arm
+    // turns that into the same no_target feedback an edge press gets. Only a
+    // non-positive ordinal is out of contract, refused silently for the
+    // reason the delta verbs spell out.
+    if (ordinal < 1) {
+        return;
+    }
+    // "tab", not an empty reason. The verb names an absolute tab rather than
+    // a direction, so there is no arrow to derive — but the OSD's
+    // directionArrow() DEFAULTS to a right arrow, so an empty reason on the
+    // "focus" action renders a glyph pointing somewhere the focus did not go.
+    // NavigationOsdContent carries a matching arrow-free arm for this token.
+    P_SCROLL_TILE_FOCUS_VERB(screenId, state->strip().focusTileByOrdinal(ordinal), QStringLiteral("tab"));
 }
 
 void ScrollEngine::setColumnWidth(const ColumnWidth& width, const QString& screenId)

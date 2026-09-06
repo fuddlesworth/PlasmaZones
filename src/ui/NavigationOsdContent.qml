@@ -480,6 +480,12 @@ Item {
             if (reason === "master")
                 return i18n("Focus on the master window");
 
+            // An absolute tab ordinal, so there is no direction to draw. It
+            // needs its own arm because directionArrow() defaults to a right
+            // arrow, which would point somewhere the focus did not go.
+            if (reason === "tab")
+                return i18nc("@info:status focus moved to a numbered tab", "Focus on the tab");
+
             const focusArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
                 return glyphed(focusArrow, i18n("Focus on Zone %1", targetZoneNumber));

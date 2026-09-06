@@ -5,7 +5,7 @@
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Eleven siblings carry the rest of the suite (enumerated below),
+// been done. Fourteen siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -13,7 +13,7 @@
 // engine regression would then have to know which half to open.
 //
 // Reviewed at the same time as the file's other exception-worthy neighbours;
-// if a ninth concern emerges, it takes a sibling rather than growing this.
+// if a further concern emerges, it takes a sibling rather than growing this.
 
 // Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
 // context teardown, and handoff semantics.
@@ -24,7 +24,7 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Eleven siblings carry the rest of the suite, split off at this file's size
+// Fourteen siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
@@ -40,9 +40,14 @@
 // blueprint progress, and test_scrollengine_maximize.cpp owns the
 // maximize-column claim (the flag riding tiles the user cannot see, two
 // columns maximized at once, the named verb's second press, and survival
-// across a mode round trip), and test_scrollengine_stripcontext.cpp owns
+// across a mode round trip), test_scrollengine_stripcontext.cpp owns
 // strip IDENTITY across the seam (the announced epoch, its lifecycle drops,
-// and the context-switch force-emit that rides the same transitions).
+// and the context-switch force-emit that rides the same transitions),
+// test_scrollengine_focusreport.cpp owns the compositor focus-report
+// contract, test_scrollengine_grouping.cpp owns same-application and
+// named tab grouping, and test_scrollengine_tabfocus.cpp owns the tile-focus
+// family (cycleTab, focusTab, and the float refusal and view hand-back they
+// share with the stack-end verbs).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -89,8 +94,11 @@ private Q_SLOTS:
     void scheduledRetileRunsUnderEventLoop();
     void columnMaximizeFlagRidesEveryTileOfTheColumn();
     void columnMaximizeTargetsTheNamedWindowsColumn();
-    void minSizeOutgrowingWorkAreaFloatsTheWindow();
+    // minPinned... is declared before minSize... to match DEFINITION order,
+    // which is what a reader following this list as a table of contents
+    // needs. The two had drifted apart.
     void minPinnedFullWidthColumnDoesNotPublishMaximized();
+    void minSizeOutgrowingWorkAreaFloatsTheWindow();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
@@ -846,7 +854,8 @@ void TestScrollEngineSmoke::minPinnedFullWidthColumnDoesNotPublishMaximized()
     // The band is exactly one value. Below kMainExtent the column does not
     // render full and the flag is false for an ordinary reason; above it the
     // oversized verdict floats the window out of the strip before any of this
-    // matters (the float test above pins that at 1300). Only a minimum equal
+    // matters (minSizeOutgrowingWorkAreaFloatsTheWindow pins that at 1300).
+    // Only a minimum equal
     // to the work area's main extent is both full-width and still tiled.
     //
     // Set BY ROLE, never symmetrically: passing (1200, 1200) would set a cross
@@ -1899,6 +1908,12 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     // The POSITIVE half: the work area genuinely changes, so the same retile
     // call that was silent above must now deliver. Without this the whole slot
     // is satisfied by an apply path that never emits at all.
+    //
+    // Not transposed, unlike the axis-sensitive slots elsewhere in this file:
+    // any change to the work area moves the tile rects, so shrinking the raw
+    // width discriminates on the vertical arm too, where it takes the CROSS
+    // extent. Transpose this if the assertion is ever narrowed to the main
+    // axis.
     sharedRect->setWidth(sharedRect->width() - 200);
     engine->retile(QStringLiteral("S1"));
     QCoreApplication::processEvents();

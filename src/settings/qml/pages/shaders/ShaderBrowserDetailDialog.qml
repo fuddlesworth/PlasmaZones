@@ -878,7 +878,7 @@ Kirigami.Dialog {
                     // config rebuild below (iTime) doesn't re-run C++ calls —
                     // these recompute only when zones / size / shader change.
                     readonly property string _preamble: (root._zonePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
-                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
+                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, livePreviewPane) : null
                     readonly property var _wallpaperTex: (root._zonePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
                     // Cached so the per-frame config rebuild below doesn't read it
                     // off the controller every frame (a QVariant vector copy) and

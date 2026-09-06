@@ -505,6 +505,7 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
+    daemon/controllers/shortcutmanager_adhoc.cpp
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
