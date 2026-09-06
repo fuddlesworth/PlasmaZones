@@ -40,6 +40,7 @@ private Q_SLOTS:
     void noResolvableEngineYieldsNull();
     void registryChangesRefreshTheIdSet();
     void relaysActivationWithItsRegistryId();
+    void activateWidgetWithoutALiveWidgetIsRefused();
     void activationWithoutAnIdIsRefused();
     void aDynamicPropertyWriteReportsFailureButStoresTheValue();
 };
@@ -211,6 +212,18 @@ void TestBarController::relaysActivationWithItsRegistryId()
     // The source travels with the id so a multi-monitor composer can tell
     // which bar's button fired.
     QCOMPARE(spy.first().at(1).value<QQuickItem*>(), &widget);
+}
+
+void TestBarController::activateWidgetWithoutALiveWidgetIsRefused()
+{
+    // No widget was built through createWidgetFor (no factory can build one
+    // here), so a press by id has nothing to press and says so; nothing is
+    // relayed.
+    BarController controller;
+    QSignalSpy spy(&controller, &BarController::widgetActivated);
+    QVERIFY(!controller.activateWidget(QStringLiteral("power")));
+    QVERIFY(!controller.activateWidget(QString()));
+    QCOMPARE(spy.count(), 0);
 }
 
 void TestBarController::activationWithoutAnIdIsRefused()

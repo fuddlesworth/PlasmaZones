@@ -176,8 +176,25 @@ QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent
             return widget;
         }
         QObject::connect(widget, SIGNAL(activated()), this, SLOT(relayWidgetActivation()));
+        m_triggers.insert(id, QPointer<QQuickItem>(widget));
     }
     return widget;
+}
+
+bool BarController::activateWidget(const QString& id)
+{
+    // Drop the dead entries as they are met; a bar that unmounted takes
+    // its widgets with it.
+    for (auto it = m_triggers.find(id); it != m_triggers.end() && it.key() == id;) {
+        if (it.value().isNull()) {
+            it = m_triggers.erase(it);
+            continue;
+        }
+        Q_EMIT widgetActivated(id, it.value().data());
+        return true;
+    }
+    qCDebug(lcBar) << "BarController: no live trigger widget for id" << id;
+    return false;
 }
 
 void BarController::relayWidgetActivation()

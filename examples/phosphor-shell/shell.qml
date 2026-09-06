@@ -569,7 +569,8 @@ Item {
             // window's attached property hands it to the JS collector.
             const p = source.mapToItem(null, 0, 0);
             const screen = ControlCenterRegistry.screenOf(source);
-            const screenWidth = screen ? screen.width : Screen.width;
+            // A QScreen carries `geometry`, not a bare `width`.
+            const screenWidth = screen ? screen.geometry.width : Screen.width;
             alignRight = p.x + source.width / 2 > screenWidth / 2;
         }
         // Nothing to do about the control center here: it is a Cooperative
@@ -634,6 +635,18 @@ Item {
     // The power menu is Modal and its own toggle() is the way back out,
     // so a caller that wants it gone calls that. A hide() would give two
     // ways to close one surface whose open state is already single-valued.
+    // `phosphorctl call bar.activate --arg id=power`: press a bar button as
+    // a pointer would, with the button itself as the source, so whatever it
+    // opens lands where a click would put it. For a keybind, and for the
+    // nested harness, which cannot inject pointer input.
+    IpcTarget {
+        target: "bar"
+
+        function activate(id: string): bool {
+            return BarRegistry.activateWidget(id);
+        }
+    }
+
     IpcTarget {
         target: "power"
 
