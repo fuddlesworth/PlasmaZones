@@ -645,6 +645,12 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Scrolls the view so the focused column sits centered on the screen.")},
         {CD::toggleColumnTabbedKey(), CD::scrollingToggleColumnTabbedShortcut(), QMetaType::QString,
          QStringLiteral("Switches the focused column between stacked windows and tabs.")},
+        {CD::cycleTabKey(), CD::scrollingCycleTabShortcut(), QMetaType::QString,
+         QStringLiteral("Shows the next tab of the focused column, wrapping round to the first one at the end. In a "
+                        "column that is not tabbed it focuses the next window down the stack.")},
+        {CD::cycleTabBackKey(), CD::scrollingCycleTabBackShortcut(), QMetaType::QString,
+         QStringLiteral("Shows the previous tab of the focused column, wrapping round to the last one at the start. In "
+                        "a column that is not tabbed it focuses the previous window up the stack.")},
         {CD::toggleWindowedFullscreenKey(), CD::scrollingToggleWindowedFullscreenShortcut(), QMetaType::QString,
          QStringLiteral("Puts the focused window into its fullscreen presentation while it keeps its place in the "
                         "column, so it does not cover the screen. Press again to leave it.")},

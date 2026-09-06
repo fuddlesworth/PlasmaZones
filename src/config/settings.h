@@ -635,6 +635,10 @@ public:
                    setScrollingCenterColumnShortcut NOTIFY scrollingCenterColumnShortcutChanged)
     Q_PROPERTY(QString scrollingToggleColumnTabbedShortcut READ scrollingToggleColumnTabbedShortcut WRITE
                    setScrollingToggleColumnTabbedShortcut NOTIFY scrollingToggleColumnTabbedShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleTabShortcut READ scrollingCycleTabShortcut WRITE setScrollingCycleTabShortcut
+                   NOTIFY scrollingCycleTabShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleTabBackShortcut READ scrollingCycleTabBackShortcut WRITE
+                   setScrollingCycleTabBackShortcut NOTIFY scrollingCycleTabBackShortcutChanged)
     Q_PROPERTY(QString scrollingToggleWindowedFullscreenShortcut READ scrollingToggleWindowedFullscreenShortcut WRITE
                    setScrollingToggleWindowedFullscreenShortcut NOTIFY scrollingToggleWindowedFullscreenShortcutChanged)
     Q_PROPERTY(QString scrollingCycleColumnWidthShortcut READ scrollingCycleColumnWidthShortcut WRITE
@@ -816,6 +820,26 @@ public:
                    snapToZone8ShortcutChanged)
     Q_PROPERTY(QString snapToZone9Shortcut READ snapToZone9Shortcut WRITE setSnapToZone9Shortcut NOTIFY
                    snapToZone9ShortcutChanged)
+
+    // Focus Tab by Number Shortcuts (scrolling; all nine ship unbound)
+    Q_PROPERTY(QString scrollFocusTab1Shortcut READ scrollFocusTab1Shortcut WRITE setScrollFocusTab1Shortcut NOTIFY
+                   scrollFocusTab1ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab2Shortcut READ scrollFocusTab2Shortcut WRITE setScrollFocusTab2Shortcut NOTIFY
+                   scrollFocusTab2ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab3Shortcut READ scrollFocusTab3Shortcut WRITE setScrollFocusTab3Shortcut NOTIFY
+                   scrollFocusTab3ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab4Shortcut READ scrollFocusTab4Shortcut WRITE setScrollFocusTab4Shortcut NOTIFY
+                   scrollFocusTab4ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab5Shortcut READ scrollFocusTab5Shortcut WRITE setScrollFocusTab5Shortcut NOTIFY
+                   scrollFocusTab5ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab6Shortcut READ scrollFocusTab6Shortcut WRITE setScrollFocusTab6Shortcut NOTIFY
+                   scrollFocusTab6ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab7Shortcut READ scrollFocusTab7Shortcut WRITE setScrollFocusTab7Shortcut NOTIFY
+                   scrollFocusTab7ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab8Shortcut READ scrollFocusTab8Shortcut WRITE setScrollFocusTab8Shortcut NOTIFY
+                   scrollFocusTab8ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab9Shortcut READ scrollFocusTab9Shortcut WRITE setScrollFocusTab9Shortcut NOTIFY
+                   scrollFocusTab9ShortcutChanged)
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise
@@ -1590,6 +1614,10 @@ public:
     void setScrollingCenterColumnShortcut(const QString& shortcut);
     QString scrollingToggleColumnTabbedShortcut() const;
     void setScrollingToggleColumnTabbedShortcut(const QString& shortcut);
+    QString scrollingCycleTabShortcut() const;
+    void setScrollingCycleTabShortcut(const QString& shortcut);
+    QString scrollingCycleTabBackShortcut() const;
+    void setScrollingCycleTabBackShortcut(const QString& shortcut);
     QString scrollingToggleWindowedFullscreenShortcut() const;
     void setScrollingToggleWindowedFullscreenShortcut(const QString& shortcut);
     QString scrollingCycleColumnWidthShortcut() const;
@@ -1957,6 +1985,27 @@ public:
     void setSnapToZone9Shortcut(const QString& shortcut);
     QString snapToZoneShortcut(int index) const;
     void setSnapToZoneShortcut(int index, const QString& shortcut);
+
+    QString scrollFocusTab1Shortcut() const;
+    void setScrollFocusTab1Shortcut(const QString& shortcut);
+    QString scrollFocusTab2Shortcut() const;
+    void setScrollFocusTab2Shortcut(const QString& shortcut);
+    QString scrollFocusTab3Shortcut() const;
+    void setScrollFocusTab3Shortcut(const QString& shortcut);
+    QString scrollFocusTab4Shortcut() const;
+    void setScrollFocusTab4Shortcut(const QString& shortcut);
+    QString scrollFocusTab5Shortcut() const;
+    void setScrollFocusTab5Shortcut(const QString& shortcut);
+    QString scrollFocusTab6Shortcut() const;
+    void setScrollFocusTab6Shortcut(const QString& shortcut);
+    QString scrollFocusTab7Shortcut() const;
+    void setScrollFocusTab7Shortcut(const QString& shortcut);
+    QString scrollFocusTab8Shortcut() const;
+    void setScrollFocusTab8Shortcut(const QString& shortcut);
+    QString scrollFocusTab9Shortcut() const;
+    void setScrollFocusTab9Shortcut(const QString& shortcut);
+    QString scrollFocusTabShortcut(int index) const;
+    void setScrollFocusTabShortcut(int index, const QString& shortcut);
 
     QString rotateWindowsClockwiseShortcut() const;
     void setRotateWindowsClockwiseShortcut(const QString& shortcut);

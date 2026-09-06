@@ -208,8 +208,27 @@ public:
     /// Drop the entire per-surface override at @p path so the surface
     /// fully inherits its ancestors / baseline. Rejected for "" (the baseline
     /// is the root and has nothing to inherit from; edit its fields directly via
-    /// setChain). @return true when an override was removed.
+    /// setChain). At a SEEDED path (the shipped card chrome for the OSD and the
+    /// PopupFrame popups) a bare clear would be undone by the read-side seed
+    /// overlay, so this engages an explicit empty chain there instead and the
+    /// surface ends up genuinely undecorated. @return true when the override
+    /// was removed or replaced by that marker.
     Q_INVOKABLE bool clearOverride(const QString& path);
+
+    /// True when @p path carries the "explicitly undecorated" marker
+    /// clearOverride leaves on a seeded surface: a direct override whose chain
+    /// is engaged and EMPTY, at a path the read-side seed overlay would
+    /// otherwise inject into. The card reads it as OFF: an override exists,
+    /// but it means "draws nothing", not "the user has a look here". An
+    /// engaged empty chain at an UNSEEDED path is not this — there it is the
+    /// documented way for a leaf to disable an ancestor's chain, a real user
+    /// look, and it keeps reading as ON.
+    Q_INVOKABLE bool isExplicitlyUndecorated(const QString& path) const;
+
+    /// Remove that marker so @p path inherits (and the seed chain flows in)
+    /// again. No-op unless isExplicitlyUndecorated(@p path). @return true when
+    /// the marker was removed.
+    Q_INVOKABLE bool clearUndecorated(const QString& path);
 
     /// Number of descendant surfaces under @p path that carry their own
     /// override — they SHADOW this parent node (the resolve walk stops at the
@@ -222,7 +241,12 @@ public:
     /// overrides (which ride the ancestor's pack rather than pinning one).
     /// Neither exclusion has an analogue here — every decoration surface
     /// resolves through its ancestors, and this tree's `chain` is the pack
-    /// choice itself — so this counts every descendant override.
+    /// choice itself — so this counts every descendant override the USER made.
+    /// The one thing it skips is an untouched seed injection: the tree read
+    /// here carries the shipped card chrome as an override at its seed paths,
+    /// and counting those would warn about shadowing on a config nobody has
+    /// edited, with a Clear action the next read undoes. A seeded descendant
+    /// the user has actually edited counts.
     Q_INVOKABLE int overrideDescendantCount(const QString& path) const;
 
     /// Clear every descendant override under @p path so the whole subtree

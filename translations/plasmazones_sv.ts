@@ -537,49 +537,65 @@
         <translation>Ta in eller mata ut mot remsans slut</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="401"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="372"/>
+        <source>Next Tab in Column</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="377"/>
+        <source>Previous Tab in Column</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="414"/>
         <source>Maximize to Screen Edges</source>
         <translation>Maximera till skärmkanterna</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="449"/>
         <source>Maximize Window Height</source>
         <translation>Maximera fönsterhöjden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="444"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="457"/>
         <source>Grow Window into Empty Space</source>
         <translation>Utvidga fönstret till tomt utrymme</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="454"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="467"/>
         <source>Focus First Window in Column</source>
         <translation>Fokusera första fönstret i kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="459"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="472"/>
         <source>Focus Last Window in Column</source>
         <translation>Fokusera sista fönstret i kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="465"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="478"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
         <translation>Fokusera föregående kolumn, stanna vid kanten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="471"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="484"/>
         <source>Focus Next Column, Stopping at the Edge</source>
         <translation>Fokusera nästa kolumn, stanna vid kanten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="477"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="490"/>
         <source>Focus Previous Column, Wrapping</source>
         <translation>Fokusera föregående kolumn, med rundgång</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="483"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="496"/>
         <source>Focus Next Column, Wrapping</source>
         <translation>Fokusera nästa kolumn, med rundgång</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1166"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="671"/>
+        <source>Focus Tab %1</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
@@ -592,113 +608,113 @@
         <translation>Växla flikkolumn</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="383"/>
         <source>Toggle Windowed Fullscreen</source>
         <translation>Växla helskärm i fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="388"/>
         <source>Cycle Column Width Preset</source>
         <translation>Bläddra bland förinställda kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="381"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="394"/>
         <source>Cycle Column Width Preset Back</source>
         <translation>Bläddra bakåt bland förinställda kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="386"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="399"/>
         <source>Increase Column Width</source>
         <translation>Öka kolumnbredden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="391"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="404"/>
         <source>Decrease Column Width</source>
         <translation>Minska kolumnbredden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="396"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="409"/>
         <source>Maximize Column</source>
         <translation>Maximera kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="423"/>
         <source>Grow Column into Empty Space</source>
         <translation>Utvidga kolumnen till tomt utrymme</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="415"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="428"/>
         <source>Cycle Window Height Preset</source>
         <translation>Bläddra bland förinställda fönsterhöjder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="434"/>
         <source>Cycle Window Height Preset Back</source>
         <translation>Stega fönstrets höjdförinställning bakåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="426"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="439"/>
         <source>Increase Window Height</source>
         <translation>Öka fönsterhöjden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="431"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="444"/>
         <source>Decrease Window Height</source>
         <translation>Minska fönsterhöjden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="449"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="462"/>
         <source>Center Visible Columns</source>
         <translation>Centrera synliga kolumner</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="488"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="501"/>
         <source>Move Window to Floating</source>
         <translation>Flytta fönstret till flytande</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="493"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="506"/>
         <source>Move Window to Tiled</source>
         <translation>Flytta fönstret till panelindelat</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="504"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="517"/>
         <source>Scroll View Back a Page</source>
         <translation>Rulla vyn en sida bakåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="509"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="522"/>
         <source>Scroll View Forward a Page</source>
         <translation>Rulla vyn en sida framåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="514"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="527"/>
         <source>Equalize Column Widths</source>
         <translation>Utjämna kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="519"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="532"/>
         <source>Minimize Column Width</source>
         <translation>Minimera kolumnbredden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="524"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="537"/>
         <source>Equalize Window Heights</source>
         <translation>Utjämna fönsterhöjder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="529"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="542"/>
         <source>Minimize Window Height</source>
         <translation>Minimera fönsterhöjden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="536"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="549"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>Öppna genvägsöversikten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="149"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="623"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
@@ -715,445 +731,460 @@
         <translation>Rullning</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="168"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="176"/>
         <source>Switch Floating and Placed Focus</source>
         <translation>Växla fokus mellan flytande och placerat</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="177"/>
         <source>Moves focus between the floating windows and the placed layout. It returns to the window that last had focus there when that window is still available.</source>
         <translation>Flyttar fokus mellan de flytande fönstren och den placerade layouten. Fokus återgår till det fönster som senast hade fokus där, om det fönstret fortfarande finns.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="172"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="180"/>
         <source>Moves focus between the floating windows and the scrolling columns. It returns to the window that last had focus there when that window is still available.</source>
         <translation>Flyttar fokus mellan de flytande fönstren och rullningskolumnerna. Fokus återgår till det fönster som senast hade fokus där, om det fönstret fortfarande finns.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="182"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="190"/>
         <source>Switches this screen to the previous layout in the list.</source>
         <translation>Växlar den här skärmen till föregående layout i listan.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="185"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
         <source>Switches this screen to the next layout in the list.</source>
         <translation>Växlar den här skärmen till nästa layout i listan.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="188"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="196"/>
         <source>Opens a picker to choose this screen&apos;s layout.</source>
         <translation>Öppnar en väljare för den här skärmens layout.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="201"/>
         <source>Locks this screen&apos;s layout so nothing switches it until unlocked.</source>
         <translation>Låser den här skärmens layout så att inget växlar den förrän den låses upp.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
         <source>Locks this screen&apos;s column template so nothing switches it until unlocked.</source>
         <translation>Låser den här skärmens kolumnmall så att inget växlar den förrän den låses upp.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="203"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="211"/>
         <source>Arrange All Windows</source>
         <translation>Ordna alla fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
         <source>Move Focus Left</source>
         <translation>Flytta fokus åt vänster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="230"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="238"/>
         <source>Move Focus Right</source>
         <translation>Flytta fokus åt höger</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="240"/>
         <source>Move Focus Up</source>
         <translation>Flytta fokus uppåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="242"/>
         <source>Move Focus Down</source>
         <translation>Flytta fokus nedåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="259"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
         <source>Rotate Clockwise</source>
         <translation>Rotera medurs</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="253"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
         <source>Rotate Counterclockwise</source>
         <translation>Rotera moturs</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="268"/>
         <source>Cycle Focus Forward</source>
         <translation>Stega fokus framåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="262"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="270"/>
         <source>Cycle Focus Backward</source>
         <translation>Stega fokus bakåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="264"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
         <source>Swap Screen Left</source>
         <translation>Byt skärm åt vänster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="266"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
         <source>Swap Screen Right</source>
         <translation>Byt skärm åt höger</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="268"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
         <source>Swap Screen Up</source>
         <translation>Byt skärm uppåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="270"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
         <source>Swap Screen Down</source>
         <translation>Byt skärm nedåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
         <source>Re-applies the tiling algorithm to every window on the screen.</source>
         <translation>Tillämpar panelindelningsalgoritmen igen på varje fönster på skärmen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="158"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="166"/>
         <source>Puts every column back to the screen&apos;s default width and display, and every window back to an even share of its column.</source>
         <translation>Återställer varje kolumn till skärmens standardbredd och standardvisning, och varje fönster till en lika stor del av sin kolumn.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="300"/>
         <source>Moves focus to the first column.</source>
         <translation>Flyttar fokus till den första kolumnen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="294"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus to the last column.</source>
         <translation>Flyttar fokus till den sista kolumnen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="325"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="333"/>
         <source>Moves the focused column to the first position.</source>
         <translation>Flyttar den fokuserade kolumnen till första positionen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="327"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="335"/>
         <source>Moves the focused column to the last position.</source>
         <translation>Flyttar den fokuserade kolumnen till sista positionen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="329"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="337"/>
         <source>Consume Window</source>
         <translation>Ta in fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="333"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
         <source>Expel Window</source>
         <translation>Mata ut fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="422"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="439"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
         <translation>Rullar vyn så att den fokuserade kolumnen hamnar mitt på skärmen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="345"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Switches the focused column between stacked windows and tabs.</source>
         <translation>Växlar den fokuserade kolumnen mellan staplade fönster och flikar.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="436"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="453"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
         <translation>Visar det fokuserade fönstret i helskärmsläge medan det behåller sin plats i kolumnen, så att det inte täcker skärmen. Tryck igen för att lämna.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="352"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="369"/>
         <source>Cycle Column Width</source>
         <translation>Bläddra bland kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="370"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
         <translation>Stegar den fokuserade kolumnen genom skärmens storleksförinställningar längs remsan.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="373"/>
         <source>Cycle Column Width Back</source>
         <translation>Bläddra bakåt bland kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
         <translation>Stegar den fokuserade kolumnen bakåt genom skärmens storleksförinställningar längs remsan.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="365"/>
         <source>Grows the focused column along the strip by the configured step.</source>
         <translation>Ökar den fokuserade kolumnen längs remsan med det inställda steget.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="350"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="367"/>
         <source>Shrinks the focused column along the strip by the configured step.</source>
         <translation>Minskar den fokuserade kolumnen längs remsan med det inställda steget.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="366"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="383"/>
         <source>Toggles the focused column between filling the work area and a smaller size.</source>
         <translation>Växlar den fokuserade kolumnen mellan att fylla arbetsytan och en mindre storlek.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="398"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="415"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
         <translation>Stegar det fokuserade fönstret genom skärmens storleksförinställningar inom sin kolumn.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
         <translation>Stegar det fokuserade fönstret bakåt genom skärmens storleksförinställningar inom sin kolumn.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="410"/>
         <source>Grows the focused window within its column by the configured step.</source>
         <translation>Ökar det fokuserade fönstret inom sin kolumn med det inställda steget.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="395"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="412"/>
         <source>Shrinks the focused window within its column by the configured step.</source>
         <translation>Minskar det fokuserade fönstret inom sin kolumn med det inställda steget.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="382"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="399"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
         <translation>Ökar den fokuserade kolumnen så att den fyller det tomma utrymmet på skärmen. Andra kolumner behåller sin storlek.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="441"/>
         <source>Scrolls the view so the fully visible columns sit centered as a group.</source>
         <translation>Rullar vyn så att de helt synliga kolumnerna centreras som en grupp.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="320"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="328"/>
         <source>Moves focus to the first window of the focused column.</source>
         <translation>Flyttar fokus till det första fönstret i den fokuserade kolumnen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="322"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="330"/>
         <source>Moves focus to the last window of the focused column.</source>
         <translation>Flyttar fokus till det sista fönstret i den fokuserade kolumnen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="442"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="459"/>
         <source>Move to Floating</source>
         <translation>Flytta till flytande</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="443"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="460"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
         <translation>Gör det fokuserade fönstret flytande. Till skillnad från flytväxlaren panelindelar den aldrig tillbaka.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="446"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="463"/>
         <source>Move to Tiled</source>
         <translation>Flytta till panelindelat</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="447"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="464"/>
         <source>Returns the focused floating window to its column. Unlike the float toggle, it never floats.</source>
         <translation>Återför det fokuserade flytande fönstret till sin kolumn. Till skillnad från flytväxlaren gör den aldrig fönstret flytande.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="470"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="487"/>
         <source>Applies the numbered layout to this screen.</source>
         <translation>Tillämpar den numrerade layouten på den här skärmen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="471"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="488"/>
         <source>Applies the numbered column template to this screen.</source>
         <translation>Tillämpar den numrerade kolumnmallen på den här skärmen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="486"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="503"/>
         <source>Sends the focused window to the numbered slot on this screen.</source>
         <translation>Skickar det fokuserade fönstret till den numrerade platsen på den här skärmen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="626"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="516"/>
+        <source>Shows the numbered tab of the focused column. In a column that is not tabbed it focuses that window in the stack.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="660"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
         <translation>Verkställ layout %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="414"/>
         <source>Cycle Window Height</source>
         <translation>Stega fönsterhöjd</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="183"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="191"/>
         <source>Switches this screen to the previous column template.</source>
         <translation>Växlar den här skärmen till föregående kolumnmall.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="186"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
         <source>Switches this screen to the next column template.</source>
         <translation>Växlar den här skärmen till nästa kolumnmall.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="197"/>
         <source>Opens a picker to choose this screen&apos;s column template. Its column widths become the widths columns cycle through.</source>
         <translation>Öppnar en väljare för den här skärmens kolumnmall. Dess kolumnbredder blir de bredder som kolumner stegar igenom.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="330"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="338"/>
         <source>Pulls a window from the next column into the focused column, stacking them.</source>
         <translation>Hämtar ett fönster från nästa kolumn in i den fokuserade kolumnen och staplar dem.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="334"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="342"/>
         <source>Moves the focused window out of a shared column into a new column after it.</source>
         <translation>Flyttar det fokuserade fönstret ut ur en delad kolumn till en ny kolumn efter den.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="337"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="345"/>
         <source>Splits the focused window out of a shared column toward the start of the strip. A window alone in its column merges into the previous column instead.</source>
         <translation>Delar ut det fokuserade fönstret ur en delad kolumn mot remsans början. Ett fönster som är ensamt i sin kolumn slås i stället ihop med föregående kolumn.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="349"/>
         <source>Splits the focused window out of a shared column toward the end of the strip. A window alone in its column merges into the next column instead.</source>
         <translation>Delar ut det fokuserade fönstret ur en delad kolumn mot remsans slut. Ett fönster som är ensamt i sin kolumn slås i stället ihop med nästa kolumn.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="401"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="418"/>
         <source>Cycle Window Height Back</source>
         <translation>Stega fönsterhöjd bakåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="304"/>
         <source>Focus Previous Column (Edge Stop)</source>
         <translation>Fokusera föregående kolumn (stanna vid kanten)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="305"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
         <translation>Flyttar fokus en kolumn mot remsans början och stannar vid kanten. Den vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="309"/>
         <source>Focus Next Column (Edge Stop)</source>
         <translation>Fokusera nästa kolumn (stanna vid kanten)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="310"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
         <translation>Flyttar fokus en kolumn mot remsans slut och stannar vid kanten. Den vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="314"/>
         <source>Focus Previous Column (Wrap)</source>
         <translation>Fokusera föregående kolumn (med rundgång)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="307"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="315"/>
         <source>Moves focus one column toward the start of the strip, wrapping to the last column at the edge.</source>
         <translation>Flyttar fokus en kolumn mot remsans början och hoppar vid kanten till den sista kolumnen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="311"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="319"/>
         <source>Focus Next Column (Wrap)</source>
         <translation>Fokusera nästa kolumn (med rundgång)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="312"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="320"/>
         <source>Moves focus one column toward the end of the strip, wrapping to the first column at the edge.</source>
         <translation>Flyttar fokus en kolumn mot remsans slut och hoppar vid kanten till den första kolumnen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="372"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="355"/>
+        <source>Shows the next tab of the focused column, wrapping round to the first one at the end. In a column that is not tabbed it focuses the next window down the stack.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="359"/>
+        <source>Shows the previous tab of the focused column, wrapping round to the last one at the start. In a column that is not tabbed it focuses the previous window up the stack.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
         <source>Toggles the focused column between covering the whole work area with no gaps and its normal size. The covering state is the one the window&apos;s maximize button shows.</source>
         <translation>Växlar den fokuserade kolumnen mellan att täcka hela arbetsytan utan mellanrum och sin normala storlek. Det täckande tillståndet är det som fönstrets maximeringsknapp visar.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="426"/>
         <source>Toggles the focused window between filling its column and the height it had before, or an even share with the other windows there if it had none.</source>
         <translation>Växlar det fokuserade fönstret mellan att fylla sin kolumn och den höjd det hade tidigare. Hade det ingen får det en lika stor del som de andra fönstren där.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="413"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="430"/>
         <source>Grows the focused window to fill the empty space left in its column. The other windows there keep their size.</source>
         <translation>Ökar det fokuserade fönstret så att det fyller det tomma utrymmet i sin kolumn. De andra fönstren där behåller sin storlek.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="417"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="434"/>
         <source>Shrinks the focused window to the smallest size preset.</source>
         <translation>Minskar det fokuserade fönstret till den minsta storleksförinställningen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="436"/>
         <source>Gives every window in the focused column an equal share of it.</source>
         <translation>Ger varje fönster i den fokuserade kolumnen en lika stor del av den.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="428"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="445"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Rullar vyn en hel skärm mot remsans början. Fokus stannar kvar.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="432"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="449"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Rullar vyn en hel skärm mot remsans slut. Fokus stannar kvar.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="388"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="405"/>
         <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
         <translation>Ger varje kolumn som syns helt en lika stor del av skärmen. Kolumner som är avskurna vid en kant lämnas orörda.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="403"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
         <translation>Minskar den fokuserade kolumnen till den minsta storleksförinställningen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="592"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="624"/>
         <source>Arrows</source>
         <translation>Piltangenter</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="635"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="675"/>
         <source>Move Window</source>
         <translation>Flytta fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="642"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="682"/>
         <source>Move Focus</source>
         <translation>Flytta fokus</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="647"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="687"/>
         <source>Swap Window</source>
         <translation>Byt fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="652"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="692"/>
         <source>Span Window</source>
         <translation>Sträck ut fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="658"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="698"/>
         <source>Swap Screens</source>
         <translation>Byt skärmar</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1108"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1129"/>
         <source>Apply Layout %1</source>
         <translation>Verkställ layout %1</translation>
     </message>
@@ -1594,7 +1625,7 @@
         <translation>Tjänsterna är inte initierade</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1126"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1147"/>
         <source>Snap to Zone %1</source>
         <translation>Fäst i zon %1</translation>
     </message>
@@ -2057,7 +2088,7 @@
         <translation>Sammanhang</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="493"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="525"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="97"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
@@ -2311,9 +2342,9 @@
         <translation>Opacitet (%)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="212"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="213"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="481"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="220"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="221"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="498"/>
         <source>Zones</source>
         <translation>Zoner</translation>
     </message>
@@ -2483,12 +2514,12 @@
         <translation>Fästning</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="284"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="288"/>
         <source>Autotile</source>
         <translation>Autopanelindelning</translation>
     </message>
@@ -9932,10 +9963,10 @@
         <translation>Fäst storleksändring (förhandsgranskning av drag)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="631"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="665"/>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="496"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="502"/>
         <source>Zone %1</source>
         <translation>Zon %1</translation>
     </message>
@@ -10105,13 +10136,13 @@
         <translation>Översikt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="142"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="143"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="150"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="151"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="156"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="152"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="159"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="164"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="175"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="204"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="271"/>
@@ -10129,26 +10160,26 @@
         <translation>Placering</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="217"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="218"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="219"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="220"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="225"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="226"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="227"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="229"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="231"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="233"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="235"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="237"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="238"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="240"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="239"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="241"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="242"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="243"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="244"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="245"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="246"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="248"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="249"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="250"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="259"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="258"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="267"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="269"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="414"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="501"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
@@ -10171,24 +10202,24 @@
         <translation>Om</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="263"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="265"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="267"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="269"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="273"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="281"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="106"/>
         <source>Virtual Screens</source>
         <translation>Virtuella skärmar</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="184"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="187"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="198"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="465"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="195"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="200"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="206"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="210"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="482"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="214"/>
         <source>Layouts</source>
         <translation>Layouter</translation>
@@ -20819,7 +20850,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="382"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="796"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="802"/>
         <source>Dismiss notification</source>
         <translation>Stäng avisering</translation>
     </message>
@@ -20989,24 +21020,24 @@
         <translation>Redan i huvudpositionen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="500"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="506"/>
         <source>Restored</source>
         <comment>@info:status the window&apos;s previous position was restored</comment>
         <translation>Återställd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="511"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="517"/>
         <source>Tiled</source>
         <comment>@info:status the window is now tiled (adjective, not a verb)</comment>
         <translation>Panelindelad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="539"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="545"/>
         <source>Swapped with master window</source>
         <translation>Bytte plats med huvudfönstret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="564"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="570"/>
         <source>Resized</source>
         <comment>@info:status the window was resized</comment>
         <translation>Storleken ändrades</translation>
@@ -21167,14 +21198,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="472"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="531"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="537"/>
         <source>Snapped into Zone %1</source>
         <translation>Fäst i zon %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="474"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="514"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="533"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="520"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="539"/>
         <source>Snapped</source>
         <comment>@info:status the window was snapped into a zone</comment>
         <translation>Fäst</translation>
@@ -21190,157 +21221,163 @@
         <translation>Fokusera huvudfönstret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="485"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="487"/>
+        <source>Focus on the tab</source>
+        <comment>@info:status focus moved to a numbered tab</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="491"/>
         <source>Focus on Zone %1</source>
         <translation>Fokusera zon %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="487"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="493"/>
         <source>Focus</source>
         <comment>@info:status focus moved in the pressed direction</comment>
         <translation>Fokus</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="491"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="497"/>
         <source>Zone %1 ↔ Zone %2</source>
         <translation>Zon %1 ↔ zon %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="493"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="499"/>
         <source>Swapped</source>
         <translation>Bytt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="498"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="504"/>
         <source>Window pushed</source>
         <translation>Fönster skjutet</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="520"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="526"/>
         <source>Snapped</source>
         <comment>@info:status the snapped layer took focus</comment>
         <translation>Fäst</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="526"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="532"/>
         <source>Extra windows moved out of the layout</source>
         <translation>Extra fönster flyttade ur layouten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="528"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Floating</source>
         <comment>@info:status the window is now floating (adjective, not a verb)</comment>
         <translation>Flytande</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="535"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="541"/>
         <source>Next window</source>
         <translation>Nästa fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="537"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="543"/>
         <source>Focused the master window</source>
         <translation>Huvudfönstret fokuserades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="544"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="550"/>
         <source>Master ratio → %1%</source>
         <translation>Huvudfönsterförhållande → %1 %</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="544"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="550"/>
         <source>Master ratio changed</source>
         <translation>Huvudfönsterförhållande ändrat</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="548"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="554"/>
         <source>Master count → %1</source>
         <translation>Antal huvudfönster → %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="548"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="554"/>
         <source>Master count changed</source>
         <translation>Antal huvudfönster ändrat</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="550"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="556"/>
         <source>Layout refreshed</source>
         <translation>Layout uppdaterad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="559"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="565"/>
         <source>Column widths equalized</source>
         <translation>Kolumnbredderna utjämnades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="562"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="568"/>
         <source>Window heights equalized</source>
         <translation>Fönsterhöjderna utjämnades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="566"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="572"/>
         <source>Tabbed display toggled</source>
         <translation>Flikvisningen växlades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="573"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
         <source>Windowed fullscreen off</source>
         <translation>Helskärm i fönster av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="575"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="581"/>
         <source>Windowed fullscreen on</source>
         <translation>Helskärm i fönster på</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="577"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="583"/>
         <source>Window moved between columns</source>
         <translation>Fönstret flyttades mellan kolumner</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="585"/>
         <source>Window expelled into its own column</source>
         <translation>Fönstret matades ut i en egen kolumn</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="590"/>
         <source>Visible columns centered</source>
         <translation>Synliga kolumner centrerades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="586"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="592"/>
         <source>Column centered</source>
         <translation>Kolumnen centrerades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="591"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="597"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
         <translation>Rullades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="594"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="600"/>
         <source>Virtual screens swapped</source>
         <translation>Virtuella skärmar bytta</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="597"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="603"/>
         <source>Virtual screens rotated</source>
         <translation>Virtuella skärmar roterade</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="599"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="605"/>
         <source>Action completed</source>
         <translation>Åtgärd slutförd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="656"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="662"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="693"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="699"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation>Kort återkoppling för fönster- och layoutåtgärder via tangentbordet</translation>
     </message>

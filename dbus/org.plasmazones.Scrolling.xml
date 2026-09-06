@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.Scrolling">
-        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface (plus the preset vocabulary beside it), the wheel-driven focusColumn and scrollView verbs, the four absolute width/height setters for external scripting, the toggleMaximizeColumn width verb, the toggleMaximizeToEdges verb the KWin effect sends when a scroll-managed window is asked to maximize, the clearWindowedFullscreen reconciliation call the KWin effect sends when a client leaves fullscreen on its own, the reapplyWindowGeometry repair call it sends on a fullscreen exit whose strip rects never moved, the blueprintProgressJson template-seed report, the stripChanged wake-up that tells a renderer its strip is worth re-reading, the focus-follows-mouse scroll cap's blocked-window list, the stripContextChanged announcement of which strip a screen is currently showing, the leaveNativeFullscreenRequested release the daemon sends ahead of a keyboard strip verb, and the scrollingScreensChanged / scrollEffectBehaviourChanged / scrollFocusScrollBlockedWindowsChanged change announcements for the three properties."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface (plus the preset vocabulary beside it), the wheel-driven focusColumn and scrollView verbs, their placement-map twins focusColumnAt, moveColumnTo and scrollViewByPx beside the stripModelJson whole-strip read they act on, the four absolute width/height setters for external scripting, the toggleMaximizeColumn width verb, the toggleMaximizeToEdges verb the KWin effect sends when a scroll-managed window is asked to maximize, the clearWindowedFullscreen reconciliation call the KWin effect sends when a client leaves fullscreen on its own, the reapplyWindowGeometry repair call it sends on a fullscreen exit whose strip rects never moved, the blueprintProgressJson template-seed report, the stripChanged wake-up that tells a renderer its strip is worth re-reading, the focus-follows-mouse scroll cap's blocked-window list, the stripContextChanged announcement of which strip a screen is currently showing, the leaveNativeFullscreenRequested release the daemon sends ahead of a keyboard strip verb, and the scrollingScreensChanged / scrollEffectBehaviourChanged / scrollFocusScrollBlockedWindowsChanged change announcements for the three properties."/>
 
         <property name="scrollingScreens" type="as" access="read">
             <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine, sorted, matching the ordering of the scrollingScreensChanged payload so a consumer can compare the two for the same set. The KWin effect uses it as the discriminator that stamps Mode 'scrolling' rather than 'tiling' in window rule queries, but it does not answer from this raw set: it intersects it at read time with the engine-managed union published on org.plasmazones.Tiling, because the two sets arrive as independent signals with no ordering guarantee and this one can transiently name a screen the union has already dropped. Changes are announced on the scrollingScreensChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
@@ -37,6 +37,39 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="delta" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="-1 scrolls the view one step toward the strip's start, +1 one step toward its end. The step is the Scrolling view scroll step setting. Any other value is ignored."/>
+            </arg>
+        </method>
+
+        <method name="focusColumnAt">
+            <annotation name="org.gtk.GDBus.DocString" value="Focus the column at a strip index on a scrolling screen. The placement-map twin of focusColumn: a map that draws the whole strip lets the user click a column directly, and this is the verb behind that click. Goes through the same engine entry as the keyboard and wheel focus verbs, so the view re-anchors under the same centering policy (the Never fit, OnOverflow, Always, and the lone-column rule) and the column's active window is activated afterwards. A press on the column that is already active answers with the no-target navigation OSD, like the sibling focus verbs, and an index past the last column lands on the last column, which is the strip's own clamp. Every other rejected call is a silent no-op with no error reply: an empty screenId, a screen the scrolling engine does not own, a screen whose current scrolling context is disabled (the same per-context gate focusColumn passes through), and a negative index are all ignored."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move. An empty string is ignored."/>
+            </arg>
+            <arg name="index" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Strip index of the column to focus, as stripModelJson numbers them. A negative value is ignored; a value past the last column clamps to it."/>
+            </arg>
+        </method>
+
+        <method name="moveColumnTo">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a column from one strip index to another on a scrolling screen. The structural twin of focusColumnAt: a placement map that draws the whole strip lets the user drag a column past its neighbours, and this is the verb behind the drop. The moved column becomes the active column and the view re-anchors under the same centering policy the keyboard move verbs use, then the column's active window is activated. A from index past the last column, or a from equal to to, names no move and answers with the no-target navigation OSD rather than clamping, because the map numbers its columns from stripModelJson and an out-of-range index means a stale model. Every other rejected call is a silent no-op with no error reply: an empty screenId, a screen the scrolling engine does not own, a screen whose current scrolling context is disabled, and a negative index in either argument are all ignored."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should change. An empty string is ignored."/>
+            </arg>
+            <arg name="from" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Strip index of the column to move, as stripModelJson numbers them. A negative value is ignored; a value past the last column answers no-target."/>
+            </arg>
+            <arg name="to" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Strip index the column should occupy afterwards. A negative value is ignored; a value past the last column answers no-target."/>
+            </arg>
+        </method>
+
+        <method name="scrollViewByPx">
+            <annotation name="org.gtk.GDBus.DocString" value="Scroll the view along a scrolling screen's strip by a pixel distance WITHOUT moving focus. The pixel twin of scrollView, for a caller that already holds a distance along the strip: the placement map pans by however far it was dragged, and one call per configured step would make that drag land on step boundaries. The view stays where the pan leaves it until the next focus change or centering verb, clamped at the strip's ends, and a pan already pinned at the end it is asked to move toward answers with the no-target navigation OSD (when that OSD is on) and no error reply. A distance of zero is a silent no-op at this boundary, never reaching the engine. Same silent ownership and per-context gates as focusColumn: an empty screenId, a screen the scrolling engine does not own, and a screen whose current scrolling context is disabled are ignored."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move. An empty string is ignored."/>
+            </arg>
+            <arg name="px" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Signed distance in logical pixels along the strip's own axis: positive moves the view toward the strip's end (rightward on a horizontal strip, downward on a vertical one), negative toward its start. Zero is ignored."/>
             </arg>
         </method>
 
@@ -127,6 +160,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="stripJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array string."/>
+            </arg>
+        </method>
+
+        <method name="stripModelJson">
+            <annotation name="org.gtk.GDBus.DocString" value="The whole strip of a scrolling screen, columns on and off screen alike, as the Phosphor shell's placement map draws it. Where visibleStripJson describes only what is on screen as screen-normalized rects for a thumbnail, this is the strip MODEL in pixels along the strip's own axis, so a consumer can draw every column, place the viewport over them, and pan. A JSON object {axis, viewOffsetPx, viewportPx, stripExtentPx, activeColumn, columns}. axis is 0 for a horizontal strip and 1 for a vertical one, and every other pixel value runs along that axis (main) or across it (cross). viewOffsetPx is the viewport's leading edge in strip coordinates, where the first column's leading edge is 0; it can overhang either end of the strip, because the centering policy centres a short strip on purpose. viewportPx is the viewport's extent along the strip (the work area's main extent) and stripExtentPx the strip's total extent, every non-minimized column plus the gaps between them. activeColumn is the strip index of the active column, -1 on an empty strip. columns is an array in strip order of {index, stripPosPx, extentPx, display, activeTile, maximized, tiles}: index is the column's strip index and the value focusColumnAt takes, stripPosPx its leading edge in strip coordinates, extentPx its resolved extent along the strip (0 for a fully minimized column, which takes no strip position), display 0 for a normal stack and 1 for a tabbed column, activeTile the index into tiles of its active tile (the shown tab when tabbed), and maximized the column's declared maximize-to-edges state, the one toggleMaximizeToEdges drives and the compositor mirrors onto the maximize bit. The width-only maximize of toggleMaximizeColumn is not a flag on the model and is not reported. tiles is the column's stack in order, minimized tiles included, each {windowId, crossPx, minimized}: crossPx is the tile's resolved extent across the strip, 0 for a minimized tile, and a hidden tab of a tabbed column carries the shown tab's extent since every tab is committed at the column's one rect. The daemon resolves the screen's layout parameters once and runs one relayout per call, the same cost as visibleStripJson. Same ownership gate as focusColumn (reads are not context-gated): an empty object when the screen is not scrolling. A scrolling screen with no strip yet answers a valid object with an empty columns array and its axis and viewport filled in, so a consumer can draw the empty strip. Changes are announced by the stripChanged wake-up, whose coalescing advice applies here too."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip to describe. An empty string yields an empty object."/>
+            </arg>
+            <arg name="modelJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string."/>
             </arg>
         </method>
 

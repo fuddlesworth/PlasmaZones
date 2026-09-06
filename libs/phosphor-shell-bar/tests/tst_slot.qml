@@ -170,7 +170,9 @@ TestCase {
         // a `Theme` of its own. That shadowed the Phosphor.Theme singleton
         // across the whole bar and made every colour read undefined, which
         // no test noticed because none of them asserted a colour.
-        compare(chipAt(s, 0).color, Theme.surface_variant, "the chip paints the theme token, so Theme is not shadowed");
+        // Groups paint no background any more; the hairline between groups
+        // is the one themed colour, and it must read the Phosphor token.
+        compare(chipAt(s, 1).children[0].color, Theme.on_surface, "the hairline paints the theme token, so Theme is not shadowed");
     }
 
     function test_chip_collapses_when_every_widget_hides() {
@@ -211,7 +213,7 @@ TestCase {
         // own padding.
         // tryCompare for the same reason: the preceding tryVerify is already
         // satisfied while the hidden cell still holds its spacing slot.
-        tryCompare(chipAt(s, 0), "implicitWidth", 30 + Tokens.spacing_m * 2, 3000, "the hidden cell leaves no spacing slot inside the chip");
+        tryCompare(chipAt(s, 0), "implicitWidth", 30, 3000, "the hidden cell leaves no spacing slot inside the chip");
     }
 
     function test_unusable_group_entries_are_ignored() {

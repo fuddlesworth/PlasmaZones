@@ -311,6 +311,28 @@ public:
     /// refusals differently. Takes a percent rather than pixels because
     /// the work area is resolved here and nowhere the shortcut layer can see.
     void scrollViewByPercent(qreal percent, const QString& screenId);
+    /// The pixel twin of scrollViewByPercent, for a caller that already holds
+    /// a distance along the strip (the placement map's drag pan, over
+    /// org.plasmazones.Scrolling.scrollViewByPx). Same detachment, clamping
+    /// and feedback: a zero @p px reports no_movement, a pan pinned at the
+    /// end it is asked to move toward reports no_target.
+    void scrollViewByPx(int px, const QString& screenId);
+    /// Focus the column at strip index @p index (ScrollStrip::focusColumn),
+    /// re-anchoring the view under the same centering policy every other
+    /// focus verb applies, then activating the column's active window. An
+    /// index past the last column clamps to it, the strip's own rule; a
+    /// negative index is out of contract and is refused silently, the way
+    /// focusColumnPlain refuses a bad delta. The already-active column
+    /// answers no_target like the other focus verbs.
+    void focusColumnAtIndex(int index, const QString& screenId);
+    /// Move the column at strip index @p from to strip index @p to
+    /// (ScrollStrip::moveColumnTo), leaving the moved column active and
+    /// re-anchoring the view the way the other move verbs do, then
+    /// activating its active window. A negative index is refused silently
+    /// like focusColumnAtIndex's; an index past the end, or from == to,
+    /// answers no_target since there is no such column to move (from is not
+    /// clamped, unlike a focus index).
+    void moveColumnToIndex(int from, int to, const QString& screenId);
     /// First/last non-minimized tile of the active column (niri
     /// focus-window-top/bottom).
     void focusWindowTop(const QString& screenId);
@@ -322,6 +344,20 @@ public:
     /// Adjacent-column focus that wraps to the far end at the strip edge
     /// (niri focus-column-left-or-last / right-or-first). delta -1/+1.
     void focusColumnWrap(int delta, const QString& screenId);
+    /// Cycle the active column's tabs, wrapping at either end. delta -1/+1.
+    /// The stack twin of focusColumnWrap: the generic directional focus
+    /// crosses onto the neighbouring output at the stack edge, and this is
+    /// the opt-in variant that stays inside the column. Acts on the tiles of
+    /// a stacked column too — they are the same tiles the column shows as
+    /// tabs once it is flipped.
+    void cycleTab(int delta, const QString& screenId);
+    /// Focus the active column's @p ordinal'th tab, 1-based, counting the
+    /// column's non-minimized tiles — which are the tabs its indicator draws
+    /// when the column is tabbed. Like cycleTab it is NOT gated on the
+    /// display mode, so it addresses a stacked column's windows the same way
+    /// and resolves even when no indicator is drawn at all. An ordinal past
+    /// the column's tab count answers no_target feedback.
+    void focusTab(int ordinal, const QString& screenId);
     /// Explicit float / re-tile of the focused window (niri
     /// move-window-to-floating / move-window-to-tiling); already-there
     /// presses answer with no_target feedback.
@@ -485,6 +521,19 @@ public:
     /// rather than a one-off. It also removes the count-mismatch guard the
     /// paired reads needed: one walk cannot disagree with itself.
     QVector<VisibleTileWithRect> visibleTilesWithRects(const QString& screenId) const;
+
+    /// The whole strip of @p screenId's current context as a strip MAP reads
+    /// it (ScrollStripModel): every column, on and off screen, with its strip
+    /// position and extent, the viewport's offset and extent on the same axis,
+    /// and the active column. Same precondition as visibleTiles: answers for
+    /// the screen NAMED, with no operation-screen fallback. The params are
+    /// resolved ONCE here and handed to ScrollStrip::stripModel, which runs one
+    /// relayout, the cost discipline visibleTilesWithRects follows. A screen
+    /// with no state yet (owned but never populated) answers an empty model
+    /// carrying the screen's resolved axis and viewport, so a consumer can
+    /// draw an empty strip; an unknown screen with no resolvable work area
+    /// answers the default-constructed model.
+    ScrollStripModel stripModelForScreen(const QString& screenId) const;
 
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     QString managedFocusedWindow(const QString& screenId) const override;
@@ -1249,6 +1298,15 @@ private:
     /// only when @p state is non-null, matching the macro's own contract.
     void focusInDirectionResolved(const QString& direction, const PhosphorEngine::NavigationContext& ctx,
                                   const QString& screen, ScrollState* state, const ScrollLayoutParams& params);
+
+    // engine_verbs.cpp
+    /// The shared body of scrollViewByPercent and scrollViewByPx past the
+    /// resolve and the empty-strip bail: pan @p state's strip by @p deltaPx,
+    /// re-apply on a change, and report through navigationFeedback under the
+    /// "scroll" action. The two public verbs differ only in how they arrive
+    /// at the pixel count, and this is what keeps their refusal tokens and
+    /// detachment behaviour one definition.
+    void scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state, const ScrollLayoutParams& params);
 
     /// After a SUCCESSFUL focus crossing (either arm), the source state's
     /// floatingHasFocus must drop — focus demonstrably left that output.

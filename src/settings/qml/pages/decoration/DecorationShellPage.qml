@@ -16,7 +16,7 @@ import QtQuick
 // walk-up.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Shell decoration surfaces")
-    headerText: i18n("Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.")
+    headerText: i18n("Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.")
     surfaceModel: [
         {
             "surfacePath": "shell",
@@ -33,6 +33,48 @@ DecorationSurfaceCardList {
         {
             "surfacePath": "shell.appletPopup",
             "cardLabel": i18n("Applet Popups"),
+            "alwaysEnabled": false,
+            "isParentNode": false
+        },
+        {
+            "surfacePath": "shell.phosphor",
+            "cardLabel": i18n("All Phosphor Shell Surfaces"),
+            "alwaysEnabled": false,
+            "isParentNode": true
+        },
+        {
+            "surfacePath": "shell.phosphor.bar",
+            "cardLabel": i18n("Bar"),
+            "alwaysEnabled": false,
+            "isParentNode": false
+        },
+        {
+            "surfacePath": "shell.phosphor.popout",
+            "cardLabel": i18n("Popouts"),
+            "alwaysEnabled": false,
+            "isParentNode": false
+        },
+        {
+            "surfacePath": "shell.phosphor.osd",
+            "cardLabel": i18n("OSD Bands"),
+            "alwaysEnabled": false,
+            "isParentNode": false
+        },
+        {
+            "surfacePath": "shell.phosphor.notification",
+            "cardLabel": i18n("Notifications"),
+            "alwaysEnabled": false,
+            "isParentNode": false
+        },
+        {
+            "surfacePath": "shell.phosphor.picker",
+            "cardLabel": i18n("Wallpaper Picker"),
+            "alwaysEnabled": false,
+            "isParentNode": false
+        },
+        {
+            "surfacePath": "shell.phosphor.lock",
+            "cardLabel": i18n("Lock Screen"),
             "alwaysEnabled": false,
             "isParentNode": false
         }

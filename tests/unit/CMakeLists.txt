@@ -641,6 +641,7 @@ add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
 add_executable(test_cheatsheet_compression
     daemon/test_cheatsheet_compression.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_adhoc.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
 target_link_libraries(test_cheatsheet_compression
@@ -654,6 +655,7 @@ add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
 add_executable(test_scrolling_shortcut_parity
     daemon/test_scrolling_shortcut_parity.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_adhoc.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
 target_link_libraries(test_scrolling_shortcut_parity
@@ -701,6 +703,7 @@ add_test(NAME test_unified_layout_controller_none COMMAND test_unified_layout_co
 add_executable(test_shortcutmanager_teardown
     daemon/test_shortcutmanager_teardown.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_adhoc.cpp
 )
 target_link_libraries(test_shortcutmanager_teardown
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
@@ -1178,6 +1181,13 @@ add_executable(test_scrolling_adaptor_verbs dbus/test_scrolling_adaptor_verbs.cp
 target_link_libraries(test_scrolling_adaptor_verbs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                            PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_scrolling_adaptor_verbs COMMAND test_scrolling_adaptor_verbs)
+# The placement-map surfaces (stripModelJson, focusColumnAt, scrollViewByPx)
+# the Phosphor shell's strip map rides on; same fixture header.
+add_executable(test_scrolling_adaptor_map dbus/test_scrolling_adaptor_map.cpp
+                                          dbus/scrollingadaptortestfixture.h)
+target_link_libraries(test_scrolling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                         PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor_map COMMAND test_scrolling_adaptor_map)
 
 # Close/reopen restore on the scroll engine through the unified placement
 # store: a reopened window's fresh uuid must match its record by appId FIFO
@@ -1249,6 +1259,28 @@ add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
 add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
+
+# The Phosphor shell surface of WindowTrackingAdaptor (shellsurface.cpp):
+# activateWindow / getWindowMetadata / moveWindowToDesktop / getUrgentWindows
+# and the windowMetadataChanged / windowUrgencyChanged registry mirror.
+add_executable(test_wta_shell_surface dbus/test_wta_shell_surface.cpp)
+target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_shell_surface COMMAND test_wta_shell_surface)
+
+# The per-desktop reads of the same surface (shellsurface_desktop.cpp):
+# getWindowStatesForDesktop's desktop / sticky / screen filter and
+# findWindowByPid's most-recent-push tie-break.
+add_executable(test_wta_shell_desktop dbus/test_wta_shell_desktop.cpp)
+target_link_libraries(test_wta_shell_desktop PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_wta_shell_desktop COMMAND test_wta_shell_desktop)
+
+# ControlAdaptor's shortcut catalog read (controladaptor_shortcuts.cpp):
+# getShortcutsJson serialises the injected provider's rows and answers []
+# without one; shortcutsChanged relays notifyShortcutsChanged.
+add_executable(test_control_shortcuts dbus/test_control_shortcuts.cpp)
+target_link_libraries(test_control_shortcuts PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_control_shortcuts COMMAND test_control_shortcuts)
 
 add_executable(test_settings_schema dbus/test_settings_schema.cpp)
 target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
@@ -1349,6 +1381,17 @@ target_link_libraries(test_tiling_adaptor_scroll_tabs PRIVATE Qt6::Test Qt6::Cor
                       PhosphorZones::PhosphorZones)
 add_test(NAME test_tiling_adaptor_scroll_tabs COMMAND test_tiling_adaptor_scroll_tabs)
 
+# Placement-map surfaces on TilingAdaptor: the currentTilesJson per-screen
+# replay of the last tile batch (its pruning on close and its drop on
+# clearEngine and on a screen leaving the managed set), and the
+# managedFocusedWindow read with its once-per-change focusedWindowChanged
+# gate, driven against a real ScrollEngine wired the way init_engines.cpp
+# wires it.
+add_executable(test_tiling_adaptor_map dbus/test_tiling_adaptor_map.cpp)
+target_link_libraries(test_tiling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorEngine::PhosphorEngine PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_tiling_adaptor_map COMMAND test_tiling_adaptor_map)
+
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
 # can't drift relative to the compositor plugin's deleted local caches.
@@ -1373,6 +1416,15 @@ target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_
 target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                             PhosphorTileEngine::PhosphorTileEngine)
 add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweeps)
+
+# The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
+# unregisterDropProxy, dropproxy.h): strict parsing and hit-testing of the
+# registry, and the drag path resolving a proxy cell to its real zone through
+# updateDragCursor / endDrag on the offscreen platform's screen.
+add_executable(test_windowdrag_drop_proxy dbus/test_windowdrag_drop_proxy.cpp)
+target_link_libraries(test_windowdrag_drop_proxy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                         PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_windowdrag_drop_proxy COMMAND test_windowdrag_drop_proxy)
 
 # Truth-table guard for resolveActivationActive() - pins the per-tick
 # overlay-active decision (toggle latch + deactivation override + the
@@ -2312,11 +2364,18 @@ add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 # ═══════════════════════════════════════════════════════════════════════════════
 # Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. These targets compile the
 # src/shell sources they need directly rather than linking the gated
-# phosphor-shell binary, those sources are unconditional files on disk, and
-# the only non-Qt dependency (PhosphorRegistry) is added unconditionally at
-# the top level. Gating would make these guard tests vanish from the default
-# configuration, where BUILD_PHOSPHOR_SHELL is OFF, which is precisely the
-# build that most needs them.
+# phosphor-shell binary, and those sources are unconditional files on disk.
+# Gating would make these guard tests vanish from the default configuration,
+# where BUILD_PHOSPHOR_SHELL is OFF, which is precisely the build that most
+# needs them.
+#
+# That holds only while a target's non-Qt dependencies are themselves added
+# unconditionally at the top level (PhosphorRegistry, PhosphorProtocol,
+# PhosphorSurface, PhosphorAnimation all are). A target needing a shell-tier
+# library gets its own `if(TARGET ...)` guard instead, as test_shell_chrome
+# does for PhosphorTheme below. Check that before adding a target here: an
+# ungated link to a gated library fails the default configure at generate
+# time, which takes down the whole suite rather than one test.
 #
 # The classes live in the GPL shell binary, so they are tested here rather
 # than from the LGPL bar module's own QuickTest suite (which covers the QML
@@ -2342,6 +2401,107 @@ target_link_libraries(test_bar_controller
 # so the test survives a move of either tree.
 target_include_directories(test_bar_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_bar_controller COMMAND test_bar_controller)
+
+# The OSD registry owner, same shape and same reasoning as test_bar_controller.
+add_executable(test_osd_controller
+    shell/test_osd_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/OsdController.h
+    ${CMAKE_SOURCE_DIR}/src/shell/osdcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentOSDFactory.h
+    ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponentosdfactory.cpp
+)
+target_link_libraries(test_osd_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        PhosphorRegistry::PhosphorRegistry
+)
+target_include_directories(test_osd_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_osd_controller COMMAND test_osd_controller)
+
+# The shell's motion root: settle profile, QML default publication, and
+# the portal's reduced-motion decoding.
+add_executable(test_shell_motion
+    shell/test_shell_motion.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ShellMotion.h
+    ${CMAKE_SOURCE_DIR}/src/shell/shellmotion.cpp
+)
+target_link_libraries(test_shell_motion
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAnimation::PhosphorAnimationQml
+)
+target_include_directories(test_shell_motion PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_shell_motion COMMAND test_shell_motion)
+
+# The gesture relay: the daemon's gestureReported split into swiped /
+# pinched over a fake daemon on the private bus.
+add_executable(test_shell_gestures
+    shell/test_shell_gestures.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ShellGestures.h
+    ${CMAKE_SOURCE_DIR}/src/shell/shellgestures.cpp
+)
+target_link_libraries(test_shell_gestures
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorProtocol::PhosphorProtocol
+)
+target_include_directories(test_shell_gestures PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
+
+# The chrome decoration resolver: tree JSON + the bundled packs to a stage
+# list per shell surface path.
+#
+# Gated on the theme target, unlike its siblings in this group. shellchrome.cpp
+# includes PhosphorTheme/PaletteStore.h and connects paletteChanged, and
+# libs/phosphor-theme is only added under BUILD_PHOSPHOR_SHELL, so this is the
+# one file here whose dependencies are not all unconditional. Without the guard
+# the default BUILD_TESTING=ON configure fails at generate and no test builds.
+if(TARGET PhosphorTheme::PhosphorTheme)
+    add_executable(test_shell_chrome
+        shell/test_shell_chrome.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ShellChrome.h
+        ${CMAKE_SOURCE_DIR}/src/shell/shellchrome.cpp
+    )
+    target_link_libraries(test_shell_chrome
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            Qt6::Gui
+            PhosphorProtocol::PhosphorProtocol
+            PhosphorSurface::PhosphorSurface
+            PhosphorTheme::PhosphorTheme
+    )
+    target_compile_definitions(test_shell_chrome PRIVATE PZ_BUNDLED_SURFACE_DIR="${CMAKE_SOURCE_DIR}/data/surface")
+    target_include_directories(test_shell_chrome PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
+endif()
+
+# The toast broker behind the `notify` IpcTarget.
+add_executable(test_toast_controller
+    shell/test_toast_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ToastController.h
+    ${CMAKE_SOURCE_DIR}/src/shell/toastcontroller.cpp
+)
+target_link_libraries(test_toast_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+)
+target_include_directories(test_toast_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_toast_controller COMMAND test_toast_controller)
 
 # Ties BarController's registered type names to the QML the Phosphor.Bar
 # module actually ships. Gated on the bar module target, since it links that
@@ -2439,6 +2599,71 @@ if(TARGET PhosphorPopout::PhosphorPopout)
             PhosphorPopout::PhosphorPopout
     )
     add_test(NAME test_routing_popout_transport COMMAND test_routing_popout_transport)
+endif()
+
+# PanePopoutTransport: the engine-placed pane (A2 §4), a real toplevel
+# built from FloatingWindow with the pane app id, hosted in
+# Phosphor.Popout's PaneHost. Needs the shell library for FloatingWindow,
+# the popout QML module + plugin for PaneHost, and Theme + Widgets for the
+# band and stroke PaneHost draws. The controller it drives brings the
+# registry and idle service along, as test_control_center_controller does.
+if(TARGET PhosphorShell::PhosphorShell AND TARGET PhosphorPopout::PhosphorPopoutQml
+   AND TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml AND TARGET PhosphorServiceIdle::PhosphorServiceIdle)
+    add_executable(test_pane_popout_transport
+        shell/test_pane_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/PanePopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/panepopouttransport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+        # The transport rewrites the pane rule's zone before an open.
+        ${CMAKE_SOURCE_DIR}/src/shell/PaneRules.h
+        ${CMAKE_SOURCE_DIR}/src/shell/panerules.cpp
+    )
+    target_include_directories(test_pane_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_pane_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShell::PhosphorShell
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorShellWidgets::PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorServiceIdle::PhosphorServiceIdle
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
+    )
+    add_test(NAME test_pane_popout_transport COMMAND test_pane_popout_transport)
+endif()
+
+# PaneRules: the shell's bundled window rule for the control-center pane.
+# Validates against the real action registry, so it links phosphor-rules;
+# the seeding path is D-Bus and not exercised here.
+if(TARGET PhosphorRules::PhosphorRules AND TARGET PhosphorProtocol::PhosphorProtocol)
+    add_executable(test_pane_rules
+        shell/test_pane_rules.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/PaneRules.h
+        ${CMAKE_SOURCE_DIR}/src/shell/panerules.cpp
+    )
+    target_include_directories(test_pane_rules PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_pane_rules
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
+    )
+    add_test(NAME test_pane_rules COMMAND test_pane_rules)
 endif()
 
 # ControlCenterController: the shell's tile registry owner and the
@@ -2573,5 +2798,13 @@ endforeach()
 # entry rather than fighting it.
 if(TARGET test_control_center_controller)
     phosphor_append_test_environment(test_control_center_controller
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
+endif()
+# The drop-proxy drag test resolves the cursor's screen through the QScreen
+# under it and registers its proxy under that screen's identifier. The sweep's
+# unnamed single offscreen screen identifies as the empty string, which the
+# registration refuses; the named config gives it a real id.
+if(TARGET test_windowdrag_drop_proxy)
+    phosphor_append_test_environment(test_windowdrag_drop_proxy
         "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
 endif()

@@ -114,6 +114,22 @@ bool ScrollTabIndicatorPainter::setIndicators(KWin::LogicalOutput* output,
     entry.hoverDirtyRects.clear();
     entry.failedBounds = QRect();
     entry.failedScale = 0.0;
+    // DELIBERATELY does not touch paintedLastPass, and it must not: that flag
+    // is not only the click gate. TilingHandler::updateScrollTabHover reads it
+    // to decide whether the pointer is over a pill, and this function's caller
+    // re-runs that hover synchronously on every change. Clearing the flag here
+    // therefore collapses the hover to "not over a pill" on every caption
+    // tick, colour reply and focus relay, which drops the mouse interception,
+    // and the interception is what routes an unmodified wheel over a pill to
+    // PlasmaZonesEffect::pointerAxis in the first place. The tab wheel would
+    // die on its own first step.
+    //
+    // The risk that argues for clearing it is one frame in which a press could
+    // be answered from the NEW hit rects while the pixels on screen are still
+    // the old model's. That is real but strictly smaller, and the rects and
+    // the model are replaced together here, so the press lands on the tab the
+    // user is about to see rather than on an unrelated one. If it ever needs
+    // covering, it needs a SEPARATE flag read only by activateScrollTabAt.
     return true;
 }
 
@@ -162,6 +178,69 @@ QString ScrollTabIndicatorPainter::pillAt(KWin::LogicalOutput* output, const QPo
         if (QRectF(it->rect).contains(local)) {
             return it->windowId;
         }
+    }
+    return {};
+}
+
+const ScrollTabIndicator* ScrollTabIndicatorPainter::indicatorFor(KWin::LogicalOutput* output,
+                                                                  const QString& windowId) const
+{
+    if (windowId.isEmpty()) {
+        return nullptr;
+    }
+    const PerOutput* const entry = find(output);
+    if (!entry) {
+        return nullptr;
+    }
+    for (const ScrollTabIndicator& indicator : entry->indicators) {
+        for (const ScrollTabPill& tab : indicator.tabs) {
+            if (tab.windowId == windowId) {
+                return &indicator;
+            }
+        }
+    }
+    return nullptr;
+}
+
+QString ScrollTabIndicatorPainter::activePillFor(KWin::LogicalOutput* output, const QString& windowId) const
+{
+    const ScrollTabIndicator* const indicator = indicatorFor(output, windowId);
+    if (!indicator) {
+        return {};
+    }
+    for (const ScrollTabPill& tab : indicator->tabs) {
+        if (tab.active) {
+            return tab.windowId;
+        }
+    }
+    return {};
+}
+
+QString ScrollTabIndicatorPainter::neighbourPill(KWin::LogicalOutput* output, const QString& windowId, int delta) const
+{
+    if (delta != -1 && delta != 1) {
+        return {};
+    }
+    const ScrollTabIndicator* const indicator = indicatorFor(output, windowId);
+    if (!indicator) {
+        return {};
+    }
+    // A single-tab indicator has nowhere to step. The caller consumes the
+    // event anyway rather than passing it through: the cursor IS over a pill,
+    // and letting that case reach the app would scroll the window's content
+    // out from under an indicator the user is pointing at.
+    if (indicator->tabs.size() < 2) {
+        return {};
+    }
+    for (int i = 0; i < indicator->tabs.size(); ++i) {
+        if (indicator->tabs.at(i).windowId != windowId) {
+            continue;
+        }
+        // Wrap, matching the engine's own cycleTab verb: the tabs of one
+        // column are a ring, and stopping at the end would leave the
+        // wheel dead over half the run.
+        const int next = (i + delta + indicator->tabs.size()) % indicator->tabs.size();
+        return indicator->tabs.at(next).windowId;
     }
     return {};
 }
@@ -219,6 +298,12 @@ void ScrollTabIndicatorPainter::drainRetired()
 
 void ScrollTabIndicatorPainter::drainRetiredTextures()
 {
+    // Deliberately a forwarder rather than one public function: the private
+    // drainRetired() is called from paint() and releaseGl(), which already
+    // hold a current context by construction, while this public spelling is
+    // what the GL-free clear paths call after making one current. Keeping the
+    // two names separate is what marks that context obligation at the call
+    // site.
     drainRetired();
 }
 
