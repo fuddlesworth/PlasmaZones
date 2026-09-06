@@ -84,6 +84,70 @@ private Q_SLOTS:
         QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).isEmpty());
     }
 
+    void outerPaddingTakesTheLargestOfSeveralPacks()
+    {
+        // The single-pack case above cannot tell a max-of-chain fold from a
+        // last-one-wins, or from a first-one-wins. Two packs that both ask for
+        // room, largest second and then largest first.
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        QVariantMap params;
+        QVariantMap glow;
+        glow.insert(QStringLiteral("glowSize"), 12);
+        QVariantMap shadow;
+        shadow.insert(QStringLiteral("shadowSize"), 30);
+        params.insert(QStringLiteral("glow"), glow);
+        params.insert(QStringLiteral("shadow"), shadow);
+        QVERIFY(chrome.setTreeJson(
+            treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow"), QStringLiteral("shadow")}, params)));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 30.0);
+
+        QVariantMap swapped;
+        QVariantMap bigGlow;
+        bigGlow.insert(QStringLiteral("glowSize"), 44);
+        QVariantMap smallShadow;
+        smallShadow.insert(QStringLiteral("shadowSize"), 5);
+        swapped.insert(QStringLiteral("glow"), bigGlow);
+        swapped.insert(QStringLiteral("shadow"), smallShadow);
+        QVERIFY(chrome.setTreeJson(
+            treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow"), QStringLiteral("shadow")}, swapped)));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 44.0);
+    }
+
+    void outerPaddingSkipsAPackTheRegistryDoesNotHave()
+    {
+        // An unknown pack in the chain contributes nothing rather than
+        // aborting the fold, so the real pack beside it still gets its room.
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        QVariantMap params;
+        QVariantMap glow;
+        glow.insert(QStringLiteral("glowSize"), 18);
+        params.insert(QStringLiteral("glow"), glow);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(),
+                                            {QStringLiteral("no-such-pack"), QStringLiteral("glow")}, params)));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 18.0);
+    }
+
+    void outerPaddingIsClampedToTheCeiling()
+    {
+        // A typo'd or hostile parameter cannot demand an unbounded canvas.
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        QVariantMap params;
+        QVariantMap glow;
+        glow.insert(QStringLiteral("glowSize"), 100000);
+        params.insert(QStringLiteral("glow"), glow);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, params)));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()),
+                 static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+
+        // And a negative request floors at zero rather than shrinking the surface.
+        QVariantMap negative;
+        QVariantMap shrink;
+        shrink.insert(QStringLiteral("glowSize"), -60);
+        negative.insert(QStringLiteral("glow"), shrink);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, negative)));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 0.0);
+    }
+
     void malformedJsonKeepsTheTree()
     {
         ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
