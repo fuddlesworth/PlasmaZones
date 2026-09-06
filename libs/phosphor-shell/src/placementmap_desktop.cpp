@@ -141,9 +141,10 @@ void PlacementMapScreen::applyDesktopWindows(const PhosphorProtocol::WindowState
     m_pinnedOccupants = occupants;
     m_pinnedWindowIds = windowIds;
     if (m_mode == Tiling || m_mode == Scrolling) {
-        // [NEW] per-desktop tile replay: the engine has no batch or strip
-        // for a desktop it is not showing, so the count stands in as
-        // equal columns until the daemon can replay that desktop's tiles.
+        // The engine holds no batch or strip for a desktop it is not
+        // showing, and there is no replay for one. The window count
+        // stands in, drawn as equal columns: the right number of cells
+        // in the right order, without claiming their real geometry.
         m_source = stackedColumns(m_pinnedWindowIds);
         m_sourceLens = QRectF();
         m_sourceStripExtentPx = 0;

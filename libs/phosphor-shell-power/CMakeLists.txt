@@ -4,13 +4,13 @@
 # PhosphorShellPower, the Phosphor.Power surface module.
 #
 # A pure-QML module holding PowerMenu, the session menu the shell opens as a
-# screen-centred Modal popout, and PowerTile, the one-action tile it repeats. The surface itself is not this module's
-# concern: the shell's LayerPopoutTransport creates the layer-shell overlay
-# and PopoutHost paints the scrim, so PowerMenu is only the panel that sits
-# in the middle of it.
+# Modal popout: a column of words down one side, each row a session action.
+# The surface itself is not this module's concern: the shell's
+# LayerPopoutTransport creates the layer-shell overlay and PopoutHost paints
+# the scrim, so PowerMenu is only the panel that sits on it.
 #
-# Themed through phosphor-theme, built on the phosphor-shell-widgets atoms
-# (PhosphorCard, PhosphorRipple), and depends on KF6 Kirigami for
+# Themed through phosphor-theme, built on the phosphor-shell-widgets atoms,
+# and depends on KF6 Kirigami for
 # Kirigami.Icon's named-icon resolution on the action glyphs — the same
 # reason phosphor-shell-bar does.
 #
@@ -27,10 +27,11 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_AUTOMOC ON)
 endif()
 
-# QuickShapes has to be found in THIS directory scope, not merely inherited
-# from a parent: PowerTile carries a PhosphorRipple, which paints with a
-# QtQuick.Shapes Shape, so the static qml plugin's dependency walk resolves
-# Qt6::QuickShapes here and warns at configure time without it.
+# QuickShapes is not imported by this module's own QML; it is found here in
+# THIS directory scope so the static plugin's dependency walk resolves the
+# Qt6::QuickShapes target that Phosphor.Widgets links (its PhosphorRipple
+# Shape) without a configure warning. Same reason the lock, launcher and
+# control-center modules find it.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # Kirigami.Icon resolves freedesktop icon NAMES through QIcon::fromTheme; the

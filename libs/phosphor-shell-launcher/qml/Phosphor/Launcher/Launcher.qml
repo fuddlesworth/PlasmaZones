@@ -23,9 +23,9 @@
 //   Tab / Shift+Tab cycle the provider filter
 //   Escape         dismissed()
 //
-// Phase 1 matches Windows results to cells by the daemon window id the
-// model exposes; the Apps "next placement" rect uses the focused cell
-// (`// [NEW] engine next-placement query`).
+// Windows results are matched to cells by the daemon window id the model
+// exposes. The Apps "next placement" rect uses the focused cell, which is
+// where a launch lands under every current engine.
 
 pragma ComponentBehavior: Bound
 
@@ -402,9 +402,9 @@ FocusScope {
             // Windows results drawn on their cells: a state-axis fill by
             // score, white edge on the selected one. The model's
             // `resultId` for the Windows provider is the toplevel id, and
-            // the map's cell id is the daemon window id; they only agree
-            // once the daemon exposes toplevel ids on cells.
-            // [NEW] WindowStateEntry.appId/title for the match.
+            // the map's cell id is the daemon window id. They agree only
+            // where the daemon exposes both for one window, so a result
+            // whose id the map does not carry simply draws no overlay.
             Repeater {
                 model: root.results.providerFilter === "windows" ? root.results : null
 
@@ -442,8 +442,10 @@ FocusScope {
                 }
             }
 
-            // Apps: where the launch will land. Phase 1 uses the focused
-            // cell. [NEW] engine next-placement query.
+            // Apps: where the launch will land. The focused cell is the
+            // answer under every current engine — snapping places into
+            // the focused zone, tiling splits it, scrolling inserts
+            // beside it.
             Rectangle {
                 readonly property var cell: {
                     if (!root.map || root.results.providerFilter !== "apps")
@@ -481,7 +483,11 @@ FocusScope {
                 anchors.topMargin: Tokens.spacing_s
                 visible: root.map !== null
                 readonly property var _nouns: [qsTr("%n zone(s)", "", root.map ? root.map.cells.length : 0), qsTr("%n tile(s)", "", root.map ? root.map.cells.length : 0), qsTr("%n column(s)", "", root.map ? root.map.cells.length : 0)]
-                text: root.map && root.map.mode >= 0 ? [qsTr("Snapping"), qsTr("Tiling"), qsTr("Scrolling")][root.map.mode] + " · " + _nouns[root.map.mode] : qsTr("No placement engine")
+                // Bounded on BOTH sides: the arrays have exactly three entries,
+                // one per placement mode, and an out-of-range mode would put a
+                // literal "undefined · undefined" on screen rather than fall
+                // back to the no-engine label.
+                text: root.map && root.map.mode >= 0 && root.map.mode < 3 ? [qsTr("Snapping"), qsTr("Tiling"), qsTr("Scrolling")][root.map.mode] + " · " + _nouns[root.map.mode] : qsTr("No placement engine")
                 color: Theme.on_surface_variant
                 font.pixelSize: Tokens.font_size_label_s
             }

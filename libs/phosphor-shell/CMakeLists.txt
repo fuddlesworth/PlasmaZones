@@ -157,6 +157,13 @@ target_link_libraries(PhosphorShell
         Qt6::Quick
         Qt6::Qml
         PhosphorLayer::PhosphorLayer
+        # PUBLIC, not PRIVATE: PlacementMap.h is an installed header and takes
+        # PhosphorProtocol::WindowStateList by reference in applyDesktopWindows,
+        # so every consumer of that header needs the include dirs. Private here
+        # builds the library itself (its own sources see the dirs) but breaks
+        # any target that only links PhosphorShell — which is how the
+        # placementmapparser test failed in CI while a warm local tree passed.
+        PhosphorProtocol::PhosphorProtocol
         PhosphorRendering::PhosphorRendering
         PhosphorShaders::PhosphorShaders
         PhosphorWayland::PhosphorWayland
@@ -172,10 +179,8 @@ target_link_libraries(PhosphorShell
         # still carries a find_dependency(PhosphorWorkspaces) (and Qt6
         # WaylandClient, below) for installed consumers.
         PhosphorWorkspaces::PhosphorWorkspaces
-        # PlacementMap: daemon wire types + JSON zone keys, D-Bus for the
-        # placement engine's geometry feed. Private for the same reason as
-        # PhosphorWorkspaces above.
-        PhosphorProtocol::PhosphorProtocol
+        # PlacementMap: JSON zone keys and D-Bus for the placement engine's
+        # geometry feed.
         PhosphorZones::PhosphorZones
         Qt6::DBus
         # WaylandClient + private headers needed by popupwindow.cpp to call

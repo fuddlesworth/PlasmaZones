@@ -130,6 +130,12 @@ Item {
         enabled: root.available
         onWheel: event => {
             const delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+            // Both components zero is a scroll-phase or end event, not a
+            // downward notch. Without this the ternary falls to -1 and the
+            // event quietly turns the volume or the brightness DOWN.
+            if (delta === 0) {
+                return;
+            }
             root._step(delta > 0 ? 1 : -1);
         }
     }

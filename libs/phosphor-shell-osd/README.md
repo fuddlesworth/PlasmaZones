@@ -29,7 +29,7 @@ call, a service signal).
 | Component       | Role                                                                                       |
 |-----------------|--------------------------------------------------------------------------------------------|
 | `OSDHost`       | Per-screen OSD surface manager: one-at-a-time display, hold timer, debounce/dedupe, fade, screen routing. |
-| `OSDCard`       | Shared chrome: an elevated rounded card with a glyph, label, and optional progress bar.     |
+| `OSDCard`       | Shared chrome: a screen-edge band that draws out along the edge, with a glyph, label, and optional progress. Not a centred card. |
 | `VolumeOSD`     | Speaker glyph + progress; muted cross at zero. `value` is 0..100.                            |
 | `BrightnessOSD` | Sun glyph + progress. `value` is 0..100.                                                     |
 | `MicOSD`        | Microphone glyph; `active` true = muted (red slash + label).                                 |
@@ -76,8 +76,8 @@ same trigger to all. `show()`'s `targetScreen` argument routes it
   a held key streams smoothly through one surface. A different kind swaps
   the delegate.
 - **Lifecycle via states.** `OSDHost` drives a `shown`/`hidden` state
-  pair. The transitions animate opacity + scale with `phosphor-theme`
-  Motion tokens, and the hide transition's tail destroys the delegate and
+  pair. The transitions animate the band's `reveal` (its length along the
+  edge) with `phosphor-theme` Motion tokens, with no scale and no fade, and the hide transition's tail destroys the delegate and
   emits `hidden(kind)`. The hold timer is what flips `shown -> hidden`. A
   kind swap also emits `hidden(previousKind)` synchronously from `show()`
   for the outgoing OSD, so the `shown`/`hidden` pairing stays symmetric.
@@ -99,8 +99,9 @@ same trigger to all. `show()`'s `targetScreen` argument routes it
 
 ## Status
 
-Phase 3.3: in progress. `OSDHost`, the card chrome, and the four built-in
-OSDs are in the tree with a QtQuickTest suite and an acceptance demo
+Shipped. `OSDHost`, the band chrome, and the four built-in OSDs are in
+the tree with a QtQuickTest suite and an acceptance demo
 (`examples/phosphor-osd-demo/`, driven by `phosphorctl call osd.show`).
-The Phase 3 gate (all four 3.x examples runnable,
-`phosphor-ui-primitives-0.1` tag) still requires 3.4 (toast framework).
+The edge-band form and the window-edge anchoring landed with the
+spectrum identity work; `OSDHost` takes `placementMap`, `edgeMargin` and
+`topInset`, and reports `anchoredToWindow`.

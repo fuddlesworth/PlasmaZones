@@ -10,6 +10,7 @@ include(CMakeFindDependencyMacro)
 # file can wire transitively.
 find_dependency(Qt6 6.10 COMPONENTS Core Gui Quick Qml WaylandClient)
 find_dependency(PhosphorLayer)
+find_dependency(PhosphorProtocol)
 find_dependency(PhosphorRendering)
 find_dependency(PhosphorShaders)
 find_dependency(PhosphorWayland)

@@ -44,8 +44,14 @@ Item {
     id: host
 
     // Most toasts shown at once in the screen-edge stack; extras queue.
-    // Anchored toasts have their window's real estate and do not count.
     property int maxVisible: 4
+    // Most toasts anchored to any ONE window at once. An anchored toast has
+    // its window's real estate rather than the screen stack's, so it does not
+    // count against maxVisible — but the real estate is still finite, and an
+    // app posting in a loop against a window the map knows would otherwise
+    // grow this model without bound, each row a live delegate with its own
+    // timer. The oldest for that window is dropped to make room.
+    property int maxAnchoredPerWindow: 3
     // Default auto-dismiss when a toast doesn't specify one.
     property int defaultTimeout: 5000
     property real spacing: Tokens.spacing_s
@@ -133,6 +139,7 @@ Item {
 
         // A window the map shows: the toast hangs from that window's edge.
         if (row.windowId !== "" && priv.rectFor(row.windowId) !== null) {
+            priv.trimAnchoredFor(row.windowId);
             anchoredModel.insert(0, row);
             return row.toastId;
         }
@@ -229,6 +236,26 @@ Item {
                 // Reassign so queuedCount updates (see show()).
                 priv.queue = priv.queue.slice(1);
                 activeModel.append(next);
+            }
+        }
+
+        // Drop the oldest anchored toasts for `windowId` until one more
+        // fits under host.maxAnchoredPerWindow. Rows are inserted at 0, so
+        // the oldest for a window is its LAST match walking forward.
+        function trimAnchoredFor(windowId) {
+            if (host.maxAnchoredPerWindow <= 0)
+                return;
+            let indices = [];
+            for (let i = 0; i < anchoredModel.count; ++i) {
+                if (anchoredModel.get(i).windowId === windowId)
+                    indices.push(i);
+            }
+            // Remove from the back so the earlier indices stay valid.
+            for (let k = indices.length - 1; k >= host.maxAnchoredPerWindow - 1 && k >= 0; --k) {
+                const at = indices[k];
+                const gone = anchoredModel.get(at).toastId;
+                anchoredModel.remove(at);
+                host.toastDismissed(gone);
             }
         }
 

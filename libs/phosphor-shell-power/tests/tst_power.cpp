@@ -10,18 +10,19 @@
 // file and before its own imports are evaluated, cleanly separating "this type
 // is not in the module" from "its imports are unavailable in a unit test".
 //
-// PowerTile has no such import and does reach Ready, so it gets the stronger
-// assertion: the file parses, every type it names resolves, and its own
-// imports are satisfiable.
+// PowerMenu is the module's only QML file, so the url() assertion is the whole
+// of this test. There is no second, loadable type left to carry a stronger
+// one: the tile that used to sit beside it is now an inline PowerRow inside
+// PowerMenu itself.
 //
-// What Ready does NOT buy, stated plainly because an earlier version of this
+// What url() does NOT buy, stated plainly because an earlier version of this
 // comment claimed otherwise and mutation testing disproved it: it does not
 // cover the IMPORTS-vs-DEPENDENCIES Kirigami-shadows-Theme hazard the module's
 // CMakeLists warns about. Swapping DEPENDENCIES for IMPORTS leaves this test
 // green, because a qmldir-injected unqualified import ranks BELOW a file's own
-// import list and PowerTile imports Phosphor.Theme directly. Ready is a
-// compile-time status and never evaluates a binding. Catching that class needs
-// the bar's approach: create the object and assert a resolved Theme value.
+// import list and PowerMenu imports Phosphor.Theme directly. Neither url() nor
+// Ready evaluates a binding. Catching that class needs the bar's approach:
+// create the object and assert a resolved Theme value.
 
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -35,16 +36,12 @@ private Q_SLOTS:
     void everyPublishedTypeResolves_data()
     {
         QTest::addColumn<QString>("typeName");
-        // loadable: false for a type whose imports the shell registers at
-        // runtime and a unit test therefore cannot satisfy.
-        QTest::addColumn<bool>("loadable");
-        QTest::newRow("PowerMenu") << QStringLiteral("PowerMenu") << false;
+        QTest::newRow("PowerMenu") << QStringLiteral("PowerMenu");
     }
 
     void everyPublishedTypeResolves()
     {
         QFETCH(QString, typeName);
-        QFETCH(bool, loadable);
 
         QQmlEngine engine;
         QQmlComponent component(&engine, QStringLiteral("Phosphor.Power"), typeName);
@@ -55,13 +52,6 @@ private Q_SLOTS:
         QVERIFY2(!component.url().isEmpty(),
                  qPrintable(QStringLiteral("type '%1' does not resolve in Phosphor.Power: %2")
                                 .arg(typeName, component.errorString())));
-
-        if (loadable) {
-            QVERIFY2(
-                component.status() == QQmlComponent::Ready,
-                qPrintable(
-                    QStringLiteral("type '%1' resolves but does not load: %2").arg(typeName, component.errorString())));
-        }
     }
 
     void anUnknownTypeIsRefused()

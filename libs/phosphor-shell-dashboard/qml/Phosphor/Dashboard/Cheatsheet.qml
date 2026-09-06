@@ -59,9 +59,10 @@ FocusScope {
     // the filter move. `spatial` labels carry x/y as their centres.
     property var spatial: []
     property var column: []
-    // The shell surfaces that have no daemon chord: bound as compositor
-    // keybinds to `phosphorctl call`, which nothing here can read, so they
-    // are listed unbound until a source exists. [NEW] shell-surface chords.
+    // The shell surfaces that have no daemon chord. They are bound as
+    // compositor keybinds to `phosphorctl call`, which no daemon surface
+    // reports, so the cheatsheet lists them without a chord rather than
+    // guessing at one.
     readonly property var shellVerbs: [
         {
             "id": "shell:launcher",

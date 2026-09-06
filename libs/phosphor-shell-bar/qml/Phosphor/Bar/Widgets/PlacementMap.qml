@@ -175,11 +175,24 @@ BarWidget {
             proxy.restart();
         }
     }
-    onMapChanged: proxy.restart()
-    Component.onCompleted: proxy.restart()
+    // Registration is per map, so a re-home has to withdraw from the OLD one
+    // before registering on the new. Without this the previous screen's map
+    // keeps a live proxy pointing at a rect this widget no longer occupies,
+    // and a real drag over it commits to a stale cell.
+    property var _registeredMap: null
+    onMapChanged: {
+        if (root._registeredMap && root._registeredMap !== root.map)
+            root._registeredMap.unregisterDropProxy();
+        root._registeredMap = root.map;
+        proxy.restart();
+    }
+    Component.onCompleted: {
+        root._registeredMap = root.map;
+        proxy.restart();
+    }
     Component.onDestruction: {
-        if (root.map)
-            root.map.unregisterDropProxy();
+        if (root._registeredMap)
+            root._registeredMap.unregisterDropProxy();
     }
 
     function _registerProxy() {
@@ -213,17 +226,21 @@ BarWidget {
         }
     }
 
+    // A vertical delta of exactly 0 is a horizontal wheel or a touchpad
+    // scroll-phase event, not a downward notch. Both handlers key off the
+    // sign of y, so without this guard those events step the strip and the
+    // desktop the wrong way for a gesture that asked for neither.
     WheelHandler {
         acceptedModifiers: Qt.NoModifier
         onWheel: event => {
-            if (root.map)
+            if (root.map && event.angleDelta.y !== 0)
                 root.map.scrollView(event.angleDelta.y > 0 ? -1 : 1);
         }
     }
     WheelHandler {
         acceptedModifiers: Qt.ControlModifier
         onWheel: event => {
-            if (!root.map)
+            if (!root.map || event.angleDelta.y === 0)
                 return;
             const next = root.map.currentDesktop + (event.angleDelta.y > 0 ? -1 : 1);
             if (next >= 0 && next < root.map.desktopCount)
