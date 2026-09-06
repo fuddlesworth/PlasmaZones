@@ -34,8 +34,28 @@ Item {
     property real t: 0.5
     property real padding: Tokens.spacing_l
 
-    implicitWidth: contentArea.implicitWidth + padding * 2
-    implicitHeight: contentArea.implicitHeight + padding * 2
+    // Measured from the children's IMPLICIT sizes, never from childrenRect.
+    // childrenRect reads each child's actual width, and a child that fills
+    // the content area takes that width from the card, which takes it from
+    // this binding: a loop by construction, silent until someone puts a
+    // fillWidth child in a card. Reading implicitWidth breaks the cycle and
+    // is what the header has always promised. A child that carries no
+    // implicit size contributes nothing, so give such a card an explicit
+    // width.
+    implicitWidth: {
+        let w = 0;
+        const kids = contentArea.children;
+        for (let i = 0; i < kids.length; ++i)
+            w = Math.max(w, kids[i].implicitWidth);
+        return w + root.padding * 2;
+    }
+    implicitHeight: {
+        let h = 0;
+        const kids = contentArea.children;
+        for (let i = 0; i < kids.length; ++i)
+            h = Math.max(h, kids[i].implicitHeight);
+        return h + root.padding * 2;
+    }
 
     // Clamp once so the M3 tint ramp below never indexes out of range.
     readonly property int _level: Math.max(0, Math.min(5, elevation))
@@ -87,7 +107,5 @@ Item {
 
         anchors.fill: parent
         anchors.margins: root.padding
-        implicitWidth: childrenRect.width
-        implicitHeight: childrenRect.height
     }
 }

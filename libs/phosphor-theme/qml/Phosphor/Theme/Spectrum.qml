@@ -56,9 +56,4 @@ QtObject {
             return 0;
         return Math.max(0, Math.min(1, x / width));
     }
-
-    // State-axis sample: a continuous level (0 cyan, 1 rose).
-    function stateColor(level) {
-        return at(level);
-    }
 }

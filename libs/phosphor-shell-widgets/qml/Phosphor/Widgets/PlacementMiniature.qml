@@ -157,12 +157,22 @@ Item {
         };
     }
 
+    // One-off lookup, for the rare single-row paths. The per-frame paths
+    // build an index map instead; see _sync and _syncEdges.
     function _indexOf(id) {
         for (let i = 0; i < cellModel.count; ++i) {
             if (cellModel.get(i).cellId === id)
                 return i;
         }
         return -1;
+    }
+
+    function _rowDiffers(have, want) {
+        for (const k in want) {
+            if (have[k] !== want[k])
+                return true;
+        }
+        return false;
     }
 
     // Diff the model's cell list into cellModel: update rows in place,
@@ -188,15 +198,26 @@ Item {
         if (!_engineAlive())
             return;
         const cells = model && model.cells ? model.cells : [];
+        // Index the rows once. Scanning per cell made each sync O(n^2), and
+        // this runs on every geometry change the daemon reports.
+        const idAt = {};
+        for (let i = 0; i < cellModel.count; ++i)
+            idAt[cellModel.get(i).cellId] = i;
         const seen = {};
         for (let i = 0; i < cells.length; ++i) {
             const row = _row(cells[i]);
             seen[row.cellId] = true;
-            const at = _indexOf(row.cellId);
-            if (at < 0)
+            const at = idAt[row.cellId];
+            if (at === undefined) {
                 cellModel.append(row);
-            else
+                // Appending shifts no existing index.
+                idAt[row.cellId] = cellModel.count - 1;
+            } else if (_rowDiffers(cellModel.get(at), row)) {
+                // Writing an unchanged row still fires the model's change
+                // signal, which re-evaluates every binding in the delegate
+                // for nothing.
                 cellModel.set(at, row);
+            }
         }
         const retiring = [];
         for (let i = 0; i < cellModel.count; ++i) {
@@ -252,9 +273,16 @@ Item {
                 _releasingEdges = Math.max(0, _releasingEdges - 1);
             }
         }
+        // Indexed after the drops, because those are the only writes below
+        // that shift a row. retarget and release only setProperty, so the
+        // map stays valid for both. Built once: retarget runs for every
+        // visible edge on every geometry change.
+        const keyAt = {};
+        for (let i = 0; i < edgeModel.count; ++i)
+            keyAt[edgeModel.get(i).key] = i;
         for (const t of r.retarget) {
-            const at = _edgeIndex(t.key);
-            if (at < 0)
+            const at = keyAt[t.key];
+            if (at === undefined)
                 continue;
             const e = edgeModel.get(at);
             if (e.phase === "release") {
@@ -268,8 +296,8 @@ Item {
             edgeModel.setProperty(at, "occupied", t.occupied);
         }
         for (const key of r.release) {
-            const at = _edgeIndex(key);
-            if (at >= 0 && edgeModel.get(at).phase !== "release") {
+            const at = keyAt[key];
+            if (at !== undefined && edgeModel.get(at).phase !== "release") {
                 if (edgeModel.get(at).phase === "enter")
                     _enteringEdges = Math.max(0, _enteringEdges - 1);
                 edgeModel.setProperty(at, "phase", "release");
@@ -402,7 +430,11 @@ Item {
             transformOrigin: Item.Center
 
             Accessible.role: Accessible.Button
-            Accessible.name: title !== "" ? label + ": " + title : label
+            // Joined with a comma, not a colon: a screen reader announces
+            // the colon, and "Label: payload" is not how the rest of the
+            // shell speaks. Translatable, like every other Accessible.name
+            // in these libraries.
+            Accessible.name: title !== "" ? qsTr("%1, %2", "placement cell: zone label, window title").arg(label).arg(title) : label
 
             SequentialAnimation on _pulse {
                 running: cell.urgent && !Motion.reducedMotion && !cell.retiring
