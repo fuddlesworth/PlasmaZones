@@ -66,6 +66,27 @@ private:
     bool m_locked = false;
 };
 
+// A backend that cannot reach the compositor at all: no manager global, no
+// integration, or a null lock object. The real SessionLock answers such a
+// failure with a queued `finished` rather than returning silently, and it has
+// to: LockStateMachine sets Locking BEFORE calling lock(), and `locked` /
+// `finished` are its only exits, so a silent return parks it in Locking for
+// good and the session can never be locked again.
+class UnavailableSessionLock : public FakeSessionLock
+{
+public:
+    void lock() override
+    {
+        ++lockCalls;
+        QMetaObject::invokeMethod(
+            this,
+            [this] {
+                Q_EMIT finished();
+            },
+            Qt::QueuedConnection);
+    }
+};
+
 class FakeAuthenticator : public IAuthenticator
 {
 public:
@@ -110,6 +131,7 @@ private Q_SLOTS:
     void compositorEndWhileAuthenticatingUnlocks();
     void staleAuthResultAfterResetIsIgnored();
     void concurrentAuthenticateIgnored();
+    void lockThatNeverReachesTheCompositorReportsFailure();
 };
 
 void LockStateMachineTest::startsUnlocked()
@@ -152,6 +174,25 @@ void LockStateMachineTest::lockRefusalReturnsToUnlocked()
     // The compositor refuses (another locker owns the session).
     lock.end();
     QCOMPARE(n(machine.state()), n(State::Unlocked));
+}
+
+void LockStateMachineTest::lockThatNeverReachesTheCompositorReportsFailure()
+{
+    UnavailableSessionLock lock;
+    FakeAuthenticator auth;
+    LockStateMachine machine(&lock, &auth, QStringLiteral("testuser"));
+
+    machine.requestLock();
+    QCOMPARE(lock.lockCalls, 1);
+    // Nothing external drives this one: the backend owes the reply itself, so
+    // the machine must leave Locking on its own. This pins the CONTRACT every
+    // ISessionLock owes — PhosphorWayland::SessionLock's own emit needs a live
+    // compositor and cannot be reached from here, which is why the gap existed.
+    QTRY_COMPARE(n(machine.state()), n(State::Unlocked));
+    // And the failure must not wedge it — a later attempt still reaches the
+    // backend rather than being swallowed by a stuck Locking state.
+    machine.requestLock();
+    QCOMPARE(lock.lockCalls, 2);
 }
 
 void LockStateMachineTest::authenticateIgnoredUntilLocked()

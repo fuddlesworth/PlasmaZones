@@ -123,8 +123,20 @@ void SessionLockWindow::handleConfigure(void* data, struct ext_session_lock_surf
                                         uint32_t width, uint32_t height)
 {
     auto* self = static_cast<SessionLockWindow*>(data);
-    if (!self->m_lockSurface || !self->m_waylandWindow)
+    if (!self || !self->m_lockSurface || !self->m_waylandWindow)
         return;
+
+    // A zero on either axis is a compositor bug and applyConfigure()
+    // deliberately refuses to ack it. Exposure must be refused with it:
+    // `isExposed()` reports m_configured, so marking this configured would let
+    // Qt paint and commit a buffer against a serial that was never acked,
+    // which is the commit_before_first_ack fatal error this class exists to
+    // avoid — and it would kill the client while the session is locked, which
+    // the protocol requires the compositor to leave locked.
+    if (width == 0 || height == 0) {
+        qCWarning(lcSessionLockWindow) << "ignoring a degenerate configure" << width << "x" << height;
+        return;
+    }
 
     // Stash and let the render path ack + size the window (see
     // LayerShellWindow::handleConfigure for why acking here would attach a
