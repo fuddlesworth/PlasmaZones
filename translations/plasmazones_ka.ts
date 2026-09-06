@@ -20328,7 +20328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
-        <translation>როცა ფანჯარა იხსნება და ზოლზე უკვე არის იმავე აპლიკაციის ფანჯარა, ახალი ფანჯარა იმ ფანჯრის სვეტს ჩანართის სახით უერთდება, ნაცვლად იმისა, რომ საკუთარი სვეტი დაიკავოს. სვეტი, რომელსაც უერთდება, ჩანართებად გარდაიქმნება, თუ ჯერ ასეთი არ არის. ფანჯრების წესებს კვლავ უპირატესობა აქვს.</translation>
+        <translation>როცა ფანჯარა იხსნება და ზოლზე უკვე არის იმავე აპლიკაციის ფანჯარა, ახალი ფანჯარა იმ ფანჯრის სვეტს ჩანართის სახით უერთდება, ნაცვლად იმისა, რომ საკუთარი სვეტი დაიკავოს. სვეტი, რომელსაც უერთდება, ჩანართებად გარდაიქმნება, თუ ჯერ ასეთი არ არის. ფანჯრების ცალკეულ წესებს კვლავ უპირატესობა აქვს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
@@ -21983,7 +21983,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
-        <translation>შესაბამის ფანჯრებს ერთი სვეტის ჩანართებად ხსნის, რომელსაც ჯგუფის სახელი ერქმევა. ახალი ფანჯარა უერთდება სვეტს, რომელშიც უკვე არის იმავე ჯგუფის ფანჯარა, და საჭიროების შემთხვევაში მას ჩანართებად გარდაქმნის. თუ ასეთი სვეტი ჯერ არ არსებობს, საკუთარ სვეტს ხსნის. სხვადასხვა წესის ფანჯრები ერთ სვეტს იზიარებენ, როცა წესები ერთსა და იმავე ჯგუფის სახელს იყენებენ.</translation>
+        <translation>შესაბამის ფანჯრებს ერთი სვეტის ჩანართებად ხსნის და ამ სვეტს ჯგუფის სახელი ერქმევა. ახალი ფანჯარა უერთდება სვეტს, რომელშიც უკვე არის იმავე ჯგუფის ფანჯარა, და საჭიროების შემთხვევაში მას ჩანართებად გარდაქმნის. თუ ასეთი სვეტი ჯერ არ არსებობს, საკუთარ სვეტს ხსნის. სხვადასხვა წესის ფანჯრები ერთ სვეტს იზიარებენ, როცა წესები ერთსა და იმავე ჯგუფის სახელს იყენებენ.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="162"/>

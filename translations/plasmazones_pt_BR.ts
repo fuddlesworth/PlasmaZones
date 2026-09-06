@@ -589,7 +589,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="364"/>
         <source>Toggle Tabbed Column</source>
-        <translation>Alternar a coluna em abas</translation>
+        <translation>Alternar a coluna com abas</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
@@ -2600,7 +2600,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Group name (windows with the same name share one tabbed column)</source>
-        <translation>Nome do grupo (janelas com o mesmo nome compartilham uma coluna em abas)</translation>
+        <translation>Nome do grupo (janelas com o mesmo nome compartilham uma coluna com abas)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="114"/>

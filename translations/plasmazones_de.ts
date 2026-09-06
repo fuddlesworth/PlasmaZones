@@ -20328,7 +20328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
-        <translation>Wenn ein Fenster geöffnet wird und der Streifen bereits ein Fenster derselben Anwendung enthält, wird das neue Fenster als Reiter in dessen Spalte eingefügt, statt eine eigene Spalte zu belegen. Die Spalte wird dabei in Reiter umgewandelt, falls sie es nicht schon ist. Fensterregeln haben weiterhin Vorrang.</translation>
+        <translation>Wenn ein Fenster geöffnet wird und der Streifen bereits ein Fenster derselben Anwendung enthält, wird das neue Fenster als Reiter in dessen Spalte eingefügt, statt eine eigene Spalte zu belegen. Die Spalte wird dabei in Reiter umgewandelt, falls sie es nicht schon ist. Regeln pro Fenster haben weiterhin Vorrang.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
@@ -21983,7 +21983,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
-        <translation>Öffnet passende Fenster als Reiter einer Spalte, die nach der Gruppe benannt ist. Ein neues Fenster wird in die Spalte eingefügt, die bereits ein Fenster derselben Gruppe enthält, und wandelt sie bei Bedarf in Reiter um. Gibt es noch keine solche Spalte, öffnet es eine eigene. Fenster aus verschiedenen Regeln teilen sich eine Spalte, wenn die Regeln denselben Gruppennamen verwenden.</translation>
+        <translation>Öffnet passende Fenster als Reiter einer Spalte, die nach der Gruppe benannt ist. Ein neues Fenster wird in die Spalte eingefügt, die bereits ein Fenster derselben Gruppe enthält. Diese Spalte wird bei Bedarf in Reiter umgewandelt. Gibt es noch keine solche Spalte, öffnet das Fenster eine eigene. Fenster aus verschiedenen Regeln teilen sich eine Spalte, wenn die Regeln denselben Gruppennamen verwenden.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="162"/>

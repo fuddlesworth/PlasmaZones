@@ -2326,12 +2326,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="271"/>
         <source>Hide title bars (off = force visible)</source>
-        <translation>Ukryj paski tytułu (wył. = wymuś widoczność)</translation>
+        <translation>Ukrywaj paski tytułu (wył. = wymuś widoczność)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="274"/>
         <source>Show border (off = hide)</source>
-        <translation>Pokaż obramowanie (wył. = ukryj)</translation>
+        <translation>Pokazuj obramowanie (wył. = ukrywaj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="217"/>
@@ -2776,7 +2776,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="289"/>
         <source>Show opacity and tint (off = hide)</source>
-        <translation>Pokaż nieprzezroczystość i zabarwienie (wył. = ukryj)</translation>
+        <translation>Pokazuj nieprzezroczystość i zabarwienie (wył. = ukrywaj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="292"/>
@@ -2808,7 +2808,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="364"/>
         <source>Show zone numbers (off = hide)</source>
-        <translation>Pokaż numery stref (wył. = ukryj)</translation>
+        <translation>Pokazuj numery stref (wył. = ukrywaj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
@@ -2898,7 +2898,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="265"/>
         <source>Open at column width</source>
-        <translation>Otwórz z zadaną szerokością kolumny</translation>
+        <translation>Otwieraj z zadaną szerokością kolumny</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="268"/>
@@ -2909,12 +2909,12 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="271"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="652"/>
         <source>Open in a tabbed column</source>
-        <translation>Otwórz w kolumnie z kartami</translation>
+        <translation>Otwieraj w kolumnie z kartami</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="274"/>
         <source>Open into column</source>
-        <translation>Otwórz w kolumnie</translation>
+        <translation>Otwieraj w kolumnie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="280"/>
@@ -2957,7 +2957,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="313"/>
         <source>Open in a tab group</source>
-        <translation>Otwórz w grupie kart</translation>
+        <translation>Otwieraj w grupie kart</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="316"/>
@@ -3201,7 +3201,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="615"/>
         <source>Stay floating when no zone is remembered</source>
-        <translation>Pozostaw pływające, gdy nie zapamiętano strefy</translation>
+        <translation>Pozostawiaj pływające, gdy nie zapamiętano strefy</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="641"/>
@@ -3231,12 +3231,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
         <source>Leave a lone column where it sits</source>
-        <translation>Zostaw pojedynczą kolumnę tam, gdzie jest</translation>
+        <translation>Zostawiaj pojedynczą kolumnę tam, gdzie jest</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Leave the space at the end of a short column</source>
-        <translation>Zostaw miejsce na końcu krótkiej kolumny</translation>
+        <translation>Zostawiaj miejsce na końcu krótkiej kolumny</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
@@ -3251,7 +3251,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="678"/>
         <source>Keep focus where it is</source>
-        <translation>Zostaw uaktywnienie tam, gdzie jest</translation>
+        <translation>Zostawiaj uaktywnienie tam, gdzie jest</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="292"/>
@@ -3282,7 +3282,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="691"/>
         <source>Keep focus where it was when it opens</source>
-        <translation>Zostaw uaktywnienie przy otwarciu tam, gdzie było</translation>
+        <translation>Zostawiaj uaktywnienie przy otwarciu tam, gdzie było</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="696"/>
@@ -3404,7 +3404,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="636"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="392"/>
         <source>Show zone numbers</source>
-        <translation>Pokaż numery stref</translation>
+        <translation>Pokazuj numery stref</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="528"/>
@@ -3418,13 +3418,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="473"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="479"/>
         <source>Hide title bars</source>
-        <translation>Ukryj paski tytułu</translation>
+        <translation>Ukrywaj paski tytułu</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="547"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
         <source>Show border</source>
-        <translation>Pokaż obramowanie</translation>
+        <translation>Pokazuj obramowanie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="550"/>
@@ -3450,7 +3450,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="562"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
         <source>Show opacity and tint</source>
-        <translation>Pokaż nieprzezroczystość i zabarwienie</translation>
+        <translation>Pokazuj nieprzezroczystość i zabarwienie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="565"/>
@@ -3501,13 +3501,13 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="592"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="403"/>
         <source>Open on monitor</source>
-        <translation>Otwórz na ekranie</translation>
+        <translation>Otwieraj na ekranie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="413"/>
         <source>Open on desktop</source>
-        <translation>Otwórz na pulpicie</translation>
+        <translation>Otwieraj na pulpicie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
@@ -3517,7 +3517,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="652"/>
         <source>Open in a normal column</source>
-        <translation>Otwórz w zwykłej kolumnie</translation>
+        <translation>Otwieraj w zwykłej kolumnie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
@@ -4273,17 +4273,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="611"/>
         <source>Keep zone size on unsnap</source>
-        <translation>Zachowaj rozmiar strefy przy odczepieniu</translation>
+        <translation>Zachowuj rozmiar strefy przy odczepieniu</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
         <source>Hide opacity and tint</source>
-        <translation>Ukryj nieprzezroczystość i zabarwienie</translation>
+        <translation>Ukrywaj nieprzezroczystość i zabarwienie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="636"/>
         <source>Hide zone numbers</source>
-        <translation>Ukryj numery stref</translation>
+        <translation>Ukrywaj numery stref</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="724"/>
@@ -4464,7 +4464,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="618"/>
         <source>Show title bars</source>
-        <translation>Pokaż paski tytułu</translation>
+        <translation>Pokazuj paski tytułu</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="621"/>
@@ -4485,7 +4485,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
         <source>Hide border</source>
-        <translation>Ukryj obramowanie</translation>
+        <translation>Ukrywaj obramowanie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
@@ -7654,7 +7654,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="502"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="497"/>
         <source>Hide title bars on</source>
-        <translation>Ukryj paski tytułu na</translation>
+        <translation>Ukrywaj paski tytułu na</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="506"/>
@@ -7934,7 +7934,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="141"/>
         <source>Show zones on all monitors</source>
-        <translation>Pokaż strefy na wszystkich ekranach</translation>
+        <translation>Pokazuj strefy na wszystkich ekranach</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="601"/>
@@ -9433,7 +9433,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
         <source>application</source>
-        <translation>program</translation>
+        <translation>aplikacja</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
@@ -18868,7 +18868,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="115"/>
         <source>Show a layout picker when dragging windows to screen edges</source>
-        <translation>Pokaż selektor układu podczas przeciągania okien do krawędzi ekranu</translation>
+        <translation>Pokazuj selektor układu podczas przeciągania okien do krawędzi ekranu</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="119"/>
@@ -20376,7 +20376,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
-        <translation>Gdy otwiera się okno, a pas zawiera już okno tego samego programu, nowe okno dołącza do kolumny tego okna jako karta zamiast zajmować własną kolumnę. Kolumna, do której dołącza, zostaje zamieniona na karty, jeśli jeszcze nimi nie jest. Reguły okien nadal mają pierwszeństwo.</translation>
+        <translation>Gdy otwiera się okno, a pas zawiera już okno tego samego programu, nowe okno dołącza do kolumny tego okna jako karta zamiast zajmować własną kolumnę. Kolumna, do której dołącza, zostaje zamieniona na karty, jeśli jeszcze nimi nie jest. Reguły dla poszczególnych okien nadal mają pierwszeństwo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
@@ -21650,7 +21650,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="128"/>
         <source>Leave a tabbed column unmarked while it holds only one window.</source>
-        <translation>Pozostaw kolumnę z kartami bez oznaczenia, dopóki zawiera tylko jedno okno.</translation>
+        <translation>Pozostawiaj kolumnę z kartami bez oznaczenia, dopóki zawiera tylko jedno okno.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="133"/>
@@ -22034,7 +22034,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
-        <translation>Otwiera pasujące okna jako karty jednej kolumny nazwanej według grupy. Nowe okno dołącza do kolumny, która zawiera już okno tej samej grupy, w razie potrzeby zamieniając ją na karty, a gdy takiej kolumny jeszcze nie ma, otwiera własną. Okna z różnych reguł dzielą kolumnę, gdy reguły używają tej samej nazwy grupy.</translation>
+        <translation>Otwiera dopasowane okna jako karty jednej kolumny nazwanej według grupy. Nowe okno dołącza do kolumny, która zawiera już okno tej samej grupy, w razie potrzeby zamieniając ją na karty, a gdy takiej kolumny jeszcze nie ma, otwiera własną. Okna z różnych reguł dzielą kolumnę, gdy reguły używają tej samej nazwy grupy.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="162"/>

@@ -2600,7 +2600,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Group name (windows with the same name share one tabbed column)</source>
-        <translation>Groepsnaam (vensters met dezelfde naam delen één kolom met tabbladen)</translation>
+        <translation>Groepsnaam (vensters met dezelfde naam delen één tabbladkolom)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="114"/>
@@ -2651,7 +2651,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="157"/>
         <source>Show the indicator over tabbed columns</source>
-        <translation>De indicator tonen boven kolommen met tabbladen</translation>
+        <translation>De indicator tonen boven tabbladkolommen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="163"/>
@@ -2951,7 +2951,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="313"/>
         <source>Open in a tab group</source>
-        <translation>In een tabbladgroep openen</translation>
+        <translation>Openen in een tabbladgroep</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="316"/>
@@ -20328,7 +20328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
-        <translation>Wanneer een venster wordt geopend en de strook al een venster van dezelfde toepassing bevat, voegt het nieuwe venster zich als tabblad bij de kolom van dat venster in plaats van een eigen kolom te nemen. De kolom wordt daarbij omgezet in tabbladen als dat nog niet zo is. Vensterregels gaan nog steeds voor.</translation>
+        <translation>Wanneer een venster wordt geopend en de strook al een venster van dezelfde toepassing bevat, voegt het nieuwe venster zich als tabblad bij de kolom van dat venster in plaats van een eigen kolom te nemen. De kolom wordt daarbij omgezet in tabbladen als dat nog niet zo is. Regels per venster gaan nog steeds voor.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
@@ -21983,7 +21983,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
-        <translation>Opent overeenkomende vensters als tabbladen van één kolom, genoemd naar de groep. Een nieuw venster voegt zich bij de kolom die al een venster van dezelfde groep bevat en zet die zo nodig om in tabbladen. Bestaat er nog geen, dan opent het een eigen kolom. Vensters uit verschillende regels delen een kolom wanneer de regels dezelfde groepsnaam gebruiken.</translation>
+        <translation>Opent overeenkomende vensters als tabbladen van één kolom, genoemd naar de groep. Een nieuw venster voegt zich bij de kolom die al een venster van dezelfde groep bevat. Die kolom wordt zo nodig in tabbladen omgezet. Bestaat zo'n kolom nog niet, dan opent het venster een eigen kolom. Vensters uit verschillende regels delen een kolom wanneer de regels dezelfde groepsnaam gebruiken.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="162"/>

@@ -2600,7 +2600,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Group name (windows with the same name share one tabbed column)</source>
-        <translation>Gruppnamn (fönster med samma namn delar en kolumn med flikar)</translation>
+        <translation>Gruppnamn (fönster med samma namn delar en flikkolumn)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="114"/>
@@ -2651,7 +2651,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="157"/>
         <source>Show the indicator over tabbed columns</source>
-        <translation>Visa indikatorn över kolumner med flikar</translation>
+        <translation>Visa indikatorn över flikkolumner</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="163"/>
@@ -3403,7 +3403,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="528"/>
         <source>Exclude from animations</source>
-        <translation>Uteslut från animeringar</translation>
+        <translation>Undanta från animeringar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="544"/>
@@ -20328,7 +20328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
-        <translation>När ett fönster öppnas och remsan redan innehåller ett fönster från samma program läggs det nya fönstret till som en flik i det fönstrets kolumn i stället för att ta en egen kolumn. Kolumnen det läggs till i görs om till flikar om den inte redan är det. Fönsterregler har fortfarande företräde.</translation>
+        <translation>När ett fönster öppnas och remsan redan innehåller ett fönster från samma program läggs det nya fönstret till som en flik i det fönstrets kolumn i stället för att ta en egen kolumn. Kolumnen det läggs till i görs om till flikar om den inte redan är det. Regler per fönster har fortfarande företräde.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
@@ -21983,7 +21983,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
-        <translation>Öppnar matchande fönster som flikar i en kolumn som namnges efter gruppen. Ett nytt fönster läggs till i den kolumn som redan innehåller ett fönster från samma grupp och gör vid behov om den till flikar. Finns det ingen sådan kolumn ännu öppnas en egen. Fönster från olika regler delar en kolumn när reglerna använder samma gruppnamn.</translation>
+        <translation>Öppnar matchande fönster som flikar i en kolumn som namnges efter gruppen. Ett nytt fönster läggs till i den kolumn som redan innehåller ett fönster från samma grupp, och kolumnen görs om till flikar vid behov. Finns det ingen sådan kolumn ännu, öppnas en egen. Fönster från olika regler delar en kolumn när reglerna använder samma gruppnamn.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="162"/>

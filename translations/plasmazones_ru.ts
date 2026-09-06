@@ -4873,7 +4873,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="746"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="750"/>
         <source>Tab group (invalid)</source>
-        <translation>Группа вкладок (недопустимая)</translation>
+        <translation>Группа вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="752"/>
@@ -20376,7 +20376,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
-        <translation>Когда открывается окно, а на ленте уже есть окно того же приложения, новое окно присоединяется к столбцу этого окна как вкладка, вместо того чтобы занимать собственный столбец. Столбец, к которому оно присоединяется, превращается во вкладки, если ещё ими не была. Правила для окон по-прежнему имеют приоритет.</translation>
+        <translation>Когда открывается окно, а на ленте уже есть окно того же приложения, новое окно присоединяется к столбцу этого окна как вкладка, вместо того чтобы занимать собственный столбец. Столбец, к которому оно присоединяется, превращается во вкладки, если это ещё не сделано. Правила для отдельных окон по-прежнему имеют приоритет.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
