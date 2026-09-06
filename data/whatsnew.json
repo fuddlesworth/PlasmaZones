@@ -32,13 +32,13 @@
             "version": "3.4.10",
             "date": "2026-09-04",
             "highlights": [
-                "New: Animation shader packs play a live preview in Animations → Shaders, on a stand-in subject matched to what the pack animates, and the parameter editor drives it as you adjust values (#1046)",
+                "New: Animation shader packs play a live preview in Animations → Library → Shaders, on a stand-in subject matched to what the pack animates, and the parameter editor drives it as you adjust values (#1046)",
                 "New: The scrolling width and height preset cycle goes on to three quarters and full size (#1050)",
                 "Changed: Gaps go up to 200 pixels, the corner radius to 50 and the border width to 20 (#1050)",
                 "Changed: The window motion events are now Placed and Released, the separate Maximized event is gone, and your assignments carry over (#1052)",
                 "Fixed: The mouse pointer no longer wobbles along with a strip animation such as Jelly (#1049)",
                 "Fixed: Focusing a column on another desktop's strip lands all of its neighbours, and a service restart no longer comes up with an empty strip (#1047, #1053)",
-                "Fixed: Letting go of the insert key mid-drag leaves the window in your hand alone, and focus-follows-mouse no longer leaks onto desktops without a placement mode (#1028)"
+                "Fixed: Letting go of the insert key mid-drag leaves the window in your hand alone, and focus follows mouse no longer leaks onto desktops without a placement mode (#1028)"
             ]
         },
         {
@@ -54,7 +54,7 @@
             "version": "3.4.8",
             "date": "2026-09-02",
             "highlights": [
-                "Changed: Put windows back on their virtual desktop, and the setting for it, since it moved windows around unpredictably while you were still logging in. Rules that route a window to a desktop are unaffected (#1034)",
+                "Changed: Put windows back on their virtual desktop is gone, along with its setting, because it moved windows around unpredictably while you were still logging in. Rules that route a window to a desktop are unaffected (#1034)",
                 "Fixed: Dropping a dragged window into the scrolling strip lands its column where the drop indicator promised, instead of stranding a wide window alone on the screen with the rest of the strip scrolled out of sight (#1037)",
                 "Fixed: Snapping a maximized window into a zone clears the compositor's maximize first, so it stops re-inflating over the zone and no longer teleports to the other monitor when maximized again (#1036)",
                 "Fixed: The last window on a tiled monitor grows into the whole screen instead of sitting centered with dead margins where focus follows mouse went numb (#1035)",
@@ -84,7 +84,7 @@
             "version": "3.4.5",
             "date": "2026-08-31",
             "highlights": [
-                "New: Windows come back on the virtual desktop they were on when you logged out, instead of all landing on whichever desktop is showing. Put windows back on their virtual desktop, under General → Session restore, turns it off (#1019)",
+                "New: Windows come back on the virtual desktop they were on when you logged out, instead of all landing on whichever desktop is showing. Put windows back on their virtual desktop, under General → Session restore, turns it off. Both were removed again in 3.4.8 (#1019)",
                 "New: The support report summarizes your session state rather than dumping session.json, and a new Placement Modes section says which mode each screen resolves to (#1022)",
                 "Changed: This release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1019)",
                 "Fixed: A detached browser tab or a new window no longer opens on the monitor the last window of that application closed on, and moving a tiled window to another monitor now sticks (#1020)",
@@ -119,7 +119,7 @@
             "highlights": [
                 "New: Debian testing and unstable have an apt repository, published through the openSUSE Build Service and rebuilt whenever KWin moves. The install lines are in the README (#1000)",
                 "New: A window moved to another desktop from the pager or the Overview is placed on the desktop it arrives on instead of sitting on top of the stack until you leave and come back (#996)",
-                "New: Default height under Scrolling → New columns offers Window decides, so a window joining a column can keep the height the application asked for (#995)",
+                "New: Default height under Scrolling → Columns → New columns offers Window decides, so a window joining a column can keep the height the application asked for (#995)",
                 "Changed: Maximizing a window on a scrolling monitor maximizes its column along the strip instead of handing the window to the compositor's maximize. Pressing it again gives the column its width back, and the button lights up whenever a column fills the monitor (#994)",
                 "Changed: This release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#994)",
                 "Fixed: Closing a window in the middle of a panned scrolling strip no longer sends it sliding off the bottom of the screen, and the strip settles once afterwards instead of bouncing between two focus picks (#1003)",
@@ -156,7 +156,7 @@
             "version": "3.4.0",
             "date": "2026-08-25",
             "highlights": [
-                "New: Scrolling mode, a third placement mode modeled on the niri compositor. Windows form columns on an endless strip and the screen scrolls along it, so opening a window never resizes the ones you have. Assign it to a screen from the Monitors page (#852)",
+                "New: Scrolling mode, a third placement mode modeled on the niri compositor. Windows form columns on an endless strip and the screen scrolls along it, so opening a window never resizes the ones you have. Assign it to a screen from the Overview page (#852)",
                 "New: Scrolling is a full third mode with its own settings section and enable switch, and the mode toggle shortcut cycles through all three modes. Rule actions let an app open at a chosen width or in a tabbed column, or join the focused column directly (#852)",
                 "New: Scrolling columns cycle through width presets, maximize, or grow into the empty space on screen, and the windows in a column share it between them or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",
                 "New: Hold Meta and scroll the mouse wheel on a scrolling screen to move through columns, the same way niri binds Mod+wheel (#852)",
@@ -357,7 +357,7 @@
             "date": "2026-07-17",
             "highlights": [
                 "New: PlasmaZones is now fully translated into German, Georgian, Swedish, Dutch, Polish, and Russian (#785, #786, #787, #788, #789, #790)",
-                "Fixed: The on-screen display, layout picker, and zone selector cards could look see-through and let the desktop show through. They are now solid, with a border and drop shadow that follow your theme. If you customized these before and they still look off, reset them on the Decoration → OSDs and Decoration → Popups pages (#792)",
+                "Fixed: The on-screen display, layout picker, and zone selector cards could look see-through and let the desktop show through. They are now solid, with a border and drop shadow that follow your theme. If you customized these before and they still look off, reset them on the Appearance → Decorations → Surfaces → OSDs and Popups pages (#792)",
                 "Fixed: A custom decoration pack on a window now follows your theme colors for its frame line and its glow or shadow, the same as it already did on the overlay cards (#792)"
             ]
         },
@@ -372,12 +372,12 @@
                 "Changed: Window Rules is now just Rules, since rules cover gaps, layout, and animation too. Your rules carry over automatically, and any appearance or gap settings you had customized are migrated into rules on upgrade (#699)",
                 "New: The managed default rules for borders, title bars, and gaps live in a System section on the Rules page and can't be deleted (#699)",
                 "Changed: The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)",
-                "New: A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Algorithms list to try it (#704)",
+                "New: A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Tiling → Library page to try it (#704)",
                 "New: Peeking at the desktop can now play a full-screen animation. Pick a pack for the new Peeked at Desktop event on the Animations → Transitions → Desktop page. Three new packs ship with it, Peek Recede, Peek Blinds, and Phosphor Peek, and every desktop transition pack works there too (#777)",
                 "New: Window decoration effects. A Decoration category adds glass, blur, glow, shadow, and animated border packs that draw behind and around your windows. Pick them from a browser and save your own sets (#624)",
                 "New: Switching virtual desktops can play a full-screen transition. Turn it on for the new desktop switch event on the Animations page and pick from eleven packs such as Fade, Slide, Wipe, and Cube (#747)",
                 "New: Audio-reactive window borders that move with your music, with the full CAVA audio settings to tune them (#624, #763)",
-                "New: Rule actions to keep a window above or below others and to tune a screen or desktop's tiling on its own, plus a Centered single-window layout (#733, #759, #703)",
+                "New: Rule actions to keep a window above or below others and to tune a screen or desktop's tiling on its own, plus a Tiled window count condition so a rule can switch algorithm as the number of tiled windows grows (#733, #759, #703)",
                 "New: The settings app now remembers the pages you visit, so you can step back and forward through them (#749)",
                 "Fixed: Dragging a window could briefly stutter at the start and end of a drag on some systems, because a shortcut config file was rewritten on every drag. That write is gone, so dragging stays smooth (#714)"
             ]
@@ -423,7 +423,7 @@
                 "New: Each rule matches windows by class, title, role, app ID, desktop, activity, and screen, and now also by transient/notification kind, window size, and focus. Match terms combine with AND, OR, and NOT, then the rule applies snapping, tiling, animation, appearance (borders, title bars, corner radius, accent color, gaps, opacity), or exclusion actions",
                 "Changed: Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk and can be restored manually",
                 "New: Snapping gains the focus options autotiling has. A window can take focus when it snaps into a zone on open, and focus can follow the mouse over snapped windows (both off by default)",
-                "New: Per-window appearance for snapping. Borders, corner radius, hidden title bars, and accent colors, mirroring the tiling options (the old Snapping → Appearance page is now called Zones)",
+                "New: Per-window appearance for snapping. Borders, corner radius, hidden title bars, and accent colors, mirroring the tiling options (this is the page now at Snapping → Overlay → Appearance)",
                 "New: Zone span toggle mode. Tap the span modifier to start and stop spanning instead of holding it down for the whole drag",
                 "New: Unsnapped windows now return to the monitor and spot they closed on after you log back in (on by default, and can be turned off globally or per app)",
                 "Changed: Smoother animations. Window move, resize, and snap now play a shader-driven morph, and the on-screen popups fade and scale in and out",
@@ -446,15 +446,15 @@
             "date": "2026-06-18",
             "highlights": [
                 "Changed: PlasmaZones now supports KDE Plasma 6.7 (KDE Frameworks 6.26, Qt 6.10, KWin 6.7). The KWin effect is ported to the 6.7 effect API. Plasma 6.6 is no longer supported (#638)",
-                "Changed: Reworked in-process snap-assist thumbnail capture for KWin 6.7, which removed the offscreen-QML readback the old path used. Thumbnails now render via an offscreen GLFramebuffer (#638)"
+                "Changed: Reworked in-process snap assist thumbnail capture for KWin 6.7, which removed the offscreen-QML readback the old path used. Thumbnails now render via an offscreen GLFramebuffer (#638)"
             ]
         },
         {
             "version": "3.0.15",
             "date": "2026-05-28",
             "highlights": [
-                "Fixed: The zone-selector popup switching the active layout on hover when snap-assist was up. Dragging a window past the top of the screen no longer resnaps every other tiled window into a different layout (#542)",
-                "Changed: Switching the autotile algorithm by hovering the zone-selector popup. Use NextLayout / QuickLayout1–9 / Layout Picker (Meta+Alt+Space) instead (#542)"
+                "Fixed: The zone-selector popup switching the active layout on hover when snap assist was up. Dragging a window past the top of the screen no longer resnaps every other tiled window into a different layout (#542)",
+                "Changed: Hovering the zone-selector popup no longer switches the autotile algorithm. Use NextLayout, QuickLayout1-9 or the Layout Picker (Meta+Alt+Space) instead (#542)"
             ]
         },
         {
@@ -475,14 +475,14 @@
             "version": "3.0.12",
             "date": "2026-05-25",
             "highlights": [
-                "Fixed: Focus-follows-mouse stealing focus from active floating and overflow windows when the cursor wandered onto an underlying tiled window. Focus-follows-mouse now pauses until a tiled window becomes active (#461, #525)"
+                "Fixed: Focus follows mouse stealing focus from active floating and overflow windows when the cursor wandered onto an underlying tiled window. Focus follows mouse now pauses until a tiled window becomes active (#461, #525)"
             ]
         },
         {
             "version": "3.0.11",
             "date": "2026-05-24",
             "highlights": [
-                "Fixed: Focus-follows-mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner. Focus-follows-mouse now pauses until a tileable window becomes active (#461, #521)",
+                "Fixed: Focus follows mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner. Focus follows mouse now pauses until a tileable window becomes active (#461, #521)",
                 "Fixed: Stale pending-restore entries for excluded apps growing session.json and logging on every daemon start (#461, #521)",
                 "Fixed: Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags on hybrid Intel+NVIDIA setups (#516, #523)",
                 "Changed: Redundant layer-shell setter messages are skipped across virtual-desktop switches (#522)"
@@ -492,7 +492,7 @@
             "version": "3.0.10",
             "date": "2026-05-23",
             "highlights": [
-                "Fixed: Focus-follows-mouse stopping after any OSD, snap preview, or layout picker was shown on an autotile monitor (#461, #517)",
+                "Fixed: Focus follows mouse stopping after any OSD, snap preview, or layout picker was shown on an autotile monitor (#461, #517)",
                 "Fixed: Popups and dialogs consuming the main window's saved zone on reopen. Snap-restore now matches structural window kind (#461, #518)",
                 "Fixed: The passive overlay shell staying mapped and prewarmed even with effects disabled (#515, #519)",
                 "Fixed: Animation shader pattern features (sparkle, streak, smoke) scaling inconsistently across different monitor sizes (#520)"
@@ -540,7 +540,7 @@
             "highlights": [
                 "Fixed: The settings window (and any 5th+ window) being left tiled when toggling autotile to snapping with more autotiled windows than zones in the manual layout (#504)",
                 "Fixed: The 250 ms+ stall before windows start moving on the autotile-to-snap toggle. Windows now animate to their snap positions within ~2 ms (#504)",
-                "Fixed: Focus-follows-mouse not re-focusing a window after focus was stolen by a keyboard shortcut, click, or new window (#461)",
+                "Fixed: Focus follows mouse not re-focusing a window after focus was stolen by a keyboard shortcut, click, or new window (#461)",
                 "Fixed: Tiling assignments saved on the settings page silently dropping. The dropdown selection now persists across navigation (#497)",
                 "Fixed: The daemon toggle re-enabling itself after disable. The unit is now masked so window-lifecycle D-Bus calls can't reactivate it (#497)",
                 "Fixed: The Snapping Assignments Monitor row reverting to its old value after Save when a per-desktop or per-activity entry masked the screen-level slot (#497)",
@@ -597,26 +597,33 @@
             "version": "3.0.0",
             "date": "2026-05-16",
             "highlights": [
-                "New: Virtual screens for ultrawide monitors. Subdivide a physical monitor into independent logical screens, each with its own layouts, autotile state, snap-assist, OSDs, shortcuts, and per-desktop or per-activity assignments. New swap and rotate actions with a confirmation OSD",
+                "New: Virtual screens for ultrawide monitors. Subdivide a physical monitor into independent logical screens, each with its own layouts, autotile state, snap assist, OSDs, shortcuts, and per-desktop or per-activity assignments. New swap and rotate actions with a confirmation OSD",
                 "New: Animation App Rules let you assign motion curves, shader overrides, and per-event timings to specific apps. A two-layer resolver with leaf seeds gives widgets distinctive tunings even when they share a parent rule",
                 "New: A new animation engine with vertex-shader plumbing and live-texture sampling, plus 47 ported transition shaders: 28 from niri, 9 from Burn-My-Windows, 10 BMW-inspired originals, an audio-reactive neon-city cityscape, a Matrix rain port, a 3D chrome-protocol rewrite, and user-texture support",
-                "Changed: Unified PassiveOverlayShell. OSDs, snap-assist, layout picker, zone selector, and zone overlay all run in one click-through shell with independent slot animations and explicit z-order, replacing the legacy NotificationOverlay",
+                "Changed: Unified PassiveOverlayShell. OSDs, snap assist, layout picker, zone selector, and zone overlay all run in one click-through shell with independent slot animations and explicit z-order, replacing the legacy NotificationOverlay",
                 "New: Krohnkite-style autotile. Drag a tiled window onto another to reorder slots live, and a new Unlimited overflow lets the stack grow past the algorithm's natural cap instead of evicting windows",
                 "Changed: Animations settings overhauled into drill-down sub-pages with motion sets for themed override bundles, a per-event shader picker, a generic shader browser, and a separate Snapping Shaders page",
-                "Changed: Layout ordering for cycling. Cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Ordering, instead of the implicit save-time order",
-                "New: Per-mode disable lists. Snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, with the disabled-context OSD pointing the user at the right toggle",
+                "Changed: Layout ordering for cycling. Cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Configuration → Priority, instead of the implicit save-time order",
+                "New: Per-mode disable lists. Snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, with the disabled-context OSD pointing you at the right toggle",
                 "Changed: Hold and toggle controls now work in always-active mode. A binding like Right Mouse Button activates when always-active is off and deactivates when on, FancyZones-style (#249)",
                 "New: Global \"auto-assign new windows for all layouts\" master toggle (#370) and a separate \"Desktop switch OSD\" toggle (#372)",
                 "Changed: Drag protocol rewritten so the daemon owns all drag routing decisions (#310), eliminating the ~40s dead-drag stalls reported when settings reload mid-drag",
-                "Changed: Meta-F float toggle now runs daemon-local (#310), so it toggles in under 50 ms instead of stalling on D-Bus backpressure across four hops",
+                "Changed: The Meta+F float toggle now runs daemon-local (#310), so it toggles in under 50 ms instead of stalling on D-Bus backpressure across four hops",
                 "Changed: Native-feeling wheel scroll across every settings page (#405) using Kirigami.WheelHandler for Plasma-aware scroll speed",
                 "New: A Phosphor SDK. Core services are extracted into reusable LGPL libraries covering engine, layout-api, animation, shaders, workspaces, placement, tiles, zones, screens, snap-engine, tile-engine, config, fsloader, shell-patterns, wayland, and layer. A new phosphor-compositor SDK lets third-party Wayland compositors host the placement, tiling, and overlay services without depending on KWin",
                 "Fixed: Brand-new virtual desktops not picking up the user's default mode and layout (#368)",
-                "Fixed: Snap-assist showing windows from other virtual desktops as occupied (#323)",
+                "Fixed: Snap assist showing windows from other virtual desktops as occupied (#323)",
                 "Fixed: Per-activity layout assignments losing to per-monitor defaults in the layout registry precedence order (#413)",
                 "Fixed: The Layouts context menu eventually failing to open after enough show and hide cycles (#406)",
                 "Fixed: Autotile shortcut adjustments to master ratio and master count not persisting across reloads (#271)",
                 "Fixed: A cycle-triggered resnap that affected windows on other virtual desktops"
+            ]
+        },
+        {
+            "version": "2.8.8",
+            "date": "2026-05-13",
+            "highlights": [
+                "Fixed: The KWin effect stopped loading the moment a distro shipped a KWin patch update, because the plugin is tied to the exact KWin it was built against. Packages now pin that version, so a mismatched KWin gives you a clean dependency error instead of installing silently broken"
             ]
         },
         {
@@ -639,9 +646,9 @@
             "version": "2.8.5",
             "date": "2026-04-10",
             "highlights": [
-                "Fixed: Master window ballooning to 100% on every notification (#271). A 75ms debounce coalesces spurious KWin minimize/unminimize cycles triggered by plasmashell popups",
+                "Fixed: Master window ballooning to 100% on every notification (#271). A 75 ms debounce coalesces spurious KWin minimize/unminimize cycles triggered by plasmashell popups",
                 "Fixed: Plasma shell surfaces (notification popups, emoji picker, krunner) are filtered out of autotile tracking entirely",
-                "Fixed: Settings toggle now recovers the systemd unit from failed state, so users can re-enable PlasmaZones after killing a terminal-run daemon without logging out"
+                "Fixed: Settings toggle now recovers the systemd unit from failed state, so you can re-enable PlasmaZones after killing a terminal-run daemon without logging out"
             ]
         },
         {
@@ -658,7 +665,7 @@
             "date": "2026-04-09",
             "highlights": [
                 "New: A --debug flag for easy diagnostic log capture (plasmazonesd --debug)",
-                "Changed: Deeper autotile debug logging for diagnosing the intermittent ratio bug (#271)"
+                "Changed: Autotile debug logging goes deeper, to help diagnose the intermittent ratio bug (#271)"
             ]
         },
         {
@@ -713,7 +720,7 @@
                 "Changed: Master ratio and count shortcuts show actual values in the OSD",
                 "Fixed: Shortcut-adjusted ratio and count now persist across reboots",
                 "Fixed: Small utility windows like the emoji picker no longer enter the autotile tree",
-                "Fixed: Focus-follows-mouse no longer steals focus through under-size windows",
+                "Fixed: Focus follows mouse no longer steals focus through under-size windows",
                 "Changed: Tumbleweed Drift shader gains sand streams, stronger audio reactivity, and faster animation",
                 "Fixed: Snap assist, overlay, and shortcut stability issues"
             ]
@@ -724,11 +731,11 @@
             "highlights": [
                 "New: Tumbleweed Drift shader with openSUSE desert landscape and audio-reactive dust effects",
                 "New: Neon Venom and Chrome Protocol shaders",
-                "Changed: Voxel terrain now uses depth buffer and multipass rendering",
+                "Changed: Voxel Terrain now uses depth buffer and multipass rendering",
                 "New: Shader engine gains depth buffer support, per-channel filter/wrapping, and presets",
                 "New: Autotile JS API adds per-window context, custom parameters, and lifecycle hooks",
                 "New: Layout ordering settings for snapping and tiling cycle",
-                "Fixed: Focus-follows-mouse no longer steals focus through excluded or overlay windows",
+                "Fixed: Focus follows mouse no longer steals focus through excluded or overlay windows",
                 "Fixed: Shortcut-adjusted master ratio and count now save to disk",
                 "Fixed: Layout picker no longer overwrites the global default when selecting per-screen",
                 "New: The What's New dialog is shown on first launch after an update",
@@ -802,7 +809,7 @@
             "highlights": [
                 "New: SVG support for shader textures with configurable resolution",
                 "Fixed: Exclusions UI not being able to add new entries",
-                "Fixed: Neon Phantom shader white-out"
+                "Fixed: Neon Phantom shader white-out. The pack was later replaced by Pulse Flow"
             ]
         },
         {
@@ -812,7 +819,7 @@
                 "Fixed: Identical monitors showing as duplicates in settings",
                 "Fixed: App-to-Zone rules not matching some app IDs",
                 "Fixed: Exclusions ignored by auto-snap and keyboard shortcuts",
-                "New: Ember Trace and Neon Phantom shaders"
+                "New: Ember Trace and Neon Phantom shaders. Both were later replaced by Pulse Flow"
             ]
         },
         {
@@ -829,7 +836,7 @@
             "highlights": [
                 "Changed: ConfigDefaults is now the single source of truth for all settings",
                 "Changed: Settings bounds exposed to QML via SettingsController",
-                "Fixed: Edge threshold resetting to 100px",
+                "Fixed: Edge threshold resetting to 100 px",
                 "Fixed: Per-screen autotile split ratio using wrong default"
             ]
         },
@@ -874,7 +881,7 @@
             "highlights": [
                 "Fixed: Resnap buffer empty on layout change",
                 "New: Per-screen mode toggle and layout cycle scoped to target screen",
-                "Changed: Unified layout change resnap path"
+                "Changed: Layout changes now resnap through one shared path"
             ]
         },
         {
@@ -935,7 +942,7 @@
             "highlights": [
                 "Fixed: KCM assignment save rewriting modes",
                 "Changed: Changing an assignment in the KCM resnaps and retiles right away",
-                "Changed: Per-screen resnap buffer for multi-monitor setups"
+                "Changed: Each screen now gets its own resnap buffer on multi-monitor setups"
             ]
         },
         {
@@ -1079,7 +1086,7 @@
             "date": "2026-03-08",
             "highlights": [
                 "Fixed: Login freeze with autostart apps via deferred shortcut registration",
-                "Fixed: Systemd service ordering for KGlobalAccel"
+                "Fixed: The systemd service now starts in the right order for KGlobalAccel"
             ]
         },
         {
@@ -1093,7 +1100,7 @@
             "version": "1.15.7",
             "date": "2026-03-06",
             "highlights": [
-                "Fixed: Compatibility with KWin 6.6.2, through a rebuild"
+                "Changed: PlasmaZones is rebuilt for KWin 6.6.2"
             ]
         },
         {
@@ -1115,7 +1122,7 @@
             "date": "2026-02-26",
             "highlights": [
                 "Fixed: Overlapping zone multi-zone cascade",
-                "Fixed: Edge tolerance now respects settings instead of hardcoded 5px"
+                "Fixed: Edge tolerance now respects settings instead of hardcoded 5 px"
             ]
         },
         {
@@ -1171,7 +1178,7 @@
             "date": "2026-02-20",
             "highlights": [
                 "New: Layout Picker Overlay for full-screen interactive layout browsing",
-                "New: Snap Assist after resnap when switching layouts",
+                "New: Snap assist after resnap when switching layouts",
                 "Fixed: Zone activation broken when Zone Selector disabled"
             ]
         },
@@ -1195,7 +1202,7 @@
             "version": "1.12.0",
             "date": "2026-02-18",
             "highlights": [
-                "Fixed: Reapply window geometries after panel changes",
+                "Fixed: Window geometries are reapplied after panel changes",
                 "Fixed: Zones and windows shifting after editing KDE panel"
             ]
         },
@@ -1211,7 +1218,7 @@
             "date": "2026-02-16",
             "highlights": [
                 "Changed: Event-driven cursor tracking during drag",
-                "Changed: Throttled drag signals to ~30Hz",
+                "Changed: Throttled drag signals to ~30 Hz",
                 "Changed: Eliminated QDBusInterface for WindowDrag calls"
             ]
         },
@@ -1220,7 +1227,7 @@
             "date": "2026-02-16",
             "highlights": [
                 "Changed: A dynamic poll timer that idles at 500 ms and drops to 32 ms during a drag",
-                "Changed: Reduced D-Bus traffic during drag from 60Hz to 30Hz"
+                "Changed: Reduced D-Bus traffic during drag from 60 Hz to 30 Hz"
             ]
         },
         {
@@ -1251,7 +1258,7 @@
             "version": "1.11.2",
             "date": "2026-02-15",
             "highlights": [
-                "New: Snap Assist trigger override. Hold modifier to enable per-snap"
+                "New: Snap assist trigger override. Hold modifier to enable per-snap"
             ]
         },
         {
@@ -1283,7 +1290,7 @@
             "version": "1.10.5",
             "date": "2026-02-13",
             "highlights": [
-                "Fixed: Snap Assist D-Bus calls freezing compositor"
+                "Fixed: Snap assist D-Bus calls freezing compositor"
             ]
         },
         {
@@ -1306,7 +1313,7 @@
             "version": "1.10.2",
             "date": "2026-02-13",
             "highlights": [
-                "Changed: CI-generated RPM spec and Debian changelog from CHANGELOG.md"
+                "Changed: The RPM spec and the Debian changelog are generated from CHANGELOG.md in CI"
             ]
         },
         {
@@ -1347,7 +1354,7 @@
             "version": "1.9.1",
             "date": "2026-02-12",
             "highlights": [
-                "New: Snap Assist. Aero Snap style window picker to fill empty zones",
+                "New: Snap assist. Aero Snap style window picker to fill empty zones",
                 "Fixed: Zone padding and outer gap not persisting in layout settings"
             ]
         },
@@ -1357,7 +1364,7 @@
             "highlights": [
                 "New: Shader preset load/save in editor",
                 "New: Preview shader effects in zone editor",
-                "Fixed: Restore window size immediately when dragging between zones",
+                "Fixed: A window's size is restored immediately when it is dragged between zones",
                 "Fixed: Overlay follows cursor when dragging to another monitor"
             ]
         },
@@ -1410,7 +1417,7 @@
             "version": "1.6.1",
             "date": "2026-02-06",
             "highlights": [
-                "New: Liquid Metal shader with mercury-like fluid surface"
+                "New: Liquid Metal shader with a mercury-like fluid surface. It was retired in a later release"
             ]
         },
         {
@@ -1434,7 +1441,7 @@
             "highlights": [
                 "New: Multi-pass shader rendering with up to 4 buffer passes",
                 "New: Zone labels rendered as shader textures",
-                "New: Voronoi Stained Glass shader with 3D raymarching",
+                "New: Voronoi Stained Glass shader with 3D raymarching. It was retired in a later release",
                 "New: Mouse button zone activation as alternative to modifier keys",
                 "New: Zone selector auto-scroll",
                 "New: Update notification banner with GitHub release checking"
@@ -1497,14 +1504,14 @@
             "version": "1.2.4",
             "date": "2026-02-01",
             "highlights": [
-                "Fixed: All synchronous D-Bus calls converted to async to prevent compositor freezes"
+                "Fixed: Every synchronous D-Bus call is now asynchronous, so the compositor no longer freezes"
             ]
         },
         {
             "version": "1.2.2",
             "date": "2026-02-01",
             "highlights": [
-                "Fixed: Async D-Bus for floating toggle prevents compositor freeze"
+                "Fixed: The floating toggle now goes through asynchronous D-Bus, so the compositor no longer freezes"
             ]
         },
         {

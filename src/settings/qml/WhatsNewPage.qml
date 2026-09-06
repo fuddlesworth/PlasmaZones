@@ -5,11 +5,10 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 
 /*
  * Browsable release history. The bundled whatsnew.json carries every release
- * PlasmaZones has ever shipped (150+ of them, 590 highlights), so this is a
+ * PlasmaZones has ever shipped (158 of them, 591 highlights), so this is a
  * two-pane browser rather than one scrolling list: a rail of version series on
  * the left and a reading pane on the right.
  *
@@ -31,6 +30,11 @@ Kirigami.Dialog {
     readonly property color subtleBg: Kirigami.Theme.alternateBackgroundColor
     readonly property color subtleBorder: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     readonly property int thinBorder: 1
+    // De-emphasis levels for secondary text. Named so the three shades stay
+    // consistent across the rail, the pane and the badges.
+    readonly property real mutedOpacity: 0.6
+    readonly property real countOpacity: 0.5
+    readonly property real bulletOpacity: 0.4
 
     readonly property var entries: settingsController.whatsNewEntries
     readonly property int unseenCount: settingsController.unseenWhatsNewReleaseCount
@@ -47,9 +51,49 @@ Kirigami.Dialog {
     readonly property int resultsIndex: -2
     property int selectedIndex: root.digestIndex
     // Series names the rail has expanded. Seeded in reset() with the newest.
+    // Always replaced wholesale, never mutated in place: a push() into the
+    // held array emits no change and the rail would keep the stale expansion.
+    // Stays `var` rather than `list<string>` because the copy-then-assign
+    // idiom below relies on plain JS array semantics.
     property var expandedSeries: []
 
-    title: i18n("What's New in PlasmaZones %1", Qt.application.version)
+    readonly property bool filtering: root.query !== "" || root.kindFilter !== ""
+
+    // One sweep of the history per filter change, shared by the rail, the
+    // reading pane and every match count. Each of those used to sweep for
+    // itself, which was four passes over 591 highlights per keystroke.
+    // This has to stay a declarative binding: recomputing it from the
+    // onTextChanged handler instead would leave the two ListView models with
+    // no dependency on the filter at all, and neither would ever rebuild.
+    readonly property var filterResult: {
+        const q = root.query.toLowerCase();
+        const kind = root.kindFilter;
+        let perRelease = [];
+        let total = 0;
+        for (let i = 0; i < root.entries.length; ++i) {
+            const release = root.entries[i];
+            // A query that names a version keeps that whole release, so
+            // searching "3.4.9" reads as "show me that release".
+            const versionMatches = q !== "" && release.version.toLowerCase().indexOf(q) !== -1;
+            let hits = [];
+            for (let j = 0; j < release.highlights.length; ++j) {
+                const h = release.highlights[j];
+                if (kind !== "" && h.kind !== kind)
+                    continue;
+                if (q !== "" && !versionMatches && h.text.toLowerCase().indexOf(q) === -1)
+                    continue;
+                hits.push(h);
+            }
+            perRelease.push(hits);
+            total += hits.length;
+        }
+        return {
+            "perRelease": perRelease,
+            "total": total
+        };
+    }
+
+    title: i18nc("@title:window the browsable release history", "What's New")
     preferredWidth: Kirigami.Units.gridUnit * 46
     // Use maximumHeight instead of preferredHeight to avoid Kirigami.Dialog
     // binding loop on "y" (its overlay centering feeds back into itself).
@@ -60,33 +104,35 @@ Kirigami.Dialog {
     onOpened: {
         root.resetView();
         settingsController.markWhatsNewSeen();
+        // Somewhere to type and somewhere to tab from. Kirigami.Dialog never
+        // makes its popup an active focus scope, so a plain `focus: true`
+        // inside it marks an intent that is never acted on and the dialog
+        // opens with no focused control at all.
+        Qt.callLater(function () {
+            searchField.forceActiveFocus();
+        });
     }
 
     // ── Model helpers ───────────────────────────────────────────────
     // All of these are plain JS over the CONSTANT `entries` list, recomputed
-    // when the filter state changes rather than bound per delegate.
+    // whenever the filter or expansion state changes. The rail delegates do
+    // bind against `expandedSeries` and `selectedIndex` per row on top of it.
 
     function resetView() {
+        // Clear the widget, not just the mirror. The dialog is a single
+        // instance kept alive for the process (Main.qml), so a query left in
+        // the field on close would still be showing on the next open while
+        // the panes behind it had been reset to unfiltered.
+        searchField.text = "";
         root.query = "";
         root.kindFilter = "";
         root.selectedIndex = root.unseenCount > 0 ? root.digestIndex : 0;
         root.expandedSeries = root.entries.length > 0 ? [root.entries[0].series] : [];
     }
 
-    /// The highlights of `release` that pass the current kind filter and query.
-    function filteredHighlights(release) {
-        const q = root.query.toLowerCase();
-        const kind = root.kindFilter;
-        let out = [];
-        for (let i = 0; i < release.highlights.length; ++i) {
-            const h = release.highlights[i];
-            if (kind !== "" && h.kind !== kind)
-                continue;
-            if (q !== "" && h.text.toLowerCase().indexOf(q) === -1 && release.version.indexOf(q) === -1)
-                continue;
-            out.push(h);
-        }
-        return out;
+    /// The highlights of the release at `index` that pass the current filter.
+    function filteredHighlights(index) {
+        return root.filterResult.perRelease[index];
     }
 
     /// Rail rows, as a flat array so one ListView renders headers and
@@ -94,7 +140,7 @@ Kirigami.Dialog {
     /// with matches force-expands and one without drops out entirely, so the
     /// user keeps their bearings instead of reading a bare list of numbers.
     function railRows() {
-        const filtering = root.query !== "" || root.kindFilter !== "";
+        const filtering = root.filtering;
         let rows = [];
         // While filtering, the pinned row is the cross-release result set;
         // the digest is itself a "since version X" slice and stacking the two
@@ -102,7 +148,7 @@ Kirigami.Dialog {
         if (filtering)
             rows.push({
                 "type": "results",
-                "hits": root.totalHits()
+                "hits": root.filterResult.total
             });
         else if (root.unseenCount > 0)
             rows.push({
@@ -114,7 +160,7 @@ Kirigami.Dialog {
         let bySeries = {};
         for (let i = 0; i < root.entries.length; ++i) {
             const release = root.entries[i];
-            const hits = filtering ? root.filteredHighlights(release).length : release.highlights.length;
+            const hits = root.filteredHighlights(i).length;
             if (filtering && hits === 0)
                 continue;
             if (bySeries[release.series] === undefined) {
@@ -141,43 +187,59 @@ Kirigami.Dialog {
         return rows;
     }
 
-    function totalHits() {
-        let n = 0;
-        for (let i = 0; i < root.entries.length; ++i)
-            n += root.filteredHighlights(root.entries[i]).length;
-        return n;
-    }
-
     function toggleSeries(series) {
         let next = root.expandedSeries.slice();
         const at = next.indexOf(series);
-        if (at === -1)
+        if (at === -1) {
             next.push(series);
-        else
+        } else {
+            // Collapsing the series the reading pane is showing would leave
+            // the selection with no row in the rail, so hand it back to a
+            // view the user can still see.
+            if (root.selectedIndex >= 0 && root.entries[root.selectedIndex].series === series)
+                root.selectedIndex = root.unseenCount > 0 ? root.digestIndex : 0;
             next.splice(at, 1);
+        }
         root.expandedSeries = next;
+    }
+
+    /// Select one release and guarantee it is reachable in the rail. Picking
+    /// a release from the results view has to expand its series too: once the
+    /// filter is cleared the rail stops force-expanding, and the selection
+    /// would otherwise sit inside a collapsed series showing nothing.
+    function selectRelease(index) {
+        root.selectedIndex = index;
+        const series = root.entries[index].series;
+        if (root.expandedSeries.indexOf(series) === -1)
+            root.expandedSeries = root.expandedSeries.concat([series]);
     }
 
     /// Every highlight from the releases the user has not seen yet, grouped by
     /// kind. This is the "what changed while I was away" view, so it reads by
     /// kind rather than by version.
     function digestGroups() {
+        // The "" bucket collects a highlight the loader could not classify.
+        // The schema keeps those out of the bundled file, but without the
+        // bucket such a line would be dropped here while still rendering in
+        // the single-release view, which is the one place the two views
+        // would disagree about what the release contains.
         let byKind = {
             "new": [],
             "changed": [],
-            "fixed": []
+            "fixed": [],
+            "": []
         };
         for (let i = 0; i < root.entries.length; ++i) {
             const release = root.entries[i];
             if (!release.unseen)
                 continue;
-            const hs = root.filteredHighlights(release);
+            const hs = root.filteredHighlights(i);
             for (let j = 0; j < hs.length; ++j)
                 if (byKind[hs[j].kind] !== undefined)
                     byKind[hs[j].kind].push(hs[j].text);
         }
         let groups = [];
-        const order = ["new", "changed", "fixed"];
+        const order = ["new", "changed", "fixed", ""];
         for (let k = 0; k < order.length; ++k)
             if (byKind[order[k]].length > 0)
                 groups.push({
@@ -202,13 +264,11 @@ Kirigami.Dialog {
     /// answered across the history rather than inside one release.
     function resultRows() {
         let body = [];
-        let total = 0;
         for (let i = 0; i < root.entries.length; ++i) {
             const release = root.entries[i];
-            const hs = root.filteredHighlights(release);
+            const hs = root.filteredHighlights(i);
             if (hs.length === 0)
                 continue;
-            total += hs.length;
             body.push({
                 "type": "release",
                 "index": i,
@@ -226,13 +286,13 @@ Kirigami.Dialog {
             {
                 "type": "title",
                 "text": i18nc("@title the reading pane is showing search results", "All matches"),
-                "sub": i18np("%n highlight", "%n highlights", total)
+                "sub": i18np("%n highlight", "%n highlights", root.filterResult.total)
             }
         ];
         if (body.length === 0)
             rows.push({
                 "type": "empty",
-                "text": root.query !== "" ? i18n("Nothing matches “%1”.", root.query) : i18n("No highlights of this kind.")
+                "text": root.emptyFilterMessage()
             });
         return rows.concat(body);
     }
@@ -247,6 +307,11 @@ Kirigami.Dialog {
             }
         ];
         const groups = root.digestGroups();
+        if (groups.length === 0)
+            rows.push({
+                "type": "empty",
+                "text": i18n("Nothing to show for these releases.")
+            });
         for (let g = 0; g < groups.length; ++g) {
             rows.push({
                 "type": "kind",
@@ -263,8 +328,16 @@ Kirigami.Dialog {
     }
 
     function releaseRows(index) {
+        // No release to show at all. The loader leaves the list empty when
+        // whatsnew.json is missing or fails validation, and an unexplained
+        // blank pane looks identical to a release with nothing in it.
         if (index < 0 || index >= root.entries.length)
-            return [];
+            return [
+                {
+                    "type": "empty",
+                    "text": i18n("The release history could not be loaded.")
+                }
+            ];
         const release = root.entries[index];
         let rows = [
             {
@@ -273,7 +346,7 @@ Kirigami.Dialog {
                 "sub": release.date
             }
         ];
-        const hs = root.filteredHighlights(release);
+        const hs = root.filteredHighlights(index);
         for (let i = 0; i < hs.length; ++i)
             rows.push({
                 "type": "item",
@@ -281,6 +354,36 @@ Kirigami.Dialog {
                 "text": hs[i].text
             });
         return rows;
+    }
+
+    /// What clicking, or pressing Return on, a rail row does. Shared so the
+    /// keyboard and the mouse cannot drift apart.
+    function activateRailRow(row) {
+        if (row === undefined)
+            return;
+        if (row.type === "series")
+            root.toggleSeries(row.series);
+        else if (row.type === "digest")
+            root.selectedIndex = root.digestIndex;
+        else if (row.type === "results")
+            root.selectedIndex = root.resultsIndex;
+        else
+            root.selectRelease(row.index);
+    }
+
+    /// Why the current filter came back empty. Each arm is a whole sentence
+    /// rather than a kind name pasted into a frame, so translators get a
+    /// string they can inflect.
+    function emptyFilterMessage() {
+        if (root.query === "")
+            return i18n("No release has highlights of this kind.");
+        if (root.kindFilter === "new")
+            return i18n("No new feature matches “%1”.", root.query);
+        if (root.kindFilter === "changed")
+            return i18n("No change matches “%1”.", root.query);
+        if (root.kindFilter === "fixed")
+            return i18n("No fix matches “%1”.", root.query);
+        return i18n("Nothing matches “%1”.", root.query);
     }
 
     function kindLabel(kind) {
@@ -336,7 +439,6 @@ Kirigami.Dialog {
         required property string kind
         required property string text
 
-        Layout.fillWidth: true
         spacing: Kirigami.Units.smallSpacing
 
         KindBadge {
@@ -348,7 +450,7 @@ Kirigami.Dialog {
         Label {
             visible: highlight.kind === ""
             text: "\u2022"
-            opacity: 0.4
+            opacity: root.bulletOpacity
             Layout.alignment: Qt.AlignTop
             Layout.leftMargin: Kirigami.Units.smallSpacing
         }
@@ -356,6 +458,7 @@ Kirigami.Dialog {
         Label {
             Layout.fillWidth: true
             text: highlight.text
+            textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }
     }
@@ -373,6 +476,7 @@ Kirigami.Dialog {
             Kirigami.SearchField {
                 id: searchField
 
+                focus: true
                 Layout.fillWidth: true
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 18
                 placeholderText: i18n("Search releases…")
@@ -389,19 +493,23 @@ Kirigami.Dialog {
                 model: [
                     {
                         "kind": "",
-                        "label": i18nc("@option:radio show every kind of release highlight", "All")
+                        "label": i18nc("@option:radio show every kind of release highlight", "All"),
+                        "a11y": i18n("Show every release highlight")
                     },
                     {
                         "kind": "new",
-                        "label": root.kindLabel("new")
+                        "label": root.kindLabel("new"),
+                        "a11y": i18n("Show only new features")
                     },
                     {
                         "kind": "changed",
-                        "label": root.kindLabel("changed")
+                        "label": root.kindLabel("changed"),
+                        "a11y": i18n("Show only changed behaviour")
                     },
                     {
                         "kind": "fixed",
-                        "label": root.kindLabel("fixed")
+                        "label": root.kindLabel("fixed"),
+                        "a11y": i18n("Show only bug fixes")
                     }
                 ]
 
@@ -410,8 +518,14 @@ Kirigami.Dialog {
 
                     text: modelData.label
                     checkable: true
+                    // The four chips are one choice, so clicking the active
+                    // one must not untick it. Without this the click toggles
+                    // `checked` off while `kindFilter` keeps its value, and
+                    // since the assignment below changes nothing the binding
+                    // never re-evaluates to put it back.
+                    autoExclusive: true
                     checked: root.kindFilter === modelData.kind
-                    Accessible.name: i18n("Show only %1 highlights", modelData.label)
+                    Accessible.name: modelData.a11y
                     onClicked: {
                         root.kindFilter = modelData.kind;
                         root.selectSensibleRow();
@@ -437,6 +551,10 @@ Kirigami.Dialog {
             // ── Version rail ────────────────────────────────────────
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                // Without a floor the rail is a bare Rectangle with no
+                // implicit width, so a narrow dialog shrinks it until the
+                // elided version labels show nothing at all.
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 8
                 Layout.fillHeight: true
                 radius: Kirigami.Units.smallSpacing * 1.5
                 color: root.subtleBg
@@ -453,6 +571,21 @@ Kirigami.Dialog {
                     keyNavigationEnabled: true
                     model: root.railRows()
 
+                    // Arrow keys move `currentIndex`, so the rail needs a
+                    // visible cursor for that to mean anything, and Return has
+                    // to do what a click does or the keyboard can reach a row
+                    // it cannot open. Focus starts in the search field, which
+                    // is what the dialog is for, and Tab hands it to the rail.
+                    activeFocusOnTab: true
+                    highlightMoveDuration: Kirigami.Units.shortDuration
+                    highlight: Rectangle {
+                        color: Kirigami.Theme.highlightColor
+                        opacity: root.bulletOpacity
+                        radius: Kirigami.Units.smallSpacing
+                    }
+                    Keys.onReturnPressed: root.activateRailRow(rail.model[rail.currentIndex])
+                    Keys.onEnterPressed: root.activateRailRow(rail.model[rail.currentIndex])
+
                     ScrollBar.vertical: ScrollBar {
                         id: railScrollBar
                     }
@@ -466,6 +599,7 @@ Kirigami.Dialog {
                         id: railRow
 
                         required property var modelData
+                        required property int index
 
                         readonly property bool isDigest: railRow.modelData.type === "digest"
                         readonly property bool isResults: railRow.modelData.type === "results"
@@ -474,7 +608,7 @@ Kirigami.Dialog {
                         // the top of the rail; only one is ever present.
                         readonly property bool isPinned: railRow.isDigest || railRow.isResults
                         readonly property bool seriesExpanded: railRow.isSeries && root.expandedSeries.indexOf(railRow.modelData.series) !== -1
-                        readonly property bool filtering: root.query !== "" || root.kindFilter !== ""
+                        readonly property bool filtering: root.filtering
 
                         width: rail.width
                         leftPadding: railRow.modelData.type === "release" ? Kirigami.Units.largeSpacing * 2 : Kirigami.Units.largeSpacing
@@ -499,15 +633,13 @@ Kirigami.Dialog {
                             return i18n("Version %1, released %2", railRow.modelData.release.version, railRow.modelData.release.date);
                         }
 
+                        // Move the keyboard cursor to the clicked row too, or
+                        // the highlight rectangle stays behind on whatever
+                        // row it was on and the next arrow key jumps from
+                        // there instead of from what the user just picked.
                         onClicked: {
-                            if (railRow.isSeries)
-                                root.toggleSeries(railRow.modelData.series);
-                            else if (railRow.isDigest)
-                                root.selectedIndex = root.digestIndex;
-                            else if (railRow.isResults)
-                                root.selectedIndex = root.resultsIndex;
-                            else
-                                root.selectedIndex = railRow.modelData.index;
+                            rail.currentIndex = railRow.index;
+                            root.activateRailRow(railRow.modelData);
                         }
 
                         contentItem: RowLayout {
@@ -556,7 +688,7 @@ Kirigami.Dialog {
                             Label {
                                 visible: railRow.isSeries || railRow.isResults || (!railRow.isDigest && railRow.filtering)
                                 Layout.rightMargin: Kirigami.Units.smallSpacing
-                                opacity: 0.5
+                                opacity: root.countOpacity
                                 font: Kirigami.Theme.smallFont
                                 text: {
                                     if (railRow.isSeries)
@@ -575,21 +707,26 @@ Kirigami.Dialog {
                     width: parent.width - Kirigami.Units.largeSpacing * 2
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
-                    opacity: 0.6
+                    opacity: root.mutedOpacity
+                    // The rail only empties when there is no history at all:
+                    // a filter always keeps its own pinned "All matches" row,
+                    // so a no-match message here could never be reached. That
+                    // message belongs in the reading pane, where it is.
                     visible: rail.count === 0
-                    text: root.query !== "" ? i18n("No release mentions “%1”.", root.query) : i18n("No release has highlights of this kind.")
+                    text: i18n("The release history could not be loaded.")
                 }
             }
 
             // ── Reading pane ────────────────────────────────────────
             // A ListView rather than a Column in a ScrollView: the results
             // view can run to every highlight in the file (a bare "Fixed"
-            // filter is 305 of them across 150 releases), and those have to
-            // be virtualised rather than all instantiated at once.
+            // filter is 305 of them across 158 releases), and those rows have
+            // to be virtualised rather than all instantiated at once.
             ListView {
                 id: readingPane
 
                 Layout.fillWidth: true
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 12
                 Layout.fillHeight: true
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -602,15 +739,17 @@ Kirigami.Dialog {
 
                 // Selection and filter changes rebuild the model; the old
                 // scroll offset means nothing against new content, so every
-                // view opens at its top.
-                onModelChanged: readingPane.positionViewAtBeginning()
+                // view opens at its top. Deferred, because items for the new
+                // model have not been created yet at the point the handler
+                // runs.
+                onModelChanged: Qt.callLater(readingPane.positionViewAtBeginning)
 
                 delegate: Column {
                     id: paneRow
 
                     required property var modelData
 
-                    readonly property real rowWidth: readingPane.width - paneScrollBar.width - Kirigami.Units.smallSpacing
+                    readonly property real rowWidth: readingPane.width - (paneScrollBar.visible ? paneScrollBar.width : 0) - Kirigami.Units.smallSpacing
 
                     width: readingPane.width
                     spacing: 0
@@ -628,11 +767,12 @@ Kirigami.Dialog {
                             Kirigami.Heading {
                                 level: 2
                                 text: paneRow.modelData.text || ""
+                                textFormat: Text.PlainText
                             }
 
                             Label {
                                 Layout.alignment: Qt.AlignBaseline
-                                opacity: 0.5
+                                opacity: root.countOpacity
                                 font: Kirigami.Theme.smallFont
                                 text: paneRow.modelData.sub || ""
                             }
@@ -648,10 +788,23 @@ Kirigami.Dialog {
                         }
                     }
 
-                    // Kind heading for a digest group.
+                    // Kind heading for a digest group. Setting `visible` on
+                    // the instance overrides the component's own empty-kind
+                    // guard, so the unclassified group is excluded here and
+                    // gets the plain heading below instead. Every digest item
+                    // renders as a bare bullet, so a group with no heading at
+                    // all would read as part of the group above it.
                     KindBadge {
-                        visible: paneRow.modelData.type === "kind"
+                        visible: paneRow.modelData.type === "kind" && paneRow.modelData.kind !== ""
                         kind: paneRow.modelData.type === "kind" ? paneRow.modelData.kind : ""
+                    }
+
+                    Label {
+                        visible: paneRow.modelData.type === "kind" && paneRow.modelData.kind === ""
+                        text: i18nc("@title a digest group of highlights with no New, Changed or Fixed kind", "Other")
+                        textFormat: Text.PlainText
+                        opacity: root.mutedOpacity
+                        font: Kirigami.Theme.smallFont
                     }
 
                     // Release heading in the results view. Clicking it drops
@@ -661,7 +814,7 @@ Kirigami.Dialog {
                         width: paneRow.rowWidth
                         horizontalPadding: 0
                         Accessible.name: paneRow.modelData.type === "release" ? i18n("Show only version %1", paneRow.modelData.version) : ""
-                        onClicked: root.selectedIndex = paneRow.modelData.index
+                        onClicked: root.selectRelease(paneRow.modelData.index)
 
                         contentItem: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
@@ -673,7 +826,7 @@ Kirigami.Dialog {
 
                             Label {
                                 Layout.alignment: Qt.AlignBaseline
-                                opacity: 0.5
+                                opacity: root.countOpacity
                                 font: Kirigami.Theme.smallFont
                                 text: paneRow.modelData.type === "release" ? paneRow.modelData.date : ""
                             }
@@ -695,8 +848,9 @@ Kirigami.Dialog {
                         visible: paneRow.modelData.type === "empty"
                         width: paneRow.rowWidth
                         wrapMode: Text.WordWrap
-                        opacity: 0.6
+                        opacity: root.mutedOpacity
                         text: paneRow.modelData.text || ""
+                        textFormat: Text.PlainText
                     }
                 }
             }
