@@ -133,6 +133,13 @@ class SettingsController : public QObject
     Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
+    // Version the user had already seen when this settings process started.
+    // markWhatsNewSeen() moves lastSeenWhatsNewVersion the moment the dialog
+    // opens, which would wipe the "new to you" marks out from under the user
+    // while they are still reading them. This snapshot never moves, so the
+    // marks stay put for the whole session.
+    Q_PROPERTY(QString whatsNewBaselineVersion READ whatsNewBaselineVersion CONSTANT)
+    Q_PROPERTY(int unseenWhatsNewReleaseCount READ unseenWhatsNewReleaseCount CONSTANT)
 
     // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
@@ -371,6 +378,14 @@ public:
     QVariantList whatsNewEntries() const
     {
         return m_whatsNewEntries;
+    }
+    QString whatsNewBaselineVersion() const
+    {
+        return m_whatsNewBaselineVersion;
+    }
+    int unseenWhatsNewReleaseCount() const
+    {
+        return m_unseenWhatsNewReleaseCount;
     }
     Q_INVOKABLE void markWhatsNewSeen();
 
@@ -1103,6 +1118,8 @@ private:
 
     DaemonController m_daemonController;
     QString m_lastSeenWhatsNewVersion;
+    QString m_whatsNewBaselineVersion;
+    int m_unseenWhatsNewReleaseCount = 0;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
     /// Simple/advanced UI mode. THE single source of the default: false

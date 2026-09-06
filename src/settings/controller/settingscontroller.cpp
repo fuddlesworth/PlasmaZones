@@ -924,6 +924,7 @@ SettingsController::SettingsController(QObject* parent)
         QSettings appSettings;
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
+        m_whatsNewBaselineVersion = m_lastSeenWhatsNewVersion;
     }
 
     // Load What's New entries from embedded resource
@@ -968,13 +969,48 @@ SettingsController::SettingsController(QObject* parent)
                     continue;
                 }
                 QVariantMap release;
-                release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
+                const QString versionString = obj.value(QLatin1String("version")).toString();
+                release[QStringLiteral("version")] = versionString;
                 release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
+                // Version series ("3.4" for 3.4.13). The dialog's left rail
+                // groups 150+ releases under these, so it is cheaper to cut
+                // the string once here than per-frame in a QML delegate.
+                const QStringList parts = versionString.split(QLatin1Char('.'));
+                release[QStringLiteral("series")] =
+                    parts.size() >= 2 ? parts.mid(0, 2).join(QLatin1Char('.')) : versionString;
+                // Split "Kind: text" so the page can badge and filter each
+                // highlight without re-parsing prose in QML. The bundled data
+                // always carries a prefix (the schema enforces the pattern);
+                // an unprefixed line still renders, just without a badge.
                 QVariantList highlights;
                 const auto arr = obj.value(QLatin1String("highlights")).toArray();
-                for (const auto& h : arr)
-                    highlights.append(h.toString());
+                for (const auto& h : arr) {
+                    const QString raw = h.toString();
+                    QVariantMap highlight;
+                    const qsizetype colon = raw.indexOf(QLatin1String(": "));
+                    const QString prefix = colon > 0 ? raw.left(colon) : QString();
+                    if (prefix == QLatin1String("New") || prefix == QLatin1String("Changed")
+                        || prefix == QLatin1String("Fixed")) {
+                        highlight[QStringLiteral("kind")] = prefix.toLower();
+                        highlight[QStringLiteral("text")] = raw.mid(colon + 2);
+                    } else {
+                        highlight[QStringLiteral("kind")] = QString();
+                        highlight[QStringLiteral("text")] = raw;
+                    }
+                    highlights.append(highlight);
+                }
                 release[QStringLiteral("highlights")] = highlights;
+                // "New to you" mark, against the session-start baseline so it
+                // survives the markWhatsNewSeen() that firing the dialog does.
+                // A first launch has no baseline. Marking all 157 releases
+                // unseen there would put the entire history behind the
+                // "since your last version" digest, which is exactly what it
+                // is not for, so a user with no stored baseline gets no marks.
+                const QVersionNumber baseline = QVersionNumber::fromString(m_whatsNewBaselineVersion);
+                const bool unseen = !baseline.isNull() && !entryVersion.isNull() && baseline < entryVersion;
+                release[QStringLiteral("unseen")] = unseen;
+                if (unseen)
+                    ++m_unseenWhatsNewReleaseCount;
                 m_whatsNewEntries.append(release);
             }
         }
