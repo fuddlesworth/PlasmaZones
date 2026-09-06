@@ -2130,12 +2130,17 @@ private:
     // routinely arrives first. Cleared with the accumulators, so it lives
     // exactly as long as the gesture that set it.
     QString m_tabWheelAnchor;
-    // True while the anchor names a step the daemon has not relayed back yet.
-    // The retirement guard needs it: during a fast gesture a relay for an
-    // EARLIER step arrives while the anchor already names a later one, and
-    // without this marker that mismatch reads as a foreign focus change and
-    // retires an anchor the gesture is still using.
-    bool m_tabWheelAnchorPending = false;
+    // Every tab this gesture has asked for, the anchor included. The
+    // retirement guard needs it: during a fast gesture a relay for an EARLIER
+    // step arrives while the anchor already names a later one, and without
+    // this that mismatch reads as a foreign focus change and retires an
+    // anchor the gesture is still walking. A plain "a step is in flight"
+    // boolean cannot do the job, because a step whose relay never comes (the
+    // window closed, the activation was refused, the mode changed) would
+    // leave it set forever and disable the guard for good. Membership answers
+    // the real question instead: did WE ask for the tab the model is now
+    // showing?
+    QSet<QString> m_tabWheelWalked;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

@@ -733,22 +733,30 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         // tab IS the anchor and it survives, which is what lets the anchor
         // outrun the model within a gesture.
         //
-        // The pending marker is what makes this safe during a FAST gesture.
-        // The anchor is written per event, but the relays come back one step
-        // at a time, so a relay for an earlier step routinely arrives while
-        // the anchor already names a later one. Without the marker that
-        // mismatch reads as a foreign change and retires an anchor the
-        // gesture is still walking, which puts back the stick the anchor
-        // exists to prevent. A relay that AGREES with the anchor means the
-        // wheel's own last step has landed, so the marker drops and any later
-        // disagreement is genuinely someone else's.
+        // The walked set is what makes this safe during a FAST gesture. The
+        // anchor is written per event, but the relays come back one step at a
+        // time, so a relay for an EARLIER step routinely arrives while the
+        // anchor already names a later one. Retiring on that mismatch would
+        // put back the stick the anchor exists to prevent, so a relay naming
+        // any tab this gesture asked for is treated as its own echo and
+        // leaves the anchor alone. A relay naming a tab the gesture never
+        // asked for is someone else (a pill click, a keyboard cycle, the
+        // daemon) and retires it.
+        //
+        // Membership rather than an in-flight flag, because a step whose
+        // relay never arrives (the window closed, the activation was refused,
+        // the mode changed) would leave such a flag set for good and disable
+        // this guard permanently.
         if (!m_tabWheelAnchor.isEmpty()) {
             const QString activeNow = painter->activePillFor(out, m_tabWheelAnchor);
             if (!activeNow.isEmpty()) {
                 if (activeNow == m_tabWheelAnchor) {
-                    m_tabWheelAnchorPending = false;
-                } else if (!m_tabWheelAnchorPending) {
+                    // The wheel's own last step landed, so nothing of ours is
+                    // outstanding and the trail can go.
+                    m_tabWheelWalked.clear();
+                } else if (!m_tabWheelWalked.contains(activeNow)) {
                     m_tabWheelAnchor.clear();
+                    m_tabWheelWalked.clear();
                 }
             }
         }
