@@ -3,6 +3,9 @@
 
 #include "shaderpreviewcontroller.h"
 
+#include <QQuickItem>
+#include <QQuickWindow>
+
 #include "daemon/rendering/zonelabeltexturebuilder.h"
 #include "phosphor_i18n.h"
 
@@ -306,12 +309,21 @@ QString ShaderPreviewController::shaderParamPreamble(const QString& shaderId) co
     return PhosphorShaders::ShaderRegistry::paramPreamble(si);
 }
 
-QImage ShaderPreviewController::buildLabelsTexture(const QVariantList& zones, int width, int height) const
+QImage ShaderPreviewController::buildLabelsTexture(const QVariantList& zones, QQuickItem* target) const
 {
-    if (zones.isEmpty() || width <= 0 || height <= 0) {
+    if (zones.isEmpty() || !target) {
         return QImage();
     }
-    return ZoneLabelTextureBuilder::build(zones, QSize(width, height), Qt::white, true).toImage();
+    const QSize size(qMax(1, qRound(target->width())), qMax(1, qRound(target->height())));
+    if (target->width() <= 0.0 || target->height() <= 0.0) {
+        return QImage();
+    }
+    // The ratio the preview's shader pass samples this at. Window-derived, not
+    // screen-derived: on Wayland QScreen::devicePixelRatio is the wl_output
+    // integer buffer scale (2 on a 1.15 output), while the shader's
+    // iResolution comes from QQuickWindow::effectiveDevicePixelRatio.
+    const qreal dpr = target->window() ? target->window()->effectiveDevicePixelRatio() : 1.0;
+    return ZoneLabelTextureBuilder::build(zones, size, dpr, Qt::white, true).toImage();
 }
 
 QImage ShaderPreviewController::loadWallpaperTexture() const
