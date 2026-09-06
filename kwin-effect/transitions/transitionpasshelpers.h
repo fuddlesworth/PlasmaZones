@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "transitionpasspure.h"
+
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams / kMaxCustomColors
 
 #include <QVariant> // QVariantMap
@@ -42,8 +44,12 @@ namespace TransitionPass {
 /// format whose values are scene-referred against the display's peak
 /// luminance, so 8-bit sRGB values written verbatim land dim and desaturated —
 /// a desktop switch flashed the wrong brightness. Inheriting the target's
-/// format is the idiom KWin's own blur and screen-transform use. Every format
-/// KWin maps a DRM format to carries alpha, so this never silently drops it.
+/// format is the idiom KWin's own blur and screen-transform use. The GL enum
+/// KWin reports always has alpha bits (XRGB8888 arrives as GL_RGBA8, the
+/// 10-bit formats as GL_RGB10_A2), but the DRM buffer behind it may be an
+/// X-format whose alpha is ignored, or a 2-bit one, so a capture that has to
+/// CARRY alpha must not trust this format — see alphaCaptureFormatFor. The
+/// desktop captures are opaque blends and do not care.
 ///
 /// Reached through framebuffer() rather than RenderTarget::texture(): that
 /// accessor dereferences the framebuffer unconditionally, and it is null on an
@@ -51,6 +57,29 @@ namespace TransitionPass {
 /// compositing so that cannot happen, but this stays honest rather than
 /// resting on a guarantee made in another file.
 GLenum captureFormatFor(const KWin::RenderTarget& outputTarget);
+
+/// The format for a capture that must carry REAL ALPHA: the strip pass's.
+/// That pass zeroes its capture's alpha at the strip band's bottom edge and
+/// lets the columns paint their coverage back in, so the alpha is the mask
+/// getStripColor subtracts the wallpaper with and stripComposite puts it
+/// back with (strip_transition.glsl). captureFormatFor cannot serve it: the
+/// target's own format may be a 2-bit-alpha GL_RGB10_A2, or a GL_RGBA8 over
+/// an XRGB buffer, and a capture allocated in it would read the zero back as
+/// 1, so the subtraction would remove nothing and the pack would displace
+/// the wallpaper with the columns. Keeps the target's PRECISION so an HDR
+/// intermediate loses no headroom: the mapping and its cost are documented
+/// on alphaCaptureFormatForInternalFormat (transitionpasspure.h), which this
+/// wraps.
+GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget);
+
+/// Overwrite the CURRENT framebuffer's alpha channel with @p alpha, leaving
+/// its colour untouched: a colour-masked clear. The strip pass zeroes its
+/// capture's alpha with it at the band's bottom edge, and the backdrop
+/// capture stamps its texture opaque with it. Disables the scissor test for
+/// the clear and restores it, and restores the clear colour, so it is safe
+/// mid scene walk outside any ScopedGlState; the colour mask is restored to
+/// all-on, the state KWin's renderer runs with.
+void clearAlpha(float alpha);
 
 /// Allocate a capture texture of @p deviceSize in @p internalFormat (LINEAR
 /// filter, CLAMP_TO_EDGE) — the shared preamble of every per-output capture.

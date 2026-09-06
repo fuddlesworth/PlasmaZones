@@ -22,6 +22,10 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (!screenId.isEmpty() && m_scrollingScreens.contains(screenId)) {
         m_activeScreen = screenId;
     }
+    // Resolved once, ahead of the echo filter: its adopt arm reads the
+    // strip's active slot, and every arm below works on the same state.
+    PhosphorEngine::PlacementStateKey key;
+    ScrollState* state = stateForWindow(windowId, &key);
     // Self-activation echo filter, m_pendingSelfActivations' consume side
     // and the home of its contract: the effect reports EVERY activation
     // back through notifyWindowFocused, including ones this engine
@@ -52,7 +56,27 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
             stampIt = m_pendingSelfActivations.contains(stampIt.key()) ? std::next(stampIt)
                                                                        : m_pendingSelfActivationQueuedAt.erase(stampIt);
         }
-        if (!expired) {
+        // A LIVE echo is still the compositor's word on where focus ended
+        // up, and the swallow is only safe while something later settles the
+        // question. The rapid focus scroll it exists for leaves later
+        // entries in the queue (the strip advanced by queueing another
+        // activation), so the trailing echo lands on the column the strip
+        // already calls active and focusWindow refuses it anyway. The close
+        // path is the other ordering: the compositor's own successor pick
+        // is reported BEFORE this engine's competing activation (windowClosed
+        // → applyLayout's focusWindowAfter), so the genuine report moves the
+        // strip onto the compositor's pick, and the echo of the engine's pick
+        // is the LAST word — the window really holding focus now. Swallowing
+        // it left the strip centred on the compositor's interim pick while
+        // the focus ring sat on the engine's (close the middle of three under
+        // CenterFocusedColumn: the right column took focus, the left one was
+        // centred). The queue's tail being empty and the strip's active slot
+        // disagreeing with the echo is exactly that state, so adopt it.
+        // Stripping the reclaim (995f135ea) fixed the anchor ping-pong by
+        // making the echo invisible; this keeps it invisible whenever a later
+        // echo is still due, and lets only the final one speak.
+        const bool stripAgrees = !state || state->strip().activeWindowId() == windowId;
+        if (!expired && (!m_pendingSelfActivations.isEmpty() || stripAgrees)) {
             // The swallow is silent to every other observer; without this
             // line a report eaten here is indistinguishable in the journal
             // from one that never arrived.
@@ -90,8 +114,6 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // removeAll, and the kMaxPendingSelfActivations cap all still run — and
     // the dropped-echo case the reclaim used to (over-)serve is now handled
     // precisely by the per-entry expiry at the match above.
-    PhosphorEngine::PlacementStateKey key;
-    ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
         return;
     }

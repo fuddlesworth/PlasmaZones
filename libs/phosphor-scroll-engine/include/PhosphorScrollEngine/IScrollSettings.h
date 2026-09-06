@@ -28,6 +28,21 @@ public:
     virtual int scrollingOuterGapRight() const = 0;
     /// Whether newly opened windows take focus (Scrolling.Behavior).
     virtual bool scrollingFocusNewWindows() const = 0;
+    /// Whether a fresh open joins, as a tab, a column that already holds a
+    /// window of the same application (Scrolling.Behavior.GroupSameAppAsTabs).
+    /// Read LIVE on the open path like scrollingFocusNewWindows, never cached.
+    /// GLOBAL ONLY: unlike its Scrolling.Behavior siblings this toggle has no
+    /// per-context rule channel (no SetScroll* action, no per-screen override
+    /// key), so it cannot be scoped to one screen or desktop. DEFAULTED, not
+    /// pure, for the same reason scrollingCropStraddlers is: off is the
+    /// answer for every implementor that has not heard of the option,
+    /// including the test stubs, and it reproduces the behaviour that existed
+    /// before the setting. Pinned to ConfigDefaults by a static_assert in
+    /// settings/scrolling.cpp.
+    virtual bool scrollingGroupSameAppAsTabs() const
+    {
+        return false;
+    }
     /// StickyWindowHandling as int (0 = treat as normal, 1 = restore only,
     /// 2 = ignore all) — the shared PhosphorEngine enum's wire values.
     /// RestoreOnly and IgnoreAll both keep sticky windows out of the strip

@@ -519,6 +519,8 @@ public:
                    scrollingInsertPositionChanged)
     Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
                    scrollingFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollingGroupSameAppAsTabs READ scrollingGroupSameAppAsTabs WRITE setScrollingGroupSameAppAsTabs
+                   NOTIFY scrollingGroupSameAppAsTabsChanged)
     Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
                    NOTIFY scrollingFocusFollowsMouseChanged)
     Q_PROPERTY(int scrollingFocusFollowsMouseMaxScroll READ scrollingFocusFollowsMouseMaxScroll WRITE
@@ -1533,10 +1535,17 @@ public:
     // Scrolling Behavior Settings (Scrolling.Behavior group)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Store-backed scalars under Scrolling.Behavior; shared leaf key names
-    // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
+    // Store-backed scalars under Scrolling.Behavior; mostly shared leaf key
+    // names (FocusNewWindows, StickyWindowHandling, …) disambiguated by
+    // group, plus the scrolling-only GroupSameAppAsTabs. Its getter satisfies
+    // both ISettings (defaulted virtual, so the D-Bus registry can publish
+    // the key through the interface) and IScrollSettings (the engine's live
+    // read) with one body; its setter overrides the ISettings no-op alone,
+    // hence the override on it too.
     bool scrollingFocusNewWindows() const override;
     void setScrollingFocusNewWindows(bool focus);
+    bool scrollingGroupSameAppAsTabs() const override;
+    void setScrollingGroupSameAppAsTabs(bool group) override;
     bool scrollingFocusFollowsMouse() const;
     void setScrollingFocusFollowsMouse(bool follows);
     int scrollingFocusFollowsMouseMaxScroll() const;

@@ -508,6 +508,7 @@ public:
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
     P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")
     P_CONFIG_KEY(focusFollowsMouseMaxScrollKey, "FocusFollowsMouseMaxScroll")
+    P_CONFIG_KEY(groupSameAppAsTabsKey, "GroupSameAppAsTabs")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior.DragScroll

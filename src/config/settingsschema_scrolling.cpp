@@ -442,6 +442,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::scrollingBehaviorGroup()] = {
         {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool,
          QStringLiteral("Focus a window when it opens.")},
+        {CD::groupSameAppAsTabsKey(), CD::scrollingGroupSameAppAsTabs(), QMetaType::Bool,
+         QStringLiteral("Open a window as a tab of a column that already holds a window of the same application, "
+                        "instead of giving it a column of its own.")},
         {CD::triggersKey(), CD::scrollingDragInsertTriggers(), QMetaType::QVariantList,
          QStringLiteral("Modifier and mouse-button combinations that insert a dragged window into the strip under the "
                         "cursor. It becomes a new column, or stacks into the column it lands on. Each entry is a "

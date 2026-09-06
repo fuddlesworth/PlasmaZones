@@ -259,6 +259,7 @@ inline constexpr double kMaxTabIndicatorFontWeight = MaxTabIndicatorFontWeight;
 // a double, because it is a character count the descriptor compares against
 // QString::size() rather than a numeric param bound.
 inline constexpr int kMaxFontFamilyLength = MaxFontFamilyLength;
+inline constexpr int kMaxTabGroupNameLength = MaxTabGroupNameLength;
 
 // Drop indicator. Every floor here really is zero — a zero border width is a
 // fill with no edge and a zero radius is a square corner, neither a sentinel —

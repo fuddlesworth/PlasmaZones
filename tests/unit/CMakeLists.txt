@@ -1048,6 +1048,24 @@ target_link_libraries(test_animation_shader_kwin_bake PRIVATE Qt6::Test Qt6::Cor
 target_compile_definitions(test_animation_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_kwin_bake COMMAND test_animation_shader_kwin_bake)
 
+# DRAWS every bundled strip pack through the KWin-path variant the strip
+# pass links (fragment assembled as striptransitionshader.cpp does, linked
+# against the pass's quad vertex stage) over a synthetic uStrip / uBelow
+# capture pair, and checks the pass's three contracts: identity at zero
+# motion, an untouched wallpaper in the gap, and no hole beside a column
+# edge under motion. The bake above only compiles. Skips without a
+# desktop-GL >= 4.5 context. Gated with the effect tree, like
+# test_transition_pass_pure below (whose block also creates the
+# PkgConfig::TestEpoxy target this links; a `::` target name resolves at
+# generate time, so the later creation is fine).
+if(USE_KDE_FRAMEWORKS AND BUILD_KWIN_EFFECT)
+    add_executable(test_strip_pack_contract ui/shaders/test_strip_pack_contract.cpp)
+    target_include_directories(test_strip_pack_contract PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+    target_link_libraries(test_strip_pack_contract PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation PhosphorShaders::PhosphorShaders PkgConfig::TestEpoxy)
+    target_compile_definitions(test_strip_pack_contract PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    add_test(NAME test_strip_pack_contract COMMAND test_strip_pack_contract)
+endif()
+
 # End-to-end: an entry-only animation shader (author writes only pTransition,
 # or pIn+pOut) assembles through the harness scaffold and bakes against the
 # real animation UBO; lone pIn falls through; traditional main() passes (T1.5).
@@ -2100,6 +2118,25 @@ add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sam
 target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
 add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
+
+# The pure half of the screen-level passes' helpers (transitionpasspure.h):
+# the on-screen format to alpha-capable capture format table the strip pass
+# allocates with, and the shared quad vertex stage. Header-only GL enums,
+# same include-from-the-effect-tree shape as the sampler above. The header
+# pulls <epoxy/gl.h> for its GL enums, so the epoxy include path is taken
+# from pkg-config rather than assumed to be a system default (the effect's
+# own Epoxy target is directory-scoped and invisible here). Gated exactly
+# like the effect tree itself (top-level CMakeLists.txt): a portable build
+# without the effect must neither require libepoxy nor test a component it
+# did not build. test_strip_pack_contract (ui/shaders) shares the gate.
+if(USE_KDE_FRAMEWORKS AND BUILD_KWIN_EFFECT)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(TestEpoxy REQUIRED IMPORTED_TARGET epoxy)
+    add_executable(test_transition_pass_pure compositor-common/test_transition_pass_pure.cpp)
+    target_include_directories(test_transition_pass_pure PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+    target_link_libraries(test_transition_pass_pure PRIVATE Qt6::Test PkgConfig::TestEpoxy)
+    add_test(NAME test_transition_pass_pure COMMAND test_transition_pass_pure)
+endif()
 
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)

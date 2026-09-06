@@ -534,6 +534,26 @@ inline constexpr QLatin1StringView OpenMaximized{"openMaximized"};
 /// other Open* slots and layered over
 /// `IScrollSettings::scrollingFocusNewWindows`.
 inline constexpr QLatin1StringView OpenFocused{"openFocused"};
+/// Open the window as a tab of a NAMED group. String `ActionParam::Value`,
+/// non-empty: the group name. On open, the scrolling engine looks for a
+/// column that already holds a window whose own rules resolve to the same
+/// group name and joins it as a tab, turning that column tabbed if needed; no
+/// such column means a column of its own. The name is what ties windows
+/// together, so a rule matching a title, a class or anything else groups
+/// every window it matches with every other window resolving to that name,
+/// across applications. Outranks the app-keyed
+/// `IScrollSettings::scrollingGroupSameAppAsTabs` default: a window with a
+/// group name never falls back to same-app grouping. An OpenColumnPlacement
+/// consume rule on the same window outranks it, the way every explicit
+/// placement outranks a grouping verdict.
+///
+/// Names compare exactly after trimming, case included ("Work" and "work"
+/// are two groups). Membership is resolved LIVE: on every open the engine
+/// re-evaluates each existing tile's rules against that tile's current
+/// metadata, so a group keyed on a title condition follows the live title,
+/// and a tile can enter or leave a group between two opens without moving.
+/// Nothing is remembered per window.
+inline constexpr QLatin1StringView OpenTabGroup{"openTabGroup"};
 /// Fullscreen at open — niri's `open-fullscreen`. Boolean `ActionParam::Value`:
 /// true puts the opening window into real KWin fullscreen, false vetoes the
 /// app's OWN fullscreen request at open (apps that start fullscreen by
