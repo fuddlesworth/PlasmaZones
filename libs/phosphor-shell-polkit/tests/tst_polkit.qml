@@ -241,6 +241,86 @@ TestCase {
         compare(none.fieldPrompt, "Password", "no request means the default label");
     }
 
+    // Collect every descendant carrying a `textFormat`, so the assertions
+    // below cover whatever Texts the prompt happens to be built from rather
+    // than a list of item ids that would rot.
+    function _textItems(item, out) {
+        const kids = item.children;
+        for (let i = 0; i < kids.length; ++i) {
+            const kid = kids[i];
+            if (kid.textFormat !== undefined && kid.text !== undefined)
+                out.push(kid);
+            _textItems(kid, out);
+        }
+        return out;
+    }
+
+    function test_request_strings_render_as_plain_text() {
+        // The message, the action id and PAM's prompt all arrive from the
+        // requesting process. Rendered as rich text they would let a caller
+        // put markup, or an <img> fetch, inside the authentication dialog.
+        const request = createTemporaryObject(fakeRequestComp, testCase);
+        request.message = "<b>Grant root?</b><img src='http://example.invalid/x.png'>";
+        request.actionId = "<i>org.example.evil</i>";
+        request.prompt = "<u>Password</u>: ";
+        const p = createTemporaryObject(promptComp, testCase, {
+            "request": request
+        });
+        p.errorText = "<s>failed</s>";
+        const texts = _textItems(p, []);
+        verify(texts.length > 0, "the prompt renders some text");
+        let sawMessage = false;
+        for (let i = 0; i < texts.length; ++i) {
+            const t = texts[i];
+            if (String(t.text).indexOf("<") < 0)
+                continue;
+            // Anything showing caller-supplied angle brackets must show them
+            // literally, never parse them.
+            compare(t.textFormat, Text.PlainText, "caller text is rendered as plain text: " + t.text);
+            if (String(t.text).indexOf("Grant root?") >= 0)
+                sawMessage = true;
+        }
+        verify(sawMessage, "the request message reaches a Text item");
+        compare(p.message, request.message, "the message is passed through unaltered");
+    }
+
+    function test_repeated_failures_each_clear_the_field() {
+        // A wrong password is the common case and it happens more than once.
+        const agent = createTemporaryObject(fakeAgentComp, testCase);
+        const p = createTemporaryObject(promptComp, testCase, {
+            "agent": agent,
+            "request": createTemporaryObject(fakeRequestComp, testCase)
+        });
+        for (let attempt = 0; attempt < 3; ++attempt) {
+            p.password = "wrong" + attempt;
+            p.submit();
+            compare(agent.responses[attempt], "wrong" + attempt);
+            p.errorText = "Authentication failure " + attempt;
+            compare(p.password, "", "attempt " + attempt + " leaves no stale entry");
+            // Clearing the error between attempts must not re-arm anything.
+            p.errorText = "";
+        }
+        compare(agent.responses.length, 3);
+        compare(agent.cancels, 0);
+    }
+
+    function test_a_unicode_password_reaches_the_agent_unchanged() {
+        // Passwords are not ASCII. Anything that normalised or re-encoded on
+        // the way through would reject a correct password.
+        const agent = createTemporaryObject(fakeAgentComp, testCase);
+        const p = createTemporaryObject(promptComp, testCase, {
+            "agent": agent,
+            "request": createTemporaryObject(fakeRequestComp, testCase)
+        });
+        const secret = "påsswörd-Ω-\u00e9\u0301-\ud83d\udd11";
+        p.password = secret;
+        p.submit();
+        compare(agent.responses.length, 1);
+        compare(agent.responses[0], secret, "byte for byte what was typed");
+        compare(agent.responses[0].length, secret.length);
+        compare(p.password, "");
+    }
+
     function test_submit_without_an_agent_is_a_no_op() {
         const p = createTemporaryObject(promptComp, testCase);
         p.password = "x";
