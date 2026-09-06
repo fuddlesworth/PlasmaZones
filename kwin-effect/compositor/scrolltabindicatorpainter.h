@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPoint>
+#include <QPointF>
 #include <QRect>
 #include <QString>
 #include <QVector>
@@ -178,6 +179,17 @@ QVector<ScrollTabHitRect> layoutPills(const ScrollTabIndicator& indicator, const
 QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
                  const QRect& bounds, qreal devicePixelRatio, const QString& hoveredWindowId);
 
+/// The same raster, addressed in DEVICE pixels: @p deviceSize is the image's
+/// exact size and @p logicalOrigin the logical point its top-left looks at.
+/// The hover sub-update needs this form because its patch has to start on a
+/// whole device pixel (that is the space glTexSubImage2D addresses), and on a
+/// fractionally-scaled output the logical origin that lands there sits
+/// BETWEEN logical pixels. rasterise() above is this function with the origin
+/// and size derived from an integral logical rect.
+QImage rasterisePatch(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
+                      const QPointF& logicalOrigin, const QSize& deviceSize, qreal devicePixelRatio,
+                      const QString& hoveredWindowId);
+
 } // namespace ScrollTabRaster
 
 /**
@@ -348,6 +360,14 @@ private:
         /// for. A change in either is a re-rasterise, not just a re-upload.
         QRect textureBounds;
         qreal textureScale = 0.0;
+        /// The texture's top-left in DEVICE pixels: `textureBounds`'s origin
+        /// floored onto the device grid. On a fractionally-scaled output that
+        /// is NOT textureBounds.topLeft() * textureScale, and the difference
+        /// is the whole point — the texture covers the same device-aligned box
+        /// KWin's damage alignment produces, so the blit and the damage cannot
+        /// disagree about a border column. Both the quad's placement and the
+        /// hover patch's sub-upload offset are measured from here.
+        QPoint textureDeviceOrigin;
         /// Bounds/scale pair for which rasterising or uploading FAILED (an
         /// image too large for GL, an allocation failure). While it matches
         /// the current pair the paint does not retry every frame; any model,
