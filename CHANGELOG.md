@@ -7,9 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.4.13] - 2026-09-06
+
 ### Added
 
 - **Scrolling can open windows of the same application as tabs**: a new window took a column of its own, so a second browser or terminal window had to be dragged onto the first one to become a tab. Group windows of the same application as tabs, under Settings → Scrolling → Window handling, now sends a new window into the column that already holds a window of its application, as a tab, and turns that column into tabs if it was not already. It joins the focused column when that one holds the application, and the first such column along the strip otherwise. It is off by default. A window rule, Open in a tab group, does the same for any windows you can match, keyed on a name you give the group rather than on the application. A rule matching every window whose title contains a project name puts them all in one tabbed column, whatever program they belong to, and two rules that use the same group name share a column. A window a rule has named never falls back to grouping by application. A rule that opens a window into the focused column still wins over both. ([#1067](https://github.com/fuddlesworth/PlasmaZones/pull/1067))
+
+### Changed
+
+- **The tab grouping and launcher text is translated**: the strings added this release for grouping windows of the same application as tabs, for the Open in a tab group window rule and for the shell launcher's result providers are translated in German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish, so those languages have no English left showing in the scrolling settings or in the rule builder. ([#1069](https://github.com/fuddlesworth/PlasmaZones/pull/1069))
 
 ### Fixed
 
@@ -17,6 +23,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Translucent popups over a scrolling strip keep their real opacity while it scrolls**: with a strip pack assigned, a notification, a volume popup or any other translucent window drawn above the columns had its opacity applied twice for the length of a scroll, so a half-transparent popup showed at a quarter and a fading notification vanished early. Both showed at their real opacity again the moment the strip settled. ([#1064](https://github.com/fuddlesworth/PlasmaZones/pull/1064))
 - **The pointer stays visible through a desktop switch on a scrolling screen**: with a strip pack assigned under Settings → Animations → Motion → Scrolling, switching virtual desktops while the strip was still settling hid the pointer for the whole desktop switch animation. The strip pass hides the compositor's cursor while it paints the strip and draws its own copy, and the desktop switch took over the screen without drawing one, so nothing showed the pointer until the switch had finished. The strip pass now hands the cursor back the moment a desktop switch takes the screen. ([#1064](https://github.com/fuddlesworth/PlasmaZones/pull/1064))
 - **A window on a scrolling screen no longer stays over the bottom gap after its edge is dragged past the work area**: dragging a tiled window's bottom edge down into the gap under it left the window there, covering the gap, until some later change happened to move it. The engine accepted the new height and worked out the corrected rect, but that rect matched the one it had already sent, so the correction was never sent to the compositor. A width change or a shrink happened to move the rect and so was corrected, which is why the problem came and went and looked like an autohide panel issue. The engine now records where the window actually sits after a resize, so the correction is always sent and the window snaps back to the work area. ([#1066](https://github.com/fuddlesworth/PlasmaZones/pull/1066))
+- **Closing the middle column of a scrolling strip now leaves focus and the strip on the same column**: with Center focused column on, closing the middle of three columns left the right column focused while the strip centred the left one, so the focused window sat off to the side. A close races two answers about what gets focus next. The compositor names its own successor first and the strip moves onto it, then the engine's own choice of the right neighbour really takes focus, and that second report was filtered out as an echo of a request the engine had already made. The engine now takes a report at its word when no later request of its own is still pending and the strip disagrees with it, so focus and the centred column agree after a close. ([#1065](https://github.com/fuddlesworth/PlasmaZones/pull/1065))
 
 ## [3.4.12] - 2026-09-05
 
