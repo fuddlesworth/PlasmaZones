@@ -545,6 +545,13 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 // NOTIFY emitters fails the build instead of dispatching through a garbage
 // member pointer.
 inline constexpr int SnapToZoneSlotCount = 9;
+// The schema loop and ConfigKeys::snapToZoneKey's range guard both bound on
+// the PROTOCOL constant, so the two have to stay equal. Without this, raising
+// the protocol count leaves the accessors below silently truncating at 9 and
+// the schema-declared slots past it unreadable and unwritable through
+// Settings — their own static_assert compares against this local and passes.
+static_assert(SnapToZoneSlotCount == PhosphorProtocol::Service::QuickLayoutSlotCount,
+              "snap-to-zone slots must cover every protocol slot the schema registers");
 
 #define P_SNAP_TO_ZONE(N)                                                                                              \
     QString Settings::snapToZone##N##Shortcut() const                                                                  \
@@ -600,6 +607,11 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
 // scrollFocusTab1..9 — the scrolling tab ordinals, same dispatch pattern as
 // the two families above and the same reason for naming the count once.
 inline constexpr int ScrollFocusTabSlotCount = 9;
+// Same tie as SnapToZoneSlotCount above, and for the same reason: the schema
+// loop and ConfigKeys::scrollFocusTabKey's guard both bound on the protocol
+// constant.
+static_assert(ScrollFocusTabSlotCount == PhosphorProtocol::Service::QuickLayoutSlotCount,
+              "focus-tab slots must cover every protocol slot the schema registers");
 
 #define P_SCROLL_FOCUS_TAB(N)                                                                                          \
     QString Settings::scrollFocusTab##N##Shortcut() const                                                              \

@@ -11,7 +11,7 @@
 // BOUNDARY RULE for the four registry TUs: a key belongs to a mode TU when
 // its name carries that mode's prefix, names that mode's family (e.g.
 // defaultScrollingTemplate), or carries the zone family prefix — scrolling*
-// here, snap* / snapping* / zone* in settingsadaptor_registry_snapping.cpp,
+// and scroll* here, snap* / snapping* / zone* in settingsadaptor_registry_snapping.cpp,
 // autotile* in settingsadaptor_registry_autotile.cpp. Mode-neutral keys
 // (drag activation, navigation / swap / span / quickLayout / cycle / rotate /
 // global shortcuts, display, appearance, filtering, animation and profile
@@ -773,10 +773,15 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingCenterColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingToggleColumnTabbedShortcut", scrollingToggleColumnTabbedShortcut,
                                  setScrollingToggleColumnTabbedShortcut)
-        // The tab ordinals. Registered here with the rest of the scrolling
-        // vocabulary even though their config keys live in Shortcuts.Global
-        // (where every indexed family lives) — the registry is split by what
-        // a property MEANS, not by its config group.
+        REGISTER_CONCRETE_STRING("scrollingCycleTabShortcut", scrollingCycleTabShortcut, setScrollingCycleTabShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleTabBackShortcut", scrollingCycleTabBackShortcut,
+                                 setScrollingCycleTabBackShortcut)
+        // The tab ordinals, after the two chords so this block reads in the
+        // same order as the schema and the Q_PROPERTY list. The scroll*
+        // spelling is covered by the BOUNDARY RULE at the top of the file;
+        // their config keys live in Shortcuts.Global, where every indexed
+        // family lives, because the registry is split by what a property
+        // MEANS rather than by its config group.
         REGISTER_CONCRETE_STRING("scrollFocusTab1Shortcut", scrollFocusTab1Shortcut, setScrollFocusTab1Shortcut)
         REGISTER_CONCRETE_STRING("scrollFocusTab2Shortcut", scrollFocusTab2Shortcut, setScrollFocusTab2Shortcut)
         REGISTER_CONCRETE_STRING("scrollFocusTab3Shortcut", scrollFocusTab3Shortcut, setScrollFocusTab3Shortcut)
@@ -786,9 +791,6 @@ void SettingsAdaptor::initializeRegistryScrolling()
         REGISTER_CONCRETE_STRING("scrollFocusTab7Shortcut", scrollFocusTab7Shortcut, setScrollFocusTab7Shortcut)
         REGISTER_CONCRETE_STRING("scrollFocusTab8Shortcut", scrollFocusTab8Shortcut, setScrollFocusTab8Shortcut)
         REGISTER_CONCRETE_STRING("scrollFocusTab9Shortcut", scrollFocusTab9Shortcut, setScrollFocusTab9Shortcut)
-        REGISTER_CONCRETE_STRING("scrollingCycleTabShortcut", scrollingCycleTabShortcut, setScrollingCycleTabShortcut)
-        REGISTER_CONCRETE_STRING("scrollingCycleTabBackShortcut", scrollingCycleTabBackShortcut,
-                                 setScrollingCycleTabBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingToggleWindowedFullscreenShortcut", scrollingToggleWindowedFullscreenShortcut,
                                  setScrollingToggleWindowedFullscreenShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthShortcut", scrollingCycleColumnWidthShortcut,

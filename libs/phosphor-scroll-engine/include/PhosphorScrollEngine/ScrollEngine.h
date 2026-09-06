@@ -329,9 +329,12 @@ public:
     /// a stacked column too — they are the same tiles the column shows as
     /// tabs once it is flipped.
     void cycleTab(int delta, const QString& screenId);
-    /// Focus the active column's @p ordinal'th tab, 1-based, counting only
-    /// the tabs its indicator actually draws (minimized tiles are skipped).
-    /// An ordinal past the column's tab count answers no_target feedback.
+    /// Focus the active column's @p ordinal'th tab, 1-based, counting the
+    /// column's non-minimized tiles — which are the tabs its indicator draws
+    /// when the column is tabbed. Like cycleTab it is NOT gated on the
+    /// display mode, so it addresses a stacked column's windows the same way
+    /// and resolves even when no indicator is drawn at all. An ordinal past
+    /// the column's tab count answers no_target feedback.
     void focusTab(int ordinal, const QString& screenId);
     /// Explicit float / re-tile of the focused window (niri
     /// move-window-to-floating / move-window-to-tiling); already-there

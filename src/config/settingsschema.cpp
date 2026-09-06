@@ -623,7 +623,9 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
                   "focus-tab defaults array must cover every protocol slot");
     for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::scrollFocusTabKey(i + 1), scrollFocusTabDefaults[i],
-                    QStringLiteral("Shows tab %1 of the focused column in scrolling mode.").arg(i + 1));
+                    QStringLiteral("Shows tab %1 of the focused column in scrolling mode. In a column that is not "
+                                   "tabbed it focuses window %1 in the stack.")
+                        .arg(i + 1));
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut(),
                 QStringLiteral("Moves every window one zone clockwise within the current layout."));

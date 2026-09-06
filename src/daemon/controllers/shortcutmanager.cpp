@@ -29,9 +29,9 @@ namespace {
 using namespace ShortcutIds;
 
 // ─── Static shortcut table ──────────────────────────────────────────────────
-// One row per settings-driven shortcut. The two indexed slot families
-// (quick_layout_N, snap_to_zone_N) are below in helper loops because their
-// getters are array-indexed rather than per-id.
+// One row per settings-driven shortcut. The three indexed slot families
+// (quick_layout_N, snap_to_zone_N, scroll_focus_tab_N) are below in helper
+// loops because their getters are array-indexed rather than per-id.
 //
 // Adding a shortcut: declare the Q_SIGNAL in shortcutmanager.h, add a
 // ConfigDefaults::xxxShortcut accessor, add the Settings::xxxShortcut getter,

@@ -113,6 +113,14 @@ bool ScrollTabIndicatorPainter::setIndicators(KWin::LogicalOutput* output,
     entry.hoverDirtyRects.clear();
     entry.failedBounds = QRect();
     entry.failedScale = 0.0;
+    // The input gate answers for the PIXELS, and the pixels for this model
+    // have not been drawn yet. Leaving it set would let a click or a wheel
+    // arriving before the next paint pass be answered from the NEW hit rects
+    // while the gate still vouches for the OLD model's pixels, so a press
+    // could activate a tab whose pill has never been on screen. notePassOutcome
+    // re-arms it one frame later, and the cost of clearing is that one frame
+    // of declined pill input after a model change.
+    entry.paintedLastPass = false;
     return true;
 }
 
@@ -281,6 +289,12 @@ void ScrollTabIndicatorPainter::drainRetired()
 
 void ScrollTabIndicatorPainter::drainRetiredTextures()
 {
+    // Deliberately a forwarder rather than one public function: the private
+    // drainRetired() is called from paint() and releaseGl(), which already
+    // hold a current context by construction, while this public spelling is
+    // what the GL-free clear paths call after making one current. Keeping the
+    // two names separate is what marks that context obligation at the call
+    // site.
     drainRetired();
 }
 

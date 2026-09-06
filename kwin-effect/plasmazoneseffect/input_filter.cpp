@@ -206,8 +206,9 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
         return true;
     }
     // ScrollFactor rule: rescale the event in place and pass it on. Only
-    // events no strip chord claimed reach here (the branch above returns),
-    // so a chord-driven strip move is never scaled by an app's rule.
+    // events neither a strip chord nor the tab wheel claimed reach here (the
+    // branches above return), so a strip move or a tab step is never scaled
+    // by an app's rule.
     applyScrollFactor(event);
     return false;
 }

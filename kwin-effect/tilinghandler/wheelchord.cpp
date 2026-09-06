@@ -419,6 +419,20 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
     // toolkit), and a held button means a drag is spending the wheel.
     // Claiming those would make the indicator a dead zone for gestures that
     // have nothing to do with tabs.
+    //
+    // The trigger is fixed rather than a configurable trigger list, unlike
+    // the two strip wheel gestures (Scrolling.Wheel.Focus and .View). Those
+    // are chords competing for the whole screen, so which modifier owns them
+    // has to be the user's call. This one is scoped to the pixels of an
+    // indicator the user is already pointing at, and "no modifier over a
+    // pill" is the only spelling that does not collide with the chords it
+    // sits beside. It follows the same reasoning that the click on a pill is
+    // not configurable either. The gesture is off whenever the indicator is,
+    // since scrollTabPillAt answers empty with nothing painted.
+    //
+    // It also does not honour m_wheelFocusInverted: that setting is scoped
+    // to the strip's column-focus chord, and a tab run reads as a list rather
+    // than as a strip, so inheriting the strip's inversion would be a guess.
     if (mods != Qt::NoModifier || buttons != Qt::NoButton) {
         resetTabWheelAccumulators();
         return false;
@@ -444,6 +458,13 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
     // already resolved it to answer the hit test, so a null here is not
     // reachable today, but bailing after the spend would hand a partially
     // consumed stream to the ScrollFactor path if it ever became reachable.
+    //
+    // The EVENT's position, where the chord path uses wheelTargetScreen's
+    // cursorPos(). The two are not interchangeable here: this gesture is
+    // anchored to a pill the hit test already resolved from `pos`, so
+    // resolving the output from anything else could name a different screen
+    // from the one the pill was found on. The chord has no such anchor and
+    // asks where the cursor is.
     KWin::LogicalOutput* out = KWin::effects ? KWin::effects->screenAt(pos.toPoint()) : nullptr;
     if (!out) {
         resetTabWheelAccumulators();

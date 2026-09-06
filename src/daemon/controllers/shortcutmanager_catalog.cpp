@@ -131,7 +131,8 @@ constexpr struct
     const char* comment;
 } kScrollingCategory = QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
 constexpr const char* kModeNameContext = kScrollingCategory.comment;
-// Every scrolling row is authored with this category order.
+// The category order the prefix-keyed scrolling branch below must match.
+// The authored rows in the static table still spell the same value inline.
 constexpr int kScrollingCategoryOrder = 10;
 
 CatalogMeta catalogMetaForId(const QString& id)
@@ -357,7 +358,8 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdScrollCycleTabBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Shows the previous tab of the focused column, wrapping round to the last one at the "
-                              "start."));
+                              "start. In a column that is not tabbed it focuses the previous window up the "
+                              "stack."));
         // ── Column width ──
         add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Grows the focused column along the strip by the configured step."));
@@ -505,14 +507,15 @@ CatalogMeta catalogMetaForId(const QString& id)
     if (id.startsWith(QLatin1String(kScrollFocusTabPrefix))) {
         // Scrolling only, unlike the mode-neutral zone digits above: the
         // ordinal addresses a TAB of the focused column, which is a concept
-        // the other two engines have nothing to map onto. Ships unbound, so
-        // the family never compresses and each slot keeps its own row.
+        // the other two engines have nothing to map onto.
         return {kScrollingCategory.source,
                 kScrollingCategoryOrder,
                 "scrolling",
                 kModeNameContext,
                 nullptr,
-                QT_TRANSLATE_NOOP("plasmazones", "Shows the numbered tab of the focused column."),
+                QT_TRANSLATE_NOOP("plasmazones",
+                                  "Shows the numbered tab of the focused column. In a column that is not tabbed "
+                                  "it focuses that window in the stack."),
                 nullptr,
                 9000};
     }
@@ -601,8 +604,8 @@ QVariantList ShortcutManager::cheatsheetModel() const
     }
 
     // ─── Family compression ────────────────────────────────────────────────
-    // The numbered slot families (kIndexedSlotCount rows each) and the
-    // directional quads (4 rows each) dominate the sheet as walls of
+    // The compressed numbered slot families (kIndexedSlotCount rows each) and
+    // the directional quads (4 rows each) dominate the sheet as walls of
     // near-identical lines.
     // When every member of a family is assigned, all members share the same
     // modifier prefix, and each member's final key token is the expected one
@@ -611,7 +614,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // unassigned, a rebind off-pattern — falls back to the individual rows,
     // because a compressed row would then lie about what the keys do.
     using FamilySpec = CheatsheetFamily;
-    // ONLY the digit families and the directional quads compress. Opposed
+    // ONLY the three digit families and the directional quads compress. Opposed
     // PAIRS (the bracket/comma rotate and cycle pairs, the scrolling
     // Home/End, U/O, paging-key and letter+Shift pairs) deliberately do
     // NOT: every action keeps its own row, spelled out, so no direction is
@@ -622,10 +625,12 @@ QVariantList ShortcutManager::cheatsheetModel() const
     QStringList digitTokens;
     QStringList quickLayoutIds;
     QStringList snapToZoneIds;
+    QStringList scrollFocusTabIds;
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         digitTokens.append(QString::number(i + 1));
         quickLayoutIds.append(quickLayoutId(i));
         snapToZoneIds.append(snapToZoneId(i));
+        scrollFocusTabIds.append(scrollFocusTabId(i));
     }
     // One spelling of the digit range everywhere: the chip token and the row
     // labels used to disagree ("1…9" against "1-9") for no reason a reader
@@ -640,7 +645,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // the merge and a family needing distinct templates wording must be left
     // uncompressed rather than given one combined string.  The directional
     // quad members below all have empty explanations today; give the spec a
-    // combinedDescription before adding one. The two digit families are the
+    // combinedDescription before adding one. The three digit families are the
     // exception: their prefix-generated per-member explanation is identical
     // across members and reads correctly for the merged range row, so
     // keeping the first member's is right for them.
@@ -658,6 +663,12 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // and a visible tile in scrolling, so the row itself stays out of any
         // one mode's vocabulary.
         {snapToZoneIds, digitTokens, PhosphorI18n::tr("Zone %1").arg(digitRange), digitRange},
+        // Ships unbound, so this one does not compress by default. It still
+        // needs a spec: a user who binds all nine on one prefix would
+        // otherwise get nine near-identical rows where the two families above
+        // give one. Its prefix-generated explanation is identical across
+        // members, which is the exception the INVARIANT above sanctions.
+        {scrollFocusTabIds, digitTokens, PhosphorI18n::tr("Focus Tab %1").arg(digitRange), digitRange},
         {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
           QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
          arrowTokens,

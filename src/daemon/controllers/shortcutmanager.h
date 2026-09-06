@@ -81,9 +81,10 @@ public:
      * Idempotent — re-registering the same id updates the callback in place;
      * the description is updated in the registry record but is not re-sent to
      * the backend for an already-registered id (Registry::bind contract).
-     * Ids colliding with the settings-driven table or the indexed slot
-     * prefixes are rejected with a warning: an adhoc unregister on such an id
-     * would purge the persistent binding's saved kglobalshortcutsrc record.
+     * Ids colliding with the settings-driven table or any of the three
+     * indexed slot prefixes are rejected with a warning: an adhoc unregister
+     * on such an id would purge the persistent binding's saved
+     * kglobalshortcutsrc record.
      */
     void registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                std::function<void()> callback) override;
@@ -157,10 +158,10 @@ public:
 
     /**
      * Every action id in the file-local STATIC registration table, in
-     * declaration order. The two indexed slot families (quick_layout_N,
-     * snap_to_zone_N, kIndexedSlotCount ids each) are registered separately
-     * by buildEntries() and are NOT returned here — this is the static
-     * portion of the registration surface, not all of it.
+     * declaration order. The three indexed slot families (quick_layout_N,
+     * snap_to_zone_N, scroll_focus_tab_N, kIndexedSlotCount ids each) are
+     * registered separately by buildEntries() and are NOT returned here —
+     * this is the static portion of the registration surface, not all of it.
      *
      * The table is a file-local array with internal linkage, and
      * cheatsheetModel() is a COMPRESSED view of it (a directional quad or a

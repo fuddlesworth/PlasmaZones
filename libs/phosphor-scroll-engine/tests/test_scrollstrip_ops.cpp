@@ -604,13 +604,26 @@ void TestScrollStripOps::focusTileByOrdinalCountsDrawnTabs()
     // reach the user as a chord that jumps to the wrong tab.
     QVERIFY(!strip.focusTileByOrdinal(3));
     QVERIFY(!strip.focusTileByOrdinal(4));
+    // Non-positive ordinals pin the CONTRACT rather than the guard: the walk
+    // below cannot satisfy `++seen == 0` either, so this stays true with the
+    // explicit `ordinal < 1` test deleted. It is here so a future rewrite of
+    // the walk cannot quietly start accepting them.
     QVERIFY(!strip.focusTileByOrdinal(0));
+    QVERIFY(!strip.focusTileByOrdinal(-2));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
 
-    // Ordinals count the tabs the indicator DRAWS, not the raw slots: with
-    // the middle tile minimized, ordinal 2 is the THIRD slot. Step off c
-    // first — ordinal 2 already names it, and the already-there refusal above
-    // would otherwise hide whether the skip happened at all.
+    // Ordinals count the tiles that are DRAWN, not the raw slots: with the
+    // middle tile minimized, ordinal 2 is the THIRD slot. Step off c before
+    // asserting ordinal 2, because ordinal 2 ends up naming c and the
+    // already-there refusal above would otherwise hide whether the skip
+    // happened at all.
+    //
+    // NOTE this reaches `minimized` through the strip-level setter, which the
+    // PlasmaZones daemon never calls: the compositor reports a minimize as a
+    // FLOAT toggle, which takes the window out of the column entirely. So
+    // this arm pins the embedder-facing contract. The production analogue,
+    // where floating a middle tab renumbers the rest, is covered at the
+    // engine level in test_scrollengine_smoke.
     QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
     QVERIFY(strip.focusTileByOrdinal(1));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
