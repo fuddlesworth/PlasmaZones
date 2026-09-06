@@ -56,6 +56,54 @@ Item {
             });
         }
         cellRects = out;
+        _syncModel(out);
+    }
+
+    // Update the Repeater's rows in place instead of handing it a fresh array.
+    // A JS-array model reassignment destroys and rebuilds every delegate, so
+    // the geometry Behaviors below never run and the rects hard-cut on every
+    // engine change — the opposite of the "retarget, never jump" they exist
+    // for. Rows are matched by id so a cell keeps its delegate across a
+    // reorder; PlacementMiniature reconciles the same way.
+    function _syncModel(rows): void {
+        for (let i = 0; i < rows.length; ++i) {
+            const r = rows[i];
+            let at = -1;
+            for (let j = i; j < cellModel.count; ++j) {
+                if (cellModel.get(j).cellId === r.id) {
+                    at = j;
+                    break;
+                }
+            }
+            if (at === -1) {
+                cellModel.insert(i, _modelRow(r));
+                continue;
+            }
+            if (at !== i)
+                cellModel.move(at, i, 1);
+            const row = _modelRow(r);
+            for (const key in row)
+                cellModel.setProperty(i, key, row[key]);
+        }
+        while (cellModel.count > rows.length)
+            cellModel.remove(cellModel.count - 1);
+    }
+
+    function _modelRow(r) {
+        return {
+            "cellId": r.id,
+            "cx": r.x,
+            "cy": r.y,
+            "cw": r.w,
+            "ch": r.h,
+            "occupied": r.occupied,
+            "focused": r.focused,
+            "t": r.t
+        };
+    }
+
+    ListModel {
+        id: cellModel
     }
 
     Connections {
@@ -69,22 +117,28 @@ Item {
     Component.onCompleted: _resolve()
 
     Repeater {
-        model: root.cellRects
+        model: cellModel
         delegate: Rectangle {
             id: cell
 
-            required property var modelData
+            required property real cx
+            required property real cy
+            required property real cw
+            required property real ch
+            required property real t
+            required property bool occupied
+            required property bool focused
 
-            readonly property color _hue: Spectrum.at(modelData.t)
+            readonly property color _hue: Spectrum.at(cell.t)
 
-            x: Math.round(modelData.x)
-            y: Math.round(modelData.y)
-            width: Math.max(1, Math.round(modelData.w))
-            height: Math.max(1, Math.round(modelData.h))
+            x: Math.round(cell.cx)
+            y: Math.round(cell.cy)
+            width: Math.max(1, Math.round(cell.cw))
+            height: Math.max(1, Math.round(cell.ch))
             radius: Tokens.radius_edge
-            color: Qt.rgba(_hue.r, _hue.g, _hue.b, modelData.occupied ? root.fillOpacity : root.fillOpacity / 2)
+            color: Qt.rgba(_hue.r, _hue.g, _hue.b, cell.occupied ? root.fillOpacity : root.fillOpacity / 2)
             border.width: 1
-            border.color: modelData.focused ? Spectrum.focus : Qt.rgba(_hue.r, _hue.g, _hue.b, root.strokeOpacity)
+            border.color: cell.focused ? Spectrum.focus : Qt.rgba(_hue.r, _hue.g, _hue.b, root.strokeOpacity)
 
             // Rects follow the engine (live mode): retarget, never jump.
             Behavior on x {

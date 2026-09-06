@@ -44,6 +44,8 @@ FocusScope {
     property Component contentComponent: null
 
     Loader {
+        id: contentLoader
+
         parent: body
         anchors.fill: parent
         active: root.open && root.contentComponent !== null
@@ -216,6 +218,14 @@ FocusScope {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                // A bare Item derives no implicit size from an anchors-filled
+                // child, so without this `body.implicitHeight` is permanently
+                // 0 and the panel's own implicitHeight (and the host's
+                // max against the grid) can never account for the detail
+                // view — a tall one is clipped. Read from the loaded ITEM's
+                // intrinsic implicitHeight rather than from the loader's
+                // filled size, which would close a loop through the anchor.
+                implicitHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
             }
         }
     }

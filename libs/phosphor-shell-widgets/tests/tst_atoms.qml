@@ -15,6 +15,14 @@ TestCase {
     id: testCase
 
     name: "PhosphorAtoms"
+    // Several cases drive forceActiveFocus() and keyClick(). Qt's keyboard
+    // helpers need a shown window, so without these they do not deliver and
+    // the assertions behind them prove nothing. Matches tst_ripple_clip.qml
+    // in this same directory.
+    when: windowShown
+    visible: true
+    width: 200
+    height: 60
 
     Component {
         id: buttonComp

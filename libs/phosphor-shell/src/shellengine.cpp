@@ -990,6 +990,13 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
             window->requestUpdate();
             return;
         }
+        // Reverting from an explicit region back to the band rule has to clear
+        // the flag the explicit branch may have set. QWaylandWindow tests it
+        // before the mask, so leaving it set would keep the panel click-through
+        // for the life of the surface no matter what mask is applied below.
+        if (window->isVisible()) {
+            window->setFlag(Qt::WindowTransparentForInput, false);
+        }
         const QRect visible = PanelWindow::visibleBand(edge, guardedPanel->effectiveInputThickness(), window->size());
         if (visible.isEmpty()) {
             return;

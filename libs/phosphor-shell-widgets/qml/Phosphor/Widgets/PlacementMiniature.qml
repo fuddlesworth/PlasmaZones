@@ -12,13 +12,15 @@
 // nothing else (05 §2, claim 1).
 //
 // The map is drawn in two layers. FILLS are per cell, keyed by id: a cell
-// that appears enters (scale 0.7 → 1 over 180 ms on the reveal curve), a
+// that appears enters (scale 0.7 → 1 on the reveal curve and duration,
+// which reduced motion shortens), a
 // cell that goes releases (opacity to 0 over release_long) and is then
 // dropped, and a cell that stays retargets its geometry. EDGES are the
 // cell set's lines, kept in their own persistent model and reconciled
 // through MiniatureEdges.js on every `changed()`: an edge within 6 % of
 // an existing edge of the same orientation retargets, a new edge enters
-// (opacity over 180 ms, staggered 15 ms in reading order, capped 150 ms),
+// (opacity over the reveal duration, staggered 15 ms in reading order,
+// capped 150 ms),
 // a vanished edge releases (720 ms) and is dropped, and at most two
 // generations are drawn, the live one and the releasing one (A2 §2).
 // That is what makes a mode morph read as one shape: the 50/50 split
@@ -408,13 +410,13 @@ Item {
                 NumberAnimation {
                     from: 0.4
                     to: 1.0
-                    duration: 600
+                    duration: Motion.duration_long_4
                     easing: Motion.decelerated
                 }
                 NumberAnimation {
                     from: 1.0
                     to: 0.4
-                    duration: 600
+                    duration: Motion.duration_long_4
                     easing: Motion.accelerated
                 }
                 onRunningChanged: {
@@ -466,7 +468,10 @@ Item {
             Component.onCompleted: scale = 1
             Behavior on scale {
                 NumberAnimation {
-                    duration: 180
+                    // Token, not a literal: the release path below is already
+                    // reduced-motion aware and this enter was not, so a
+                    // reduced-motion user still got the full scale-in.
+                    duration: Motion.duration_reveal
                     easing: Motion.reveal
                 }
             }
@@ -601,7 +606,7 @@ Item {
                         duration: edge.phase === "enter" ? edge.delay : 0
                     }
                     NumberAnimation {
-                        duration: edge.phase === "release" ? (Motion.reducedMotion ? Motion.duration_release : Motion.duration_release_long) : 180
+                        duration: edge.phase === "release" ? (Motion.reducedMotion ? Motion.duration_release : Motion.duration_release_long) : Motion.duration_reveal
                         easing: edge.phase === "release" ? Motion.release : Motion.reveal
                     }
                     ScriptAction {

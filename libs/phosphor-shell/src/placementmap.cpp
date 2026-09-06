@@ -13,6 +13,7 @@
 #include <QSize>
 
 #include <algorithm>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcPlacementMap, "phosphorshell.placementmap")
 
@@ -706,7 +707,20 @@ PlacementMap::PlacementMap(QObject* parent)
     setAvailable(QDBusConnection::sessionBus().interface()->isServiceRegistered(Name));
 }
 
-PlacementMap::~PlacementMap() = default;
+PlacementMap::~PlacementMap()
+{
+    // The screens have to die BEFORE this object's own members and before
+    // ~QObject reaps the children. Every PlacementMapScreen destructor calls
+    // unregisterDropProxy(), which reads m_caps and calls through m_bus — and
+    // m_bus is built in the init list, so it is child index 0 and ~QObject
+    // would delete it first, leaving those reads pointing at freed memory.
+    // Only reachable with a proxy registered (snapping with the bar up), which
+    // is why it has not shown up as a routine crash.
+    for (PlacementMapScreen* screen : std::as_const(m_screens)) {
+        delete screen;
+    }
+    m_screens.clear();
+}
 
 PlacementMap* PlacementMap::create(QQmlEngine* engine, QJSEngine* scriptEngine)
 {
