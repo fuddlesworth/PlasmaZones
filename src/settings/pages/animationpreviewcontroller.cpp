@@ -475,7 +475,9 @@ void AnimationPreviewController::bindClassTextures(QQuickItem* item, const QStri
     }
     // Slot map mirrors the UBO-branch sampler aliases in the shared
     // transition includes: uFromDesktop=1, uToDesktop=2, uStrip=1,
-    // uOldWindow=3.
+    // uBelow=2 (deliberately unfed for the strip class: the stand-in scene
+    // IS the strip layer, and an unfed slot reads transparent so the
+    // below-strip subtraction stays the identity), uOldWindow=3.
     if (eventClass == QLatin1String("desktop")) {
         shaderItem->setUserTexture(1, desktopFromImage());
         shaderItem->setUserTexture(2, desktopToImage());
