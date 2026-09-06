@@ -563,9 +563,13 @@ Item {
     function togglePowerMenu(source: Item): void {
         let alignRight = false;
         if (source && source.width > 0) {
+            // The bar spans its screen from x 0, so window coordinates are
+            // screen coordinates. The screen comes from the controller,
+            // which marks it C++-owned: reading a QScreen through a
+            // window's attached property hands it to the JS collector.
             const p = source.mapToItem(null, 0, 0);
-            const w = source.Window.window;
-            const screenWidth = w && w.screen ? w.screen.width : Screen.width;
+            const screen = ControlCenterRegistry.screenOf(source);
+            const screenWidth = screen ? screen.width : Screen.width;
             alignRight = p.x + source.width / 2 > screenWidth / 2;
         }
         // Nothing to do about the control center here: it is a Cooperative
