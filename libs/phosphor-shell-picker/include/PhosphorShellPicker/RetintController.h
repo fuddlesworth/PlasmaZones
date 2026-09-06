@@ -133,7 +133,9 @@ private Q_SLOTS:
 private:
     void startRun();
     void ensureSnapshot();
-    void applyToStore(const QVariantMap& tokens);
+    // Returns false when nothing reached the store, so a caller does not
+    // latch a preview path the user cannot see.
+    [[nodiscard]] bool applyToStore(const QVariantMap& tokens);
     void setPreviewPath(const QString& path);
     void setBusy(bool busy);
     void setLastError(const QString& error);

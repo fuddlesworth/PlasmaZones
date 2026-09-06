@@ -174,6 +174,11 @@ FocusScope {
         candidates.currentPath = priv.currentPath;
         candidates.rescan();
         presets.rescan();
+        // A click assigns currentIndex directly, which severs its `-1`
+        // binding for good. Without this the reopened picker still highlights
+        // the row from the last session, and any later change to that index
+        // writes the old row's path back over selectedPath.
+        candidateList.currentIndex = -1;
         priv.selectedPath = priv.currentPath;
         priv.selectedPreset = "";
         priv.hoveredPath = "";

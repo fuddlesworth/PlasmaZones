@@ -154,6 +154,10 @@ void PlacementMapScreen::serviceLost()
     m_lastBatch.clear();
     m_sourceLens = QRectF();
     m_sourceStripExtentPx = 0;
+    // Same reset reseed() performs. Left out here, the strip keeps drawing
+    // the overflow arrows of the strip the dead daemon last described.
+    m_sourceOverflowLeft = 0;
+    m_sourceOverflowRight = 0;
     m_focusedWindowId.clear();
     m_focusFromDaemon = false;
     clearPinnedSource();
@@ -914,11 +918,20 @@ void PlacementMap::noteReferencedWindows(PlacementMapScreen* screen, const QSet<
 
 void PlacementMap::pruneMetadata()
 {
+    // Liveness is pointer identity against the screens the map owns, not a
+    // key rebuilt by dereferencing the entry. Rebuilding it has to read
+    // through the key to ask whether the key is safe to read, and it silently
+    // drops a screen whose name or pin no longer hashes to the slot it was
+    // inserted under — which would prune the metadata of live windows.
+    const QSet<PlacementMapScreen*> live(m_screens.cbegin(), m_screens.cend());
     QSet<QString> keep;
-    for (auto it = m_referenced.cbegin(); it != m_referenced.cend(); ++it) {
-        if (m_screens.contains(screenKey(it.key()->screenName(), it.key()->pinnedDesktop()))) {
-            keep.unite(it.value());
+    for (auto it = m_referenced.begin(); it != m_referenced.end();) {
+        if (!live.contains(it.key())) {
+            it = m_referenced.erase(it);
+            continue;
         }
+        keep.unite(it.value());
+        ++it;
     }
     for (auto it = m_occupancy.cbegin(); it != m_occupancy.cend(); ++it) {
         keep.insert(it.key());

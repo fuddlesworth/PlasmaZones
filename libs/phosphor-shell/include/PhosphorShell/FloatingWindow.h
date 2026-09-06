@@ -46,8 +46,8 @@ class PHOSPHORSHELL_EXPORT FloatingWindow : public QQuickItem
     Q_PROPERTY(int minimumHeight READ minimumHeight WRITE setMinimumHeight NOTIFY minimumHeightChanged)
     // Ask the compositor for no server-side decoration: a frameless
     // toplevel draws its own edge. A shell pane sets this so it reads as a
-    // tile, not a titled window. Read at window creation, so set it before
-    // the first show.
+    // tile, not a titled window. Applied live: a window already up has its
+    // flags reset, so this may be toggled at any point in its life.
     Q_PROPERTY(bool frameless READ isFrameless WRITE setFrameless NOTIFY framelessChanged)
 
 public:

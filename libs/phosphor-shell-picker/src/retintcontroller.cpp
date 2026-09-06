@@ -224,7 +224,13 @@ void RetintController::previewTokens(const QVariantMap& tokens, const QString& l
     m_pendingPath.clear();
     ensureSnapshot();
     setLastError({});
-    applyToStore(tokens);
+    if (!applyToStore(tokens)) {
+        // Nothing reached the store, so there is no preview to announce.
+        // Latching the path here would additionally make preview() refuse
+        // this candidate forever through its "already showing" guard.
+        setLastError(QStringLiteral("the palette reached no store"));
+        return;
+    }
     setPreviewPath(label);
     Q_EMIT previewApplied(label);
 }
@@ -284,7 +290,10 @@ void RetintController::onPaletteReady(const QVariantMap& tokens, const QString& 
     if (!m_hasSnapshot) {
         // commit() ran while this was in flight: the palette lands and is
         // kept, and persists like a commit of a landed preview.
-        applyToStore(tokens);
+        if (!applyToStore(tokens)) {
+            setLastError(QStringLiteral("the palette reached no store"));
+            return;
+        }
         setPreviewPath(wallpaperPath);
         if (!m_persistPath.isEmpty() && m_store && !writePalette(m_persistPath, storePalette())) {
             qCWarning(lcRetint) << "the committed palette was not saved to" << m_persistPath;
@@ -292,7 +301,10 @@ void RetintController::onPaletteReady(const QVariantMap& tokens, const QString& 
         Q_EMIT previewApplied(wallpaperPath);
         return;
     }
-    applyToStore(tokens);
+    if (!applyToStore(tokens)) {
+        setLastError(QStringLiteral("the palette reached no store"));
+        return;
+    }
     setPreviewPath(wallpaperPath);
     Q_EMIT previewApplied(wallpaperPath);
 }
@@ -338,10 +350,10 @@ void RetintController::ensureSnapshot()
     Q_EMIT previewingChanged();
 }
 
-void RetintController::applyToStore(const QVariantMap& tokens)
+bool RetintController::applyToStore(const QVariantMap& tokens)
 {
     if (!m_store) {
-        return;
+        return false;
     }
     // Only the tokens the palette already publishes, minus the brand
     // stops: the restore is then an exact merge of the snapshot, and the
@@ -355,9 +367,10 @@ void RetintController::applyToStore(const QVariantMap& tokens)
         }
     }
     if (filtered.isEmpty()) {
-        return;
+        return false;
     }
     QMetaObject::invokeMethod(m_store, "applyTokens", Q_ARG(QVariantMap, filtered));
+    return true;
 }
 
 void RetintController::setPreviewPath(const QString& path)
