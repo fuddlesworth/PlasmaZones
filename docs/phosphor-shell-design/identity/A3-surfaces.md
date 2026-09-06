@@ -451,7 +451,10 @@ about to lose.
 
 ### b) Layout
 
-- The column is 320 px wide, anchored to the left screen edge, full height.
+- The column is 320 px wide, anchored to the screen edge the menu was
+  summoned from (the left edge for a keybind; the bar button's edge, starting
+  under the bar, when the button opened it, so the pointer is already on the
+  words), full height.
   Ground: void `#050916` at 70%, no radius, right edge 1 px cyan line. The
   rest of the screen is the dimmed desktop with no ground.
 - Six rows, 72 px tall, vertically centred as a block: `Lock`, `Suspend`,

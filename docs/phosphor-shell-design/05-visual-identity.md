@@ -171,7 +171,7 @@ changed digit (R7).
 | Toasts | A 2 px band (purple; rose if critical) on the top edge of the app's window with the card hanging 8 px inside it; screen-edge anchor only when the app has no window. Band retracts. Drag a toast into a rect to open the app there. |
 | Notification center | A strip column / left leaf / left zone the engine places, holding history rows you can drag out into the map. |
 | OSDs | Value bands on the edge that concerns them: volume/mic on the focused window's bottom edge, brightness on the screen's right edge, caps on the focused window's top edge, idle/power on the bar clock, media as a playback band. Readout rides the fill point. Bands coexist and travel when focus moves. |
-| Power menu | The compositor dims the desktop; a column of words on the left edge, coloured by destructiveness (lock cyan → shut down rose). Underlined first letters. Commit is a spectrum wipe. |
+| Power menu | The compositor dims the desktop; a column of words on the edge it was summoned from, coloured by destructiveness (lock cyan → shut down rose). Underlined first letters. Commit is a spectrum wipe. |
 | Lockscreen | The layout you left, as static 1 px spectrum outlines with 8% fill and the app glyph centred, on void. Clock and auth in the largest empty region. Unlock fills the outlines with the real windows. |
 | Dashboard | Every desktop's live placement map at once, a grid, the current one outlined blue; calendar, weather and media are three same-grammar cells in the last row. The shell's single scale transition. |
 | Picker | A bottom-edge strip of candidates; hovering one retints the live desktop and every surface pack for as long as it is hovered (`prismata` carries the transition). |

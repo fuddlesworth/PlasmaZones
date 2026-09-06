@@ -557,7 +557,19 @@ Item {
         Popouts.toggle(request);
     }
 
-    function togglePowerMenu(): void {
+    // `source` is the bar button that summoned it, or null for a keybind:
+    // the column lands on the button's edge, under the bar, so the pointer
+    // that pressed it is already on the words.
+    function togglePowerMenu(source: Item): void {
+        let alignRight = false;
+        let originY = -1;
+        if (source && source.width > 0) {
+            const p = source.mapToItem(null, 0, 0);
+            const w = source.Window.window;
+            const screenWidth = w && w.screen ? w.screen.width : Screen.width;
+            alignRight = p.x + source.width / 2 > screenWidth / 2;
+            originY = Tokens.bar_thickness + Tokens.spacing_xl;
+        }
         // Nothing to do about the control center here: it is a Cooperative
         // popout on the same controller, so opening this Modal one closes
         // it through the controller's own arbitration.
@@ -575,7 +587,9 @@ Item {
             // bound in the Component: ids from this file do not resolve in
             // the root context the transport builds the delegate against.
             "props": {
-                "session": sessionCoordinator.session
+                "session": sessionCoordinator.session,
+                "alignRight": alignRight,
+                "originY": originY
             },
             "anchor": PhosphorPopout.Anchor.ScreenCenter,
             "exclusive": PhosphorPopout.ExclusiveMode.Modal,
@@ -599,7 +613,7 @@ Item {
             if (Popouts.modalActive && id !== "power")
                 return;
             if (id === "power")
-                root.togglePowerMenu();
+                root.togglePowerMenu(source);
             else if (id === "controlcenter")
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
@@ -624,11 +638,11 @@ Item {
 
         function show(): void {
             if (!Popouts.isOpen("power"))
-                root.togglePowerMenu();
+                root.togglePowerMenu(null);
         }
 
         function toggle(): void {
-            root.togglePowerMenu();
+            root.togglePowerMenu(null);
         }
     }
 

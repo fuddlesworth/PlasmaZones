@@ -8,7 +8,13 @@
 // the six session actions are 24 px words down the left edge, coloured
 // on the state axis by how destructive they are (Lock cyan through Shut
 // down rose), each with its one-letter shortcut underlined. A 3 px
-// selection line on the screen's left edge slides between words.
+// selection line on the screen's edge slides between words.
+//
+// The column sits on the edge the menu was summoned from: the left edge,
+// vertically centred, for a keybind or `phosphorctl`; the button's edge,
+// starting under the bar, when the bar's power button opened it, so the
+// pointer that pressed the button is already on the words (`alignRight`,
+// `originY`).
 //
 // Destructive actions (log out, restart, shut down) take two presses: the
 // first grows the line to 6 px and starts a 3 s countdown that shortens
@@ -41,6 +47,14 @@ FocusScope {
 
     readonly property int rowHeight: 72
     readonly property int confirmMs: 3000
+
+    // Which screen edge the column and the selection line hug. False is
+    // the spec's left edge; the host sets true when the summoning button
+    // sits in the right half of the bar.
+    property bool alignRight: false
+    // Screen y the column's top should start at (the bar's bottom edge
+    // when a bar button opened the menu). Negative centres the block.
+    property real originY: -1
 
     // Id of the selected action, and the id awaiting its second press
     // (or ""). Ids, not indices: rows come and go with logind's answers.
@@ -240,7 +254,7 @@ FocusScope {
         opacity: 0.6
     }
 
-    // The selection line on the screen's left edge. 3 px, 6 px while an
+    // The selection line on the column's screen edge. 3 px, 6 px while an
     // action is armed, shortening with the countdown.
     Rectangle {
         id: selectionLine
@@ -249,7 +263,7 @@ FocusScope {
         readonly property Item _row: root._rows[root.selectedId] ?? null
         readonly property bool _armed: _action !== null && root.armed === _action.id
 
-        x: 0
+        x: root.alignRight ? root.width - width : 0
         y: column.y + (_row ? _row.y : 0)
         width: _armed ? 6 : 3
         height: root.rowHeight * (_armed ? countdown.remaining : 1)
@@ -296,8 +310,13 @@ FocusScope {
     Column {
         id: column
 
-        x: 48
-        anchors.verticalCenter: parent.verticalCenter
+        // Named so the tests can check where the words landed.
+        objectName: "powerColumn"
+
+        x: root.alignRight ? root.width - 48 - width : 48
+        // Under the summoning button, clamped to the screen; centred when
+        // nothing summoned it from a point.
+        y: root.originY >= 0 ? Math.max(Tokens.spacing_xl, Math.min(root.originY, root.height - height - Tokens.spacing_xl)) : Math.round((root.height - height) / 2)
         spacing: 0
 
         // One row per action, hidden (and skipped by the Column) when
@@ -365,6 +384,9 @@ FocusScope {
 
         Row {
             anchors.verticalCenter: parent.verticalCenter
+            // Words hug the column's screen edge.
+            anchors.right: root.alignRight ? parent.right : undefined
+            layoutDirection: root.alignRight ? Qt.RightToLeft : Qt.LeftToRight
             spacing: Tokens.spacing_m
 
             Text {
