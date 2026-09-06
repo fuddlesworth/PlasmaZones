@@ -18,8 +18,9 @@ Item {
     id: root
 
     property var host: null
-    // The player on display. Re-picked on every player edge; a test can
-    // hand one in directly.
+    // The player on display. Re-picked whenever the set of players changes
+    // OR any of them starts or stops, since the pick prefers whichever is
+    // playing; a test can hand one in directly.
     property var player: null
 
     function _pick(): void {
@@ -45,6 +46,25 @@ Item {
         target: root.host
         function onPlayerCountChanged() {
             root._pick();
+        }
+    }
+
+    // The host has no aggregate playback signal, only per-player ones, so
+    // watch each player. Without this a paused player that starts changes no
+    // count and the cell keeps showing the wrong one — the pick prefers the
+    // playing player, so it has to re-run on that edge.
+    Instantiator {
+        model: root.host ? root.host.playerCount : 0
+        delegate: QtObject {
+            required property int index
+            readonly property var watched: root.host ? root.host.playerAt(index) : null
+
+            readonly property Connections conn: Connections {
+                target: watched
+                function onIsPlayingChanged() {
+                    root._pick();
+                }
+            }
         }
     }
     onHostChanged: _pick()

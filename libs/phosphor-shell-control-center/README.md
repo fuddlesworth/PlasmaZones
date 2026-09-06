@@ -14,7 +14,7 @@ Phase 4.4 deliverable per
 
 ## Responsibility
 
-Own the tile grid, the drill-in detail view, and the routing between
+Own the rail list, the drill-in detail view, and the routing between
 them. The surface knows how a control tile *behaves*; it does not know
 what any particular tile controls.
 
@@ -62,10 +62,10 @@ that would cost.
 
 | Component       | Role                                                                                          |
 |-----------------|-----------------------------------------------------------------------------------------------|
-| `ControlCenter` | Tile grid + detail routing. Materialises tiles from a provider, owns their teardown, applies each tile's layout hint, and arbitrates the one-detail-view-at-a-time rule. |
-| `Tile`          | Chrome for a **toggle**: icon, label, live readout, filled/outlined active treatment, ripple, and an optional detail chevron. Occupies one cell. |
-| `SliderTile`    | Chrome for a **range** (volume, brightness): the same surface with a `PhosphorSlider` and a tappable icon for mute. Spans the full grid width. |
-| `DetailPanel`   | The drill-in view: titled surface with a back affordance that slides over the grid. Content comes from the tile. |
+| `ControlCenter` | Rail list + detail routing. Materialises tiles from a provider, owns their teardown, applies each tile's layout hint, and arbitrates the one-detail-view-at-a-time rule. |
+| `Tile`          | Chrome for a **toggle**: a 52 px rail with icon, label, live readout, a 2 px state-axis underline, and an optional detail chevron. Spans the pane. |
+| `SliderTile`    | Chrome for a **range** (volume, brightness): the same rail, where the underline itself is the slider, with a tappable icon for mute. Spans the pane. |
+| `DetailPanel`   | The drill-in view: titled surface with a back affordance that slides over the rails. Content comes from the tile. |
 
 ### Built-in tiles
 
@@ -78,8 +78,9 @@ that would cost.
 | `BrightnessTile` | the first Display-kind `BrightnessDevice`                           | slider |
 
 Layout is the host's job: a tile declares `spansRow` and `ControlCenter`
-turns that into a column span, so a tile never has to know how many
-columns the grid has.
+stretches it to the pane, so a tile never has to know the pane's width.
+Every shipped control is a rail that spans, and a provider-supplied tile
+that declares otherwise is honoured.
 
 ## Tiles do not self-latch
 
@@ -97,7 +98,6 @@ ControlCenter {
     anchors.fill: parent
     provider: controlCenterController   // Registry-backed, from the shell
     tileIds: ["network", "bluetooth", "audio", "brightness"]
-    columns: 2
 }
 ```
 
@@ -157,7 +157,7 @@ suite over the host's registry-agnostic contract.
 
 Built only with `-DBUILD_PHOSPHOR_SHELL=ON`, which is off by default.
 The acceptance demo is `examples/phosphor-control-center-demo/`, a plain
-window that hosts the grid over the real services, so a tile whose service
+window that hosts the rails over the real services, so a tile whose service
 is missing on the machine reports itself unavailable rather than vanishing.
 
 One thing is deliberately unfinished. `DetailPanel` has a content path, and
