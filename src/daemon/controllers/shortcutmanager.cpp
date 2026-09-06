@@ -898,7 +898,7 @@ bool collidesWithSettingsDrivenId(const QString& id)
         return QSet<QString>(ids.cbegin(), ids.cend());
     }();
     return kStaticIdSet.contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
-        || id.startsWith(QLatin1String(kSnapToZonePrefix));
+        || id.startsWith(QLatin1String(kSnapToZonePrefix)) || id.startsWith(QLatin1String(kScrollFocusTabPrefix));
 }
 } // namespace
 

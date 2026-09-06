@@ -262,17 +262,37 @@ void PlasmaZonesEffect::pointerAxis(KWin::PointerAxisEvent* event)
     // that filter is ordered below the Effects filter, so an event the
     // interception claims never reaches it. Route the chord here so wheeling
     // over a tab pill still moves the strip.
+    //
+    // Both axis gestures must be routed here, in the same order the filter
+    // uses them. The interception is held for exactly as long as the pointer
+    // sits over a pill, so this is the ONLY path an unmodified wheel over a
+    // pill can take; routing the chord alone would leave the tab wheel
+    // reachable only in the residual cases where no interception is held
+    // (a pill appearing under a stationary cursor, a live drag, teardown).
     if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
         return;
     }
+    // The client never sees a claimed tick, so end the ScrollFactor stream
+    // exactly as the filter's own branches do. Skipping this would leave a
+    // fractional v120 remainder to be applied to the next tick the client
+    // DOES see.
     if (m_tilingHandler->handleWheelChord(event->delta, event->deltaV120, event->orientation, event->modifiers,
-                                          event->buttons)
-        && m_overhangInputFilter) {
-        // The client never sees a claimed tick, so end the ScrollFactor
-        // stream exactly as the filter's own chord branch does. Skipping this
-        // would leave a fractional v120 remainder to be applied to the next
-        // tick the client DOES see.
-        m_overhangInputFilter->resetScrollFactorStream();
+                                          event->buttons)) {
+        if (m_overhangInputFilter) {
+            m_overhangInputFilter->resetScrollFactorStream();
+        }
+        return;
+    }
+    // Tab indicators next, and AFTER the chords, matching the filter: a chord
+    // is an explicit modifier gesture over the strip and must keep working
+    // wherever the cursor sits, including over a pill. What reaches here is
+    // an unmodified wheel, so an application's own Ctrl+wheel is never
+    // swallowed either.
+    if (m_tilingHandler->handleTabWheel(event->position, event->delta, event->deltaV120, event->orientation,
+                                        event->modifiers, event->buttons)) {
+        if (m_overhangInputFilter) {
+            m_overhangInputFilter->resetScrollFactorStream();
+        }
     }
 }
 

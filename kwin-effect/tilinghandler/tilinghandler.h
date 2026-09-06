@@ -2124,6 +2124,12 @@ private:
     // from one to the other.
     qreal m_tabWheelAccumVertical = 0.0;
     qreal m_tabWheelAccumHorizontal = 0.0;
+    // The tab the live tab-wheel gesture last asked for. The walk anchors on
+    // this rather than on the model's `active` flag because that flag only
+    // catches up once the daemon relays the focus back, and the next notch
+    // routinely arrives first. Cleared with the accumulators, so it lives
+    // exactly as long as the gesture that set it.
+    QString m_tabWheelAnchor;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

@@ -400,6 +400,9 @@ void TilingHandler::resetTabWheelAccumulators()
 {
     m_tabWheelAccumVertical = 0.0;
     m_tabWheelAccumHorizontal = 0.0;
+    // The walk anchor is gesture state too: it must not survive to re-anchor
+    // a later gesture on a tab the user has since navigated away from.
+    m_tabWheelAnchor.clear();
 }
 
 bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 deltaV120, Qt::Orientation orientation,
@@ -437,6 +440,15 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
         resetTabWheelAccumulators();
         return false;
     }
+    // Resolve the output BEFORE spending any notches. scrollTabPillAt above
+    // already resolved it to answer the hit test, so a null here is not
+    // reachable today, but bailing after the spend would hand a partially
+    // consumed stream to the ScrollFactor path if it ever became reachable.
+    KWin::LogicalOutput* out = KWin::effects ? KWin::effects->screenAt(pos.toPoint()) : nullptr;
+    if (!out) {
+        resetTabWheelAccumulators();
+        return false;
+    }
     const std::optional<qreal> notches = wheelNotches(delta, deltaV120);
     if (!notches) {
         resetTabWheelAccumulators();
@@ -451,18 +463,31 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
         // scrolls its own content between the steps the user does spend.
         return true;
     }
+    const ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
+    // Anchor the walk on the tab the COLUMN is showing, NEVER on the pill
+    // under the cursor. Activating a tab recolours the pills but does not
+    // reorder them, so the cursor keeps naming the same pill for the whole
+    // gesture; anchoring there would resolve every event to that one pill's
+    // neighbour and the wheel would move a single tab and then stick.
+    //
+    // The gesture's own last target wins while it is still in this run,
+    // because the model's `active` flag only catches up once the daemon
+    // relays the focus back and the next notch routinely arrives first.
+    // Falling back to the model covers the first notch of a fresh gesture,
+    // and to the hovered pill when the run has no active tab at all.
+    QString target = m_tabWheelAnchor;
+    if (target.isEmpty() || painter->indicatorFor(out, hovered) != painter->indicatorFor(out, target)) {
+        target = painter->activePillFor(out, hovered);
+    }
+    if (target.isEmpty()) {
+        target = hovered;
+    }
+    const QString anchor = target;
     // Walk the ring one tab per step rather than jumping `steps` at once: the
     // painter's model is the only thing that knows the run, and each hop must
     // start from where the last one landed. The hop is resolved entirely from
     // the model — nothing round-trips to the daemon between steps, so a
     // multi-notch event cannot read a half-applied strip.
-    KWin::LogicalOutput* out = KWin::effects ? KWin::effects->screenAt(pos.toPoint()) : nullptr;
-    if (!out) {
-        resetTabWheelAccumulators();
-        return false;
-    }
-    const ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
-    QString target = hovered;
     for (int i = 0; i < steps; ++i) {
         const QString next = painter->neighbourPill(out, target, step);
         if (next.isEmpty()) {
@@ -474,14 +499,20 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
     // the target where it started. Consume anyway: the cursor IS over a pill,
     // and letting that one case fall through to the app would scroll the
     // window's content out from under an indicator the user is pointing at.
-    if (target == hovered) {
+    if (target == anchor) {
+        return true;
+    }
+    // Unlike the click path, which falls through to whatever is underneath
+    // when the tab's window died between the payload and the press, a wheel
+    // tick here is CONSUMED. A click is a single deliberate act and passing
+    // it on is recoverable; a wheel gesture is a stream, and letting one tick
+    // of it reach the app would scroll that app's content mid-gesture.
+    if (!m_effect->findWindowByIdExact(target)) {
         return true;
     }
     // The activation the click path uses. One owner of "which tab is active":
     // focus the tab's window and let the strip learn through windowFocused.
-    if (!m_effect->findWindowByIdExact(target)) {
-        return true;
-    }
+    m_tabWheelAnchor = target;
     slotFocusWindowRequested(target);
     return true;
 }
