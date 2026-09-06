@@ -644,7 +644,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Rebuilt for KWin 6.1.2**: the PlasmaZones KWin effect is compiled against a specific KWin version and will not load under a different one, so this release rebuilds the effect for KWin 6.1.2. Update to it once your system moves to that KWin, otherwise window dragging, shortcuts, and snapping stop working.
+- **Rebuilt for the current KWin**: the PlasmaZones KWin effect is compiled against a specific KWin version and will not load under a different one, so this release rebuilds the effect for the KWin this Plasma update ships. Update to it once your system has moved to that KWin, otherwise window dragging, shortcuts, and snapping stop working.
 - **Shorter KWin version-mismatch warning**: when the installed effect was built for a different KWin than the one running, the notification now gives just the diagnosis and the rebuild-and-reinstall fix, without the NixOS-specific install note.
 
 ## [3.1.2] - 2026-06-25

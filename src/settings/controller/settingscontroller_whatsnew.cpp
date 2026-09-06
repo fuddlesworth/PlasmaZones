@@ -126,7 +126,7 @@ void SettingsController::loadWhatsNew()
         release[QStringLiteral("version")] = versionString;
         release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
         // Version series ("3.4" for 3.4.13). The dialog's left rail groups
-        // all 158 releases under these, so it is cheaper to cut the string
+        // all 159 releases under these, so it is cheaper to cut the string
         // once here than per-frame in a QML delegate.
         const QStringList parts = versionString.split(QLatin1Char('.'));
         release[QStringLiteral("series")] = parts.size() >= 2 ? parts.mid(0, 2).join(QLatin1Char('.')) : versionString;
@@ -163,7 +163,7 @@ void SettingsController::loadWhatsNew()
         }
         release[QStringLiteral("highlights")] = highlights;
         // "New to you" mark, against the session-start baseline. A first
-        // launch has no baseline. Marking all 158 releases unseen there would
+        // launch has no baseline. Marking all 159 releases unseen there would
         // put the entire history behind the "since your last version" digest,
         // which is exactly what it is not for, so a user with no stored
         // baseline gets no marks.

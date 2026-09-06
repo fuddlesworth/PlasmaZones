@@ -69,7 +69,7 @@
             "version": "3.4.6",
             "date": "2026-09-01",
             "highlights": [
-                "Changed: This release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1029, #1030)",
+                "Changed: The daemon and the KWin effect exchange fullscreen and virtual-desktop state, so both must be rebuilt and installed together (#1029, #1030)",
                 "Fixed: Maximizing a window on a scrolling monitor fills the screen and stays filled, instead of shrinking back a moment later or hanging a gap's width off the edge (#1031, #1033)",
                 "Fixed: A window snapped into a zone on a second monitor is no longer recomputed onto the primary one (#1032)",
                 "Fixed: Floating a window puts it back where that window itself was, on the monitor it is on, rather than borrowing a position from another window or another monitor (#1030, #1031)",
@@ -86,7 +86,7 @@
             "highlights": [
                 "New: Windows come back on the virtual desktop they were on when you logged out, instead of all landing on whichever desktop is showing. Put windows back on their virtual desktop, under General → Session restore, turns it off. Both were removed again in 3.4.8 (#1019)",
                 "New: The support report summarizes your session state rather than dumping session.json, and a new Placement Modes section says which mode each screen resolves to (#1022)",
-                "Changed: This release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1019)",
+                "Changed: The daemon and the KWin effect exchange why a window is being placed, so a login restore is told apart from a window arriving on a desktop you switched to, and both must be rebuilt and installed together (#1019)",
                 "Fixed: A detached browser tab or a new window no longer opens on the monitor the last window of that application closed on, and moving a tiled window to another monitor now sticks (#1020)",
                 "Fixed: Moving windows between desktops or monitors during a session no longer costs other windows their login restore (#1024)",
                 "Fixed: Dropping a window into a zone on a second monitor keeps the snap instead of losing it the moment the drag ends (#1023)",
@@ -104,7 +104,7 @@
                 "New: Maximize to Screen Edges gives a scrolling column the whole work area with no gaps, and the maximize button, Meta+PgUp and an application's own maximize request all do that on a scrolling monitor. The new shortcut is Meta+Alt+M, and Meta+Alt+F is a width verb again (#1007)",
                 "New: Center short columns, under Scrolling → Window → Window handling, centers the windows of a column that does not fill the screen instead of leaving the space at the end. It is off by default and a window rule can set it per monitor, desktop or activity (#1010)",
                 "New: The support archive records which KWin effects your configuration enables and which ones KWin has actually loaded (#1008)",
-                "Changed: This release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1007, #1013)",
+                "Changed: The daemon and the KWin effect exchange maximize and strip state, so both must be rebuilt and installed together (#1007, #1013)",
                 "Fixed: With more than one virtual desktop on a scrolling monitor, the first click on a window on a desktop you had switched away from works instead of being swallowed (#1005)",
                 "Fixed: Coming back to a desktop leaves the strip working, so the first scroll after a return moves it (#1013)",
                 "Fixed: A window that says it is a dialog, stays above others or is skipped by the task switcher a moment after it opens is no longer placed into a column first. Yakuake's dropdown terminal is the case that showed it (#1009, #1011)",
@@ -121,7 +121,7 @@
                 "New: A window moved to another desktop from the pager or the Overview is placed on the desktop it arrives on instead of sitting on top of the stack until you leave and come back (#996)",
                 "New: Default height under Scrolling → Columns → New columns offers Window decides, so a window joining a column can keep the height the application asked for (#995)",
                 "Changed: Maximizing a window on a scrolling monitor maximizes its column along the strip instead of handing the window to the compositor's maximize. Pressing it again gives the column its width back, and the button lights up whenever a column fills the monitor (#994)",
-                "Changed: This release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#994)",
+                "Changed: The daemon and the KWin effect exchange column maximize state, so both must be rebuilt and installed together (#994)",
                 "Fixed: Closing a window in the middle of a panned scrolling strip no longer sends it sliding off the bottom of the screen, and the strip settles once afterwards instead of bouncing between two focus picks (#1003)",
                 "Fixed: Restoring a maximized scrolling column no longer snaps out to full width first, a maximize animates from where the window actually was, and a fast double-click does both presses (#1001)",
                 "Fixed: Zone shader previews number their zones again, decoration previews show the wallpaper behind the window, and a pack looks the same on its browser card as in its detail preview (#998)",
@@ -386,7 +386,7 @@
             "version": "3.1.3",
             "date": "2026-07-01",
             "highlights": [
-                "Fixed: PlasmaZones is rebuilt for KWin 6.1.2 so the window-manager integration keeps working after the latest Plasma update. Update PlasmaZones once your system moves to that KWin"
+                "Changed: PlasmaZones is rebuilt for the KWin this Plasma update ships, so the window-manager integration keeps working. Update PlasmaZones once your system has moved to it"
             ]
         },
         {
@@ -461,7 +461,7 @@
             "version": "3.0.14",
             "date": "2026-05-27",
             "highlights": [
-                "Fixed: Intermittent DPMS-wake autotile orphan reassignment on dual-monitor setups. KWin's screenAdded/screenRemoved signals now latch the screen-change-in-progress flag early enough to catch the per-window outputChanged race (#527, #536)"
+                "Fixed: Waking two monitors from sleep sometimes left tiled windows reassigned to the wrong screen. PlasmaZones now notices the screen change early enough to catch windows as they move (#527, #536)"
             ]
         },
         {
@@ -558,7 +558,7 @@
             "highlights": [
                 "Fixed: The shader picker dropdown being disabled in the layout editor after enabling shader effects (#494)",
                 "Fixed: Newly-opened windows still auto-snapping to zones when snapping was turned off globally (#461)",
-                "Fixed: Keyboard snap-to-zone shortcuts still firing when snapping was turned off globally. Snapping.Enabled=false is now a total kill-switch at parity with autotiling (#461)",
+                "Fixed: Keyboard snap-to-zone shortcuts still fired when snapping was turned off globally. Turning snapping off now stops everything, the way turning tiling off already did (#461)",
                 "Fixed: Electron/CEF child surfaces (Steam image previews, Discord popups, VS Code dialogs) being snapped to zones (#461)",
                 "Fixed: KWin effect-load failures now name the exact build-vs-running KWin version and the remediation, instead of a generic 'effect not running' message (#481)",
                 "Changed: Nix flake hardened. New overlays.default output, and module/install docs explicitly steer users toward the NixOS/Home Manager modules and away from the unsafe `nix profile install` path (#481)"
@@ -594,13 +594,20 @@
             ]
         },
         {
+            "version": "3.0.1",
+            "date": "2026-05-16",
+            "highlights": [
+                "Fixed: The AUR binary package failed to build because its license files were never staged into the release tarball, and the Fedora COPR build aborted on a malformed KWin version requirement. The Debian rendering library also installs with a proper SONAME now"
+            ]
+        },
+        {
             "version": "3.0.0",
             "date": "2026-05-16",
             "highlights": [
                 "New: Virtual screens for ultrawide monitors. Subdivide a physical monitor into independent logical screens, each with its own layouts, autotile state, snap assist, OSDs, shortcuts, and per-desktop or per-activity assignments. New swap and rotate actions with a confirmation OSD",
                 "New: Animation App Rules let you assign motion curves, shader overrides, and per-event timings to specific apps. A two-layer resolver with leaf seeds gives widgets distinctive tunings even when they share a parent rule",
                 "New: A new animation engine with vertex-shader plumbing and live-texture sampling, plus 47 ported transition shaders: 28 from niri, 9 from Burn-My-Windows, 10 BMW-inspired originals, an audio-reactive neon-city cityscape, a Matrix rain port, a 3D chrome-protocol rewrite, and user-texture support",
-                "Changed: Unified PassiveOverlayShell. OSDs, snap assist, layout picker, zone selector, and zone overlay all run in one click-through shell with independent slot animations and explicit z-order, replacing the legacy NotificationOverlay",
+                "Changed: The OSDs, snap assist, layout picker, zone selector and zone overlay all draw in one click-through surface now, each animating on its own and stacking in a defined order",
                 "New: Krohnkite-style autotile. Drag a tiled window onto another to reorder slots live, and a new Unlimited overflow lets the stack grow past the algorithm's natural cap instead of evicting windows",
                 "Changed: Animations settings overhauled into drill-down sub-pages with motion sets for themed override bundles, a per-event shader picker, a generic shader browser, and a separate Snapping Shaders page",
                 "Changed: Layout ordering for cycling. Cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Configuration → Priority, instead of the implicit save-time order",
@@ -639,7 +646,7 @@
             "date": "2026-04-11",
             "highlights": [
                 "Fixed: Emby and other Electron/CEF apps silently breaking after mid-session WM_CLASS rename (#271). Float toggle, focus navigation, and snap operations now survive class mutations",
-                "New: A WindowRegistry decouples runtime state from mutable app classes. The daemon always reads the live class instead of a frozen first-seen string"
+                "New: PlasmaZones follows an application's identity as it changes, instead of remembering whatever it called itself the first time it was seen"
             ]
         },
         {
@@ -835,7 +842,7 @@
             "date": "2026-03-25",
             "highlights": [
                 "Changed: ConfigDefaults is now the single source of truth for all settings",
-                "Changed: Settings bounds exposed to QML via SettingsController",
+                "Changed: The settings app knows each option's own limits, so a slider or a spin box stops where the setting does",
                 "Fixed: Edge threshold resetting to 100 px",
                 "Fixed: Per-screen autotile split ratio using wrong default"
             ]
@@ -1013,7 +1020,7 @@
             "version": "2.0.2",
             "date": "2026-03-11",
             "highlights": [
-                "Fixed: Missing retileAllScreens D-Bus slot",
+                "Fixed: Changing the border width, and other settings that retile every screen at once, failed because the command behind them was never wired up",
                 "Fixed: Negative zone geometries from constraint solver"
             ]
         },
@@ -1071,7 +1078,7 @@
             "version": "1.15.11",
             "date": "2026-03-08",
             "highlights": [
-                "Fixed: The release workflow getting stuck in a retry loop"
+                "Fixed: Releases could stall part way through publishing and had to be restarted by hand"
             ]
         },
         {
@@ -1210,7 +1217,7 @@
             "version": "1.11.8",
             "date": "2026-02-16",
             "highlights": [
-                "Changed: Signal-driven drag detection replaces poll timer entirely"
+                "Changed: A window drag is picked up the moment it starts, rather than being noticed by a timer polling thirty times a second"
             ]
         },
         {
@@ -1219,7 +1226,7 @@
             "highlights": [
                 "Changed: Event-driven cursor tracking during drag",
                 "Changed: Throttled drag signals to ~30 Hz",
-                "Changed: Eliminated QDBusInterface for WindowDrag calls"
+                "Changed: Drag messages take a shorter path between the compositor and the daemon"
             ]
         },
         {
@@ -1365,7 +1372,7 @@
                 "New: Shader preset load/save in editor",
                 "New: Preview shader effects in zone editor",
                 "Fixed: A window's size is restored immediately when it is dragged between zones",
-                "Fixed: Overlay follows cursor when dragging to another monitor"
+                "Fixed: The zone overlay moves to the monitor you drag onto, instead of staying on the one the drag started from"
             ]
         },
         {

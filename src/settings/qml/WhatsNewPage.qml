@@ -8,7 +8,7 @@ import org.kde.kirigami as Kirigami
 
 /*
  * Browsable release history. The bundled whatsnew.json carries every release
- * PlasmaZones has ever shipped (158 of them, 591 highlights), so this is a
+ * PlasmaZones has ever shipped (159 of them, 592 highlights), so this is a
  * two-pane browser rather than one scrolling list: a rail of version series on
  * the left and a reading pane on the right.
  *
@@ -61,7 +61,7 @@ Kirigami.Dialog {
 
     // One sweep of the history per filter change, shared by the rail, the
     // reading pane and every match count. Each of those used to sweep for
-    // itself, which was four passes over 591 highlights per keystroke.
+    // itself, which was four passes over 592 highlights per keystroke.
     // This has to stay a declarative binding: recomputing it from the
     // onTextChanged handler instead would leave the two ListView models with
     // no dependency on the filter at all, and neither would ever rebuild.
@@ -720,7 +720,7 @@ Kirigami.Dialog {
             // ── Reading pane ────────────────────────────────────────
             // A ListView rather than a Column in a ScrollView: the results
             // view can run to every highlight in the file (a bare "Fixed"
-            // filter is 305 of them across 158 releases), and those rows have
+            // filter is 305 of them across 159 releases), and those rows have
             // to be virtualised rather than all instantiated at once.
             ListView {
                 id: readingPane
