@@ -54,7 +54,7 @@ the notification server are ours.
 | Colour as coordinate (rail axis, structure axis, state axis) | `Phosphor.Theme.Spectrum`, `SpectrumRail`, `SpectrumStroke`, `SpectrumUnderline` | shipped |
 | Enter / hold / release motion, settle spring, reduced motion | `Phosphor.Theme.Motion`, `SettleAnimation`, `ShellMotion` | shipped |
 | Tabular values with the underline tick | `TabularText` | shipped |
-| Surface packs on the chrome (same packs as window frames) | `DecorationSlot` + `ShellChrome` + shared `SurfaceDecoration` | shipped for bar, OSD, toast, launcher, polkit, picker |
+| Surface packs on the chrome (same packs as window frames) | `DecorationSlot` + `ShellChrome` + shared `SurfaceDecoration` | shipped for bar, OSD, toast, launcher, polkit, picker, pane, lock clock |
 | Touchpad gestures through the compositor | effect `gestures.cpp` → `CompositorBridge.reportGesture` → `ShellGestures` | shipped |
 | Matched-edge morph between placement modes | `MiniatureEdges.js` | shipped |
 | Light theme (same spectrum on a bright field) | `ThemePresets::lightPalette`, `Theme.isDark` consumers | shipped |

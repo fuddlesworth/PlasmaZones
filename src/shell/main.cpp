@@ -406,27 +406,33 @@ int main(int argc, char* argv[])
     // the new one on every hot reload. Paired with the aboutToReload drain
     // below: that drops the outgoing engine's surfaces while its object
     // graph is still valid, and this adopts the replacement.
-    engine.addEngineHook([&popoutTransport, &paneTransport, &controlCenterController](QQmlEngine* qmlEngine) {
-        popoutTransport.setEngine(qmlEngine);
-        paneTransport.setEngine(qmlEngine);
-        // The zone nearest the chip, from this engine's placement map and
-        // the chip rect the bar reported (A2 §4.2).
-        auto* map = qmlEngine->singletonInstance<PhosphorShell::PlacementMap*>(QStringLiteral("Phosphor.Shell"),
-                                                                               QStringLiteral("PlacementMap"));
-        paneTransport.setZoneResolver([map = QPointer<PhosphorShell::PlacementMap>(map),
-                                       &controlCenterController](const QString& screenName) -> int {
-            if (!map) {
-                return 0;
-            }
-            auto* screenMap = map->forScreen(screenName);
-            const QRect chip = controlCenterController.chipRectFor(screenName);
-            if (!screenMap || chip.isNull()) {
-                return 0;
-            }
-            return PhosphorShellApp::PanePopoutTransport::nearestZone(screenMap->cells(), screenMap->workArea(),
-                                                                      chip.center().x());
+    engine.addEngineHook(
+        [&popoutTransport, &paneTransport, &controlCenterController, &shellChrome](QQmlEngine* qmlEngine) {
+            popoutTransport.setEngine(qmlEngine);
+            paneTransport.setEngine(qmlEngine);
+            // The pane's surface pack, the same Component every other surface's
+            // DecorationSlot instantiates.
+            paneTransport.setDecorationProvider([&shellChrome]() -> QObject* {
+                return shellChrome.decorationComponent();
+            });
+            // The zone nearest the chip, from this engine's placement map and
+            // the chip rect the bar reported (A2 §4.2).
+            auto* map = qmlEngine->singletonInstance<PhosphorShell::PlacementMap*>(QStringLiteral("Phosphor.Shell"),
+                                                                                   QStringLiteral("PlacementMap"));
+            paneTransport.setZoneResolver([map = QPointer<PhosphorShell::PlacementMap>(map),
+                                           &controlCenterController](const QString& screenName) -> int {
+                if (!map) {
+                    return 0;
+                }
+                auto* screenMap = map->forScreen(screenName);
+                const QRect chip = controlCenterController.chipRectFor(screenName);
+                if (!screenMap || chip.isNull()) {
+                    return 0;
+                }
+                return PhosphorShellApp::PanePopoutTransport::nearestZone(screenMap->cells(), screenMap->workArea(),
+                                                                          chip.center().x());
+            });
         });
-    });
 
     // Bar-anchored popouts hang below the bar's reserved band. The popout
     // surface is full-bleed and learns nothing about other surfaces' zones

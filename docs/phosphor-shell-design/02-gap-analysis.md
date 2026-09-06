@@ -12,7 +12,6 @@ gap withholds, not by effort.
 | Gap | Why it matters | Notes |
 |---|---|---|
 | Compositor-drawn chrome packs | A1 §2.4 wants the compositor to draw a pack on the bar exactly as on a window frame. Today the shell hosts the chain itself, with the same packs and the same tree, so the look is right but the renderer differs. | Needs a per-surface content rect the effect can decorate (a bar's band is a strip of a taller surface). Revisit when Phosphor is the compositor. |
-| Decoration slot on the lock clock and the control-center pane | The two surfaces without a `DecorationSlot`. | Lock is a session-lock window built in C++; the pane is a toplevel in `phosphor-popout`. Both are small additions. |
 | Touchpad gesture progress | Gestures are events. A 1:1 drawer (the launcher following the fingers) needs progress forwarded from the effect. | `registerTouchpadSwipeShortcut` takes a progress callback; the relay would need a rate limit. |
 | Bundled faces | Manrope and JetBrains Mono are resolved, not shipped; most machines fall back to Noto Sans. | Bundling means binaries in the repo. Decide with packaging. |
 | Bar keyboard navigation | The placement map is pointer-only. | A3 §1 lists the chords. |

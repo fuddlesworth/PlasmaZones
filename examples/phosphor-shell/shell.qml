@@ -470,6 +470,7 @@ Item {
             LockScreen {
                 anchors.fill: parent
                 controller: lockController
+                decoration: ShellChrome.decorationComponent
                 map: lockSurface.name.length > 0 ? PlacementMap.forScreen(lockSurface.name) : null
                 wallpaperPath: PhosphorShell.wallpaper.path
                 battery: lockBattery

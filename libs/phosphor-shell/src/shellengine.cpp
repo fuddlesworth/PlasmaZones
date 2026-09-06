@@ -33,6 +33,8 @@
 #include <QPointer>
 #include <QRect>
 #include <QRegion>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLoggingCategory>
@@ -336,6 +338,16 @@ void ShellEngine::teardown()
         m_shellGlobal->clearSingletons();
     }
     m_rootObject.reset();
+    // Everything the reload drained (popouts, panes, per-screen delegates,
+    // surfaces) went through deleteLater / destroy(), and this function
+    // runs synchronously into the engine's destructor before the event
+    // loop would ever process those deletes. Left alone they outlive the
+    // engine's singletons: ~QQmlEngine destroys PlacementMap first, that
+    // fires bindings on the still-alive delegates, a Behavior then
+    // deferred-creates its animation on a dying engine, and the shell
+    // segfaults (one reload in three, depending on what was open). Flush
+    // the deferred deletes now, while the engine can still do it cleanly.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     m_engine.reset();
 }
 

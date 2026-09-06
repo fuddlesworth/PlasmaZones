@@ -171,9 +171,23 @@ FocusScope {
         onWindowsChanged: priv.recompute()
     }
 
+    // The surface pack on the clock block (A1 §2.4, `shell.phosphor.lock`:
+    // the motes by default), set by the composition root.
+    property Component decoration: null
+
+    DecorationSlot {
+        anchors.fill: parent
+        component: root.decoration
+        contentItem: block
+        surfacePath: "shell.phosphor.lock"
+    }
+
     // The content block: clock, date, field, left-aligned to the region.
     Column {
         id: block
+
+        // The pack's capture item.
+        property bool shaderAnchor: true
 
         readonly property real inset: root.blockInset
 

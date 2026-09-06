@@ -134,6 +134,11 @@ void PanePopoutTransport::setZoneResolver(ZoneResolver resolver)
     m_zoneResolver = std::move(resolver);
 }
 
+void PanePopoutTransport::setDecorationProvider(DecorationProvider provider)
+{
+    m_decorationProvider = std::move(provider);
+}
+
 int PanePopoutTransport::nearestZone(const QVariantList& cells, const QRect& workArea, int chipCenterX)
 {
     int best = 0;
@@ -226,6 +231,11 @@ QString PanePopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& re
     }
     if (!hostItem->setProperty("contentItem", QVariant::fromValue(contentItem))) {
         qCWarning(lcPaneTransport) << request.popoutId << "— PaneHost rejected the contentItem write";
+    }
+    if (m_decorationProvider) {
+        if (QObject* decoration = m_decorationProvider()) {
+            hostItem->setProperty("decoration", QVariant::fromValue(decoration));
+        }
     }
     contentItem->setParent(hostItem);
     QScreen* screen =

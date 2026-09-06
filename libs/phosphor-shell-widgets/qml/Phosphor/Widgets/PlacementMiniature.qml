@@ -163,13 +163,23 @@ Item {
     // append new ids, and mark rows whose id is gone as retiring so the
     // delegate can release before _purge drops the row. Then reconcile
     // the edge layer against the new geometry.
+    // False once the engine is tearing down (the theme singletons are gone
+    // by then). The map is C++ and outlives the engine, and the delegates'
+    // own animations finish during teardown too, so a model write can be
+    // asked for while the miniature is dying; creating the delegates'
+    // deferred animations on a dying context then is a crash, not a
+    // TypeError. Every model write checks this first. Nothing to draw.
+    // Set at the start of this item's own destruction, which runs before
+    // its children (the delegates and their animations) are torn down.
+    property bool _dying: false
+    Component.onDestruction: root._dying = true
+
+    function _engineAlive() {
+        return !root._dying && typeof Motion !== "undefined" && Motion !== null && typeof Theme !== "undefined" && Theme !== null;
+    }
+
     function _sync() {
-        // The map is C++ and outlives the QML engine: on a hot reload its
-        // changed() can reach a miniature whose engine is already tearing
-        // down (the theme singletons are gone by then). Rebuilding rows
-        // there creates the delegates' deferred animations on a dying
-        // context, which is a crash, not a TypeError. Nothing to draw.
-        if (typeof Motion === "undefined" || Motion === null || typeof Theme === "undefined" || Theme === null)
+        if (!_engineAlive())
             return;
         const cells = model && model.cells ? model.cells : [];
         const seen = {};
@@ -197,6 +207,8 @@ Item {
     }
 
     function _purge(id) {
+        if (!_engineAlive())
+            return;
         const at = _indexOf(id);
         if (at >= 0 && cellModel.get(at).retiring)
             cellModel.remove(at);
@@ -274,6 +286,8 @@ Item {
     }
 
     function _edgeEntered(key) {
+        if (!_engineAlive())
+            return;
         const at = _edgeIndex(key);
         if (at >= 0 && edgeModel.get(at).phase === "enter") {
             edgeModel.setProperty(at, "phase", "live");
@@ -282,6 +296,8 @@ Item {
     }
 
     function _edgeReleased(key) {
+        if (!_engineAlive())
+            return;
         const at = _edgeIndex(key);
         if (at >= 0 && edgeModel.get(at).phase === "release") {
             edgeModel.remove(at);

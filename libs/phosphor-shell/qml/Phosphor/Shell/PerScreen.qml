@@ -115,12 +115,15 @@ Item {
         }
     }
 
-    // Component.onDestruction is reached AFTER aboutToQuit has
-    // already fired and torn the delegates down, so the Map is
-    // empty here. Defensive clear() in case PerScreen is used in a
-    // context that doesn't go through QGuiApplication::quit() (e.g.
-    // a test that destroys the engine directly).
-    Component.onDestruction: root._instances.clear()
+    // On quit, aboutToQuit has already torn the delegates down and the
+    // Map is empty here. On a HOT RELOAD it has not: the root object is
+    // destroyed while the engine lives, and delegates built with
+    // createObject(null) are JS-owned, so they would outlive this item
+    // and die only with the engine, after its singletons. Their bindings
+    // then fire on a dying engine (PlacementMap goes first) and creating
+    // a Behavior's deferred animation there segfaults. Tear them down
+    // here, while the engine can still do it safely.
+    Component.onDestruction: root._teardownAll()
 
     // Model-switch (and explicit-teardown) path. `_teardownAll`
     // calls destroy() on each delegate, which is safe OUTSIDE the

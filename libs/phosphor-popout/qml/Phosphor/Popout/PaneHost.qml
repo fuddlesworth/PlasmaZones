@@ -43,6 +43,10 @@ FocusScope {
     // The pane's screen x and the screen width, for the band's slice.
     property real railOffset: 0
     property real railWidth: 0
+    // The surface pack on the pane (A1 §2.4, `shell.phosphor.popout`),
+    // set by the transport from the composition root. With a chain
+    // engaged the pane's own stroke steps aside for the pack's.
+    property Component decoration: null
     // Hue axis for the stroke: the pane's centre on the screen.
     readonly property real hueT: railWidth > 0 ? Spectrum.tForX(railOffset + width / 2, railWidth) : 0.5
 
@@ -78,10 +82,26 @@ FocusScope {
     }
 
     Rectangle {
+        id: ground
+
+        // The pack's capture item: the ground alone, so the content stays
+        // crisp and interactive.
+        property bool shaderAnchor: true
+
         anchors.fill: parent
         radius: Tokens.radius_tile
         color: Theme.surface_container
         opacity: 0.96
+    }
+
+    DecorationSlot {
+        id: decorationSlot
+
+        anchors.fill: parent
+        component: root.decoration
+        contentItem: ground
+        surfacePath: "shell.phosphor.popout"
+        focused: root.open
     }
 
     SpectrumStroke {
@@ -89,6 +109,7 @@ FocusScope {
         radius: Tokens.radius_tile
         t: root.hueT
         active: root.open
+        visible: !decorationSlot.active
     }
 
     // The top-edge band, the rail's gradient over this pane's x-range.

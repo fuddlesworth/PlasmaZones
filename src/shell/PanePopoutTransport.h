@@ -98,6 +98,12 @@ public:
     using ZoneResolver = std::function<int(const QString& screenName)>;
     void setZoneResolver(ZoneResolver resolver);
 
+    /// The decoration Component every pane's DecorationSlot instantiates
+    /// (ShellChrome.decorationComponent), asked for at each open so a
+    /// reload's fresh Component is the one handed over. Null = undecorated.
+    using DecorationProvider = std::function<QObject*()>;
+    void setDecorationProvider(DecorationProvider provider);
+
     /// The zone whose top edge is nearest @p chipCenterX among @p cells
     /// (PlacementMapScreen.cells entries: x, w, y, zoneNumber). Cells on the
     /// work area's top edge are preferred; with none there, every cell
@@ -156,6 +162,7 @@ private:
     int m_paneWidth = 380;
     int m_paneHeight = 460;
     ZoneResolver m_zoneResolver;
+    DecorationProvider m_decorationProvider;
     int m_ruleZone = 0;
     quint64 m_counter = 0;
 };
