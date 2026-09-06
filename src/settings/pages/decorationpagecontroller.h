@@ -208,8 +208,23 @@ public:
     /// Drop the entire per-surface override at @p path so the surface
     /// fully inherits its ancestors / baseline. Rejected for "" (the baseline
     /// is the root and has nothing to inherit from; edit its fields directly via
-    /// setChain). @return true when an override was removed.
+    /// setChain). At a SEEDED path (the shipped card chrome for the OSD and the
+    /// PopupFrame popups) a bare clear would be undone by the read-side seed
+    /// overlay, so this engages an explicit empty chain there instead and the
+    /// surface ends up genuinely undecorated. @return true when the override
+    /// was removed or replaced by that marker.
     Q_INVOKABLE bool clearOverride(const QString& path);
+
+    /// True when @p path carries a direct override whose chain is engaged and
+    /// EMPTY — the "explicitly undecorated" marker clearOverride leaves on a
+    /// seeded surface. The card reads it as OFF: an override exists, but it
+    /// means "draws nothing", not "the user has a look here".
+    Q_INVOKABLE bool isExplicitlyUndecorated(const QString& path) const;
+
+    /// Remove that marker so @p path inherits (and the seed chain flows in)
+    /// again. No-op unless isExplicitlyUndecorated(@p path). @return true when
+    /// the marker was removed.
+    Q_INVOKABLE bool clearUndecorated(const QString& path);
 
     /// Number of descendant surfaces under @p path that carry their own
     /// override — they SHADOW this parent node (the resolve walk stops at the

@@ -6,6 +6,7 @@
 #include "decoration_controller_detail.h"
 #include "decorationpreviewcontroller.h"
 
+#include "config/configdefaults.h"
 #include "core/interfaces/isettings.h"
 
 #include <PhosphorSurface/DecorationProfile.h>
@@ -35,11 +36,22 @@ QStringList overrideDescendantsOf(const DecorationProfileTree& tree, const QStri
     QStringList out;
     if (path.isEmpty())
         return out;
+    const auto seeds = ConfigDefaults::decorationProfileTree();
     const QString prefix = path + QLatin1Char('.');
     const QStringList overridden = tree.overriddenPaths();
     for (const QString& p : overridden) {
-        if (p.startsWith(prefix))
-            out.append(p);
+        if (!p.startsWith(prefix))
+            continue;
+        // The tree the controller reads carries the shipped card chrome as an
+        // injected override at its seed paths, and an untouched injection is
+        // not a user override: counting it would put a "3 descendant surfaces
+        // shadow this parent" warning on the popup card of a config nobody has
+        // ever edited, with a Clear action that cannot clear it (the overlay
+        // re-injects on the next read). A seeded path the user HAS edited no
+        // longer matches the seed and counts normally.
+        if (seeds.hasOverride(p) && tree.directOverride(p) == seeds.directOverride(p))
+            continue;
+        out.append(p);
     }
     return out;
 }
@@ -453,8 +465,50 @@ bool DecorationPageController::clearOverride(const QString& path)
     if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
     DecorationProfileTree tree = this->tree();
-    if (!tree.clearOverride(path))
+    const bool removed = tree.clearOverride(path);
+    // Seeded surfaces (the card chrome in ConfigDefaults::decorationProfileTree:
+    // the OSD and the three PopupFrame popups) are re-injected by the read-side
+    // seed overlay, so a plain clear here is undone on the very next read and
+    // the card's toggle snaps straight back ON — the surface could not be
+    // turned off at all. Persist the explicit empty chain the overlay's master
+    // gate honours instead, which IS what OFF means for a seeded surface:
+    // undecorated. Nothing to inherit is lost, since the seed was the only
+    // thing this path was getting.
+    DecorationProfile undecorated;
+    undecorated.chain = QStringList{};
+    if (tree.withSeedDefaults(ConfigDefaults::decorationProfileTree()).hasOverride(path))
+        tree.setOverride(path, undecorated);
+    else if (!removed)
         return false;
+    m_settings->setDecorationProfileTree(tree);
+    return true;
+}
+
+bool DecorationPageController::isExplicitlyUndecorated(const QString& path) const
+{
+    if (path.isEmpty() || !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
+        return false;
+    const DecorationProfileTree& t = tree();
+    if (!t.hasOverride(path))
+        return false;
+    const DecorationProfile direct = t.directOverride(path);
+    return direct.chain && direct.chain->isEmpty();
+}
+
+bool DecorationPageController::clearUndecorated(const QString& path)
+{
+    if (!m_settings || !isExplicitlyUndecorated(path))
+        return false;
+    DecorationProfileTree tree = this->tree();
+    DecorationProfile profile = tree.directOverride(path);
+    // Disengage only the chain slot: a parameters-only retune the user made
+    // before switching the surface off survives, and the seed chain flows in
+    // under it again (the overlay gates parameters on their own engagement).
+    profile.chain.reset();
+    if (!profile.parameters && !profile.disabledPacks)
+        tree.clearOverride(path);
+    else
+        tree.setOverride(path, profile);
     m_settings->setDecorationProfileTree(tree);
     return true;
 }

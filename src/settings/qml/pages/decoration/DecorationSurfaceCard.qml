@@ -14,8 +14,12 @@ import org.kde.kirigami as Kirigami
  * design as AnimationEventCard's timing latch); a per-surface override in
  * the DecorationProfileTree is created only when the user actually edits the
  * chain. OFF clears the override (reset to inherited — same as
- * AnimationEventCard, no separate reset button) and the card shows the
- * RESOLVED chain read-only with an "Inheriting from: …" breadcrumb.
+ * AnimationEventCard, no separate reset button); on a surface that ships a
+ * seed chain (the OSD and the PopupFrame popups) the controller persists an
+ * explicit empty chain there instead, since a bare clear would just be
+ * re-seeded on the next read and the toggle could never stay off. Either way
+ * the card then shows the RESOLVED chain read-only with an
+ * "Inheriting from: …" breadcrumb.
  * CATEGORY paths (window, popup) and the standalone osd surface inherit
  * from the tree's BASELINE (empty by default), so their toggle doubles as
  * the category's decoration master switch: OFF renders the whole category
@@ -68,11 +72,15 @@ Item {
     // True when this card edits its own DIRECT profile: an alwaysEnabled root
     // always does; a leaf when its override is engaged or the editor is
     // latched open for this session.
-    readonly property bool _editing: root.alwaysEnabled || root._hasOverride || root._editorLatch
+    // An "explicitly undecorated" override (engaged, empty chain) is what OFF
+    // persists on a seeded surface, so it must NOT read back as ON here — the
+    // override exists precisely to say the surface draws nothing.
+    readonly property bool _editing: root.alwaysEnabled || (root._hasOverride && !root._undecorated) || root._editorLatch
 
     // ── Reactive model state ─────────────────────────────────────────────
     property var _effects: []
     property bool _hasOverride: false
+    property bool _undecorated: false
     // Effective (resolved) values for the read-only / preview view.
     property var _resolved: ({})
     // Direct-override sparse map: which fields are engaged AT this path.
@@ -110,14 +118,15 @@ Item {
     function refresh() {
         if (!root.bridge)
             return;
-        var wasOverride = root._hasOverride;
+        var wasOverride = root._hasOverride && !root._undecorated;
         root._hasOverride = root.bridge.hasOverride(root.surfacePath);
+        root._undecorated = root.bridge.isExplicitlyUndecorated(root.surfacePath);
         // EXTERNAL clear (a parent card's "Clear shadowing children", a page
         // reset/discard): a true→false transition closes the latched editor.
         // Our own OFF path already cleared the latch before the write, and our
         // own first edit moves the flag false→true, so a transition here is
         // never self-driven.
-        if (wasOverride && !root._hasOverride)
+        if (wasOverride && !(root._hasOverride && !root._undecorated))
             root._editorLatch = false;
         root._resolved = root.bridge.resolvedProfile(root.surfacePath);
         root._raw = root.bridge.rawProfile(root.surfacePath);
@@ -198,6 +207,11 @@ Item {
                 // asked for, and an engaged chain at a category root
                 // suppresses the shipped seed decorations on its leaves.
                 root._editorLatch = true;
+                // A seeded surface that was switched OFF carries the empty-chain
+                // marker; drop it so the shipped chain flows back in rather than
+                // the editor opening on an empty chain the user never chose.
+                if (root.bridge)
+                    root.bridge.clearUndecorated(root.surfacePath);
             } else {
                 root._editorLatch = false;
                 if (root.bridge)
