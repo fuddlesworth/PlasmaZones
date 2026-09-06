@@ -113,6 +113,14 @@ Item {
             item.decoration = Qt.binding(() => root.decoration);
         priv.apply(item, value, active);
         priv.place(item);
+        // Drawn out from here, not from the `to: "shown"` transition. On a
+        // kind swap the state is ALREADY "shown", so the transition does not
+        // fire and the incoming band would appear instantly at full length
+        // (OSDCard.reveal defaults to 1) while the outgoing one retracts.
+        if (item.reveal !== undefined) {
+            enter.target = item;
+            enter.restart();
+        }
         root.state = "shown";
         holdTimer.restart();
         root.shown(kind);
@@ -235,6 +243,19 @@ Item {
                 const old = priv.delegate;
                 priv.delegate = null;
                 if (old.reveal !== undefined) {
+                    // One shared retract, one target. A second swap inside
+                    // the retract window would otherwise overwrite the
+                    // target and orphan the delegate already retiring: its
+                    // ScriptAction never reaches it, so it stays a child of
+                    // `frame`, half-revealed, for the life of the host.
+                    // Drop the outgoing one now rather than animate it out
+                    // twice.
+                    if (retire.target) {
+                        const orphan = retire.target;
+                        retire.stop();
+                        retire.target = null;
+                        priv.destroyItem(orphan);
+                    }
                     retire.target = old;
                     retire.restart();
                 } else {
@@ -324,15 +345,9 @@ Item {
     transitions: [
         Transition {
             to: "shown"
-            // The band draws out from its source point.
-            ScriptAction {
-                script: {
-                    if (priv.delegate && priv.delegate.reveal !== undefined) {
-                        enter.target = priv.delegate;
-                        enter.restart();
-                    }
-                }
-            }
+            // The draw-out itself is started by show(), which is the only
+            // path that has the incoming delegate and is the only one that
+            // runs on a kind swap too. Nothing to do here.
         },
         Transition {
             to: "hidden"
