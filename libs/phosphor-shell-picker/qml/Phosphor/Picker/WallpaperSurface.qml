@@ -115,12 +115,13 @@ PanelWindow {
                 swap();
                 return;
             }
-            const url = urlFor(path);
             if (String(back.source) === normalisedUrlFor(path) && back.status === Image.Ready) {
                 swap();
                 return;
             }
-            back.source = url;
+            // The RAW encoded form is what loads; only the comparison above
+            // goes through the normalised one.
+            back.source = urlFor(path);
         }
 
         // The back slot finished loading: swap when it is the image still

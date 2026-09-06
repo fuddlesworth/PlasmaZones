@@ -236,8 +236,9 @@ void WindowDragAdaptor::watchDropProxyOwner(const QString& service)
     // At most ONE watcher per peer, never one per registration. The shell
     // re-sends registerDropProxy whenever the miniature's JSON changes — every
     // bar geometry or cell-rect change (PlacementMapScreen::sendDropProxy) —
-    // so allocating here per call would add a bus match rule per repaint and
-    // leak them for the daemon's lifetime.
+    // so allocating here per call would add a bus match rule per geometry
+    // change and leak them for the daemon's lifetime. (An unchanged repaint
+    // sends nothing: the shell suppresses an identical payload.)
     if (m_dropProxyWatchers.contains(service)) {
         return;
     }

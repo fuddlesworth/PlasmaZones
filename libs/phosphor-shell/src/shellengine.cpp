@@ -975,10 +975,17 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
         // empty mask as "no input region", the whole surface. So the empty
         // case goes through Qt::WindowTransparentForInput instead, which
         // is the same flag phosphor-layer's hide path uses, and which
-        // QWaylandWindow::updateInputRegion tests before the mask. The
-        // flag is only touched while the window is visible: the layer
-        // library sets it on hide and clears it on show, and a write from
-        // here while hidden would fight that.
+        // QWaylandWindow::updateInputRegion tests before the mask.
+        //
+        // The flag is only touched while the window is visible, so an
+        // ordinary hide (which does not keep the surface mapped) is left
+        // alone. Note this guard is NOT sufficient for a panel configured
+        // with SurfaceConfig::keepMappedOnHide: that hide sets the same flag
+        // while the QQuickWindow stays Qt-visible, so any later apply() here
+        // would clear it and a hidden-but-mapped panel would eat clicks
+        // again. No shell panel sets keepMappedOnHide today; adopting it for
+        // one means gating these writes on the surface's own shown state
+        // rather than on QWindow::isVisible().
         if (guardedPanel->hasExplicitInputRegion()) {
             const QRegion region = PanelWindow::explicitInputRegion(guardedPanel->inputRegion(), window->size());
             if (window->isVisible()) {

@@ -135,6 +135,50 @@ private Q_SLOTS:
         QCOMPARE(reg.count(), 0);
     }
 
+    // Ownership: a proxy outlives every individual drag, so it is tied to the
+    // life of the peer that registered it. A shell that crashes rather than
+    // unregistering would otherwise keep capturing snap drops for the rest of
+    // the daemon's life.
+    void registry_retiresProxiesWithTheirOwner()
+    {
+        DropProxyRegistry reg;
+        const QString a = QStringLiteral(":1.42");
+        const QString b = QStringLiteral(":1.43");
+
+        QVERIFY(reg.registerProxy(QStringLiteral("DP-1"), proxyJson(QRect(0, 0, 10, 10), {}), a));
+        QVERIFY(reg.registerProxy(QStringLiteral("DP-2"), proxyJson(QRect(0, 0, 10, 10), {}), a));
+        QVERIFY(reg.registerProxy(QStringLiteral("HDMI-1"), proxyJson(QRect(0, 0, 10, 10), {}), b));
+        QCOMPARE(reg.count(), 3);
+        QCOMPARE(reg.ownerOf(QStringLiteral("DP-1")), a);
+        QCOMPARE(reg.ownerOf(QStringLiteral("HDMI-1")), b);
+
+        // One peer's death retires every screen IT registered, and nothing else.
+        QStringList dropped = reg.unregisterProxiesOwnedBy(a);
+        dropped.sort();
+        QCOMPARE(dropped, QStringList({QStringLiteral("DP-1"), QStringLiteral("DP-2")}));
+        QVERIFY(!reg.hasProxy(QStringLiteral("DP-1")));
+        QVERIFY(!reg.hasProxy(QStringLiteral("DP-2")));
+        QVERIFY(reg.hasProxy(QStringLiteral("HDMI-1")));
+        QCOMPARE(reg.count(), 1);
+
+        // Idempotent, and a peer with nothing registered sweeps nothing.
+        QVERIFY(reg.unregisterProxiesOwnedBy(a).isEmpty());
+
+        // An off-bus registration carries no owner and must never be swept by
+        // an empty-name sweep, which is what an unowned proxy would look like.
+        QVERIFY(reg.registerProxy(QStringLiteral("DP-9"), proxyJson(QRect(0, 0, 10, 10), {})));
+        QCOMPARE(reg.ownerOf(QStringLiteral("DP-9")), QString());
+        QVERIFY(reg.unregisterProxiesOwnedBy(QString()).isEmpty());
+        QVERIFY(reg.hasProxy(QStringLiteral("DP-9")));
+
+        // Re-registering under a second owner hands the slot over, so the
+        // first owner's death can no longer retire it.
+        QVERIFY(reg.registerProxy(QStringLiteral("HDMI-1"), proxyJson(QRect(0, 0, 20, 20), {}), a));
+        QCOMPARE(reg.ownerOf(QStringLiteral("HDMI-1")), a);
+        QVERIFY(reg.unregisterProxiesOwnedBy(b).isEmpty());
+        QVERIFY(reg.hasProxy(QStringLiteral("HDMI-1")));
+    }
+
     void registry_hitTestsAndReplaces()
     {
         DropProxyRegistry reg;

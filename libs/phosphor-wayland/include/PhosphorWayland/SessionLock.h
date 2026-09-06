@@ -50,13 +50,20 @@ public:
     ~SessionLock() override;
 
     /// True iff the compositor advertises `ext_session_lock_manager_v1`. The
-    /// constructor still succeeds when unsupported, but `lock()` is a no-op.
+    /// constructor still succeeds when unsupported; `lock()` then reports
+    /// `finished()` rather than locking.
     static bool isSupported();
 
-    /// Request that the session be locked. The compositor replies with exactly
-    /// one of `locked()` or `finished()`. A no-op if a lock is already in
-    /// progress, the session is already locked by this object, or the protocol
-    /// is unsupported.
+    /// Request that the session be locked. Answers with exactly one of
+    /// `locked()` or `finished()` — including when the request never reaches
+    /// the compositor (protocol unsupported, no integration, or the lock
+    /// object could not be created), in which case `finished()` is emitted
+    /// asynchronously. Callers set their own state before calling and have no
+    /// other exit, so a silent return would strand them for good.
+    ///
+    /// The one case that answers with neither is a redundant call: a lock
+    /// already in flight or already held by this object is ignored, because
+    /// the reply for the outstanding request is still owed.
     void lock();
 
     /// Release the lock after a successful authentication: sends

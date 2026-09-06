@@ -143,9 +143,11 @@ private:
     QString m_bridgeName;
     QString m_bridgeVersion;
     QStringList m_capabilities;
-    // Unique bus name of the peer that registered. Empty for a registration
-    // made off the bus (the unit tests call the slot directly), which is why
-    // the gate treats an empty value as "no remote peer to authorise".
+    // Unique bus name of the peer that registered, empty when the
+    // registration did not arrive over D-Bus. A D-Bus caller is then never
+    // equal to it, so remote gestures stay refused until a bridge registers
+    // over the bus. The tests call the slots directly and bypass the
+    // comparison entirely, because it is gated on calledFromDBus().
     QString m_bridgeService;
 };
 

@@ -720,6 +720,11 @@ PlacementMap::~PlacementMap()
         delete screen;
     }
     m_screens.clear();
+    // Keyed by raw PlacementMapScreen*, so it must not outlive them. The prune
+    // timer cannot fire from inside a destructor, but unregisterDropProxy above
+    // reaches D-Bus, and anything that ever spins an event loop there would
+    // otherwise let pruneMetadata walk freed pointers.
+    m_referenced.clear();
 }
 
 PlacementMap* PlacementMap::create(QQmlEngine* engine, QJSEngine* scriptEngine)

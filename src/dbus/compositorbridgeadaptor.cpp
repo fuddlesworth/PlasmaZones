@@ -105,8 +105,12 @@ void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& 
         return;
     }
     if (calledFromDBus() && message().service() != m_bridgeService) {
-        qCDebug(lcDbusWindow) << "reportGesture dropped: caller" << message().service()
-                              << "is not the registered bridge" << m_bridgeService;
+        // Warned, not logged at debug: this is either a peer trying to drive
+        // the shell's surfaces, or the real bridge calling from a connection
+        // it never registered — which would take out every gesture in the
+        // session. Neither should be invisible at default log levels.
+        qCWarning(lcDbusWindow) << "reportGesture dropped: caller" << message().service()
+                                << "is not the registered bridge" << m_bridgeService;
         return;
     }
     // Boundary validation: the vocabulary is closed, so anything else is a
