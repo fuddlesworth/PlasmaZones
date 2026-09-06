@@ -77,7 +77,7 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
     static const auto kCompositorOnlySamplers = [] {
         QList<SamplerMatcher> matchers;
         for (const QString& name : {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
-                                    QStringLiteral("uToDesktop"), QStringLiteral("uStrip")}) {
+                                    QStringLiteral("uToDesktop"), QStringLiteral("uStrip"), QStringLiteral("uBelow")}) {
             matchers.append({name, QRegularExpression(QStringLiteral("\\b") + name + QStringLiteral("\\b"))});
         }
         return matchers;
@@ -461,6 +461,17 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral(
                 "geometryGrid is ignored for desktop/strip packs (the pass draws its own "
                 "full-screen quad)");
+        }
+        // Neither screen-level pass binds a pack's declared textures: the
+        // desktop pass binds its two scene captures, the strip pass its
+        // capture and below-strip snapshot, and nothing else. Worse than
+        // dead, on the preview branch a declared texture lands on the very
+        // slots those captures alias (uTexture1 / uTexture2), so the pack
+        // would sample its image in place of the scene.
+        if (screenLevel && !eff.textures.isEmpty()) {
+            lints << QStringLiteral(
+                "textures are ignored for desktop/strip packs (the pass binds only its own "
+                "scene captures, which alias uTexture1/uTexture2 on the preview branch)");
         }
     }
     // geometryGrid is qBound(0, raw, cap) at load, so a negative value
