@@ -290,10 +290,14 @@ public:
 
         ::PhosphorSurfaceShaders::DecorationProfileTree tree;
         const ::PhosphorSurfaceShaders::DecorationProfile card = cardDecoration();
-        tree.setOverride(QStringLiteral("osd"), card);
-        tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
-        tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
-        tree.setOverride(QStringLiteral("popup.cheatsheet"), card);
+        // Through the accessors, like the shell.* seeds below: these paths are
+        // also spelled out in DecorationSupportedPaths.h, and a seed written
+        // at a path the tree does not support decorates nothing and says so
+        // nowhere.
+        tree.setOverride(::PhosphorSurfaceShaders::decorationOsdPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupLayoutPickerPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupZoneSelectorPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupCheatsheetPath(), card);
 
         // The Phosphor shell's chrome (docs/phosphor-shell-design/identity/A1
         // §2.4): every surface is a decoration host like a window frame, and

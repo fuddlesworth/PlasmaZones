@@ -37,6 +37,13 @@ QRect rectFromJson(const QJsonValue& value)
     return rect.width() > 0 && rect.height() > 0 ? rect : QRect();
 }
 
+// The registry is fed over D-Bus by whatever peer claims a screen, and every
+// drag tick walks it. Real hardware has a handful of outputs and a placement
+// map has tens of cells, so these ceilings sit far above anything legitimate
+// while keeping both the memory and the per-tick walk bounded.
+constexpr int MaxProxies = 64;
+constexpr int MaxCellsPerProxy = 512;
+
 } // namespace
 
 std::optional<DropProxy> DropProxyRegistry::parse(const QString& json)
@@ -60,6 +67,11 @@ std::optional<DropProxy> DropProxyRegistry::parse(const QString& json)
         return std::nullopt;
     }
     const QJsonArray cells = cellsValue.toArray();
+    if (cells.size() > MaxCellsPerProxy) {
+        qCWarning(lcDbusWindow) << "drop proxy: rejecting" << cells.size() << "cells; the ceiling is"
+                                << MaxCellsPerProxy;
+        return std::nullopt;
+    }
     proxy.cells.reserve(cells.size());
     for (const QJsonValue& v : cells) {
         const QJsonObject cellObj = v.toObject();
@@ -105,6 +117,14 @@ bool DropProxyRegistry::registerProxy(const QString& screenId, const QString& js
     // alternate id for the same output does not leave two proxies standing.
     if (const auto it = find(screenId); it != m_proxies.constEnd()) {
         m_proxies.erase(it);
+    }
+    // Only a screen id that MATCHES an existing one replaces it, so a peer
+    // handing over a fresh spelling each time would otherwise grow this
+    // without bound and lengthen every drag tick's walk with it.
+    if (m_proxies.size() >= MaxProxies) {
+        qCWarning(lcDbusWindow) << "drop proxy: refusing" << screenId << "— already holding" << m_proxies.size()
+                                << "proxies, which is the ceiling";
+        return false;
     }
     m_proxies.insert(screenId, std::move(*proxy));
     return true;

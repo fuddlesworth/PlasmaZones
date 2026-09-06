@@ -29,6 +29,31 @@ inline QString decorationShellAppletPopupPath()
     return QStringLiteral("shell.appletPopup");
 }
 
+/// The OSD surface and the three transient overlays invoked by user action.
+/// Accessors rather than literals because the seed tree in
+/// configdefaults_shaders.h writes overrides at these exact paths, and a
+/// typo there is a seed that silently decorates nothing.
+inline QString decorationOsdPath()
+{
+    return QStringLiteral("osd");
+}
+inline QString decorationPopupLayoutPickerPath()
+{
+    return QStringLiteral("popup.layoutPicker");
+}
+inline QString decorationPopupZoneSelectorPath()
+{
+    return QStringLiteral("popup.zoneSelector");
+}
+inline QString decorationPopupCheatsheetPath()
+{
+    return QStringLiteral("popup.cheatsheet");
+}
+inline QString decorationPopupSnapAssistPath()
+{
+    return QStringLiteral("popup.snapAssist");
+}
+
 /// The Phosphor shell's own surfaces, a family under `shell` beside the
 /// plasmashell leaves. The shell process resolves these itself (it hosts
 /// the chain in QML, the daemon's overlay pattern), so the same tree the
@@ -92,12 +117,12 @@ inline QStringList decorationLeafSurfacePaths()
                QStringLiteral("window.snapped"),
                QStringLiteral("window.floating"),
                // osd — the notification surface.
-               QStringLiteral("osd"),
+               decorationOsdPath(),
                // popup.* — the four transient overlays invoked by user action.
-               QStringLiteral("popup.snapAssist"),
-               QStringLiteral("popup.zoneSelector"),
-               QStringLiteral("popup.layoutPicker"),
-               QStringLiteral("popup.cheatsheet"),
+               decorationPopupSnapAssistPath(),
+               decorationPopupZoneSelectorPath(),
+               decorationPopupLayoutPickerPath(),
+               decorationPopupCheatsheetPath(),
                // shell.* — surfaces owned by plasmashell rather than by us or by an
                // application. Unlike every path above, these are FOREIGN windows the
                // KWin effect decorates in place. The subtree is baseline-isolated

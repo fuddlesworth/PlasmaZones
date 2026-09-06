@@ -2,8 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // phosphor-widgets-kitchen-sink, the Phase 3.1 acceptance demo.
 //
-// One scrollable window listing every Phosphor.Widgets atom in its
-// enabled and disabled states. Hover, press, and focus states are live:
+// One scrollable window listing the interactive Phosphor.Widgets atoms in
+// their enabled and disabled states: PhosphorButton, PhosphorTextField,
+// PhosphorSlider and PhosphorCard, with PhosphorRipple shown through the
+// button. The rest of the module is not here — SpectrumRail,
+// SpectrumStroke, SpectrumUnderline, TabularText, DecorationSlot,
+// SettleAnimation and PlacementMiniature are either non-interactive or need
+// a live placement model, and are exercised by their own tests and by the
+// shell surfaces that host them.
+//
+// Hover, press, and focus states are live:
 // interact with the enabled specimens to see the state-layer tint,
 // ripple, and focus outline. The header cycles the accent token and
 // resets the palette, proving every atom retints live through the Theme
