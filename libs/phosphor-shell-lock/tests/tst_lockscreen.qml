@@ -53,6 +53,48 @@ TestCase {
         }
     }
 
+    // The real LockService does NOT go straight to `unlocked` on a correct
+    // password. It enters Releasing, emits `aboutToUnlock` so the surfaces can
+    // play their exit while the compositor lock is still held, and waits for
+    // the controller to call `finishUnlock()`. The fake above models a service
+    // WITHOUT that handshake (the fallback leg of onUnlocked); this one models
+    // the production path, which nothing exercised.
+    Component {
+        id: fakeReleasingLockComponent
+
+        QtObject {
+            id: releasingLock
+
+            property int state: 2
+            readonly property bool locked: state === 2 || state === 3 || state === 4
+            property string lastPassword: ""
+            property int finishUnlockCalls: 0
+
+            signal authenticationFailed(string reason)
+            signal aboutToUnlock
+            signal unlocked
+
+            function unlock(password) {
+                if (state !== 2)
+                    return;
+                lastPassword = password;
+                state = 3;
+            }
+            function succeed() {
+                // Authenticating -> Releasing, surfaces still up and still locked.
+                state = 4;
+                aboutToUnlock();
+            }
+            function finishUnlock() {
+                if (state !== 4)
+                    return;
+                finishUnlockCalls += 1;
+                state = 0;
+                unlocked();
+            }
+        }
+    }
+
     // A PlacementMapScreen stand-in: two columns on the left two thirds,
     // the right third free.
     Component {
@@ -121,8 +163,8 @@ TestCase {
         };
     }
 
-    function makeScene(withMap) {
-        const lock = createTemporaryObject(fakeLockComponent, testCase);
+    function makeScene(withMap, lockComponent) {
+        const lock = createTemporaryObject(lockComponent === undefined ? fakeLockComponent : lockComponent, testCase);
         const controller = createTemporaryObject(controllerComponent, testCase, {
             "lock": lock
         });
@@ -265,6 +307,34 @@ TestCase {
         verify(c.surfacesWanted);
         verify(!c.handleKey(keyEvent(Qt.Key_X, "x")));
         tryCompare(dismissedSpy, "count", 1);
+        verify(!c.surfacesWanted);
+        compare(c.password, "");
+        compare(c.phase, "idle");
+    }
+
+    function test_releaseHandshakeHoldsTheLockUntilTheExitHasPlayed() {
+        const s = makeScene(true, fakeReleasingLockComponent);
+        const c = s.controller;
+        const dismissedSpy = createTemporaryObject(spyComponent, testCase, {
+            "target": c,
+            "signalName": "dismissed"
+        });
+        c.handleKey(keyEvent(Qt.Key_P, "p"));
+        c.submit();
+        compare(s.lock.lastPassword, "p");
+        s.lock.succeed();
+        // Releasing: the compositor lock is STILL held, the surfaces are still
+        // up, and the controller has not let go yet.
+        compare(c.phase, "dismissing");
+        verify(c.locked, "the session is still locked while the exit plays");
+        verify(c.surfacesWanted);
+        compare(s.lock.finishUnlockCalls, 0, "the lock is not released before the exit");
+        verify(!c.handleKey(keyEvent(Qt.Key_X, "x")), "no input during the dismiss");
+        // Once the exit has played the controller releases the lock, exactly
+        // once, and only then do the surfaces go.
+        tryCompare(dismissedSpy, "count", 1);
+        compare(s.lock.finishUnlockCalls, 1);
+        verify(!c.locked);
         verify(!c.surfacesWanted);
         compare(c.password, "");
         compare(c.phase, "idle");
