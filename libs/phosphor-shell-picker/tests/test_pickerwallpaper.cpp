@@ -282,6 +282,21 @@ private Q_SLOTS:
         wallpaper.clearPreview(mine);
         QTRY_COMPARE(surface->property("shownPath").toString(), alpha);
 
+        // A filename with a space, which is the common case for a wallpaper
+        // the user chose and the one every fixture above avoids. The surface
+        // compares the Image's reported `source` against the URL it built, and
+        // QUrl's toString decodes %20 back to a space while keeping %23/%3F —
+        // so an encoded string compared against a raw one never matches and
+        // the crossfade silently stops swapping. Covers `#` and `?` too, which
+        // break the load itself rather than the comparison.
+        const QString spaced = QDir(images.path()).filePath(QStringLiteral("my wall #1?x.png"));
+        QVERIFY(pixels.save(spaced));
+        wallpaper.setPreview(spaced, mine);
+        QTRY_COMPARE(surface->property("shownPath").toString(), spaced);
+        QCOMPARE(surface->property("pendingPath").toString(), QString());
+        wallpaper.clearPreview(mine);
+        QTRY_COMPARE(surface->property("shownPath").toString(), alpha);
+
         // A path that cannot load is dropped and the front stays.
         wallpaper.setPreview(QDir(images.path()).filePath(QStringLiteral("missing.png")), QString());
         QTRY_COMPARE(surface->property("pendingPath").toString(), QString());

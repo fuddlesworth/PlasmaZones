@@ -304,15 +304,6 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(1).toInt(), 0x00000001);
     }
 
-    // Register a bridge that declares "gestures", the way the bundled KWin
-    // bridge does. reportGesture only relays for such a bridge, so every
-    // positive gesture case has to go through this first.
-    void registerGestureBridge()
-    {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
-                                        {QStringLiteral("borderless"), QStringLiteral("gestures")});
-    }
-
     void testReportGesture_relaysValidGestures()
     {
         registerGestureBridge();
@@ -396,6 +387,19 @@ private Q_SLOTS:
     }
 
 private:
+    // A plain helper, deliberately NOT in the Q_SLOTS block: moc registers
+    // every slot there as a test function, so a helper declared among them
+    // runs as an extra (and vacuous) case.
+    //
+    // Registers a bridge declaring "gestures", the way the bundled KWin bridge
+    // does. reportGesture only relays for such a bridge, so every positive
+    // gesture case has to go through this first.
+    void registerGestureBridge()
+    {
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless"), QStringLiteral("gestures")});
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;
     CompositorBridgeAdaptor* m_bridgeAdaptor = nullptr;

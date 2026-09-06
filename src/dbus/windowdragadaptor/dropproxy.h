@@ -9,6 +9,7 @@
 #include <QPoint>
 #include <QRect>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <optional>
 
@@ -29,6 +30,9 @@ struct DropProxy
 {
     QRect rect;
     QVector<DropProxyCell> cells;
+    /// Unique bus name of the peer that registered this proxy. Empty for a
+    /// registration that did not arrive over D-Bus.
+    QString owner;
 };
 
 /**
@@ -64,9 +68,23 @@ public:
     /// leaves any earlier registration standing when @p json fails to parse.
     /// Screen ids are matched through ScreenIdentity::screensMatch, so a
     /// connector-name and EDID spelling of one output share a slot.
-    bool registerProxy(const QString& screenId, const QString& json);
+    /// @p owner is the registering peer's unique bus name, empty for a call
+    /// that did not come off the bus. It is stored under the SAME screen slot
+    /// as the proxy, so the owner record and the proxy can never disagree
+    /// about which output they describe — keying them separately would let a
+    /// dead peer's connector-name entry retire a live peer's EDID-named proxy.
+    bool registerProxy(const QString& screenId, const QString& json, const QString& owner = QString());
     void unregisterProxy(const QString& screenId);
     bool hasProxy(const QString& screenId) const;
+
+    /// Retire every proxy registered by @p owner and report which screen slots
+    /// were dropped. Used when the registering peer's bus name goes away: a
+    /// proxy outlives any single drag, so a shell that crashed rather than
+    /// unregistering would otherwise keep capturing snap drops forever.
+    QStringList unregisterProxiesOwnedBy(const QString& owner);
+
+    /// The registering peer's bus name for @p screenId, empty if none.
+    QString ownerOf(const QString& screenId) const;
     int count() const
     {
         return m_proxies.size();

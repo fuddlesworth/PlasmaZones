@@ -152,7 +152,7 @@ width but visually attached (concave/"gothic" corners); none.
 4. **Window animation and shell animation on one clock/curve family.** niri comes closest (springs everywhere) but its layer-shell shells cannot join the spring; everyone else has two motion systems (compositor beziers vs shell QML/GTK). Phosphor can make a popout's spring the same object as a window's snap-in spring.
 5. **Shared-element morph between a *window* and a shell surface** (e.g. a window collapsing into its bar entry, a notification unfolding into the app window). Shells cannot capture window textures with layout intent; a compositor can.
 6. **Drag feedback in the bar during a window drag** (zone highlights mirrored in the bar; the bar becoming a drop target that maps to zones). Requires drag state, which only the compositor has.
-7. **Afterglow / persistence as a *state* signal** (surveyed as untaken; not adopted, see A1 §7.2 and §6 below) (a surface that was just active decays rather than snapping off): nobody uses temporal decay as UI semantics; CRT projects use it purely as a filter.
+7. **Afterglow / persistence as a *state* signal** (surveyed as untaken; not adopted, see A1 §7 item 2 and §6 below) (a surface that was just active decays rather than snapping off): nobody uses temporal decay as UI semantics; CRT projects use it purely as a filter.
 8. **Non-blur depth.** With glass contested (Tahoe legibility, GNOME's flat stance), a depth language built on emissive edges and decay instead of backdrop blur is untaken by any shell.
 9. **Per-output overlays that are true compositor render passes** (niri does this for its own dialogs; no third-party shell can). Phosphor can render OSD/lock/picker without layer-shell round trips.
 10. **Gesture drawers that scrub the strip itself** (a swipe on the bar pans the scrolling strip with 1:1 coupling). Requires owning the scroll engine.
@@ -189,7 +189,7 @@ Where the field clusters: **150–300 ms ease-out for enter, faster accelerate f
 
 ## 6. Phosphor / CRT-afterglow: three sentences on what to avoid
 
-> **Superseded by A1 §7.2.** The CRT metaphor was considered as the naming
+> **Superseded by A1 §7 item 2.** The CRT metaphor was considered as the naming
 > layer for the motion system and dropped: the packs never use it as a visual
 > device, and it drags the design toward retro pastiche. The asymmetric
 > envelopes below are kept on their own merits (05 R6); the lore is not.

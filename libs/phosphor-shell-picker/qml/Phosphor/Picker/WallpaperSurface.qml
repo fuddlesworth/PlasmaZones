@@ -79,11 +79,22 @@ PanelWindow {
         property string pendingPath: ""
 
         // Wallpaper paths are filenames the user chose, so they routinely
-        // carry spaces and occasionally `#` or `?`. Bare concatenation both
-        // breaks the load and breaks `settle()`, which compares this against
-        // the Image's own already-normalised `source` and would never match.
+        // carry spaces and occasionally `#` or `?`. Bare concatenation leaves
+        // `#` and `?` to be read as a fragment and a query, and the image then
+        // silently fails to load.
         function urlFor(path: string): string {
             return path === "" ? "" : "file://" + encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
+        }
+
+        // The same URL as Qt will report it back through `Image.source`.
+        // These have to be compared through one normalisation, not against the
+        // raw string: QUrl's toString decodes `%20` back to a space while
+        // KEEPING `%23` / `%3F`, so a hand-built encoded string never equals
+        // the round-tripped source for any path containing a space — and
+        // `settle()` would then early-return forever and the crossfade would
+        // never swap.
+        function normalisedUrlFor(path: string): string {
+            return path === "" ? "" : String(Qt.url(urlFor(path)));
         }
 
         // Ask for `path`. Same as the front: forget anything pending, so a
@@ -105,7 +116,7 @@ PanelWindow {
                 return;
             }
             const url = urlFor(path);
-            if (String(back.source) === url && back.status === Image.Ready) {
+            if (String(back.source) === normalisedUrlFor(path) && back.status === Image.Ready) {
                 swap();
                 return;
             }
@@ -115,7 +126,7 @@ PanelWindow {
         // The back slot finished loading: swap when it is the image still
         // wanted, drop the request when it failed.
         function settle(slot: Image): void {
-            if (slot !== back || pendingPath === "" || String(slot.source) !== urlFor(pendingPath))
+            if (slot !== back || pendingPath === "" || String(slot.source) !== normalisedUrlFor(pendingPath))
                 return;
             if (slot.status === Image.Ready) {
                 swap();

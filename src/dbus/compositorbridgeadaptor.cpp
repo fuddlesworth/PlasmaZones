@@ -7,6 +7,7 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
+#include <QDBusMessage>
 #include <QUuid>
 
 namespace PlasmaZones {
@@ -66,6 +67,9 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
     m_bridgeName = compositorName;
     m_bridgeVersion = version;
     m_capabilities = capabilities;
+    // Remember WHO registered, so a later reportGesture can be attributed.
+    // A direct (non-D-Bus) call has no peer and leaves this empty.
+    m_bridgeService = calledFromDBus() ? message().service() : QString();
 
     qCInfo(lcDbusWindow) << "Compositor bridge registered:" << compositorName << "apiVersion=" << version
                          << "capabilities:" << capabilities;
@@ -88,11 +92,21 @@ void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& 
 {
     // The interface documents this as firing "only for gestures the bridge
     // registered under the 'gestures' capability", and that gate has to be
-    // real: the session bus is an untrusted boundary and gestureReported
-    // drives the shell's launcher and dashboard, so without it any peer on
-    // the bus could open those surfaces at will.
+    // real: gestureReported drives the shell's launcher and dashboard, and the
+    // session bus is an untrusted boundary.
+    //
+    // The capability list alone is NOT that gate — it is daemon-wide state
+    // describing whichever bridge registered last, so any peer would pass it
+    // as soon as a gestures-capable bridge existed. The caller's own bus name
+    // has to match the registered bridge's. A direct (non-D-Bus) call has no
+    // peer to authorise, which is the path the unit tests take.
     if (!isBridgeRegistered() || !hasCapability(QStringLiteral("gestures"))) {
-        qCWarning(lcDbusWindow) << "reportGesture dropped: caller is not a bridge registered for gestures";
+        qCDebug(lcDbusWindow) << "reportGesture dropped: no bridge registered for gestures";
+        return;
+    }
+    if (calledFromDBus() && message().service() != m_bridgeService) {
+        qCDebug(lcDbusWindow) << "reportGesture dropped: caller" << message().service()
+                              << "is not the registered bridge" << m_bridgeService;
         return;
     }
     // Boundary validation: the vocabulary is closed, so anything else is a

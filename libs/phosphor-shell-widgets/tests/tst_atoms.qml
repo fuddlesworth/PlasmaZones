@@ -15,10 +15,11 @@ TestCase {
     id: testCase
 
     name: "PhosphorAtoms"
-    // Several cases drive forceActiveFocus() and keyClick(). Qt's keyboard
-    // helpers need a shown window, so without these they do not deliver and
-    // the assertions behind them prove nothing. Matches tst_ripple_clip.qml
-    // in this same directory.
+    // Shown and sized to match tst_ripple_clip.qml beside it, so the cases
+    // that drive forceActiveFocus() and keyClick() run against a real window
+    // rather than relying on the offscreen platform's implicit focus. They do
+    // pass either way under the harness's QT_QPA_PLATFORM=offscreen — this is
+    // about not depending on that, not about repairing a broken assertion.
     when: windowShown
     visible: true
     width: 200

@@ -90,7 +90,7 @@ QHash<QString, DropProxy>::const_iterator DropProxyRegistry::find(const QString&
     return m_proxies.constEnd();
 }
 
-bool DropProxyRegistry::registerProxy(const QString& screenId, const QString& json)
+bool DropProxyRegistry::registerProxy(const QString& screenId, const QString& json, const QString& owner)
 {
     if (screenId.isEmpty()) {
         qCWarning(lcDbusWindow) << "drop proxy: rejecting registration with an empty screen id";
@@ -100,6 +100,7 @@ bool DropProxyRegistry::registerProxy(const QString& screenId, const QString& js
     if (!proxy) {
         return false;
     }
+    proxy->owner = owner;
     // Replace under whichever spelling the earlier registration used, so an
     // alternate id for the same output does not leave two proxies standing.
     if (const auto it = find(screenId); it != m_proxies.constEnd()) {
@@ -107,6 +108,29 @@ bool DropProxyRegistry::registerProxy(const QString& screenId, const QString& js
     }
     m_proxies.insert(screenId, std::move(*proxy));
     return true;
+}
+
+QStringList DropProxyRegistry::unregisterProxiesOwnedBy(const QString& owner)
+{
+    QStringList dropped;
+    if (owner.isEmpty()) {
+        return dropped;
+    }
+    for (auto it = m_proxies.begin(); it != m_proxies.end();) {
+        if (it.value().owner == owner) {
+            dropped.append(it.key());
+            it = m_proxies.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return dropped;
+}
+
+QString DropProxyRegistry::ownerOf(const QString& screenId) const
+{
+    const auto it = find(screenId);
+    return it == m_proxies.constEnd() ? QString() : it->owner;
 }
 
 void DropProxyRegistry::unregisterProxy(const QString& screenId)

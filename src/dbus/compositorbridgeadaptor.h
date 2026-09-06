@@ -7,6 +7,7 @@
 #include <PhosphorProtocol/BridgeMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QDBusContext>
 #include <QString>
 #include <QStringList>
 
@@ -23,9 +24,15 @@ namespace PlasmaZones {
  * (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...),
  * which bridges subscribe to after a successful registration.
  *
+ * Inherits @c QDBusContext so reportGesture can identify its caller. The
+ * registered capability list is daemon-wide state, not a property of whoever
+ * is calling, so checking it alone would let any peer on the session bus drive
+ * the shell's gesture surfaces; the caller's bus name has to be matched
+ * against the bridge that registered.
+ *
  * @note This is an EXPERIMENTAL interface — may change before v2.
  */
-class PLASMAZONES_EXPORT CompositorBridgeAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT CompositorBridgeAdaptor : public QDBusAbstractAdaptor, public QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.CompositorBridge")
@@ -136,6 +143,10 @@ private:
     QString m_bridgeName;
     QString m_bridgeVersion;
     QStringList m_capabilities;
+    // Unique bus name of the peer that registered. Empty for a registration
+    // made off the bus (the unit tests call the slot directly), which is why
+    // the gate treats an empty value as "no remote peer to authorise".
+    QString m_bridgeService;
 };
 
 } // namespace PlasmaZones

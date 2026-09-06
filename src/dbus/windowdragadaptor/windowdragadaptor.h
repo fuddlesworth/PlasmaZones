@@ -21,6 +21,7 @@
 #include <QVector>
 #include <memory>
 
+class QDBusServiceWatcher;
 class QScreen;
 class QTimer;
 
@@ -625,13 +626,17 @@ private:
     void applySingleZoneTarget(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
                                PhosphorZones::Layout* layout);
     void clearZoneTarget();
-    // Arm a one-shot watcher that unregisters this peer's proxies when its bus
-    // name goes away, so a shell that crashes cannot leave a proxy standing.
-    void watchDropProxyOwner(const QString& service, const QString& screenId);
+    // Watch a registering peer's bus name so its proxies retire when it dies,
+    // since a proxy outlives any single drag and a crashed shell would
+    // otherwise keep capturing snap drops. At most one watcher per peer: the
+    // shell re-registers on every miniature geometry change, so one per call
+    // would leak a bus match rule per repaint.
+    void watchDropProxyOwner(const QString& service);
     DropProxyRegistry m_dropProxies;
-    // Bus name of the peer that registered each screen's proxy, so a peer's
-    // death only retires the screens it actually owns.
-    QHash<QString, QString> m_dropProxyOwners;
+    // One watcher per registering bus name. The owner of each proxy is stored
+    // by the registry itself, in the same slot as the proxy, so the two cannot
+    // disagree about which output they describe.
+    QHash<QString, QDBusServiceWatcher*> m_dropProxyWatchers;
 
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;
