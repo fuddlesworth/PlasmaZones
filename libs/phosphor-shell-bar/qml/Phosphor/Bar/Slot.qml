@@ -194,6 +194,21 @@ RowLayout {
                             root._cells = cells;
                             root.mountedCount += 1;
                         }
+
+                        // The registry is append-only without this. `groups`
+                        // is a settable property on the host, so a bar that
+                        // re-lays its slots would leave destroyed cells in
+                        // the map and cellFor() would hand BarHost a dead
+                        // Item for its anchor, its rail urgency or its map
+                        // widget.
+                        Component.onDestruction: {
+                            const cells = root._cells;
+                            if (cells[cell.modelData] === cell) {
+                                delete cells[cell.modelData];
+                                root._cells = cells;
+                                root.mountedCount -= 1;
+                            }
+                        }
                     }
                 }
             }

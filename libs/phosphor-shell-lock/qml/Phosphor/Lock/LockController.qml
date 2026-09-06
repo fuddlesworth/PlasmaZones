@@ -142,7 +142,13 @@ QtObject {
     }
 
     property Timer _dismissTimer: Timer {
-        interval: Motion.duration_dismiss
+        // The exit is two animations in parallel: the outlines fill over
+        // duration_release and the content block fades over duration_dismiss.
+        // Hold for the LONGER of them — releasing at duration_dismiss drops
+        // the surfaces while the fill is barely a third done, so the exit the
+        // header describes never actually plays. Still far inside the state
+        // machine's 1 s release failsafe.
+        interval: Math.max(Motion.duration_release, Motion.duration_dismiss)
         repeat: false
         onTriggered: {
             // The exit has played: release the compositor lock now.
