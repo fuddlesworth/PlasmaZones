@@ -81,12 +81,15 @@ ScrollEngine::GroupedOpenHost ScrollEngine::groupedOpenHost(const ScrollStrip& s
                                                             const ScrollOpenParams& openParams) const
 {
     GroupedOpenHost host;
-    // One resolve per sibling tile per open. The daemon's resolver is
+    // At most one resolve per sibling tile per open. The daemon's resolver is
     // deliberately uncached (it re-stamps screen context and walks the rule
-    // set on every call), and the active-first probe plus the strip scan
-    // would otherwise ask for the same tile twice.
+    // set on every call). tabGroupColumnIndex already skips the active
+    // column on its rescan, so today no tile is probed twice and the memo is
+    // defensive: it holds the bound if a future predicate reads a tile from
+    // two columns, or reads the arrival beside a sibling. Returned by VALUE:
+    // a reference into a QHash dies on the next insert's rehash.
     QHash<QString, ScrollOpenParams> memo;
-    const auto resolveTile = [&](const QString& tileId) -> const ScrollOpenParams& {
+    const auto resolveTile = [&](const QString& tileId) -> ScrollOpenParams {
         auto it = memo.find(tileId);
         if (it == memo.end()) {
             it =
@@ -102,7 +105,7 @@ ScrollEngine::GroupedOpenHost ScrollEngine::groupedOpenHost(const ScrollStrip& s
     if (!group.isEmpty()) {
         host.named = true;
         host.columnIdx = tabGroupColumnIndex(strip, [&](const QString& tileId) {
-            const ScrollOpenParams& tileParams = resolveTile(tileId);
+            const ScrollOpenParams tileParams = resolveTile(tileId);
             return tileParams.tabGroup && tileParams.tabGroup->trimmed() == group;
         });
         return host;
@@ -130,7 +133,7 @@ ScrollEngine::GroupedOpenHost ScrollEngine::groupedOpenHost(const ScrollStrip& s
         if (currentAppIdFor(tileId) != appId) {
             return false;
         }
-        const ScrollOpenParams& tileParams = resolveTile(tileId);
+        const ScrollOpenParams tileParams = resolveTile(tileId);
         return !tileParams.tabGroup || tileParams.tabGroup->trimmed().isEmpty();
     });
     return host;

@@ -1629,6 +1629,22 @@ public:
         Q_EMIT scrollingKeepFloatingAboveChanged();
         Q_EMIT settingsChanged();
     }
+    // Same-app tab grouping: the third ISettings defaulted pair in this
+    // family, overridden for the same reason as the two above so a
+    // StubSettings-backed adaptor round-trips the key instead of dropping
+    // the write into the interface's no-op body.
+    bool scrollingGroupSameAppAsTabs() const override
+    {
+        return m_scrollingGroupSameAppAsTabs;
+    }
+    void setScrollingGroupSameAppAsTabs(bool value) override
+    {
+        if (m_scrollingGroupSameAppAsTabs == value)
+            return;
+        m_scrollingGroupSameAppAsTabs = value;
+        Q_EMIT scrollingGroupSameAppAsTabsChanged();
+        Q_EMIT settingsChanged();
+    }
     // The scrolling tab-indicator family: all twelve pairs are DEFAULTED
     // virtuals on ISettings that answer frozen constants, which makes any
     // consumer predicate untestable through an unoverridden stub — the same
@@ -2942,6 +2958,7 @@ private:
     bool m_snappingKeepFloatingAbove = ConfigDefaults::snappingKeepFloatingAbove();
     bool m_autotileKeepFloatingAbove = ConfigDefaults::autotileKeepFloatingAbove();
     bool m_scrollingKeepFloatingAbove = ConfigDefaults::scrollingKeepFloatingAbove();
+    bool m_scrollingGroupSameAppAsTabs = ConfigDefaults::scrollingGroupSameAppAsTabs();
     bool m_scrollingTabIndicatorEnabled = ConfigDefaults::scrollingTabIndicatorEnabled();
     int m_scrollingTabIndicatorStyle = ConfigDefaults::scrollingTabIndicatorStyle();
     int m_scrollingTabIndicatorGapsBetweenTabs = ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs();

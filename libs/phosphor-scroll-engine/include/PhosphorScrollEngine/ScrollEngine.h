@@ -1629,16 +1629,17 @@ private:
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
     /// The six scrolling BEHAVIOUR toggles with a per-screen rule channel,
-    /// rule-only per-screen keys layered over the config-seeded members. Four
-    /// of them (always-center-single-column, respect-minimum-size, smart gaps
-    /// and the straddler clamp) are consumed inside layoutParamsForScreen and
-    /// exist ONLY in map-taking form, since that is the one call site and it
-    /// has already fetched the map. The other two (the open-path focus arm
-    /// and the sticky gate) are consumed outside it and carry a screenId
-    /// wrapper; the sticky gate also keeps a map-taking form, because the
-    /// open path resolves several values for one screen off a single fetch.
-    /// groupSameAppAsTabs below is NOT one of the six: it is a global-only
-    /// live read with no per-screen key.
+    /// rule-only per-screen keys layered over the config-seeded members. Five
+    /// of them (always-center-single-column, center-short-columns,
+    /// respect-minimum-size, smart gaps and the straddler clamp) are consumed
+    /// inside layoutParamsForScreen and exist ONLY in map-taking form, since
+    /// that is the one call site and it has already fetched the map. The
+    /// sixth (the open-path focus arm) is consumed outside it and carries a
+    /// screenId wrapper. The sticky gate is their int-valued sibling, not one
+    /// of the six bools: it carries both forms because the open path resolves
+    /// several values for one screen off a single fetch. groupSameAppAsTabs
+    /// below is not one of the six either: it is a global-only live read
+    /// with no per-screen key.
     bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
     bool effectiveCenterShortColumns(const QVariantMap& overrides) const;
     bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
@@ -1696,7 +1697,7 @@ private:
                            const ScrollOpenParams& openParams, QString* outDisplacedTab, bool* outNamed);
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QString& screenId) const;
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QVariantMap& overrides) const;
-    /// Shared bool-override reader for the five toggles above: takes the
+    /// Shared bool-override reader for the six toggles above: takes the
     /// override only when it is a real bool, so a hand-edited string cannot
     /// coerce to false and silently disable a behaviour.
     static bool effectiveBoolOverride(const QVariantMap& overrides, const QString& key, bool fallback);

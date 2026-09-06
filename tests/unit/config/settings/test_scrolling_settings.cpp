@@ -1292,7 +1292,7 @@ private Q_SLOTS:
         settings.setScrollingGroupSameAppAsTabs(true); // unchanged: silent
         QCOMPARE(groupSpy.count(), 1);
         QCOMPARE(changedSpy.count(), preGroupChanged + 1);
-        settings.save();
+        QVERIFY(settings.save());
         Settings reloaded;
         QVERIFY(reloaded.scrollingGroupSameAppAsTabs());
     }

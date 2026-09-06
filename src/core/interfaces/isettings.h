@@ -352,15 +352,16 @@ public:
         return false;
     }
 
-    // The four defaults below are spelled as literals rather than calling
+    // The five defaults below are spelled as literals rather than calling
     // their ConfigDefaults twins, because this interface header deliberately
     // does not depend on the config layer. A stub answering the opposite of
     // what the real Settings would is a silent behaviour split, so each is
     // pinned from the other side: settings/scrolling.cpp — a TU that sees
     // both — static_asserts the tab-indicator default, the drop-indicator
-    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() and
-    // ConfigDefaults::scrollingKeepFloatingAbove() against the literals here,
-    // and names this comment. Change any of them and fix both places.
+    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
+    // ConfigDefaults::scrollingKeepFloatingAbove() and
+    // ConfigDefaults::scrollingGroupSameAppAsTabs() against the literals
+    // here, and names this comment. Change any of them and fix both places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default because two readers reach it through this interface
