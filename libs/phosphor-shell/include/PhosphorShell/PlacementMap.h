@@ -355,6 +355,14 @@ public:
     /// one, so this answers `forScreen(screenName)` for it (and for a
     /// negative index); every other desktop gets its own screen object,
     /// cached per (screen, desktop) and owned here like the live ones.
+    ///
+    /// That choice is made PER CALL, not maintained. A screen handed back for
+    /// a non-current desktop stays pinned for its whole life, so switching to
+    /// that desktop does not turn it into the live map — it keeps tracking
+    /// through its own refetch rather than the engine's focus and tile edges.
+    /// A consumer that wants the live map to follow the active desktop must
+    /// call again when `Workspaces.activeIndex` changes; binding through that
+    /// property is enough to re-run this.
     Q_INVOKABLE PhosphorShell::PlacementMapScreen* forScreenDesktop(const QString& screenName, int desktopIndex);
 
     [[nodiscard]] bool isAvailable() const;

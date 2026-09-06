@@ -113,6 +113,9 @@ private:
     QStringList m_directories;
     QString m_currentPath;
     QList<Candidate> m_candidates;
+    // Lazily built view of m_candidates for QML; see candidates().
+    mutable QVariantList m_candidatesCache;
+    mutable bool m_candidatesCacheValid = false;
 };
 
 } // namespace PhosphorShellPicker

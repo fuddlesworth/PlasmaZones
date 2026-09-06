@@ -265,12 +265,17 @@ void TestPanePopoutTransport::compositorCloseReportsUpward()
 void TestPanePopoutTransport::noEngineOnTheScreenGoesToTheFallback()
 {
     m_controller->reportScreenMode(kScreen, -1);
+    // Latched true first, or the check below passes on the default and would
+    // still pass with the setPaneExternal(false) deleted outright.
+    m_controller->setPaneExternal(true);
+    QVERIFY(m_controller->isPaneExternal());
     QTest::ignoreMessage(QtInfoMsg, QRegularExpression(QStringLiteral("floating fallback")));
     const QString handle = m_transport->openSurface(makeRequest());
     QCOMPARE(handle, QStringLiteral("socket-1"));
     QCOMPARE(m_fallback->opened, QStringList{kPopout});
     QVERIFY(!m_transport->windowFor(handle));
-    // The fallback owns the open state; this transport did not touch it.
+    // The fallback is the bar's own inline pane, so the open must clear the
+    // external flag rather than leave it where the last toplevel open put it.
     QVERIFY(!m_controller->isPaneExternal());
 }
 

@@ -102,17 +102,25 @@ void TestPaneRules::controlCenterRuleTakesTheZoneItIsGiven()
     const Rule three = PaneRules::controlCenterRule(kAppId, 3);
     QCOMPARE(three.id, base.id);
     QCOMPARE(PaneRules::defaultZone(), 1);
+    // Counted, not just visited: without this the loops below do nothing at
+    // all if SnapToZone stops being emitted, and the test still passes.
+    int seen = 0;
     for (const RuleAction& action : three.actions) {
         if (action.type == QString(ActionType::SnapToZone)) {
             QCOMPARE(action.params.value(ActionParam::Zones).toArray(), QJsonArray{3});
+            ++seen;
         }
     }
+    QCOMPARE(seen, 1);
     const Rule floored = PaneRules::controlCenterRule(kAppId, -4);
+    seen = 0;
     for (const RuleAction& action : floored.actions) {
         if (action.type == QString(ActionType::SnapToZone)) {
             QCOMPARE(action.params.value(ActionParam::Zones).toArray(), QJsonArray{1});
+            ++seen;
         }
     }
+    QCOMPARE(seen, 1);
 }
 
 void TestPaneRules::roundTripsThroughJson()

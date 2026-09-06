@@ -91,12 +91,19 @@ void WallpaperCandidates::setCurrentPath(const QString& path)
 
 QVariantList WallpaperCandidates::candidates() const
 {
-    QVariantList list;
-    list.reserve(m_candidates.size());
-    for (const Candidate& candidate : m_candidates) {
-        list.append(toMap(candidate));
+    // Built once per scan, not once per read. This is bound as a ListView
+    // model and indexed from QML (`model[currentIndex].path`), so every read
+    // rebuilt a QVariantMap for every wallpaper on disk, up to the 2000-entry
+    // cap. The cache is dropped wherever m_candidates changes.
+    if (!m_candidatesCacheValid) {
+        m_candidatesCache.clear();
+        m_candidatesCache.reserve(m_candidates.size());
+        for (const Candidate& candidate : m_candidates) {
+            m_candidatesCache.append(toMap(candidate));
+        }
+        m_candidatesCacheValid = true;
     }
-    return list;
+    return m_candidatesCache;
 }
 
 int WallpaperCandidates::count() const
@@ -243,6 +250,8 @@ void WallpaperCandidates::rescan()
         return;
     }
     m_candidates = std::move(scanned);
+    m_candidatesCache.clear();
+    m_candidatesCacheValid = false;
     Q_EMIT candidatesChanged();
 }
 

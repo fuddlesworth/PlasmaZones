@@ -331,6 +331,14 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
 {
     Q_UNUSED(registry)
     auto* self = static_cast<LayerShellIntegration*>(data);
+    // Every id field below is 0 when its global was never bound, or was bound
+    // and already removed. Wayland never issues object id 0, so a real removal
+    // can never alias one of those — but the chain only stays safe while that
+    // holds, so say it here rather than leaving it implicit in eight
+    // comparisons.
+    if (id == 0) {
+        return;
+    }
     if (id == self->m_singlePixelBufferManagerId) {
         self->m_singlePixelBufferAvailable = false;
         self->m_singlePixelBufferManagerId = 0;
