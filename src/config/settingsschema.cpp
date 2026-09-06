@@ -613,6 +613,20 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i],
                     QStringLiteral("Snaps the focused window to zone %1 of the current layout.").arg(i + 1));
     }
+    const QString scrollFocusTabDefaults[] = {
+        CD::scrollFocusTab1Shortcut(), CD::scrollFocusTab2Shortcut(), CD::scrollFocusTab3Shortcut(),
+        CD::scrollFocusTab4Shortcut(), CD::scrollFocusTab5Shortcut(), CD::scrollFocusTab6Shortcut(),
+        CD::scrollFocusTab7Shortcut(), CD::scrollFocusTab8Shortcut(), CD::scrollFocusTab9Shortcut(),
+    };
+    // Same protocol-constant bound as the two loops above.
+    static_assert(std::size(scrollFocusTabDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "focus-tab defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
+        addShortcut(globals, CD::scrollFocusTabKey(i + 1), scrollFocusTabDefaults[i],
+                    QStringLiteral("Shows tab %1 of the focused column in scrolling mode. In a column that is not "
+                                   "tabbed it focuses window %1 in the stack.")
+                        .arg(i + 1));
+    }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut(),
                 QStringLiteral("Moves every window one zone clockwise within the current layout."));
     addShortcut(globals, CD::rotateWindowsCounterclockwiseKey(), CD::rotateWindowsCounterclockwiseShortcut(),

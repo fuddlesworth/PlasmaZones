@@ -745,6 +745,42 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         if (damage.isValid()) {
             damageScrollTabBand(out, damage);
         }
+        // A gesture ends by events stopping, so nothing else can retire the
+        // tab wheel's walk anchor. Retire it here instead: if the anchor's
+        // column now shows a DIFFERENT tab, the change came from something
+        // other than the wheel (a pill click, a keyboard cycle, the daemon)
+        // and the next gesture must start from what the user can see. When
+        // the relay is simply the wheel's own step coming back, the active
+        // tab IS the anchor and it survives, which is what lets the anchor
+        // outrun the model within a gesture.
+        //
+        // The walked set is what makes this safe during a FAST gesture. The
+        // anchor is written per event, but the relays come back one step at a
+        // time, so a relay for an EARLIER step routinely arrives while the
+        // anchor already names a later one. Retiring on that mismatch would
+        // put back the stick the anchor exists to prevent, so a relay naming
+        // any tab this gesture asked for is treated as its own echo and
+        // leaves the anchor alone. A relay naming a tab the gesture never
+        // asked for is someone else (a pill click, a keyboard cycle, the
+        // daemon) and retires it.
+        //
+        // Membership rather than an in-flight flag, because a step whose
+        // relay never arrives (the window closed, the activation was refused,
+        // the mode changed) would leave such a flag set for good and disable
+        // this guard permanently.
+        if (!m_tabWheelAnchor.isEmpty()) {
+            const QString activeNow = painter->activePillFor(out, m_tabWheelAnchor);
+            if (!activeNow.isEmpty()) {
+                if (activeNow == m_tabWheelAnchor) {
+                    // The wheel's own last step landed, so nothing of ours is
+                    // outstanding and the trail can go.
+                    m_tabWheelWalked.clear();
+                } else if (!m_tabWheelWalked.contains(activeNow)) {
+                    m_tabWheelAnchor.clear();
+                    m_tabWheelWalked.clear();
+                }
+            }
+        }
         // The pill under a parked pointer may have moved or vanished: a
         // stale hover would keep the hand (and the interception) over
         // whatever is there now until the next motion. Re-evaluate at the
