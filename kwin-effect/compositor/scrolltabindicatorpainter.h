@@ -345,7 +345,11 @@ public:
     /// and first deletes any retired textures (this is the GL-current point).
     /// @p clipRegion is the DEVICE-space region of the scene walk in
     /// progress (the pass's damage region); the blit is hardware-clipped to
-    /// it, never painted unclipped. Paint order only yields stacking order
+    /// it, never painted unclipped. It is mapped through the render target's
+    /// transform into buffer space before it reaches the scissor, the same
+    /// way KWin's item renderer maps its own: the scissor takes framebuffer
+    /// rects, and a screen target is Y-flipped (and possibly rotated)
+    /// relative to the device region. Paint order only yields stacking order
     /// when every window above repaints the same pixels afterwards, and KWin
     /// hands each of them only the damage region — pill pixels outside it
     /// would surface over whatever is stacked above the strip until the next

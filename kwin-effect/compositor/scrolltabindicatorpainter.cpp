@@ -659,12 +659,24 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     glActiveTexture(GL_TEXTURE0);
     // render() rather than a hand-rolled quad: it applies the texture's own
     // content transform, and an image upload is Y-flipped relative to GL's
-    // origin. Hardware-clipped to the walk's DEVICE region: KWin's scissor
-    // path takes framebuffer-space rects (it flips Y itself against the
-    // current framebuffer height), which is exactly the space the per-window
-    // damage region is in, so the region is passed through untranslated —
-    // the quad's own placement rides the MVP and the scissor is independent
-    // of it. Pixels outside the region must not be painted (see the header).
+    // origin. Hardware-clipped to the walk's DEVICE region, mapped into the
+    // render target's own buffer space first. GLVertexBuffer's scissor arm
+    // takes rects in the CURRENT FRAMEBUFFER's coordinates (it flips Y itself
+    // against that framebuffer's height), and the scene's device region is
+    // not yet in that space: the target carries an OutputTransform (FlipY on
+    // every screen swapchain, since its slots are EglImageTextures, and the
+    // output rotation on top of that) that KWin's own ItemRendererOpenGL
+    // applies to its scissor region before the same draw call. Passing the
+    // device region through untransformed put the scissor box in the
+    // vertically mirrored position: a full-output region is its own mirror,
+    // so the pills painted on every full-damage frame, but any partial
+    // damage over the band (a hover, the composited cursor crossing it, a
+    // client repaint under it) clipped the quad to a box that did not
+    // contain the band, the pass repainted the band's pixels from
+    // underneath, and the pills vanished until the next full-output frame.
+    // That is the mouse-over flicker. The render offset bracket is KWin's
+    // too: a mirrored output renders inside black bars and nothing may land
+    // in them.
     //
     // GLVertexBuffer's hardwareClipping arm sets the scissor BOX per rect and
     // draws once per rect, and leaves enabling GL_SCISSOR_TEST to the caller
@@ -673,8 +685,19 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     // every translucent pixel. Enabled here; the ScopedGlState guard above
     // restores the prior enable bit and box on exit. render() binds and
     // unbinds the texture itself.
-    glEnable(GL_SCISSOR_TEST);
-    entry->texture->render(clipRegion, quadSize, /*hardwareClipping=*/true);
+    const QSize bufferOffset =
+        renderTarget.transform().map(QSize(viewport.renderOffset().x(), viewport.renderOffset().y()));
+    KWin::Region scissor(
+        KWin::Rect(QPoint(bufferOffset.width(), bufferOffset.height()), renderTarget.size() - 2 * bufferOffset));
+    scissor &= viewport.transform().map(clipRegion & renderTarget.transformedRect(), renderTarget.transformedSize());
+    // An empty scissor means this pass's damage misses the band, not that
+    // the pills are off screen: they still stand from the last pass that
+    // painted them. Report the blit as issued (the input side gates on this)
+    // and just skip the draw, which is what a zero-rect region did anyway.
+    if (!scissor.isEmpty()) {
+        glEnable(GL_SCISSOR_TEST);
+        entry->texture->render(scissor, quadSize, /*hardwareClipping=*/true);
+    }
     return true;
 }
 
