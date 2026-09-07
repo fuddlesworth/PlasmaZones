@@ -2593,6 +2593,73 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml)
     add_test(NAME test_bar_widget_types COMMAND test_bar_widget_types)
 endif()
 
+# Every shipped shell QML file must compile. A property assignment to a name
+# that does not exist takes the whole file out with no warning, and it has
+# done so three times. The sweep walks the linked modules' resource trees, so
+# every module whose files should be covered has to be on the link line here
+# AND its plugin registrar with it: without the registrar a statically linked
+# module registers no types and each file would fail on its own imports.
+#
+# The service libraries are linked for their registerQmlTypes(), which is what
+# makes a Phosphor.Service.* import resolve — the difference between this and
+# a static qmllint run. No D-Bus daemon is contacted: the files are loaded,
+# never instantiated.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
+    add_executable(test_shell_qml_compiles shell/test_shell_qml_compiles.cpp)
+    target_link_libraries(test_shell_qml_compiles
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellControlCenterQml
+            PhosphorShellControlCenterQmlplugin
+            PhosphorShellOsdQml
+            PhosphorShellOsdQmlplugin
+            PhosphorShellNotificationsQml
+            PhosphorShellNotificationsQmlplugin
+            PhosphorShellDashboardQml
+            PhosphorShellDashboardQmlplugin
+            PhosphorShellLauncherQml
+            PhosphorShellLauncherQmlplugin
+            PhosphorShellPowerQml
+            PhosphorShellPowerQmlplugin
+            PhosphorShellPickerQml
+            PhosphorShellPickerQmlplugin
+            PhosphorShellPolkitQml
+            PhosphorShellPolkitQmlplugin
+            PhosphorShellLockQml
+            PhosphorShellLockQmlplugin
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorShellQml
+            PhosphorShellQmlplugin
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorServiceSni::PhosphorServiceSni
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceBrightness::PhosphorServiceBrightness
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServicePolkit::PhosphorServicePolkit
+            PhosphorServiceIdle::PhosphorServiceIdle
+            PhosphorServiceSession::PhosphorServiceSession
+            # Not for a QML module: PanelWindow, SystemClock and SystemUsage
+            # are C++ types this library registers into Phosphor.Shell.
+            PhosphorShell::PhosphorShell
+    )
+    add_test(NAME test_shell_qml_compiles COMMAND test_shell_qml_compiles)
+endif()
+
 # LayerPopoutTransport, the shell's real popout transport (Phase 4.6),
 # driven headless through phosphor-layer's mock transport + screen provider.
 # Gated on the popout QML module because building PopoutHost in-test needs
@@ -2625,6 +2692,11 @@ if(TARGET PhosphorPopout::PhosphorPopoutQml AND TARGET PhosphorLayer::PhosphorLa
             PhosphorPopoutQmlplugin
             PhosphorThemeQml
             PhosphorThemeQmlplugin
+            # PopoutHost imports Phosphor.Widgets for the DecorationSlot it
+            # wraps its content frame in. Without the module the host does
+            # not load and every open in this file is refused.
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
     )
     add_test(NAME test_layer_popout_transport COMMAND test_layer_popout_transport)
 endif()
