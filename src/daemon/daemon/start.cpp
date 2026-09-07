@@ -515,14 +515,12 @@ void Daemon::connectDesktopActivity()
                 // the published active-layout map and the overlays would keep the
                 // pre-renumber answer for every screen whose number moved.
                 //
-                // This runs BEFORE VirtualDesktopManager's clamp, so a screen
-                // sitting on the desktop that was just removed still carries
-                // that number here and resolves against it. The clamp emits
-                // screenDesktopChanged moments later and its handler re-diffs,
-                // so the cost is one spurious active-layout publish rather than
-                // a stuck wrong value. Moving the clamp ahead of
-                // desktopRemovedAt would close it and is a larger change than
-                // it earns. Re-diff
+                // Every screen's number is already correct when this runs:
+                // VirtualDesktopManager shifts the renumbered entries and pulls
+                // down the ones a last-desktop removal left out of range, both
+                // silently, before it emits. So this diff resolves against the
+                // post-removal numbering and the clamp that follows has nothing
+                // left to correct. Re-diff
                 // here, where the engines are already correct.
                 diffActiveAssignments();
                 if (m_overlayService) {

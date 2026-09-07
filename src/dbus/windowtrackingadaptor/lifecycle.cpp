@@ -1227,4 +1227,21 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     }
 }
 
+void WindowTrackingAdaptor::relayWindowReleasedFromContext(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // "unsnapped", and an empty zoneId, which is what the effect's zone cache
+    // reads as "this window occupies no zone" and removes the entry for. The
+    // screen is carried so a subscriber that keys on it sees the context the
+    // window was released FROM, which is the only screen this statement is
+    // about. isFloating stays false: the release says the window stopped being
+    // a resident there, not that it started floating, and the float domain is
+    // per mode and answered elsewhere.
+    Q_EMIT windowStateChanged(windowId,
+                              PhosphorProtocol::WindowStateEntry{windowId, QString(), screenId, false,
+                                                                 QStringLiteral("unsnapped"), QStringList{}, false});
+}
+
 } // namespace PlasmaZones

@@ -697,12 +697,11 @@ void SnapEngine::releaseFromContext(const PhosphorEngine::PlacementStateKey& key
     // per-window, not per-context, so a window legitimately floating in
     // scrolling or autotile on the desktop it moved TO would have that marker
     // cleared and be pulled back into the layout. The caller therefore drives
-    // the ONE consumer that matters — the placement re-capture, in
-    // TilingAdaptor::reconcileWindowMembership — and leaves the other two.
-    //
-    // What is still not reported is the effect's per-window snap mirror. It is
-    // corrected by the window's re-announce on its new desktop, and a narrower
-    // signal for it is a separate change from closing the occupancy leak.
+    // the two that ARE right for a context release, one at a time, in
+    // TilingAdaptor::reconcileWindowMembership: the placement re-capture
+    // (captureWindowPlacement) and the effect's per-window zone mirror
+    // (relayWindowReleasedFromContext). Only the float-marker clear is left
+    // out, deliberately.
     state->windowClosed(canonical);
     // The reverse map named this store; with the window gone from it, leaving
     // the entry would keep isWindowTracked answering true for a window no store

@@ -498,16 +498,33 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
         if (!moved.blueprintIdentity.isValid() && displaced.blueprintIdentity.isValid()) {
             moved.blueprintIdentity = displaced.blueprintIdentity;
         }
+        // The consumed marker is merged the same way the cursor above was,
+        // NOT moved over the top of the destination's. Both sets name ids
+        // already restored out of the stash at their key, and the two stashes
+        // just became one, so the union is what that one entry has had
+        // restored. A plain overwrite dropped the displaced entry's half and a
+        // plain move would have been unreachable for it.
+        //
+        // Intersected with the merged entry's own ids, because
+        // restoreFromStripStash drops the pair once the consumed set reaches
+        // tileCount(). An id from the displaced entry that names no tile here
+        // would inflate the count against a smaller total and retire a stash
+        // that still has tiles waiting to be claimed. Every writer of this set
+        // keeps it a subset of its stash; the intersect is what preserves that.
+        QSet<QString> mergedConsumed = m_stripStashConsumed.take(oldKey);
+        mergedConsumed.unite(m_stripStashConsumed.take(newKey));
+        if (!mergedConsumed.isEmpty()) {
+            QSet<QString> stillStashed;
+            for (const StashedColumn& column : std::as_const(moved.columns)) {
+                for (const StashedTile& tile : column.tiles) {
+                    stillStashed.insert(tile.windowId);
+                }
+            }
+            mergedConsumed.intersect(stillStashed);
+        }
         m_stripStash.insert(newKey, moved);
-        // The one mover here with NO vacancy check, unlike the stash above and
-        // the two maps below. It is inside the stash move, which is already
-        // gated on the destination's stash being empty, and a consumed marker
-        // without a stash to consume is meaningless — so overwriting one is
-        // arguably right. Nobody has been able to construct that state to
-        // confirm it either way; if you are here because a consumed cursor came
-        // back wrong, this asymmetry is the first thing to check.
-        if (m_stripStashConsumed.contains(oldKey)) {
-            m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
+        if (!mergedConsumed.isEmpty()) {
+            m_stripStashConsumed.insert(newKey, mergedConsumed);
         }
     }
     // The mid-burst deferred-apply marker is context-keyed too:

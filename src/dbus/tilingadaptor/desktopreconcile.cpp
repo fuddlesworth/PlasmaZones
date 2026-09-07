@@ -189,6 +189,15 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const QSe
         // window, which is exactly what this is.
         if (m_windowTrackingAdaptor) {
             m_windowTrackingAdaptor->captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
+            // The effect keeps its own per-window zone cache, fed by
+            // windowStateChanged, and the IsSnapped / Zone rule-match fields
+            // read it. Left unsaid it keeps naming the zone this window has
+            // just been released from, so rules scoped to that zone go on
+            // matching a window that is no longer in it. This is the second of
+            // the two consumers a context release must drive by hand; see
+            // relayWindowReleasedFromContext for why the engine signal that
+            // would drive all of them at once is wrong here.
+            m_windowTrackingAdaptor->relayWindowReleasedFromContext(windowId, held->screenId);
         }
     }
 }

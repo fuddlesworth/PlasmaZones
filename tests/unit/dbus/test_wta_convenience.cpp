@@ -595,6 +595,45 @@ private Q_SLOTS:
         QVERIFY(foundUnsnapped);
     }
 
+    // A context release (TilingAdaptor::reconcileWindowMembership dropping a
+    // window from a desktop or activity it has left) does NOT run through
+    // uncommitSnap, so the engine emits nothing — see the note on
+    // SnapEngine::releaseFromContext for why that signal would be wrong there.
+    // The effect's per-window zone mirror still has to be told, or the
+    // IsSnapped / Zone rule fields keep matching against a zone the window has
+    // left. This relay is the narrow announcement that does it, and an EMPTY
+    // zoneId is the part that matters: that is what the effect's zone cache
+    // reads as "occupies no zone" and removes the entry for.
+    void testWindowStateChanged_emittedOnContextRelease()
+    {
+        const QString windowId = QStringLiteral("firefox|12345");
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->relayWindowReleasedFromContext(windowId, m_screenId);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), windowId);
+        const auto state = spy.at(0).at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(state.changeType, QLatin1String("unsnapped"));
+        QVERIFY2(state.zoneId.isEmpty(), "an empty zoneId is what clears the effect's zone cache entry");
+        QVERIFY(state.zoneIds.isEmpty());
+        // The screen the window was released FROM, which is the only context
+        // this statement is about.
+        QCOMPARE(state.screenId, m_screenId);
+        // Not a float report. The release says the window stopped being a
+        // resident, and the float domain is per mode and answered elsewhere.
+        QVERIFY(!state.isFloating);
+    }
+
+    // Guard the one caller's guard: an empty id must announce nothing rather
+    // than broadcast a release for a window that cannot be named.
+    void testWindowStateChanged_contextReleaseIgnoresEmptyId()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->relayWindowReleasedFromContext(QString(), m_screenId);
+        QCOMPARE(spy.count(), 0);
+    }
+
     void testWindowStateChanged_emittedOnFloat()
     {
         QString windowId = QStringLiteral("firefox|12345");

@@ -321,6 +321,20 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
                 --it.value();
             }
         }
+        // Removing the LAST desktop shifts nothing (no entry is above it), so a
+        // screen sitting on it is left naming a number that no longer exists.
+        // Pull those down here, still silently, so the whole per-screen mirror
+        // is correct BEFORE desktopRemovedAt goes out. Otherwise the subscriber
+        // resolves every screen against the stale number and publishes an
+        // active-layout map built from it, and only clampScreenDesktopsToCount
+        // below corrects it — one wrong publish later, via a signal that also
+        // means "this output switched desktops" when nothing did. That clamp
+        // now finds these entries already in range and stays quiet.
+        for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
+            if (it.value() > m_desktopCount) {
+                it.value() = m_desktopCount;
+            }
+        }
         Q_EMIT desktopRemovedAt(removedPosition);
     }
     // The count notification belongs HERE, where the value is committed.
