@@ -1192,6 +1192,14 @@ public:
         return QStringLiteral("/plasmazones/surface");
     }
 
+    /// Pointer shader packs (the `data/pointer/` family). Mirrors
+    /// `userSurfaceSubdir()` so settings + daemon + compositor code share one
+    /// source of truth for the on-disk location.
+    static QString userPointerSubdir()
+    {
+        return QStringLiteral("/plasmazones/pointer");
+    }
+
 private:
     // Non-instantiable
     ConfigDefaults() = delete;

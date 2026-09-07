@@ -87,6 +87,7 @@ Kirigami.Dialog {
     readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
     readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
     readonly property bool _animationPreview: _livePreview && _previewKind === "animation"
+    readonly property bool _pointerPreview: _livePreview && _previewKind === "pointer"
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -125,6 +126,11 @@ Kirigami.Dialog {
     // itself until its shader compiles, so it arms on the decoration
     // schedule (a tick after teardown), not the zone one.
     property bool _animationArmed: false
+    // The pointer pane's arm flag, lifecycle-twin of the two above: written
+    // ONLY by _teardownPanes / _armPanes. Like the animation pane it covers
+    // itself until its shader compiles, so it arms on the decoration schedule
+    // (a tick after teardown) rather than waiting for `opened`.
+    property bool _pointerArmed: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -239,11 +245,13 @@ Kirigami.Dialog {
         _rendererActive = false; // zone
         _decorationArmed = false; // decoration
         _animationArmed = false; // animation
+        _pointerArmed = false; // pointer
     }
     function _armPanes() {
         Qt.callLater(function () {
             root._decorationArmed = root.visible && root._decorationPreview;
             root._animationArmed = root.visible && root._animationPreview;
+            root._pointerArmed = root.visible && root._pointerPreview;
         });
         // The zone arm normally waits for onOpened. A reset while ALREADY
         // open (a mid-session caller, or a fast pack switch on a dialog whose
@@ -798,6 +806,24 @@ Kirigami.Dialog {
                     visible: active
 
                     sourceComponent: AnimationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
+                // Live pointer preview: the pack run as one screen-space pass
+                // over a stand-in desktop with a simulated cursor. Same Loader
+                // shape and armed-flag lifecycle as the two panes above.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root.visible && root._pointerPreview && root._pointerArmed
+                    visible: active
+
+                    sourceComponent: PointerPreviewPane {
                         previewController: root.previewController
                         packId: root.effect ? (root.effect.id || "") : ""
                         liveParams: root._liveParams

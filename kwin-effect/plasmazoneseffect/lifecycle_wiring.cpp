@@ -315,6 +315,24 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // mirror the animation registry's effectsChanged handler above.
         scheduleEffectAudioSync();
     });
+
+    // Pointer shader pack hot-reload, the same shape as the surface handler
+    // above: drop every compiled pointer pack so the next live frame
+    // recompiles against the new source, and re-derive the engaged chain,
+    // because a reload can add the pack id a chain names, remove one it
+    // resolved to, or change the reach / trailSeconds / layer the pass
+    // budgets its damage and cursor handling from. No repaint is forced: the
+    // chain is event-driven, so the next pointer movement brings it back with
+    // the fresh packs, and a full repaint here would light up the whole
+    // screen for a decoration that is not even live.
+    connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this, [this]() {
+        // Fires from the registry's file watcher between frames, where
+        // the compositor's GL context is NOT current, and the cached
+        // packs own GLShaders, GLTextures and GLFramebuffers.
+        // invalidateShaderCache makes the context current itself,
+        // under the same discipline as the sibling handlers here.
+        m_pointerPass.invalidateShaderCache();
+    });
 }
 
 void PlasmaZonesEffect::initTimers()

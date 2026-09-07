@@ -24,9 +24,7 @@
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 
-#include <scene/itemrenderer.h>
 #include <scene/windowitem.h>
-#include <scene/workspacescene.h>
 
 #include <QList>
 #include <QPoint>
@@ -872,37 +870,12 @@ void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutpu
 
 void StripTransitionManager::drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport)
 {
-    // The workspace scene is reached through any window item: the effects
-    // API exposes no scene accessor, and Item::scene() on a member of the
-    // scene IS the workspace scene. An empty stacking order means no strip
-    // either, so there is nothing to draw the cursor over.
-    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-    KWin::WorkspaceScene* scene = nullptr;
-    for (KWin::EffectWindow* w : stack) {
-        if (w && w->windowItem()) {
-            scene = qobject_cast<KWin::WorkspaceScene*>(w->windowItem()->scene());
-            break;
-        }
-    }
-    if (!scene || !scene->cursorItem()) {
-        return;
-    }
-    // WorkspaceScene::updateCursor only moves the item while the cursor is
-    // shown; hidden, its position is whatever the pointer was at when the
-    // hide landed. Track the live pointer the way that slot does (the item's
-    // own hotspot offset lives in its child, so the position IS the pointer).
-    scene->cursorItem()->setPosition(KWin::effects->cursorPos());
-    // Same call paintGenericScreen makes for the overlay item, with the same
-    // viewport, so the cursor lands exactly where the un-passed frame would
-    // have put it, at the item's own scale, for a theme sprite and a
-    // client-provided surface alike. Rendered as the ROOT of the call, which
-    // is what makes the hidden item drawable: the renderer honours
-    // explicitVisible on children only. No colour-space handling of our own,
-    // the renderer's item path carries it. Hand GL state back as found, as
-    // every draw in this tail does.
-    const ShaderInternal::ScopedGlState glStateGuard;
-    scene->renderer()->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
-                                  KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
+    // The body moved to TransitionPass::drawSceneCursor: the pointer
+    // decoration pass hides the cursor and re-draws it for exactly the same
+    // reason (it owns the frame's tail and must put the cursor where KWin's
+    // overlay item would have), and two copies of that renderItem call would
+    // drift. The behaviour here is unchanged.
+    TransitionPass::drawSceneCursor(renderTarget, viewport);
 }
 
 void StripTransitionManager::reapSettled()

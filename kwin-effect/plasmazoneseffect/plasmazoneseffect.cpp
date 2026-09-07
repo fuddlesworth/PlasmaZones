@@ -211,7 +211,17 @@ bool PlasmaZonesEffect::isActive() const
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
         || m_stripTransition.holdsCursorHide() || m_scrollTabPainter->hasAnyIndicators()
-        || !m_scrollCorpseFreeze.isEmpty();
+        || !m_scrollCorpseFreeze.isEmpty()
+        // The POINTER pass, same two clauses and the same reasoning as the
+        // strip pass's pair. `isLive()` is what puts the effect in the chain
+        // while a pointer trail is alive: nothing else here is true for a
+        // pointer that merely moved, so without it paintScreen is never
+        // called and the repaints the pass schedules would paint nothing.
+        // `holdsCursorHide()` outlives it by one frame for a `layer: above`
+        // pack, so the frame that shows the cursor again still runs. Both are
+        // O(1) and short-circuit on the pass's cached engaged verdict, so a
+        // disabled or empty chain costs one bool read per paint cycle.
+        || m_pointerPass.isLive() || m_pointerPass.holdsCursorHide();
 }
 
 void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)

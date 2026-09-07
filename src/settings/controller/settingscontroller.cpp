@@ -59,6 +59,7 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
@@ -751,6 +752,22 @@ SettingsController::SettingsController(QObject* parent)
     // registered with the framework as a headless domain (the drill-down nav
     // nodes are virtual PageAdapters) in buildApplicationController.
     m_decorationPage = new DecorationPageController(m_surfaceShaderRegistry, &m_settings, this);
+
+    // Pointer shader registry — the fourth pack family, scanning the XDG
+    // `plasmazones/pointer` dirs the same way the two registries above scan
+    // theirs.
+    m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
+    registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
+
+    // Pointer page sub-controller. One flat chain of cursor packs plus a
+    // master switch, persisting through the Settings pointerEnabled /
+    // pointerChainJson Q_PROPERTYs, whose NOTIFYs the meta-object loop above
+    // already routes into onSettingsPropertyChanged for dirty tracking — so
+    // this controller needs no per-page staging either. It is deliberately NOT
+    // part of the decoration domain: the two Pointer keys are owned by the
+    // pointer page through the ordinary pageOwnedConfigKeys manifest, so a
+    // Reset there cannot touch the decoration profile tree.
+    m_pointerPage = new PointerPageController(m_pointerShaderRegistry, &m_settings, this);
 
     // Rules page sub-controller — the unified rule surface. It owns
     // its own RuleModel and talks to the daemon's

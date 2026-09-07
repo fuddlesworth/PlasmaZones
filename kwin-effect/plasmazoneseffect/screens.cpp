@@ -677,6 +677,11 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // reason; its sibling spring state goes with the forgetOutput below.
     m_stripTransition.outputRemoved(output);
 
+    // The pointer pass keeps its history in ONE output's device-px canvas and
+    // stores that output as a raw pointer, so a disconnected LogicalOutput*
+    // here would be dereferenced by its damage math and its repaint pump.
+    m_pointerPass.outputRemoved(output);
+
     // Drop this output's strip view accumulator. The map is keyed by
     // LogicalOutput*, so a disconnected one would leave an entry whose key can
     // be reused by a later hotplug landing at the same address — the next

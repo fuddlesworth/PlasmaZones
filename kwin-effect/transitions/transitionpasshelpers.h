@@ -124,6 +124,30 @@ const char* outputQuadVertexSource();
 /// translateAnimationParams coerces every color to a valid QColor (default →
 /// Qt::transparent), so the isValid guard is defence-in-depth against a
 /// caller that bypasses the registry encoder.
+/// Render the scene's own cursor item into the CURRENT target, at the live
+/// pointer position. Only meaningful while the caller holds the compositor's
+/// cursor hidden (EffectsHandler::hideCursor): a screen-level pass that
+/// replaces an output's frame must draw the cursor itself, because KWin's
+/// scene walk would otherwise smear it into the pass's capture (or, for the
+/// pointer pass, paint it under the decoration it is supposed to sit above).
+///
+/// The item is drawn EXPLICITLY as the root of the renderItem call, which is
+/// what makes a hidden item drawable at all: KWin's renderer honours
+/// explicitVisible on CHILD items only. Uses the same call and viewport
+/// paintGenericScreen makes for the overlay item, so the cursor lands exactly
+/// where the un-passed frame would have put it, at the item's own scale, for
+/// a theme sprite and a client-provided surface alike. No colour-space
+/// handling of its own; the renderer's item path carries it.
+///
+/// Hands GL state back as found (ScopedGlState). A no-op when the scene or
+/// its cursor item cannot be reached.
+///
+/// Shared by StripTransitionManager (which hides the cursor for the length of
+/// a strip leg on the pointer's output) and PointerDecorationPass (which
+/// hides it while a `layer: above` pointer pack is live), so the two never
+/// drift apart.
+void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
+
 void translatePackParams(
     const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QVariantMap& params,
     std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>& customParams,

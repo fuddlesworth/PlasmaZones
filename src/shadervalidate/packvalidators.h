@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The three per-authoring-model pack validators for plasmazones-shader-validate.
+// The four per-authoring-model pack validators for plasmazones-shader-validate.
 // Each reproduces the matching runtime's GLSL assembly (entry scaffold +
 // generated p_<id> preamble + include expansion) and bakes every stage through
 // headless glslang. main.cpp owns argument parsing and dispatch; these do the
@@ -25,5 +25,10 @@ int validateAnimationPack(const QString& packDir, QTextStream& out);
 // surface/decoration packs (data/surface/*): SurfaceShaderEffect + paramPreamble;
 // validates effect.frag, buffer passes, and the shared vertex stage.
 int validateSurfacePack(const QString& packDir, QTextStream& out);
+
+// pointer packs (data/pointer/*): PointerShaderEffect + the pPointer entry
+// scaffold + paramPreamble; validates effect.frag, buffer passes, and the
+// shared vertex stage.
+int validatePointerPack(const QString& packDir, QTextStream& out);
 
 } // namespace PlasmaZones::ShaderValidate

@@ -1,0 +1,64 @@
+{
+    "id": "phosphor-trail",
+    "name": "Phosphor Trail",
+    "description": "A luminous ribbon follows the pointer along its recent path. The ribbon is widest and brightest at the pointer and tapers away with age, wrapped in a soft glow halo. Its colour runs through the brand spectrum from the head colour at the pointer to the tail colour at the far end, and it grows wider and brighter when the pointer moves fast.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reachParam": "width",
+    "trailSeconds": 2.0,
+    "parameters": [
+        {
+            "id": "width",
+            "name": "Width",
+            "type": "float",
+            "default": 6.0,
+            "min": 1.0,
+            "max": 32.0,
+            "description": "Ribbon width at the pointer (px)"
+        },
+        {
+            "id": "lifetime",
+            "name": "Lifetime",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.2,
+            "max": 2.0,
+            "description": "How long a point on the path stays lit (seconds)"
+        },
+        {
+            "id": "glow",
+            "name": "Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 3.0,
+            "description": "Strength of the soft halo around the ribbon, 0 to disable"
+        },
+        {
+            "id": "speedBoost",
+            "name": "Speed boost",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How much wider and brighter the ribbon gets when the pointer moves fast"
+        },
+        {
+            "id": "colorA",
+            "name": "Head colour",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Colour at the pointer end of the ribbon"
+        },
+        {
+            "id": "colorB",
+            "name": "Tail colour",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Colour at the fading end of the ribbon"
+        }
+    ]
+}

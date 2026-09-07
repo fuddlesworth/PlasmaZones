@@ -1,0 +1,73 @@
+{
+    "id": "sparks",
+    "name": "Sparks",
+    "description": "The pointer sheds small sparks as it moves. Faster motion throws more of them. Each spark leaves the path in its own direction, arcs under gravity and burns out after a short life, with its colour shifting from the first colour to the second as it goes.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particles",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 96,
+    "trailSeconds": 1.0,
+    "parameters": [
+        {
+            "id": "count",
+            "name": "Sparks per step",
+            "type": "int",
+            "default": 24,
+            "min": 1,
+            "max": 48,
+            "description": "How many sparks a fast-moving pointer can shed from each point on its path"
+        },
+        {
+            "id": "size",
+            "name": "Spark size",
+            "type": "float",
+            "default": 2.0,
+            "min": 0.5,
+            "max": 8.0,
+            "description": "Radius of each spark (px)"
+        },
+        {
+            "id": "gravity",
+            "name": "Gravity",
+            "type": "float",
+            "default": 300.0,
+            "min": 0.0,
+            "max": 1200.0,
+            "description": "How strongly sparks fall (px per second squared)"
+        },
+        {
+            "id": "life",
+            "name": "Life",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.2,
+            "max": 1.0,
+            "description": "How long each spark burns (seconds)"
+        },
+        {
+            "id": "spread",
+            "name": "Spread",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How fast sparks fly away from the path"
+        },
+        {
+            "id": "colorA",
+            "name": "Birth colour",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Colour of a freshly shed spark"
+        },
+        {
+            "id": "colorB",
+            "name": "Burnout colour",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Colour a spark fades toward before it is gone"
+        }
+    ]
+}

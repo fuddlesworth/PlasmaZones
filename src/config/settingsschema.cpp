@@ -64,6 +64,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
+    appendPointerSchema(s);
 
     return s;
 }

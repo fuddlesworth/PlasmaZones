@@ -1,0 +1,406 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// PointerDecorationPass — lifecycle, settings, pointer sampling, damage and
+// cursor arbitration. The pack COMPILATION lives in pointerdecorationshader
+// .cpp and the DRAW in pointerdecorationpaint.cpp; the class contract and the
+// reasoning behind the cost rule, the coordinate space and the cursor
+// arbitration live on the header.
+
+#include "pointerdecorationpass.h"
+
+#include "plasmazoneseffect/shader_internal.h"
+#include "compositor/effectlogging.h"
+
+#include <core/output.h>
+#include <core/rect.h>
+#include <effect/effecthandler.h>
+#include <effect/globals.h>
+#include <opengl/glframebuffer.h>
+#include <opengl/glshader.h>
+#include <opengl/gltexture.h>
+
+#include <QImage>
+#include <QLoggingCategory>
+#include <QPoint>
+#include <QSizeF>
+
+#include <algorithm>
+
+namespace PlasmaZones {
+
+namespace PPS = PhosphorPointerShaders;
+
+PointerDecorationPass::PointerDecorationPass() = default;
+
+PointerDecorationPass::~PointerDecorationPass()
+{
+    // The compiled packs own GLShaders, GLTextures and GLFramebuffers whose
+    // destruction issues glDelete*; the destructor can run at compositor
+    // teardown where no context is current. Same discipline as every other GL
+    // owner in the effect.
+    releaseGl();
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+void PointerDecorationPass::setEnabled(bool enabled)
+{
+    if (m_enabled == enabled) {
+        return;
+    }
+    m_enabled = enabled;
+    rebuildChain();
+    if (!m_engaged) {
+        // Turning the feature off mid-trail must not leave the pointer
+        // invisible behind an `above` layer's hide, and must not leave the
+        // history to be picked up by a later enable as a stale burst.
+        updateCursorHiding();
+        m_history.reset();
+        m_hasTimeOrigin = false;
+    }
+}
+
+void PointerDecorationPass::setProfile(const PPS::PointerProfile& profile)
+{
+    if (m_profile == profile) {
+        return;
+    }
+    m_profile = profile;
+    rebuildChain();
+    if (!m_engaged) {
+        updateCursorHiding();
+        m_history.reset();
+        m_hasTimeOrigin = false;
+    }
+}
+
+void PointerDecorationPass::rebuildChain()
+{
+    m_engagedLayers.clear();
+    m_anyAboveLayer = false;
+    m_maxReachLogical = 0.0;
+    m_maxTrailSeconds = 0.0;
+
+    if (!m_enabled || m_profile.isEmpty()) {
+        m_engaged = false;
+        return;
+    }
+    // Populating the search paths is what makes the registry scan the pack
+    // dirs at all, so it has to happen before the first resolve — but only
+    // once the user has actually enabled a chain, so a disabled feature never
+    // pays for the scan or the file watcher.
+    ensureRegistryPaths();
+
+    m_engagedLayers.reserve(static_cast<size_t>(m_profile.layers.size()));
+    for (const PPS::PointerLayer& layer : m_profile.layers) {
+        if (!layer.enabled || layer.effectId.isEmpty()) {
+            continue;
+        }
+        const PPS::PointerShaderEffect eff = m_registry.effect(layer.effectId);
+        if (!eff.isValid()) {
+            // Not a per-frame warning: the resolve happens only when the
+            // profile, the enable flag or the registry changes.
+            qCWarning(lcEffect) << "Pointer pack" << layer.effectId << "is not in the registry — layer skipped";
+            continue;
+        }
+        // reach is LOGICAL px, possibly overridden by the pack's reachParam
+        // against this layer's parameter overrides. It sets the damage rect,
+        // so a pack painting past it is clipped rather than smeared.
+        m_maxReachLogical = std::max(m_maxReachLogical, eff.resolvedReach(layer.parameters));
+        m_maxTrailSeconds = std::max(m_maxTrailSeconds, eff.trailSeconds);
+        if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
+            m_anyAboveLayer = true;
+        }
+        m_engagedLayers.push_back(EngagedLayer{layer.effectId, eff, layer.parameters});
+    }
+    // A chain whose every layer resolved away is NOT engaged: the cost rule
+    // is about live layers, not about a non-empty profile.
+    m_engaged = !m_engagedLayers.empty() && m_maxTrailSeconds > 0.0;
+}
+
+// ── Pointer sampling ────────────────────────────────────────────────────────
+
+void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPos, Qt::MouseButtons buttons,
+                                        Qt::MouseButtons oldButtons)
+{
+    if (!m_engaged || !KWin::effects) {
+        return;
+    }
+    const bool moved = pos != oldPos;
+    const bool buttonsChanged = buttons != oldButtons;
+    if (!moved && !buttonsChanged) {
+        return;
+    }
+    KWin::LogicalOutput* const screen = KWin::effects->screenAt(pos.toPoint());
+    if (!screen) {
+        return;
+    }
+    if (screen != m_output) {
+        // A new canvas. The samples in the ring are positions against the old
+        // output's origin and scale, so carrying them over would draw the
+        // trail at an arbitrary offset on the new output for the length of
+        // one trailSeconds window. Start clean.
+        m_history.reset();
+        m_hasTimeOrigin = false;
+        m_output = screen;
+    }
+    const qreal scale = screen->scale();
+    const QPointF devicePx = (pos - screen->geometryF().topLeft()) * scale;
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (moved) {
+        m_history.notePointer(devicePx, nowMs);
+    }
+    if (buttonsChanged) {
+        m_history.noteButtons(buttons, oldButtons, devicePx, nowMs);
+    }
+    // Ask for the frame ourselves. A pointer moving over a hardware cursor
+    // plane damages nothing, so without this the chain would only tick when
+    // something unrelated happened to repaint the screen — the same reason
+    // repaintHoverDecorations exists on this signal.
+    const QRectF logical = damageLogicalRect(screen, nowMs);
+    if (!logical.isEmpty()) {
+        KWin::effects->addRepaint(KWin::RectF(logical));
+    }
+}
+
+bool PointerDecorationPass::isLive() const
+{
+    if (!m_engaged) {
+        return false;
+    }
+    return m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
+}
+
+// ── Damage ──────────────────────────────────────────────────────────────────
+
+QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs) const
+{
+    if (!m_engaged || !screen) {
+        return {};
+    }
+    const qreal scale = screen->scale();
+    // reach is declared in logical px (the unit a user types in the settings
+    // app); the history and the canvas are device px.
+    QRectF rect = m_history.damageRect(m_maxReachLogical * scale, nowMs, m_maxTrailSeconds);
+    if (rect.isEmpty()) {
+        return {};
+    }
+    if (m_anyAboveLayer) {
+        // An `above` chain hides KWin's cursor and re-draws the sprite
+        // itself, so the sprite's own rect has to be inside the damage or the
+        // pointer would leave a hole wherever it drifts past the reach band.
+        const QRectF sprite = cursorCanvasRect(screen);
+        if (!sprite.isEmpty()) {
+            rect = rect.united(sprite);
+        }
+    }
+    const QSizeF deviceSize = screen->geometryF().size() * scale;
+    return rect.intersected(QRectF(QPointF(0.0, 0.0), deviceSize));
+}
+
+QRectF PointerDecorationPass::damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs) const
+{
+    const QRectF device = damageDeviceRect(screen, nowMs);
+    if (device.isEmpty()) {
+        return {};
+    }
+    const qreal scale = screen->scale();
+    const QRectF outputGeo = screen->geometryF();
+    const QRectF local(device.x() / scale, device.y() / scale, device.width() / scale, device.height() / scale);
+    // Grown to whole logical pixels AFTER the translate: a fractional-scale
+    // device rect maps to a fractional logical one, and a repaint region that
+    // stops mid-pixel leaves the pack's outermost row unrefreshed. Aligning
+    // before the translate would round the output origin too, which on a
+    // fractionally-positioned output shifts the whole rect.
+    return QRectF(local.translated(outputGeo.topLeft()).toAlignedRect());
+}
+
+QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen) const
+{
+    if (!screen || !KWin::effects) {
+        return {};
+    }
+    const KWin::PlatformCursorImage cursor = KWin::effects->cursorImage();
+    if (cursor.isNull()) {
+        return {};
+    }
+    const QImage img = cursor.image();
+    const qreal dpr = img.devicePixelRatio() > 0.0 ? img.devicePixelRatio() : 1.0;
+    // The hotspot is expressed in the sprite image's own device pixels, so it
+    // divides by the image's dpr to reach logical px — not by the OUTPUT's
+    // scale, which need not match the cursor theme's size.
+    const QPointF logicalTopLeft = KWin::effects->cursorPos() - cursor.hotSpot() / dpr;
+    const qreal scale = screen->scale();
+    const QPointF canvasTopLeft = (logicalTopLeft - screen->geometryF().topLeft()) * scale;
+    const QSizeF canvasSize(img.width() / dpr * scale, img.height() / dpr * scale);
+    return QRectF(canvasTopLeft, canvasSize);
+}
+
+void PointerDecorationPass::scheduleRepaints()
+{
+    if (!m_engaged || !m_output || !KWin::effects) {
+        // Nothing engaged: no repaint, no clock read, no allocation. The
+        // cursor hide cannot be outstanding either — every path that
+        // disengages releases it — but a disengage that raced a frame is
+        // covered by the release below.
+        if (m_cursorHidden) {
+            updateCursorHiding();
+        }
+        return;
+    }
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (!m_history.isLive(nowMs, m_maxTrailSeconds)) {
+        // Gone quiet. Drop the iTime origin so the next burst starts at zero,
+        // and hand the cursor back — this is the path that covers a pointer
+        // output which stopped painting entirely, where paintOutput's own
+        // release never runs.
+        m_hasTimeOrigin = false;
+        updateCursorHiding();
+        return;
+    }
+    const QRectF logical = damageLogicalRect(m_output, nowMs);
+    if (!logical.isEmpty()) {
+        KWin::effects->addRepaint(KWin::RectF(logical));
+    }
+}
+
+// ── Cursor arbitration ──────────────────────────────────────────────────────
+
+bool PointerDecorationPass::cursorOnOutput(KWin::LogicalOutput* screen) const
+{
+    return screen && KWin::effects && screen->geometryF().contains(KWin::effects->cursorPos());
+}
+
+void PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
+{
+    if (m_cursorHidden || !m_anyAboveLayer || !KWin::effects || !cursorOnOutput(screen)) {
+        return;
+    }
+    // Another owner (the strip pass, KWin's zoom, a screen-edge peek) already
+    // holds the hidden state and draws its own copy; taking a second hide
+    // would leave the show/hide pair unbalanced and drawing the cursor twice.
+    if (KWin::effects->isCursorHidden()) {
+        return;
+    }
+    KWin::effects->hideCursor();
+    m_cursorHidden = true;
+}
+
+void PointerDecorationPass::updateCursorHiding()
+{
+    if (!m_cursorHidden) {
+        return;
+    }
+    const bool stillLive = m_engaged && m_anyAboveLayer && m_output && cursorOnOutput(m_output)
+        && m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
+    if (stillLive) {
+        return;
+    }
+    if (KWin::effects) {
+        KWin::effects->showCursor();
+    }
+    m_cursorHidden = false;
+}
+
+void PointerDecorationPass::releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen)
+{
+    // Unconditional for THIS output, unlike updateCursorHiding: a live chain
+    // on it does not keep the hide, because the caller is about to paint the
+    // output through another pass and nothing else would draw the cursor.
+    if (!m_cursorHidden || !cursorOnOutput(screen)) {
+        return;
+    }
+    if (KWin::effects) {
+        KWin::effects->showCursor();
+    }
+    m_cursorHidden = false;
+}
+
+// ── Teardown ────────────────────────────────────────────────────────────────
+
+bool PointerDecorationPass::ensureGlContextCurrent()
+{
+    return KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+}
+
+void PointerDecorationPass::releaseGl()
+{
+    if (m_packCache.empty() && !m_cursorSprite) {
+        return;
+    }
+    // The result is CAPTURED rather than discarded: the only false case is
+    // compositor teardown, where GL is going away and the driver reclaims the
+    // objects whatever we do, so the clear is safe either way — but a guard
+    // whose answer is thrown away is not a guard.
+    if (!ensureGlContextCurrent()) {
+        qCWarning(lcEffect) << "Pointer pack cache released without a current GL context (compositor teardown?)";
+    }
+    m_packCache.clear();
+    m_cursorSprite.reset();
+    m_cursorSpriteKey = 0;
+}
+
+void PointerDecorationPass::invalidateShaderCache()
+{
+    releaseGl();
+    // A reload can add the pack a chain names, or remove one it resolved to,
+    // and it can change reach / trailSeconds / layer — all of which feed the
+    // engaged-chain cache, not just the compiled shaders.
+    rebuildChain();
+    if (!m_engaged) {
+        updateCursorHiding();
+    }
+}
+
+void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)
+{
+    if (m_output != screen) {
+        return;
+    }
+    // A dangling LogicalOutput* here would be dereferenced by scheduleRepaints
+    // and by the damage math; the history is keyed to this output's canvas
+    // and means nothing without it.
+    m_output = nullptr;
+    m_history.reset();
+    m_hasTimeOrigin = false;
+    // The pointer is about to land somewhere else (or nowhere); a hide taken
+    // for the dying output has no pass left to draw the cursor for it.
+    if (m_cursorHidden) {
+        if (KWin::effects) {
+            KWin::effects->showCursor();
+        }
+        m_cursorHidden = false;
+    }
+    // The buffer targets are sized to the removed output's device size; the
+    // next live frame reallocates them against whatever output the pointer
+    // lands on. Freed here rather than carried, so a hotplug cycle does not
+    // hold a full-size FBO pair per pack for a pointer that never returns.
+    // screenRemoved arrives from KWin's signal, not from the paint thread, so
+    // the glDelete* the resets below issue need the context made current —
+    // same discipline as releaseGl().
+    if (!m_packCache.empty() && !ensureGlContextCurrent()) {
+        qCWarning(lcEffect) << "Pointer buffer targets freed without a current GL context (compositor teardown?)";
+    }
+    for (auto& entry : m_packCache) {
+        entry.second.bufferTex.clear();
+        entry.second.bufferFbo.clear();
+        entry.second.bufferSize = QSize();
+    }
+}
+
+void PointerDecorationPass::reset()
+{
+    if (m_cursorHidden) {
+        if (KWin::effects) {
+            KWin::effects->showCursor();
+        }
+        m_cursorHidden = false;
+    }
+    releaseGl();
+    m_history.reset();
+    m_output = nullptr;
+    m_hasTimeOrigin = false;
+}
+
+} // namespace PlasmaZones

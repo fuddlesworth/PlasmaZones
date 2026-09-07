@@ -58,6 +58,10 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorPointerShaders {
+class PointerShaderRegistry;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -101,6 +105,7 @@ class RegistryShaderPreviewBackend;
 #include "settings/pages/snappingshaderspagecontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/decorationpagecontroller.h"
+#include "settings/pages/pointerpagecontroller.h"
 #include "settings/services/stagingservice.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
 #include "settings/pages/scrollingbehaviorcontroller.h"
@@ -176,6 +181,11 @@ class SettingsController : public QObject
     // resolved through a DecorationProfileTree. QML reads
     // `settingsController.decorationPage.<invokable>()`.
     Q_PROPERTY(DecorationPageController* decorationPage READ decorationPage CONSTANT)
+    // Pointer — the cursor-decoration chain. Its own config domain (the
+    // Pointer group), not part of the decoration tree, even though its pages
+    // sit beside the decoration ones in the navigation. QML reads
+    // `settingsController.pointerPage.<invokable>()`.
+    Q_PROPERTY(PointerPageController* pointerPage READ pointerPage CONSTANT)
     // Rules page — the unified rule surface. The controller owns one
     // RuleModel and talks to the daemon's org.plasmazones.Rules
     // adaptor; QML reads `settingsController.rulesPage.model`.
@@ -538,6 +548,10 @@ public:
     DecorationPageController* decorationPage() const
     {
         return m_decorationPage;
+    }
+    PointerPageController* pointerPage() const
+    {
+        return m_pointerPage;
     }
     RuleController* rulesPage() const
     {
@@ -1070,6 +1084,15 @@ private:
     /// Safe only while `~DecorationPageController` stays `= default`.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
     DecorationPageController* m_decorationPage = nullptr;
+    /// Settings-side mirror of the daemon's / compositor's pointer-pack
+    /// registry — drives the Pointer page's chain and the pointer browser.
+    /// Same parent / construction-order situation as the two registries above:
+    /// a QObject child of `this` constructed before `m_pointerPage`, so
+    /// insertion-order child deletion tears the registry down FIRST and the
+    /// page's non-owned registry pointer dangles through its own destruction.
+    /// Safe only while `~PointerPageController` stays `= default`.
+    PhosphorPointerShaders::PointerShaderRegistry* m_pointerShaderRegistry = nullptr;
+    PointerPageController* m_pointerPage = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.

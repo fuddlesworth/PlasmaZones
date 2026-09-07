@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Shared helpers for the shader-pack validators (plasmazones-shader-validate).
-// The per-mode validators (packvalidator_overlay/_animation/_surface.cpp) and
+// The per-mode validators (packvalidator_overlay/_animation/_surface/_pointer.cpp) and
 // the CLI entry point (main.cpp) live in separate translation units to keep
 // each file focused;
 // this header exposes the pieces the validators share: the pack-path confine
@@ -28,18 +28,19 @@ namespace PlasmaZones::ShaderValidate {
 
 // ── authoring-model detection ──────────────────────────────────────────────
 
-/// The three authoring models a pack can belong to.
+/// The four authoring models a pack can belong to.
 enum class PackModel {
     Overlay,
     Animation,
-    Surface
+    Surface,
+    Pointer
 };
 
 /// Which authoring model @p packDir belongs to, or nullopt when the directory
 /// carries no marker.
 ///
 /// Detected from the pack's SIBLING `shared/` directory rather than from
-/// metadata.json, because the three schemas are not distinguishable: all three
+/// metadata.json, because the three schemas are not distinguishable: all four
 /// carry id / name / fragmentShader, and the only animation-exclusive field
 /// (`appliesTo`) is optional, so a universal animation pack that omits it looks
 /// exactly like an overlay pack. The shared directory is unambiguous, since
@@ -66,8 +67,8 @@ std::optional<QString> confinedPackPath(const QString& packDir, const QString& r
 
 // In-place confinement: rewrites @p path to its confined absolute form and
 // returns true, or returns false when the path escapes the pack dir. An EMPTY
-// path is left as-is and accepted (that stage is simply absent). All three
-// validators gate every user-editable metadata path through this before
+// path is left as-is and accepted (that stage is simply absent). Every
+// validator gates every user-editable metadata path through this before
 // opening it.
 bool confinePackPathInPlace(const QString& packDir, QString& path);
 
@@ -80,7 +81,7 @@ QString poolName(const QString& type);
 
 // Report a compiled stage's outcome ("OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line plus the did-you-mean hint).
-// Returns 1 on failure, 0 on success. Shared by all three validators.
+// Returns 1 on failure, 0 on success. Shared by all the validators.
 int reportCompile(QTextStream& out, const QString& label, const PhosphorRendering::ShaderCompiler::Result& result,
                   const QStringList& declared);
 

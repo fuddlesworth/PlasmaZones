@@ -100,6 +100,7 @@ set(plasmazones_core_SRCS
     config/settings/perscreen_selector.cpp
     config/settings/animationprofile.cpp
     config/settings/profiletrees.cpp
+    config/settings/pointer.cpp
     config/settings/disable.cpp
     config/settings/uienums.cpp
     config/settings/triggers.cpp
@@ -118,6 +119,7 @@ set(plasmazones_core_SRCS
     config/settingsschema.h
     config/settingsschema.cpp
     config/settingsschema_p.h
+    config/settingsschema_pointer.cpp
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
     config/settingsschemachoices.h
@@ -285,6 +287,13 @@ target_link_libraries(plasmazones_core
         # ConfigDefaults baseline), so consumers linking plasmazones_core need
         # the include path + link edge.
         PhosphorSurface::PhosphorSurface
+        # PhosphorPointer: PointerProfile — the pointer decoration chain type.
+        # PUBLIC for the same reason as PhosphorSurface above: configdefaults
+        # holds the shipped-empty chain and core/isettings.h plus
+        # config/settings.h expose the type by value on the pointerChain
+        # accessors, so consumers linking plasmazones_core need the include
+        # path + link edge.
+        PhosphorPointer::PhosphorPointer
         # PhosphorRules: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a RuleStore for the per-mode
         # disable lists, the RuleAdaptor exposes the store on D-Bus, and
@@ -1120,6 +1129,7 @@ add_executable(plasmazones-shader-validate
     shadervalidate/packvalidator_overlay.cpp
     shadervalidate/packvalidator_animation.cpp
     shadervalidate/packvalidator_surface.cpp
+    shadervalidate/packvalidator_pointer.cpp
     shadervalidate/packvalidatorcommon.cpp
 )
 target_link_libraries(plasmazones-shader-validate
@@ -1129,6 +1139,7 @@ target_link_libraries(plasmazones-shader-validate
         PhosphorShaders::PhosphorShaders
         PhosphorAnimation::PhosphorAnimation
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer
         Qt6::Core
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -1137,10 +1148,11 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 
 # CI gate: every bundled pack must parse + bake clean. Headless glslang, so this
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
-# packs (data/overlays), animation packs (--animation, data/animations), and
-# surface packs (--surface, data/surface) are distinct authoring models with
-# different entry conventions, so each gets its own invocation. (The validator
-# also detects the model per pack now, so the flags are belt-and-braces here;
+# packs (data/overlays), animation packs (--animation, data/animations),
+# surface packs (--surface, data/surface) and pointer packs (--pointer,
+# data/pointer) are distinct authoring models with different entry conventions,
+# so each gets its own invocation. (The validator also detects the model per
+# pack now, so the flags are belt-and-braces here;
 # they pin each test to one model regardless of what a tree grows later.)
 #
 # REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
@@ -1160,17 +1172,19 @@ if(BUILD_TESTING)
              COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
     add_test(NAME shader_validate_surface
              COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
+    add_test(NAME shader_validate_pointer
+             COMMAND plasmazones-shader-validate --pointer ${PROJECT_SOURCE_DIR}/data/pointer)
 
     # The XDG half of the standard isolation, applied by hand — NOT a stray copy
-    # that should have used the shared helper. These three tests have no target of
+    # that should have used the shared helper. These tests have no target of
     # their own (they all invoke the one `plasmazones-shader-validate` command), and
     # `phosphor_apply_test_isolation` keys its sandbox on a TARGET name, so it
     # cannot apply here. Giving the module a sandbox key independent of the
     # target name is the only way to fold this in.
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
-    # the explicit --overlay/--animation/--surface directory arguments and
-    # derives include paths from them (the packvalidator_* arms). The one host
+    # the explicit --overlay/--animation/--surface/--pointer directory arguments
+    # and derives include paths from them (the packvalidator_* arms). The one host
     # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
     # `builtin:` buffer fallback resolves through QStandardPaths when a pack
     # names a builtin buffer whose sibling `../shared/` copy is missing —
@@ -1180,7 +1194,8 @@ if(BUILD_TESTING)
     set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
     file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"
                         "${_pz_shader_validate_xdg}/state" "${_pz_shader_validate_xdg}/cache")
-    foreach(_pz_sv shader_validate_bundled shader_validate_animations shader_validate_surface)
+    foreach(_pz_sv shader_validate_bundled shader_validate_animations shader_validate_surface
+                   shader_validate_pointer)
         set_property(TEST ${_pz_sv} APPEND PROPERTY ENVIRONMENT
             "XDG_CONFIG_HOME=${_pz_shader_validate_xdg}/config"
             "XDG_DATA_HOME=${_pz_shader_validate_xdg}/data"

@@ -43,6 +43,7 @@
 #include "shader_resolve.h"
 #include "types.h"
 
+#include "pointer/pointerdecorationpass.h"
 #include "transitions/desktoptransitionmanager.h"
 #include "transitions/shadertransitionmanager.h"
 #include "transitions/striptransitionmanager.h"
@@ -2869,6 +2870,14 @@ private:
     // the tiling batch path (notifyLeg); liveness belongs to the spring.
     // Same ownership shape and init-order rule as m_desktopTransition.
     StripTransitionManager m_stripTransition;
+
+    // The POINTER decoration pass: the user's chain of data/pointer packs
+    // (trails, halos, click ripples) drawn over the finished frame of the
+    // output the pointer is on. Same by-value + `this` ctor ownership shape
+    // and declaration-order rule as the transition managers above. Driven by
+    // pointer events alone (slotMouseChanged), so a chain with no live layer
+    // costs nothing per frame — see the class note.
+    PointerDecorationPass m_pointerPass;
 
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.

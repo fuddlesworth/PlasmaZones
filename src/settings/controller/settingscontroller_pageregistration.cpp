@@ -510,11 +510,24 @@ void SettingsController::buildApplicationController()
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
 
+    // Pointer sits under Surfaces because that is where a user looks for it,
+    // but it is NOT a decoration surface: it owns the two Pointer.* keys
+    // outright rather than a subtree of the shared DecorationProfileTree, so
+    // it stays out of kDecorationAllLeaves and out of isDecorationPage (see
+    // the sibling _pagetopology.cpp).
+    regVirtual(QStringLiteral("decorations-pointer"), QStringLiteral("decorations-surfaces"),
+               PhosphorI18n::tr("Pointer"), QStringLiteral("pages/pointer/PointerPage.qml"),
+               QStringLiteral("input-mouse"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
     regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),
                QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
+               QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("decorations-pointer-shaders"), QStringLiteral("decorations-library"),
+               PhosphorI18n::tr("Pointer Packs"), QStringLiteral("pages/pointer/PointerShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Every page declared its simple/advanced tier at registration above.

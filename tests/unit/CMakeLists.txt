@@ -384,6 +384,12 @@ p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.c
 # PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
 p_add_test(test_settings_decoration_tree config/settings/test_settings_decoration_tree.cpp)
 
+# Pointer master switch + PointerProfile chain persistence, including the
+# sparse-persistence contract on both keys. PhosphorPointer symbols resolve
+# transitively via plasmazones_core (which links PhosphorPointer PUBLIC for
+# Settings::pointerChain()).
+p_add_test(test_settings_pointer config/settings/test_settings_pointer.cpp)
+
 # Pins runtime palette tracking for system-colors mode (needs Qt6::Gui for
 # QGuiApplication palette events; p_add_test links Core only).
 add_executable(test_settings_system_palette_tracking config/settings/test_settings_system_palette_tracking.cpp)
@@ -1870,6 +1876,35 @@ target_link_libraries(test_decorationpreviewcontroller
 # speak for this route's controllers.
 target_compile_definitions(test_decorationpreviewcontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcontroller)
+
+# The pointer route's counterpart to the guard above. The decoration sweep
+# deliberately excludes the pointer preview QML (its previewController is a
+# PointerPreviewController, a different class), so without this the pointer
+# route's QML calls would go unchecked — the exact gap that sweep exists to
+# close. Covers both pointer controllers, since the chain editor writes every
+# edit straight through the page bridge.
+add_executable(test_pointer_qml_contracts
+    settings/pages/test_pointer_qml_contracts.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpagecontroller_browser.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpreviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp  # the browser arm's installShaderPack
+)
+target_link_libraries(test_pointer_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        PhosphorPointer::PhosphorPointer
+        PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
+        PhosphorControl::PhosphorControl  # PointerPageController's PageController base
+        plasmazones_core
+)
+target_include_directories(test_pointer_qml_contracts PRIVATE ${CMAKE_SOURCE_DIR}/src/settings)
+target_compile_definitions(test_pointer_qml_contracts PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_pointer_qml_contracts COMMAND test_pointer_qml_contracts)
 
 # Companion test executable: decoration-set CRUD over the shared
 # ShaderSetStore (save / list / apply / remove / update / export / import,

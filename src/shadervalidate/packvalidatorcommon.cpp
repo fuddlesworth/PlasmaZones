@@ -135,6 +135,9 @@ std::optional<PackModel> detectPackModel(const QString& packDir)
     if (shared.exists(QStringLiteral("surface_uniforms.glsl"))) {
         return PackModel::Surface;
     }
+    if (shared.exists(QStringLiteral("pointer_uniforms.glsl"))) {
+        return PackModel::Pointer;
+    }
     if (shared.exists(QStringLiteral("common.glsl"))) {
         return PackModel::Overlay;
     }

@@ -593,9 +593,15 @@ private Q_SLOTS:
         // controller to its calls would demand the wrong route's API — the
         // exact mistake the note above describes for the dialog. Its own
         // metaobject mirror lives in test_animations_qml_contracts.
+        // PointerPreviewPane and PointerPreviewCanvas are the POINTER route,
+        // on a PointerPreviewController, and are excluded for the same reason
+        // as the animation pane rather than as a blanket pass: their own
+        // metaobject mirror lives in test_pointer_qml_contracts.
         const QStringList excluded{settingsQml + QStringLiteral("/ShaderBrowserCard.qml"),
                                    settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml"),
-                                   settingsQml + QStringLiteral("/AnimationPreviewPane.qml")};
+                                   settingsQml + QStringLiteral("/AnimationPreviewPane.qml"),
+                                   settingsQml + QStringLiteral("/PointerPreviewPane.qml"),
+                                   settingsQml + QStringLiteral("/PointerPreviewCanvas.qml")};
         QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
         while (sweep.hasNext()) {
             const QString path = sweep.next();

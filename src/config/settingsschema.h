@@ -79,5 +79,6 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema);
 void appendWindowsSchema(PhosphorConfig::Schema& schema);
 void appendGapsSchema(PhosphorConfig::Schema& schema);
 void appendDecorationsSchema(PhosphorConfig::Schema& schema);
+void appendPointerSchema(PhosphorConfig::Schema& schema);
 
 } // namespace PlasmaZones

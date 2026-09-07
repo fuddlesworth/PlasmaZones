@@ -10,9 +10,9 @@
 // no compositor). It is the CI gate for the bundled sets and a pre-commit-
 // friendly tool for pack authors.
 //
-// Three authoring models. Each pack's model is DETECTED from the marker header
+// Four authoring models. Each pack's model is DETECTED from the marker header
 // in its sibling `shared/` directory (see detectPackModel); --overlay /
-// --animation / --surface force one model for every path given, for a pack
+// --animation / --surface / --pointer force one model for every path given, for a pack
 // tree that carries no shared/ dir of its own. Detection is the default
 // because --overlay used to be, so validating an animation pack without
 // remembering the flag reported wrong-validator artifacts as pack errors:
@@ -30,9 +30,13 @@
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see
 //     validateSurfacePack.
+//   • pointer packs (--pointer, data/pointer/*):
+//     PointerShaderEffect + the pPointer entry scaffold + paramPreamble;
+//     validates effect.frag, buffer passes, and the shared vertex stage on the
+//     preview Qt-RHI path — see validatePointerPack.
 //
 // Usage:
-//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface]
+//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface|--pointer]
 //                               [--emit-preamble] [--] <path> [<path> ...]
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
@@ -42,6 +46,8 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorPointer/PointerShaderEffect.h>
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -60,6 +66,8 @@
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
+using PhosphorPointerShaders::PointerShaderEffect;
+using PhosphorPointerShaders::PointerShaderRegistry;
 using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
 using PhosphorSurfaceShaders::SurfaceShaderEffect;
@@ -86,7 +94,26 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
     // sidecar pulls in the right base header per authoring model.
     QString baseHeader;
 
-    if (model == PackModel::Surface) {
+    if (model == PackModel::Pointer) {
+        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+        if (!metaFile.open(QIODevice::ReadOnly)) {
+            errStream << name << ": cannot read metadata.json\n";
+            return 1;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
+        if (!doc.isObject()) {
+            errStream << name << ": invalid metadata.json\n";
+            return 1;
+        }
+        PointerShaderEffect eff = PointerShaderEffect::fromJson(doc.object());
+        eff.sourceDir = QDir(packDir).absolutePath();
+        if (!eff.isValid()) {
+            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
+            return 1;
+        }
+        preamble = PointerShaderRegistry::paramPreamble(eff);
+        baseHeader = QStringLiteral("pointer_uniforms.glsl");
+    } else if (model == PackModel::Surface) {
         QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
         if (!metaFile.open(QIODevice::ReadOnly)) {
             errStream << name << ": cannot read metadata.json\n";
@@ -183,7 +210,7 @@ int main(int argc, char** argv)
 
     QStringList args;
     bool quiet = false; // --quiet/-q: print only failing packs (clean pre-commit output)
-    // System selection: --overlay vs --animation vs --surface, each FORCING one
+    // System selection: --overlay vs --animation vs --surface vs --pointer, each FORCING one
     // authoring model for every path given. With none of them the model is
     // detected per pack from its shared/ directory (detectPackModel), which is
     // the default because the old default silently forced `--overlay` and
@@ -210,6 +237,8 @@ int main(int argc, char** argv)
             forcedModel = PackModel::Animation;
         } else if (a == QLatin1String("--surface") || a == QLatin1String("-s")) {
             forcedModel = PackModel::Surface;
+        } else if (a == QLatin1String("--pointer") || a == QLatin1String("-p")) {
+            forcedModel = PackModel::Pointer;
         } else if (a == QLatin1String("--overlay") || a == QLatin1String("-o")) {
             forcedModel = PackModel::Overlay;
         } else if (a == QLatin1String("--emit-preamble")) {
@@ -219,12 +248,14 @@ int main(int argc, char** argv)
         }
     }
     if (args.isEmpty()) {
-        errStream << "usage: plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] "
+        errStream << "usage: plasmazones-shader-validate [--quiet] "
+                     "[--overlay|--animation|--surface|--pointer] "
                      "[--emit-preamble] [--] <pack-dir-or-root> [...]\n"
                   << "  (no model flag)   detect each pack's model from its shared/ dir  [default]\n"
                   << "  --overlay         force zone/overlay packs (data/overlays/*)\n"
                   << "  --animation       force transition/animation packs (data/animations/*)\n"
                   << "  --surface         force surface-layer packs (data/surface/*)\n"
+                  << "  --pointer         force pointer packs (data/pointer/*)\n"
                   << "  --emit-preamble   write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
         return 2;
     }
@@ -270,7 +301,7 @@ int main(int argc, char** argv)
         }
         errStream << QFileInfo(pack).fileName()
                   << ": no sibling shared/ marker, validating as an overlay pack. Pass "
-                     "--overlay/--animation/--surface to choose\n";
+                     "--overlay/--animation/--surface/--pointer to choose\n";
         return PackModel::Overlay;
     };
 
@@ -297,7 +328,8 @@ int main(int argc, char** argv)
         QString report;
         QTextStream reportStream(&report);
         const PackModel model = modelFor(pack);
-        const int e = model == PackModel::Surface ? validateSurfacePack(pack, reportStream)
+        const int e = model == PackModel::Pointer ? validatePointerPack(pack, reportStream)
+            : model == PackModel::Surface         ? validateSurfacePack(pack, reportStream)
             : model == PackModel::Animation       ? validateAnimationPack(pack, reportStream)
                                                   : validatePack(pack, reportStream);
         reportStream.flush();

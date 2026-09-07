@@ -6,6 +6,7 @@
 #include "configdefaults_limits.h"
 
 #include <PhosphorCompositor/DecorationDefaults.h>
+#include <PhosphorPointer/PointerProfile.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
 namespace PlasmaZones {
@@ -419,6 +420,31 @@ public:
     static constexpr qreal decorationBlurScaleMultiplierMax()
     {
         return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMax;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Pointer shader Settings
+    //
+    // The group/key accessors (pointerGroup / enabledKey / chainKey) are
+    // inherited from ConfigKeys, like every other group.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Master switch for the pointer decoration chain. Off by default: a
+    /// pointer pack repaints the output under the cursor on every frame the
+    /// pointer is live, so it is opt-in the way the animated decoration packs
+    /// are, and an untouched config costs nothing.
+    static bool pointerEnabled()
+    {
+        return false;
+    }
+
+    /// The shipped pointer chain is empty. Unlike the decoration tree there is
+    /// no seed layer to overlay: a pointer pack decorates the cursor itself,
+    /// which is a deliberate choice rather than default chrome, so the stored
+    /// blob and the resolved chain are the same thing.
+    static ::PhosphorPointerShaders::PointerProfile pointerChain()
+    {
+        return {};
     }
 };
 

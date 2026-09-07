@@ -594,6 +594,7 @@ private Q_SLOTS:
         const QList<Case> cases = {
             {"animation_uniforms.glsl", PackModel::Animation},
             {"surface_uniforms.glsl", PackModel::Surface},
+            {"pointer_uniforms.glsl", PackModel::Pointer},
             {"common.glsl", PackModel::Overlay},
         };
 
@@ -655,6 +656,7 @@ private Q_SLOTS:
         const QList<Tree> trees = {
             {P_SOURCE_DIR "/data/animations", PackModel::Animation},
             {P_SOURCE_DIR "/data/surface", PackModel::Surface},
+            {P_SOURCE_DIR "/data/pointer", PackModel::Pointer},
             {P_SOURCE_DIR "/data/overlays", PackModel::Overlay},
         };
 

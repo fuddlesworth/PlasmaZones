@@ -99,6 +99,18 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kDecorationDirectChildren{QStringLiteral("window-appearance")};
     static const QSet<QString> kDecorationAllLeaves =
         kDecorationDirectChildren + kDecorationSurfacesChildren + kDecorationLibraryChildren;
+    // The pointer leaves live in the decoration NAVIGATION (a page under
+    // Surfaces and a browser under Library) but NOT in the decoration config
+    // domain. They are kept out of kDecorationAllLeaves on purpose, because
+    // isDecorationPage is defined as membership of the "decorations" group and
+    // that predicate routes Reset, Discard and dirty through the shared
+    // DecorationProfileTree machinery. The pointer page owns Pointer.Enabled
+    // and Pointer.Chain through the ordinary pageOwnedConfigKeys manifest
+    // instead, so its Reset touches those two keys and nothing else. They are
+    // folded into the two parent-bucket entries below so a collapsed Surfaces
+    // or Library section still lights its badge for a pending pointer edit.
+    static const QString kPointerPage = QStringLiteral("decorations-pointer");
+    static const QString kPointerShaders = QStringLiteral("decorations-pointer-shaders");
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -173,8 +185,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-transitions"), kAnimationsTransitionsChildren},
         {QStringLiteral("animations-motion"), kAnimationsMotionChildren},
-        {QStringLiteral("decorations-surfaces"), kDecorationSurfacesChildren},
-        {QStringLiteral("decorations-library"), kDecorationLibraryChildren},
+        {QStringLiteral("decorations-surfaces"), kDecorationSurfacesChildren + QSet<QString>{kPointerPage}},
+        {QStringLiteral("decorations-library"), kDecorationLibraryChildren + QSet<QString>{kPointerShaders}},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
         // "appearance" wraps the Animations and Decoration trees (the window-
         // appearance page rides kDecorationAllLeaves as Decoration → General);
@@ -549,6 +561,15 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // scope chip (its override dot + clearPerScreenGapOverride), matching the
         // established per-monitor-override UX; the global footer Save/Discard
         // handles them via the per-screen save path.
+        // Pointer — the cursor-decoration chain and its master switch. Two
+        // ordinary Store-backed keys owned outright by this page, which is the
+        // whole reason it stays out of the decoration domain: a Reset here
+        // resets the pointer and cannot reach the shared decoration tree.
+        {QStringLiteral("decorations-pointer"),
+         {
+             {CD::pointerGroup(), CD::enabledKey()},
+             {CD::pointerGroup(), CD::chainKey()},
+         }},
         {QStringLiteral("window-appearance"),
          {
              {CD::windowsAppearanceGroup(), CD::showBorderKey()},
@@ -744,6 +765,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("decorations-shell"),
         QStringLiteral("decorations-sets"),
         QStringLiteral("decorations-shaders"),
+        QStringLiteral("decorations-pointer"),
+        QStringLiteral("decorations-pointer-shaders"),
         QStringLiteral("rules"),
         QStringLiteral("profiles"),
         QStringLiteral("editor"),

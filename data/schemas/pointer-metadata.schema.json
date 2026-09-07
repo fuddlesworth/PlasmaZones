@@ -1,0 +1,98 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:pointer-metadata",
+    "title": "PlasmaZones Pointer Shader Metadata",
+    "description": "metadata.json for a bundled or user pointer shader pack (trails, halos, click ripples, sparks). Core identity and the parameter contract are enforced. Optional placement and multipass keys (layer, reach, reachParam, trailSeconds, needsCursor, multipass, bufferShaders, bufferFeedback, bufferScale, animated, vertexShader, textures) and descriptive metadata (description, author, version, category, preview) are allowed through.",
+    "type": "object",
+    "required": ["id", "name", "fragmentShader", "parameters"],
+    "additionalProperties": false,
+    "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "version": { "type": "string" },
+        "category": { "type": "string" },
+        "preview": { "type": "string" },
+        "fragmentShader": { "type": "string", "minLength": 1 },
+        "vertexShader": { "type": "string" },
+        "layer": {
+            "type": "string",
+            "enum": ["below", "above"],
+            "description": "Where the pack paints relative to the cursor sprite. below (the default) paints under KWin's cursor and never touches cursor visibility. above hides the cursor while the pack is live and the host paints the sprite itself after the chain."
+        },
+        "reach": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1024,
+            "description": "How far (logical px, default 64) from any trail point or press point the pack may paint. The host derives the damage rect from it, so painting outside it gets clipped."
+        },
+        "reachParam": {
+            "type": "string",
+            "description": "Name of an int or float parameter whose resolved value replaces reach."
+        },
+        "trailSeconds": {
+            "type": "number",
+            "minimum": 0,
+            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event."
+        },
+        "needsCursor": {
+            "type": "boolean",
+            "description": "Bind the cursor sprite as uCursorSprite and set uPointerFlags.x to 1."
+        },
+        "animated": {
+            "type": "boolean",
+            "description": "Accepted for parity with the other families and ignored. Pointer packs always tick while live."
+        },
+        "multipass": { "type": "boolean" },
+        "bufferShaders": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 2
+        },
+        "bufferScale": { "type": "number", "minimum": 0.125, "maximum": 1.0 },
+        "bufferFeedback": { "type": "boolean" },
+        "textures": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "path": { "type": "string", "minLength": 1 },
+                    "wrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
+                }
+            }
+        },
+        "parameters": {
+            "type": "array",
+            "maxItems": 48,
+            "items": { "$ref": "#/definitions/parameter" }
+        }
+    },
+    "definitions": {
+        "parameter": {
+            "type": "object",
+            "required": ["id", "name", "type", "default"],
+            "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string", "minLength": 1 },
+                "description": { "type": "string" },
+                "group": { "type": "string" },
+                "type": {
+                    "type": "string",
+                    "enum": ["float", "int", "bool", "color", "image"],
+                    "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
+                },
+                "default": {
+                    "type": ["number", "string", "boolean"],
+                    "description": "Default value. Use a string for color (#aarrggbb), a number for float or int, and a boolean for bool."
+                },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "step": { "type": "number" }
+            },
+            "additionalProperties": false
+        }
+    }
+}

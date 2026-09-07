@@ -1,0 +1,217 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "pointerpreviewcontroller.h"
+
+#include <PhosphorPointer/PointerShaderEffect.h>
+#include <PhosphorPointer/PointerShaderRegistry.h>
+#include <PhosphorPointer/PointerUniformExtension.h>
+#include <PhosphorRendering/ShaderEffect.h>
+#include <PhosphorShaders/ShaderRegistry.h>
+
+#include <QPointF>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QUrl>
+#include <QVariantList>
+
+#include <memory>
+
+namespace PlasmaZones {
+
+PointerPreviewController::PointerPreviewController(PhosphorPointerShaders::PointerShaderRegistry* registry,
+                                                   QObject* parent)
+    : QObject(parent)
+    , m_registry(registry)
+{
+    // A pack installed or edited on disk while the browser is open moves what
+    // packInfo and configurePreviewItem resolve, and neither is a property QML
+    // could bind to on its own.
+    if (m_registry) {
+        connect(m_registry, &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
+                &PointerPreviewController::bumpPreviewRevision);
+    }
+}
+
+PointerPreviewController::~PointerPreviewController() = default;
+
+void PointerPreviewController::bumpPreviewRevision()
+{
+    ++m_previewRevision;
+    Q_EMIT previewRevisionChanged();
+}
+
+QVariantMap PointerPreviewController::packInfo(const QString& packId) const
+{
+    QVariantMap info;
+    if (!m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
+        return info;
+    }
+    const PhosphorPointerShaders::PointerShaderEffect effect = m_registry->effect(packId);
+    info.insert(QStringLiteral("valid"), effect.isValid());
+    if (!effect.isValid()) {
+        return info;
+    }
+    info.insert(QStringLiteral("id"), effect.id);
+    info.insert(QStringLiteral("name"), effect.name);
+    // Surfaced by the pane: an "above" pack replaces the cursor sprite rather
+    // than painting under it, and trailSeconds is how long the pane must keep
+    // driving frames after the simulated pointer stops.
+    info.insert(QStringLiteral("layer"), PhosphorPointerShaders::PointerShaderEffect::layerToken(effect.layer));
+    info.insert(QStringLiteral("trailSeconds"), effect.trailSeconds);
+    info.insert(QStringLiteral("needsCursor"), effect.needsCursor);
+
+    QVariantList params;
+    params.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters) {
+        QVariantMap m;
+        m.insert(QStringLiteral("id"), p.id);
+        m.insert(QStringLiteral("name"), p.name);
+        m.insert(QStringLiteral("type"), p.type);
+        m.insert(QStringLiteral("description"), p.description);
+        m.insert(QStringLiteral("group"), p.group);
+        m.insert(QStringLiteral("default"), p.defaultValue);
+        m.insert(QStringLiteral("min"), p.minValue);
+        m.insert(QStringLiteral("max"), p.maxValue);
+        m.insert(QStringLiteral("step"), p.stepValue);
+        params.append(m);
+    }
+    info.insert(QStringLiteral("parameters"), params);
+    return info;
+}
+
+bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QString& packId,
+                                                    const QVariantMap& friendlyParams) const
+{
+    using Registry = PhosphorPointerShaders::PointerShaderRegistry;
+    auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
+    if (!shaderItem || !m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
+        return false;
+    }
+    const PhosphorPointerShaders::PointerShaderEffect effect = m_registry->effect(packId);
+    if (!effect.isValid()) {
+        return false;
+    }
+
+    // Extension BEFORE the sources — see the header's ordering note.
+    shaderItem->setUniformExtension(std::make_shared<PhosphorPointerShaders::PointerUniformExtension>());
+
+    // `{<packRoot>/shared, <packRoot>}`, so `#include <pointer_lib.glsl>`
+    // resolves to the same shared helpers the compositor and the validator
+    // expand against.
+    const QStringList includePaths = Registry::includePathsFor(effect.sourceDir);
+    if (!includePaths.isEmpty()) {
+        shaderItem->setShaderIncludePaths(includePaths);
+    }
+    shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
+    // The `#define p_<id> customParamsN_x` block, spliced after `#version` at
+    // bake time. Its slot allocation mirrors translatePointerParams exactly, so
+    // `p_<id>` resolves to the UBO lane setShaderParams uploads to.
+    shaderItem->setParamPreamble(Registry::paramPreamble(effect));
+    // The `pPointer(vec2 uv)` scaffold. Must match the compositor's and the
+    // validator's so all three bake the same source for the same pack.
+    shaderItem->setEntryScaffold(Registry::pointerEntryPrologue(), Registry::pointerEntryCandidates());
+    if (!effect.vertexShaderPath.isEmpty()) {
+        shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    }
+    // Always-set rather than gated, for the same reason applyEffectStaticConfig
+    // is: a metadata edit that turns multipass OFF must clear the buffers a
+    // previous configure installed, not leave the item running stale passes.
+    if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
+        shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);
+        shaderItem->setBufferFeedback(effect.bufferFeedback);
+        shaderItem->setBufferScale(effect.bufferScale);
+    } else {
+        shaderItem->setBufferShaderPaths({});
+        shaderItem->setBufferFeedback(false);
+        shaderItem->setBufferScale(1.0);
+    }
+    // A pointer pack ticks continuously while the pointer is live, so iTime is
+    // seconds since the pass engaged rather than a progress sweep. The item
+    // free-runs it; the pane gates that through `playing`.
+    shaderItem->setITime(0.0);
+    updatePreviewParams(item, packId, friendlyParams);
+    return true;
+}
+
+void PointerPreviewController::updatePreviewParams(QQuickItem* item, const QString& packId,
+                                                   const QVariantMap& friendlyParams) const
+{
+    auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
+    if (!shaderItem || !m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
+        return;
+    }
+    const PhosphorPointerShaders::PointerShaderEffect effect = m_registry->effect(packId);
+    if (!effect.isValid()) {
+        return;
+    }
+    const QVariantMap translated =
+        PhosphorPointerShaders::PointerShaderRegistry::translatePointerParams(effect, friendlyParams);
+    if (!translated.isEmpty()) {
+        shaderItem->setShaderParams(translated);
+    }
+}
+
+void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, qreal dtMs, bool pressed)
+{
+    auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
+    if (!shaderItem) {
+        return;
+    }
+    const auto ext =
+        std::dynamic_pointer_cast<PhosphorPointerShaders::PointerUniformExtension>(shaderItem->uniformExtension());
+    if (!ext) {
+        return;
+    }
+
+    // A pack switch reuses this controller, so a stale ring would open the new
+    // pack with a trail streaking in from wherever the old one stopped.
+    if (m_historyItem != shaderItem) {
+        m_historyItem = shaderItem;
+        m_history.reset();
+        m_nowMs = 0;
+        m_pressed = false;
+    }
+    // Clamped so a paused-then-resumed pane (or a first frame with no previous
+    // timestamp) cannot jump the clock far enough to age the whole ring out in
+    // one step, and never runs backwards.
+    m_nowMs += static_cast<qint64>(qBound(0.0, static_cast<double>(dtMs), 250.0));
+
+    // The canvas is the item, in DEVICE px: iResolution is DPR-scaled on the
+    // way to the GPU (the extension keeps requiresPhysicalResolution), and
+    // every tail position is canvas px, so the history has to be fed device px
+    // for the two to agree. iMouse stays logical because the node scales it by
+    // the same DPR as iResolution.
+    const qreal dpr = shaderItem->window() ? shaderItem->window()->effectiveDevicePixelRatio() : 1.0;
+    const QPointF devicePos(x * dpr, y * dpr);
+    m_history.notePointer(devicePos, m_nowMs);
+
+    // A synthetic left button, so the press and release edges reach the history
+    // through the same noteButtons the compositor calls on a real click.
+    if (pressed != m_pressed) {
+        const Qt::MouseButtons before = m_pressed ? Qt::MouseButtons(Qt::LeftButton) : Qt::MouseButtons(Qt::NoButton);
+        const Qt::MouseButtons now = pressed ? Qt::MouseButtons(Qt::LeftButton) : Qt::MouseButtons(Qt::NoButton);
+        m_history.noteButtons(now, before, devicePos, m_nowMs);
+        m_pressed = pressed;
+    }
+
+    ext->apply(m_history.frameState(m_nowMs, dpr));
+    shaderItem->setIMouse(QPointF(x, y));
+}
+
+void PointerPreviewController::resetPointer()
+{
+    m_history.reset();
+    m_historyItem = nullptr;
+    m_nowMs = 0;
+    m_pressed = false;
+}
+
+QString PointerPreviewController::wallpaperPath() const
+{
+    // Same resolver the other three previews use, so all four agree on what
+    // "the desktop" is.
+    return PhosphorShaders::ShaderRegistry::wallpaperPath();
+}
+
+} // namespace PlasmaZones

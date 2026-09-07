@@ -357,6 +357,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups
+        ConfigDefaults::pointerGroup(), // "Pointer" — pointer chain master switch + PointerProfile blob
     };
 }
 
