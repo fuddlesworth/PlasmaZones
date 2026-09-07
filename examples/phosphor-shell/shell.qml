@@ -533,13 +533,25 @@ Item {
         // delete the live screen when this wrapper is collected. Do not
         // reach for a QScreen any other way from QML.
         const target = ControlCenterRegistry.screenOf(source);
+        // Anchored under its own chip, like every other panel. It used to
+        // take the bar-centre default, which was invisible while it was an
+        // engine-placed pane (the engine decided where it went) and became
+        // wrong the moment it started being positioned by the shell.
+        const centre = BarRegistry.anchorCenterFor(source);
+        const anchored = centre >= 0;
+        const railT = anchored && target && target.width > 0 ? Math.max(0, Math.min(1, centre / target.width)) : 0.5;
         const request = {
             "popoutId": "control-center",
             "content": paneComponent,
             "targetScreen": target,
+            "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "keyboardFocus": true,
-            "dismissOnFocusLoss": false
+            "dismissOnFocusLoss": false,
+            "props": {
+                "railT": railT
+            }
         };
         // The arbiter keys on the popout id alone, which is right for the
         // launcher and the power menu but not for a pane that belongs to

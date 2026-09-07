@@ -359,8 +359,24 @@ int main(int argc, char* argv[])
     // no placement engine, so the router's "socket" slot is the pane
     // transport and the socket transport sits behind it.
     PhosphorShellApp::PanePopoutTransport paneTransport(&controlCenterController, &socketTransport);
-    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport,
-                                                             {QStringLiteral("control-center")});
+    // NOTHING is engine-placed at the moment, and the empty route set is the
+    // decision rather than an oversight.
+    //
+    // The control center was the one id here, so it opened as a real
+    // toplevel the engine placed in a zone. Two faults came from that and
+    // only that. It was ENORMOUS, because a pane is a tile and a tile gets
+    // the whole zone: five controls stretched across an 830 px surface. And
+    // it was the only surface that appeared centred and jumped, because a
+    // toplevel is mapped where the compositor chooses and the rule moves it
+    // afterwards, which a layer surface the shell positions itself never
+    // does. Every other panel — the calendar included — was already on the
+    // layer route and had neither problem.
+    //
+    // The pane transport and its rules are left wired up: the notification
+    // centre and the expanded map are still meant to be panes (A2 §4.1),
+    // and putting an id back in this set is all it takes. What is settled is
+    // that a surface you open to change one setting is not worth a window.
+    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport, {});
     PhosphorPopout::PopoutController popouts(&routedTransport);
 
     // Compositor-side effects the QML asks for (blur behind the bar band).

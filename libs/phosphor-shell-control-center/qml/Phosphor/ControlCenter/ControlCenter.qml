@@ -52,12 +52,53 @@ Item {
     signal detailOpened(string tileId)
     signal detailClosed(string tileId)
 
-    implicitWidth: grid.implicitWidth + 2 * Tokens.spacing_m
+    /// The surface's width. Fixed rather than derived from the cards,
+    /// because the cards divide whatever width they are given and would
+    /// otherwise collapse to their text. Matches the bar's other panels, so
+    /// moving between them is not re-reading a differently shaped surface.
+    property real panelWidth: 360
+
+    implicitWidth: root.panelWidth
     // The taller of the two views, not just the grid. A host that sizes
     // itself to this would otherwise clip a detail view taller than the
     // grid behind it, and neither view scrolls or clips, so the overflow
     // would simply be cut off.
     implicitHeight: Math.max(grid.implicitHeight, detail.implicitHeight) + 2 * Tokens.spacing_m
+
+    /// Where this surface sits along the screen, 0..1, for the stroke and
+    /// the top band. Set by the host from the chip that opened it.
+    property real railT: 0.5
+
+    // The surface's own material. It had none: as an engine-placed pane it
+    // borrowed PaneHost's ground, and the moment it became an ordinary
+    // popout the cards were left floating on the bare desktop with no
+    // surface under them. The layers are 05 §5's, the same ones the bar's
+    // other panels draw.
+    Rectangle {
+        anchors.fill: parent
+        radius: Tokens.radius_l
+        color: Theme.isDark ? Qt.rgba(0.027, 0.059, 0.133, 0.94) : Qt.rgba(0.96, 0.976, 1, 0.94)
+    }
+
+    SpectrumStroke {
+        anchors.fill: parent
+        radius: Tokens.radius_l
+        t: root.railT
+    }
+
+    // The top edge IS the rail over this surface's x-range, so the panel and
+    // the bar above it match hue for hue, and it carries the gleam.
+    SpectrumRail {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.leftMargin: Tokens.radius_l
+        anchors.rightMargin: Tokens.radius_l
+        thickness: 2
+        gleam: true
+        sliceStart: Math.max(0, root.railT - 0.09)
+        sliceEnd: Math.min(1, root.railT + 0.09)
+    }
 
     QtObject {
         id: priv
@@ -165,7 +206,10 @@ Item {
                 // long) spans both columns.
                 const wide = item.spansRow === undefined ? false : item.spansRow;
                 item.Layout.fillWidth = true;
-                item.Layout.fillHeight = true;
+                // NOT fillHeight: a card keeps its own height. Stretching
+                // them to fill was what turned a five-control panel into
+                // five 230 px slabs.
+                item.Layout.fillHeight = false;
                 item.Layout.columnSpan = wide ? 2 : 1;
                 // Step each card along the shared field by its position, so
                 // the grid reads as one gradient rather than a set of
@@ -203,16 +247,18 @@ Item {
     GridLayout {
         id: grid
 
-        // FILLS the surface, and the cards stretch with it.
+        // Top-anchored, and the surface is sized to IT rather than the other
+        // way round. This surface is a transient now, not an engine-placed
+        // tile, so it gets the size it asks for.
         //
-        // This was a ColumnLayout anchored to the top three edges, on the
-        // reasoning that a host giving the surface more height than the
-        // rows need should not spread them down it. But the control center
-        // is placed as a TILE: it gets the whole zone whatever that is, so
-        // "do not spread" meant five thin rows at the top of an 830 px pane
-        // and two thirds of it empty blur. A surface that is going to be
-        // zone-sized has to be designed for the size it will get.
-        anchors.fill: parent
+        // It has been both other things and both were wrong. Filling a
+        // zone-sized pane stretched five controls across 830 px, so each
+        // card became enormous. Hugging the top of a zone-sized pane left
+        // two thirds of it empty. Neither is fixable by layout, because the
+        // fault was the surface taking a whole zone at all.
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.margins: Tokens.spacing_m
         columns: 2
         columnSpacing: Tokens.spacing_m
