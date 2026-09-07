@@ -1946,7 +1946,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="133"/>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="118"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="124"/>
         <source>Could not create the user shader directory.</source>
         <translation>De map voor gebruikersshaders kon niet worden gemaakt.</translation>
     </message>
@@ -5483,21 +5483,21 @@
         <translation>Titel (zonder achtervoegsel)</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="49"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="113"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
         <source>Floating</source>
         <translation>Zwevend</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="47"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="115"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
         <source>Snapped</source>
         <translation>Vastgeklikt</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="45"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
         <source>Tiled</source>
@@ -5505,59 +5505,70 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="504"/>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="55"/>
         <source>Popups</source>
         <translation>Pop-ups</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="56"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="61"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="38"/>
         <source>Layout Picker</source>
         <translation>Indelingskiezer</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="58"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="63"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="44"/>
         <source>Shortcut Cheatsheet</source>
         <translation>Sneltoetsoverzicht</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="66"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="52"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="61"/>
+        <source>OSD Bands</source>
+        <comment>@item the Phosphor shell&apos;s on-screen display bands</comment>
+        <translation>OSD-balken</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="71"/>
         <source>Phosphor Shell</source>
+        <comment>@item breadcrumb level for the Phosphor shell&apos;s own surfaces</comment>
         <translation>Phosphor-shell</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="68"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="47"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="73"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="49"/>
         <source>Bar</source>
+        <comment>@item the Phosphor shell&apos;s top bar surface, not a progress or menu bar</comment>
         <translation>Balk</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="70"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="53"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="75"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="55"/>
         <source>Popouts</source>
+        <comment>@item panels that pop out from the Phosphor shell bar</comment>
         <translation>Uitklapvensters</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="72"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="65"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="77"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="67"/>
         <source>Notifications</source>
+        <comment>@item the Phosphor shell&apos;s notification toasts</comment>
         <translation>Meldingen</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="74"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="71"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="79"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="73"/>
         <source>Wallpaper Picker</source>
         <translation>Achtergrondkiezer</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="76"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="77"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="81"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="79"/>
         <source>Lock Screen</source>
         <translation>Vergrendelscherm</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="139"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="145"/>
         <source>Global default</source>
         <translation>Globale standaard</translation>
     </message>
@@ -6686,7 +6697,7 @@
         <translation>Weergave</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="52"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="57"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="399"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="39"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="26"/>
@@ -10217,7 +10228,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="269"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="410"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="497"/>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="43"/>
         <source>Windows</source>
         <translation>Vensters</translation>
     </message>
@@ -10268,7 +10279,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="229"/>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="54"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="59"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="32"/>
         <source>Zone Selector</source>
         <translation>Zonekiezer</translation>
@@ -10343,7 +10354,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="426"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="508"/>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="60"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="65"/>
         <source>Shell</source>
         <translation>Shell</translation>
     </message>
@@ -10371,7 +10382,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="413"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="500"/>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="53"/>
         <source>OSDs</source>
         <translation>OSD&apos;s</translation>
     </message>
@@ -13485,6 +13496,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="90"/>
         <source>What&apos;s New</source>
+        <comment>@action:button opens the release history</comment>
         <translation>Wat is er nieuw</translation>
     </message>
     <message>
@@ -22894,25 +22906,20 @@
         <translation>Voorinstellingen zijn de formaten die de sneltoetsen voor breedte en hoogte doorlopen zolang dit sjabloon is toegewezen.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="20"/>
         <source>Shell decoration surfaces</source>
         <translation>Decoratieoppervlakken van de shell</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
-        <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.</source>
-        <oldsource>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</oldsource>
-        <translation>Decoratie voor oppervlakken die een shell bezit: de Plasma-panelen en applet-pop-ups, en de oppervlakken van de Phosphor-shell. De algemene standaarddecoratie geldt nooit voor deze. Plasma-oppervlakken blijven zonder decoratie totdat hier een decoratie wordt ingeschakeld, terwijl de Phosphor-oppervlakken beginnen met de spectrumstandaarden.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="21"/>
+        <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start with the decoration the Phosphor shell ships.</source>
+        <translation>Decoratie voor oppervlakken die een shell bezit: de Plasma-panelen en applet-pop-ups, en de oppervlakken van de Phosphor-shell. De algemene standaarddecoratie geldt nooit voor deze. Plasma-oppervlakken blijven zonder decoratie totdat hier een decoratie wordt ingeschakeld, terwijl de Phosphor-oppervlakken beginnen met de decoratie die de Phosphor-shell meelevert.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="41"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="43"/>
         <source>All Phosphor Shell Surfaces</source>
+        <comment>@item the category root card that every Phosphor shell surface inherits from</comment>
         <translation>Alle oppervlakken van de Phosphor-shell</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="59"/>
-        <source>OSD Bands</source>
-        <translation>OSD-balken</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>
@@ -22927,19 +22934,20 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="23"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="25"/>
         <source>All Shell Surfaces</source>
+        <comment>@item the category root card that every shell surface inherits from</comment>
         <translation>Alle shell-oppervlakken</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="62"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="29"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="67"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="31"/>
         <source>Panels</source>
         <translation>Panelen</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="64"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="35"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="69"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="37"/>
         <source>Applet Popups</source>
         <translation>Applet-pop-ups</translation>
     </message>
@@ -23534,7 +23542,129 @@
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="305"/>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="678"/>
         <source>Since %1</source>
+        <comment>@label %1 is a version number, e.g. 3.4.7</comment>
         <translation>Sinds %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="313"/>
+        <source>Nothing new since version %1.</source>
+        <comment>@info empty state of the digest view</comment>
+        <translation>Niets nieuws sinds versie %1.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="716"/>
+        <source>The release history could not be loaded.</source>
+        <comment>@info shown when whatsnew.json is missing or fails validation</comment>
+        <translation>De versiegeschiedenis kon niet worden geladen.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="379"/>
+        <source>No release has highlights of this kind.</source>
+        <comment>@info empty state when a kind filter matches nothing and no search text is typed</comment>
+        <translation>Geen enkele versie heeft items van deze soort.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="381"/>
+        <source>No new feature matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Geen nieuwe functie komt overeen met “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="383"/>
+        <source>No change matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Geen wijziging komt overeen met “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="385"/>
+        <source>No fix matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Geen oplossing komt overeen met “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="386"/>
+        <source>Nothing matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Niets komt overeen met “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="393"/>
+        <source>Changed</source>
+        <comment>@label a release highlight that changes existing behavior</comment>
+        <translation>Gewijzigd</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="482"/>
+        <source>Search releases…</source>
+        <comment>@info:placeholder</comment>
+        <translation>Versies zoeken…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="483"/>
+        <source>Search release highlights</source>
+        <comment>@info:whatsthis accessible name of the search field</comment>
+        <translation>Items in de versiegeschiedenis zoeken</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="497"/>
+        <source>Show every release highlight</source>
+        <comment>@info:whatsthis accessible name of the All filter chip</comment>
+        <translation>Alle items tonen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="502"/>
+        <source>Show only new features</source>
+        <comment>@info:whatsthis accessible name of the New filter chip</comment>
+        <translation>Alleen nieuwe functies tonen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="507"/>
+        <source>Show only changed behavior</source>
+        <comment>@info:whatsthis accessible name of the Changed filter chip</comment>
+        <translation>Alleen gewijzigd gedrag tonen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="512"/>
+        <source>Show only bug fixes</source>
+        <comment>@info:whatsthis accessible name of the Fixed filter chip</comment>
+        <translation>Alleen opgeloste fouten tonen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="628"/>
+        <source>Everything since version %1</source>
+        <comment>@info:whatsthis %1 is a version number</comment>
+        <translation>Alles sinds versie %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="630"/>
+        <source>Every matching highlight</source>
+        <comment>@info:whatsthis accessible name of the All matches rail row</comment>
+        <translation>Alle overeenkomende items</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
+        <source>Collapse the %1 releases</source>
+        <comment>@info:whatsthis %1 is a version series, e.g. 3.4</comment>
+        <translation>De %1-versies inklappen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
+        <source>Expand the %1 releases</source>
+        <comment>@info:whatsthis %1 is a version series, e.g. 3.4</comment>
+        <translation>De %1-versies uitklappen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="633"/>
+        <source>Version %1, released %2</source>
+        <comment>@info:whatsthis %1 is a version number, %2 a release date</comment>
+        <translation>Versie %1, uitgebracht op %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="816"/>
+        <source>Show only version %1</source>
+        <comment>@info:whatsthis %1 is a version number</comment>
+        <translation>Alleen versie %1 tonen</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="306"/>
@@ -23545,52 +23675,10 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="313"/>
-        <source>Nothing to show for these releases.</source>
-        <translation>Er is niets te tonen voor deze versies.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="338"/>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="716"/>
-        <source>The release history could not be loaded.</source>
-        <translation>De versiegeschiedenis kon niet worden geladen.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="379"/>
-        <source>No release has highlights of this kind.</source>
-        <translation>Geen enkele versie heeft items van deze soort.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="381"/>
-        <source>No new feature matches “%1”.</source>
-        <translation>Geen nieuwe functie komt overeen met “%1”.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="383"/>
-        <source>No change matches “%1”.</source>
-        <translation>Geen wijziging komt overeen met “%1”.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="385"/>
-        <source>No fix matches “%1”.</source>
-        <translation>Geen oplossing komt overeen met “%1”.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="386"/>
-        <source>Nothing matches “%1”.</source>
-        <translation>Niets komt overeen met “%1”.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="391"/>
         <source>New</source>
         <comment>@label a release highlight that adds a feature</comment>
         <translation>Nieuw</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="393"/>
-        <source>Changed</source>
-        <comment>@label a release highlight that changes existing behaviour</comment>
-        <translation>Gewijzigd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="395"/>
@@ -23599,65 +23687,10 @@
         <translation>Opgelost</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="482"/>
-        <source>Search releases…</source>
-        <translation>Versies zoeken…</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="483"/>
-        <source>Search release highlights</source>
-        <translation>Items in de versiegeschiedenis zoeken</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="496"/>
         <source>All</source>
         <comment>@option:radio show every kind of release highlight</comment>
         <translation>Alles</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="497"/>
-        <source>Show every release highlight</source>
-        <translation>Alle items tonen</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="502"/>
-        <source>Show only new features</source>
-        <translation>Alleen nieuwe functies tonen</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="507"/>
-        <source>Show only changed behaviour</source>
-        <translation>Alleen gewijzigd gedrag tonen</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="512"/>
-        <source>Show only bug fixes</source>
-        <translation>Alleen opgeloste fouten tonen</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="628"/>
-        <source>Everything since version %1</source>
-        <translation>Alles sinds versie %1</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="630"/>
-        <source>Every matching highlight</source>
-        <translation>Alle overeenkomende items</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
-        <source>Collapse the %1 releases</source>
-        <translation>De %1-versies inklappen</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
-        <source>Expand the %1 releases</source>
-        <translation>De %1-versies uitklappen</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="633"/>
-        <source>Version %1, released %2</source>
-        <translation>Versie %1, uitgebracht op %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="680"/>
@@ -23670,11 +23703,6 @@
         <source>Other</source>
         <comment>@title a digest group of highlights with no New, Changed or Fixed kind</comment>
         <translation>Overig</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="816"/>
-        <source>Show only version %1</source>
-        <translation>Alleen versie %1 tonen</translation>
     </message>
 </context>
 </TS>

@@ -6,8 +6,10 @@ import QtQuick
 // model declaration like the other decoration sub-pages, with i18n() labels in
 // QML.
 //
-// Unlike every other decoration surface, these are windows PlasmaZones does not
-// own: they belong to plasmashell. The `shell` subtree is baseline-isolated
+// Unlike the window surfaces, these belong to a shell rather than to a
+// managed window. The `shell.panel` and `shell.appletPopup` cards are
+// plasmashell's own surfaces; the `shell.phosphor.*` cards are the Phosphor
+// shell's, which PlasmaZones does own. The `shell` subtree is baseline-isolated
 // (it never inherits the global default chain), none of these surfaces honours
 // the plain border / opacity settings or the window rules, and there is no
 // separate enable toggle — a pack chain engaged here is the whole decoration
@@ -16,11 +18,11 @@ import QtQuick
 // walk-up.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Shell decoration surfaces")
-    headerText: i18n("Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start on the spectrum defaults.")
+    headerText: i18n("Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start with the decoration the Phosphor shell ships.")
     surfaceModel: [
         {
             "surfacePath": "shell",
-            "cardLabel": i18n("All Shell Surfaces"),
+            "cardLabel": i18nc("@item the category root card that every shell surface inherits from", "All Shell Surfaces"),
             "alwaysEnabled": false,
             "isParentNode": true
         },
@@ -38,31 +40,31 @@ DecorationSurfaceCardList {
         },
         {
             "surfacePath": "shell.phosphor",
-            "cardLabel": i18n("All Phosphor Shell Surfaces"),
+            "cardLabel": i18nc("@item the category root card that every Phosphor shell surface inherits from", "All Phosphor Shell Surfaces"),
             "alwaysEnabled": false,
             "isParentNode": true
         },
         {
             "surfacePath": "shell.phosphor.bar",
-            "cardLabel": i18n("Bar"),
+            "cardLabel": i18nc("@item the Phosphor shell's top bar surface, not a progress or menu bar", "Bar"),
             "alwaysEnabled": false,
             "isParentNode": false
         },
         {
             "surfacePath": "shell.phosphor.popout",
-            "cardLabel": i18n("Popouts"),
+            "cardLabel": i18nc("@item panels that pop out from the Phosphor shell bar", "Popouts"),
             "alwaysEnabled": false,
             "isParentNode": false
         },
         {
             "surfacePath": "shell.phosphor.osd",
-            "cardLabel": i18n("OSD Bands"),
+            "cardLabel": i18nc("@item the Phosphor shell's on-screen display bands", "OSD Bands"),
             "alwaysEnabled": false,
             "isParentNode": false
         },
         {
             "surfacePath": "shell.phosphor.notification",
-            "cardLabel": i18n("Notifications"),
+            "cardLabel": i18nc("@item the Phosphor shell's notification toasts", "Notifications"),
             "alwaysEnabled": false,
             "isParentNode": false
         },

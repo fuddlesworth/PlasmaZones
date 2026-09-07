@@ -302,7 +302,7 @@ Kirigami.Dialog {
         let rows = [
             {
                 "type": "title",
-                "text": i18n("Since %1", root.baselineVersion),
+                "text": i18nc("@label %1 is a version number, e.g. 3.4.7", "Since %1", root.baselineVersion),
                 "sub": i18np("%n release", "%n releases", root.unseenCount)
             }
         ];
@@ -310,7 +310,7 @@ Kirigami.Dialog {
         if (groups.length === 0)
             rows.push({
                 "type": "empty",
-                "text": i18n("Nothing to show for these releases.")
+                "text": i18nc("@info empty state of the digest view", "Nothing new since version %1.", root.baselineVersion)
             });
         for (let g = 0; g < groups.length; ++g) {
             rows.push({
@@ -335,7 +335,7 @@ Kirigami.Dialog {
             return [
                 {
                     "type": "empty",
-                    "text": i18n("The release history could not be loaded.")
+                    "text": i18nc("@info shown when whatsnew.json is missing or fails validation", "The release history could not be loaded.")
                 }
             ];
         const release = root.entries[index];
@@ -376,21 +376,21 @@ Kirigami.Dialog {
     /// string they can inflect.
     function emptyFilterMessage() {
         if (root.query === "")
-            return i18n("No release has highlights of this kind.");
+            return i18nc("@info empty state when a kind filter matches nothing and no search text is typed", "No release has highlights of this kind.");
         if (root.kindFilter === "new")
-            return i18n("No new feature matches “%1”.", root.query);
+            return i18nc("@info %1 is the user's search text", "No new feature matches “%1”.", root.query);
         if (root.kindFilter === "changed")
-            return i18n("No change matches “%1”.", root.query);
+            return i18nc("@info %1 is the user's search text", "No change matches “%1”.", root.query);
         if (root.kindFilter === "fixed")
-            return i18n("No fix matches “%1”.", root.query);
-        return i18n("Nothing matches “%1”.", root.query);
+            return i18nc("@info %1 is the user's search text", "No fix matches “%1”.", root.query);
+        return i18nc("@info %1 is the user's search text", "Nothing matches “%1”.", root.query);
     }
 
     function kindLabel(kind) {
         if (kind === "new")
             return i18nc("@label a release highlight that adds a feature", "New");
         if (kind === "changed")
-            return i18nc("@label a release highlight that changes existing behaviour", "Changed");
+            return i18nc("@label a release highlight that changes existing behavior", "Changed");
         if (kind === "fixed")
             return i18nc("@label a release highlight that fixes a bug", "Fixed");
         return "";
@@ -479,8 +479,8 @@ Kirigami.Dialog {
                 focus: true
                 Layout.fillWidth: true
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 18
-                placeholderText: i18n("Search releases…")
-                Accessible.name: i18n("Search release highlights")
+                placeholderText: i18nc("@info:placeholder", "Search releases…")
+                Accessible.name: i18nc("@info:whatsthis accessible name of the search field", "Search release highlights")
                 onTextChanged: {
                     root.query = text;
                     // A query rebuilds the rail around matches, so the old
@@ -494,22 +494,22 @@ Kirigami.Dialog {
                     {
                         "kind": "",
                         "label": i18nc("@option:radio show every kind of release highlight", "All"),
-                        "a11y": i18n("Show every release highlight")
+                        "a11y": i18nc("@info:whatsthis accessible name of the All filter chip", "Show every release highlight")
                     },
                     {
                         "kind": "new",
                         "label": root.kindLabel("new"),
-                        "a11y": i18n("Show only new features")
+                        "a11y": i18nc("@info:whatsthis accessible name of the New filter chip", "Show only new features")
                     },
                     {
                         "kind": "changed",
                         "label": root.kindLabel("changed"),
-                        "a11y": i18n("Show only changed behaviour")
+                        "a11y": i18nc("@info:whatsthis accessible name of the Changed filter chip", "Show only changed behavior")
                     },
                     {
                         "kind": "fixed",
                         "label": root.kindLabel("fixed"),
-                        "a11y": i18n("Show only bug fixes")
+                        "a11y": i18nc("@info:whatsthis accessible name of the Fixed filter chip", "Show only bug fixes")
                     }
                 ]
 
@@ -625,12 +625,12 @@ Kirigami.Dialog {
 
                         Accessible.name: {
                             if (railRow.isDigest)
-                                return i18n("Everything since version %1", root.baselineVersion);
+                                return i18nc("@info:whatsthis %1 is a version number", "Everything since version %1", root.baselineVersion);
                             if (railRow.isResults)
-                                return i18n("Every matching highlight");
+                                return i18nc("@info:whatsthis accessible name of the All matches rail row", "Every matching highlight");
                             if (railRow.isSeries)
-                                return railRow.seriesExpanded ? i18n("Collapse the %1 releases", railRow.modelData.series) : i18n("Expand the %1 releases", railRow.modelData.series);
-                            return i18n("Version %1, released %2", railRow.modelData.release.version, railRow.modelData.release.date);
+                                return railRow.seriesExpanded ? i18nc("@info:whatsthis %1 is a version series, e.g. 3.4", "Collapse the %1 releases", railRow.modelData.series) : i18nc("@info:whatsthis %1 is a version series, e.g. 3.4", "Expand the %1 releases", railRow.modelData.series);
+                            return i18nc("@info:whatsthis %1 is a version number, %2 a release date", "Version %1, released %2", railRow.modelData.release.version, railRow.modelData.release.date);
                         }
 
                         // Move the keyboard cursor to the clicked row too, or
@@ -675,7 +675,7 @@ Kirigami.Dialog {
                                 elide: Text.ElideRight
                                 text: {
                                     if (railRow.isDigest)
-                                        return i18n("Since %1", root.baselineVersion);
+                                        return i18nc("@label %1 is a version number, e.g. 3.4.7", "Since %1", root.baselineVersion);
                                     if (railRow.isResults)
                                         return i18nc("@item the rail row that shows every match", "All matches");
                                     return railRow.isSeries ? "" : railRow.modelData.release.version;
@@ -713,7 +713,7 @@ Kirigami.Dialog {
                     // so a no-match message here could never be reached. That
                     // message belongs in the reading pane, where it is.
                     visible: rail.count === 0
-                    text: i18n("The release history could not be loaded.")
+                    text: i18nc("@info shown when whatsnew.json is missing or fails validation", "The release history could not be loaded.")
                 }
             }
 
@@ -813,7 +813,7 @@ Kirigami.Dialog {
                         visible: paneRow.modelData.type === "release"
                         width: paneRow.rowWidth
                         horizontalPadding: 0
-                        Accessible.name: paneRow.modelData.type === "release" ? i18n("Show only version %1", paneRow.modelData.version) : ""
+                        Accessible.name: paneRow.modelData.type === "release" ? i18nc("@info:whatsthis %1 is a version number", "Show only version %1", paneRow.modelData.version) : ""
                         onClicked: root.selectRelease(paneRow.modelData.index)
 
                         contentItem: RowLayout {
