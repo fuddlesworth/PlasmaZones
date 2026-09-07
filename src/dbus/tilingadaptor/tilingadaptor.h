@@ -25,6 +25,8 @@ class ScreenManager;
 
 namespace PhosphorEngine {
 class IPlacementEngine;
+class WindowRegistry;
+struct WindowMetadata;
 }
 
 namespace PlasmaZones {
@@ -93,6 +95,35 @@ public:
     /// — the empty-list form of THIS setter clears only the parked opens and
     /// exists for symmetry, with no production caller.
     void setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
+
+    /// Subscribe to the compositor-fed WindowRegistry so a window's desktop
+    /// membership is reconciled against the engine states here, in the one
+    /// place that can see every (screen, desktop, activity) state at once.
+    ///
+    /// Every prior fix for "a window moved between virtual desktops left its
+    /// slot behind" (#1076 and its family) added an arm to the KWin effect,
+    /// which decides whether to release a window from proxies of the desktop
+    /// in view: the managed-screen set, the tracked set, the catch-scan on
+    /// desktop return. None of those knows which desktop's state still lists
+    /// the window, so each (window moved, desktop in view, mode per desktop)
+    /// combination needed its own arm and each was a place to forget one.
+    /// The engines own the membership, and the registry carries the
+    /// window's authoritative desktop set (x11 numbering, the same the
+    /// engines key their states by), so the invariant is enforced here:
+    /// whenever a window's desktop set changes, any state holding it under a
+    /// desktop the window no longer belongs to releases it. The effect's arms
+    /// keep doing their effect-side work (pre-tile stash, decoration) and
+    /// their placement of the arrival; the membership question is no longer
+    /// theirs. Pass nullptr on shutdown. Not owned.
+    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
+
+    /// The reconcile setWindowRegistry subscribes: release @p windowId from
+    /// any pipeline state whose desktop is absent from @p desktops. An EMPTY
+    /// set means the window's desktops are unknown, or it is on all of them,
+    /// and releases nothing: a sticky window legitimately sits in a state
+    /// keyed by whichever desktop it was adopted on. Public so the contract
+    /// is testable without a registry round-trip.
+    void reconcileWindowDesktops(const QString& windowId, const QSet<int>& desktops);
 
     // ── Engine relay entry points ────────────────────────────────────────
     // The composition root connects every pipeline engine's signals here
@@ -592,6 +623,9 @@ private:
     /// Engines sharing the lifecycle pipeline, primary first (see
     /// setLifecycleEngines). Interface-only borrows.
     QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
+    /// The registry subscription setWindowRegistry made, so a re-wire
+    /// replaces it rather than stacking a second reconcile per change.
+    QMetaObject::Connection m_registryDesktopConnection;
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
     /// Last per-window tab-colour map relayed by relayScrollTabColorsForWindow

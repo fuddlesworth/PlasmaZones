@@ -157,10 +157,33 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // snapping screen, the tiling adopt on a managed one). Running both
         // would put two independent placement answers for one window on the wire
         // at once, with the winner decided by D-Bus reply order.
+        const bool destinationManaged = m_tilingHandler->isManagedScreen(screenId);
+        if (!destinationManaged) {
+            // The desktop in view runs no tiling, but the desktop the window
+            // came from may well have, and the window was tiled there: this
+            // is the EFFECT-side half of that departure, mirroring the
+            // departure arm above for a window that left a desktop the user
+            // was not looking at. The engine-side half — dropping the window
+            // from the source desktop's state, which the desktop in view can
+            // say nothing about — is the daemon's: TilingAdaptor's
+            // desktop-membership reconcile releases it off the registry
+            // desktop set the metadata push above carries (#1076). Here:
+            // stash the pre-autotile rect before the tracking wipe, exactly
+            // as the departure arm does, so a later move back onto a tiled
+            // desktop folds it in before its re-add and a float-back there
+            // returns to the free position rather than the source desktop's
+            // tiled frame; drop the effect's tracking entries and the
+            // autotile decoration that would otherwise outlive the tile.
+            // releaseWindowTracking's daemon relay is gated on this screen
+            // being managed, so on this branch it is effect-side only.
+            m_tilingHandler->savePreTileForDesktopMove(windowId);
+            m_tilingHandler->releaseWindowTracking(windowId, screenId);
+            removeWindowDecoration(windowId);
+        }
         if (m_snapHandler && m_snapHandler->drainDesktopArrivalFor(windowId, window)) {
             return;
         }
-        if (!m_tilingHandler->isManagedScreen(screenId)) {
+        if (!destinationManaged) {
             // Snapping screen. There is no stack to join and snapping places
             // nothing on its own, so an arrival floats — unless the context's
             // layout auto-assigns, which is the one case with somewhere to put

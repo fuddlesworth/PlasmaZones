@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A window moved to another virtual desktop no longer leaves its slot behind**: on a tiled desktop, moving a window to a desktop with nothing assigned while looking at that desktop left the window's slot occupied on the desktop it came from. The other windows there kept tiling around a gap until the daemon restarted. The compositor side had been deciding whether to release a moved window from what it could see of the desktop in view, and a desktop that runs no tiling could not say anything about the one the window left. The daemon now owns that decision. Whenever a window's set of virtual desktops changes, any tiling or scrolling stack keyed by a desktop the window no longer belongs to releases it, whatever desktop is in view and whatever each desktop runs. A sticky window, and a window whose desktop set merely grew, keep their place. ([#1076](https://github.com/fuddlesworth/PlasmaZones/discussions/1076))
+
 ## [3.4.14] - 2026-09-06
 
 ### Added

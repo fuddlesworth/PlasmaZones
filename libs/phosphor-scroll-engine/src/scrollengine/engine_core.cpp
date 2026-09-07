@@ -1064,6 +1064,20 @@ QString ScrollEngine::heldScreenForWindow(const QString& windowId) const
     return {};
 }
 
+std::optional<PhosphorEngine::PlacementStateKey> ScrollEngine::heldKeyForWindow(const QString& windowId) const
+{
+    // Same membership check as heldScreenForWindow, minus the current-context
+    // scoping: the key is answered from whichever state holds the window, a
+    // background desktop's included. See IPlacementEngine::heldKeyForWindow.
+    const QString canonical = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    const ScrollState* state = stateForWindow(canonical, &key);
+    if (state && state->containsWindow(canonical)) {
+        return key;
+    }
+    return std::nullopt;
+}
+
 QRect ScrollEngine::lastManagedRect(const QString& rawWindowId) const
 {
     return m_lastAppliedRect.value(canonicalizeForLookup(rawWindowId));

@@ -178,6 +178,23 @@ public:
         return {};
     }
 
+    /// The (screen, desktop, activity) key of the state that genuinely holds
+    /// @p windowId, tiled or floating, in ANY context — or nullopt when no
+    /// state holds it. Membership-grade like heldScreenForWindow, but
+    /// deliberately NOT scoped to the screen's current context: this is the
+    /// query for "which desktop's stack still lists this window", which the
+    /// daemon's desktop-membership reconcile asks after the compositor
+    /// reports the window's desktop set changed. The holding state is
+    /// usually a BACKGROUND one by then (the user is looking at the desktop
+    /// the window arrived on), which is exactly the case the current-context
+    /// predicates answer empty for. Engines without per-context states keep
+    /// the default.
+    virtual std::optional<PlacementStateKey> heldKeyForWindow(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and

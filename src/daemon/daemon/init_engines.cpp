@@ -1205,6 +1205,12 @@ void Daemon::initEnginesAndWiring()
     // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_tilingAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
+    // Desktop-membership reconcile: the registry's per-window desktop set is
+    // the authority on which desktop a window belongs to, and the adaptor
+    // sees every engine state, so a window that leaves a desktop is released
+    // from that desktop's stack here rather than by the effect guessing from
+    // the desktop in view (see TilingAdaptor::setWindowRegistry).
+    m_tilingAdaptor->setWindowRegistry(m_windowRegistry.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
     // The wheel's view step reads ShortcutManager's narrow getter over

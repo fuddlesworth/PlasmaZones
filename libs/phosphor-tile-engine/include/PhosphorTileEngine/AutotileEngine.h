@@ -1106,6 +1106,7 @@ public:
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
                                 int minHeight) override;
     QString heldScreenForWindow(const QString& windowId) const override;
+    std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
     /**
      * @brief Update a window's minimum size at runtime

@@ -785,6 +785,9 @@ void Daemon::stop()
         // half-torn-down state. Symmetric with the resolver / router clears above
         // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
         m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
+        // Same contract for the registry subscription: a metadata push landing
+        // in the teardown gap must not walk engines that are being reset.
+        m_tilingAdaptor->setWindowRegistry(nullptr);
     }
 
     // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value

@@ -1392,6 +1392,15 @@ target_link_libraries(test_tiling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::D
                       PhosphorEngine::PhosphorEngine PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_tiling_adaptor_map COMMAND test_tiling_adaptor_map)
 
+# Desktop-membership reconcile (#1076): a window whose virtual-desktop set
+# changed is released from any engine state keyed by a desktop it left,
+# driven through a real WindowRegistry against both tiling-family engines.
+add_executable(test_tiling_adaptor_desktop_reconcile dbus/test_tiling_adaptor_desktop_reconcile.cpp)
+target_link_libraries(test_tiling_adaptor_desktop_reconcile PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorEngine::PhosphorEngine PhosphorTileEngine::PhosphorTileEngine
+                      PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_tiling_adaptor_desktop_reconcile COMMAND test_tiling_adaptor_desktop_reconcile)
+
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
 # can't drift relative to the compositor plugin's deleted local caches.

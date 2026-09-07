@@ -148,6 +148,13 @@ public:
     /// the daemon relay is Tiling.releaseWindowTracking, which runs NO
     /// placement capture — the window is mid-drag and its frame must never
     /// be recorded as a float-back.
+    ///
+    /// The daemon relay fires only when @p screenId is managed in the CURRENT
+    /// context. That gate is deliberately NOT lifted for a window arriving
+    /// from another desktop: which desktop's state still lists a window is
+    /// the daemon's question, answered by TilingAdaptor's desktop-membership
+    /// reconcile off the window's registry desktop set (#1076), never by this
+    /// screen's managed set, which says nothing about the desktop it left.
     void releaseWindowTracking(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)

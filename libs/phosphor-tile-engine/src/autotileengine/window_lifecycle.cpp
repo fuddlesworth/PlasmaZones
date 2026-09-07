@@ -208,6 +208,23 @@ QString AutotileEngine::heldScreenForWindow(const QString& windowId) const
     return {};
 }
 
+std::optional<PhosphorEngine::PlacementStateKey> AutotileEngine::heldKeyForWindow(const QString& windowId) const
+{
+    // Same membership check as heldScreenForWindow, minus the current-context
+    // scoping: the key is answered from whichever state holds the window, a
+    // background desktop's included. See IPlacementEngine::heldKeyForWindow.
+    const QString canonical = canonicalizeForLookup(windowId);
+    const auto keyIt = m_states.windowKeys().constFind(canonical);
+    if (keyIt == m_states.windowKeys().constEnd()) {
+        return std::nullopt;
+    }
+    const PhosphorTiles::TilingState* state = m_states.stateForKey(keyIt.value());
+    if (state && state->containsWindow(canonical)) {
+        return keyIt.value();
+    }
+    return std::nullopt;
+}
+
 void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& screenId, int minWidth, int minHeight)
 {
     if (!warnIfEmptyWindowId(rawWindowId, "windowOpened")) {

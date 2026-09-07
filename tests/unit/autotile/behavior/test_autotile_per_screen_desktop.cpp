@@ -112,6 +112,46 @@ private Q_SLOTS:
         engine.setAutotileScreens({kS1});
         QCOMPARE(engine.tilingStateForScreen(kS1), globalState);
     }
+
+    // #1076: a window moved from a tiled desktop onto an unassigned desktop
+    // (the screen runs no tiling there) is released by the effect while the
+    // unassigned desktop is in view. The release must reach the SOURCE
+    // desktop's state by window id even though the screen is not autotile in
+    // the current context, otherwise the slot stays occupied on return.
+    void releaseReachesSourceDesktopFromUnmanagedContext()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString win = QStringLiteral("win-moved");
+
+        engine.setCurrentDesktopForScreen(kS1, 1);
+        engine.setAutotileScreens({kS1});
+        engine.windowOpened(win, kS1);
+        engine.windowOpened(QStringLiteral("win-stays"), kS1);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d1 != nullptr);
+        QVERIFY(d1->containsWindow(win));
+        QCOMPARE(d1->windowCount(), 2);
+
+        // The user switches the screen to desktop 3, where nothing is assigned.
+        engine.setCurrentDesktopForScreen(kS1, 3);
+        engine.setAutotileScreens({});
+        QVERIFY(!engine.isAutotileScreen(kS1));
+        QVERIFY(engine.isWindowTracked(win));
+
+        // The effect's arrival arm releases the window from the desktop in view.
+        engine.windowClosed(win);
+        QCoreApplication::processEvents();
+        QVERIFY(!engine.isWindowTracked(win));
+
+        // Back on desktop 1 the stack holds only the window that stayed.
+        engine.setCurrentDesktopForScreen(kS1, 1);
+        engine.setAutotileScreens({kS1});
+        QCOMPARE(engine.tilingStateForScreen(kS1), d1);
+        QVERIFY(!d1->containsWindow(win));
+        QVERIFY(d1->containsWindow(QStringLiteral("win-stays")));
+        QCOMPARE(d1->windowCount(), 1);
+    }
 };
 
 QTEST_MAIN(TestAutotilePerScreenDesktop)
