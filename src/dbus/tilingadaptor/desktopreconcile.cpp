@@ -164,6 +164,10 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const QSe
         if (!held || !leftTheContext(*held)) {
             continue;
         }
+        // Inert for snapping, which neither pins screens nor overrides the
+        // accessor, so this reads 0 against a key whose desktop is never 0.
+        // Kept so the two loops answer the same question, and so an engine
+        // joining this list later inherits the gate rather than the omission.
         if (engine->stickyPinnedDesktopForScreen(held->screenId) == held->desktop) {
             continue;
         }

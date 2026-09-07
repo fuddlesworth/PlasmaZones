@@ -53,6 +53,12 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     // entry points).
     m_lifecycleEngines = engines;
     m_lifecycleEngines.removeAll(nullptr);
+    // Keep the two lists disjoint whichever setter runs last (see
+    // setMembershipEngines): the reconcile walks both, and an engine in both
+    // would be asked twice and released through two different paths.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        m_membershipEngines.removeAll(engine);
+    }
     if (m_lifecycleEngines.isEmpty()) {
         // Real teardown goes through clearEngine(); this empty-list form
         // exists for symmetry and has no production caller (see the header).
@@ -72,6 +78,12 @@ void TilingAdaptor::setMembershipEngines(const QVector<PhosphorEngine::IPlacemen
 {
     m_membershipEngines = engines;
     m_membershipEngines.removeAll(nullptr);
+    // Disjoint from the lifecycle list by contract, and enforced rather than
+    // assumed: the reconcile walks both, so an engine in both would be asked
+    // twice and released through two different paths.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        m_membershipEngines.removeAll(engine);
+    }
 }
 
 bool TilingAdaptor::ensurePipeline(const char* methodName) const

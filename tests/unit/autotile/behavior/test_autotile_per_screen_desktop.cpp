@@ -291,32 +291,105 @@ private Q_SLOTS:
     void renumberAfterRemoval_shiftsAStashWithNoLiveState()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QJsonObject bag{{QStringLiteral("marker"), QStringLiteral("desktop-3")}};
+        const QJsonObject bag3{{QStringLiteral("marker"), QStringLiteral("desktop-3")}};
+        const QJsonObject bag4{{QStringLiteral("marker"), QStringLiteral("desktop-4")}};
 
+        // TWO bags, on adjacent desktops, so the ORDER of the shift matters. A
+        // chain like this is what a descending walk gets wrong: it would try
+        // desktop 4 first, find desktop 3 still occupied by the bag that has
+        // not moved yet, and drop it.
+        for (const auto& [desktop, bag] : QList<std::pair<int, QJsonObject>>{{3, bag3}, {4, bag4}}) {
+            engine.setCurrentDesktopForScreen(kS1, desktop);
+            engine.setAutotileScreens({kS1});
+            engine.windowOpened(QStringLiteral("win-d%1").arg(desktop), kS1);
+            QCoreApplication::processEvents();
+            PhosphorTiles::TilingState* state = engine.tilingStateForScreen(kS1);
+            QVERIFY(state != nullptr);
+            state->setScriptState(bag);
+            // Taking the screen out of the set tears the state down and rescues
+            // the bag, leaving the desktop holding a stash and NO state — the
+            // shape the stateless shift exists for.
+            engine.setAutotileScreens({});
+            QCoreApplication::processEvents();
+        }
+
+        engine.pruneStatesForDesktop(2);
+        engine.renumberDesktopsAfterRemoval(2);
+
+        // 3 became 2 and 4 became 3. Each must be findable at its new number,
+        // which only happens if both moved and neither was dropped.
+        engine.setCurrentDesktopForScreen(kS1, 2);
+        engine.setAutotileScreens({kS1});
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d2 != nullptr);
+        QCOMPARE(d2->scriptState(), bag3);
+
+        engine.setCurrentDesktopForScreen(kS1, 3);
+        engine.setAutotileScreens({kS1});
+        PhosphorTiles::TilingState* d3 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d3 != nullptr);
+        QCOMPARE(d3->scriptState(), bag4);
+    }
+
+    // The two halves of the renumber meeting on one key. A LIVE state migrating
+    // down lands on a key a STATELESS bag already occupies, and the state
+    // brings its own bag with it. The stateless pass runs afterwards and must
+    // not then pick up the live state's bag and carry it off: that would part a
+    // live layout from its script state AND orphan the bag on a key nothing
+    // lives on, which is both failures the shift exists to prevent, caused by
+    // the shift itself.
+    void renumberAfterRemoval_liveStateBagIsNotStolenByTheStatelessPass()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QJsonObject staleBag{{QStringLiteral("marker"), QStringLiteral("stateless-d3")}};
+        const QJsonObject liveBag{{QStringLiteral("marker"), QStringLiteral("live-d4")}};
+
+        // Desktop 3: a state that dies, leaving its bag behind with no state.
         engine.setCurrentDesktopForScreen(kS1, 3);
         engine.setAutotileScreens({kS1});
         engine.windowOpened(QStringLiteral("win-d3"), kS1);
         QCoreApplication::processEvents();
         PhosphorTiles::TilingState* d3 = engine.tilingStateForScreen(kS1);
         QVERIFY(d3 != nullptr);
-        d3->setScriptState(bag);
-
-        // Taking the screen out of the set tears the state down and rescues the
-        // bag, which leaves desktop 3 holding a stash and NO state — the shape
-        // the stateless shift exists for.
+        d3->setScriptState(staleBag);
         engine.setAutotileScreens({});
         QCoreApplication::processEvents();
 
+        // Desktop 4: a state that STAYS live, with its own bag.
+        engine.setCurrentDesktopForScreen(kS1, 4);
+        engine.setAutotileScreens({kS1});
+        engine.windowOpened(QStringLiteral("win-d4"), kS1);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d4 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d4 != nullptr);
+        d4->setScriptState(liveBag);
+
+        // Remove desktop 2. Desktop 3's stateless bag targets 2; desktop 4's
+        // live state targets 3, which is where that stale bag sits right now.
         engine.pruneStatesForDesktop(2);
         engine.renumberDesktopsAfterRemoval(2);
 
-        // Desktop 3 is desktop 2 now. Bringing the screen back there must find
-        // the bag, which only happens if it moved with the numbering.
+        // The live state is on desktop 3 now.
+        engine.setCurrentDesktopForScreen(kS1, 3);
+        engine.setAutotileScreens({kS1});
+        PhosphorTiles::TilingState* moved = engine.tilingStateForScreen(kS1);
+        QVERIFY(moved != nullptr);
+        QVERIFY2(moved->containsWindow(QStringLiteral("win-d4")),
+                 "the live desktop-4 state should have migrated down to desktop 3");
+
+        // The discriminator is desktop 2, and it has to be read through a
+        // freshly CREATED state: a migrated state carries its script bag in the
+        // object itself, so asking the live one proves nothing either way. What
+        // desktop 2 restores is whichever bag the shift left on its key. The
+        // stale desktop-3 leftover is the right answer; the live state's own
+        // bag being there means the stateless pass stole it after the state
+        // loop moved it in.
         engine.setCurrentDesktopForScreen(kS1, 2);
         engine.setAutotileScreens({kS1});
         PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(kS1);
         QVERIFY(d2 != nullptr);
-        QCOMPARE(d2->scriptState(), bag);
+        QVERIFY2(d2->scriptState() != liveBag, "the live state's bag must not have been carried onto desktop 2");
+        QCOMPARE(d2->scriptState(), staleBag);
     }
 };
 

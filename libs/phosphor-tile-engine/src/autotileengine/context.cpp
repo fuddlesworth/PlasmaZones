@@ -39,6 +39,8 @@
 #include <QVarLengthArray>
 #include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 namespace PhosphorTileEngine {
 
@@ -741,14 +743,23 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     // else's layout, which is exactly what pruneStatesForDesktop's own erase
     // guards against.
     //
-    // Only the KEYS are collected here. The move itself happens AFTER the
-    // state loop, because shifting first would put a bag on a key the loop
-    // then migrates again — moving it twice, which is the opposite of the
-    // problem this solves.
-    QList<TilingStateKey> statelessStashKeys;
-    for (const auto& entry : m_scriptStateStash) {
-        if (entry.first.desktop > removedDesktop && !m_states.containsKey(entry.first)) {
-            statelessStashKeys.append(entry.first);
+    // TAKEN OUT of the stash entirely, not merely noted, and re-filed after the
+    // state loop. Leaving them in place across the loop loses them two ways:
+    // migrateStateKey overwrites the destination's entry with the moving
+    // state's own, and where the moving state has NO bag it ERASES the
+    // destination's instead — which is right when the entry there belongs to
+    // the state being replaced, and wrong for a leftover that is itself queued
+    // to shift down. Holding them locally also means the re-file cannot pick up
+    // a bag the loop put there, which is the other half of the same hazard.
+    // std::vector, not QList: StashedScriptState owns a unique_ptr split tree
+    // and is move-only, which Qt's implicitly-shared containers cannot hold.
+    std::vector<std::pair<TilingStateKey, StashedScriptState>> statelessStashes;
+    for (auto it = m_scriptStateStash.begin(); it != m_scriptStateStash.end();) {
+        if (it->first.desktop > removedDesktop && !m_states.containsKey(it->first)) {
+            statelessStashes.emplace_back(it->first, std::move(it->second));
+            it = m_scriptStateStash.erase(it);
+        } else {
+            ++it;
         }
     }
 
@@ -775,34 +786,21 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
             }
         }
     }
-    // NOW the stateless bags, with every state-owned move already done so the
-    // loop cannot pick one up a second time.
+    // NOW re-file the bags taken out above, at their shifted keys.
     //
-    // ASCENDING, for the same reason the state loop above is: the prune left
-    // removedDesktop vacant, so the lowest bag lands safely and each later
-    // target was vacated by the step before it. Descending would find every
-    // destination still occupied by the bag that has not moved yet.
-    //
-    // A destination that is STILL occupied after that belongs to a live state
-    // the loop placed there, which outranks a stateless leftover — the prunes
-    // would have reaped the leftover anyway, so it is dropped.
-    std::sort(statelessStashKeys.begin(), statelessStashKeys.end(),
-              [](const TilingStateKey& a, const TilingStateKey& b) {
-                  return a.desktop < b.desktop;
-              });
-    for (const TilingStateKey& oldKey : std::as_const(statelessStashKeys)) {
-        auto it = m_scriptStateStash.find(oldKey);
-        if (it == m_scriptStateStash.end()) {
-            continue;
-        }
+    // No ordering needed, and that is a property of taking them OUT rather than
+    // an oversight: a destination can only be blocked by an entry still in the
+    // map, and none of these are. Two of them cannot collide with each other
+    // either, since subtracting one from distinct keys stays distinct. What a
+    // destination CAN hold is a live state's bag the loop moved there, and that
+    // outranks a leftover the prunes would have reaped anyway, so the leftover
+    // is dropped rather than clobbering it.
+    for (auto& [oldKey, bag] : statelessStashes) {
         const TilingStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
         if (m_scriptStateStash.contains(newKey)) {
-            m_scriptStateStash.erase(it);
             continue;
         }
-        StashedScriptState moved = std::move(it->second);
-        m_scriptStateStash.erase(it);
-        m_scriptStateStash.insert_or_assign(newKey, std::move(moved));
+        m_scriptStateStash.insert_or_assign(newKey, std::move(bag));
     }
 
     // The pins and the per-output desktop map index the same numbering, so they

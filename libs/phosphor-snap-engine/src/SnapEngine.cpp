@@ -682,9 +682,25 @@ void SnapEngine::releaseFromContext(const PhosphorEngine::PlacementStateKey& key
     }
     const QString canonical = canonicalWindowId(windowId);
     // windowClosed, not removeWindowData: this window genuinely stopped living
-    // here, so the store owes its stateChanged. removeWindowData is the silent
-    // phantom-eviction primitive and would leave every consumer of the zone's
-    // occupancy holding the old answer.
+    // here, and windowClosed is the spelling that says so. removeWindowData is
+    // the silent phantom-eviction primitive, used for evicting a copy that was
+    // never a legitimate resident.
+    //
+    // Be clear about what this does NOT do. SnapState::stateChanged has no
+    // production subscriber, so nothing downstream is told: the effect's
+    // per-window mirror and the persisted placement record both keep saying the
+    // window is snapped in the zone on the desktop it left, until some
+    // unrelated event re-captures. The canonical unsnap (uncommitSnap) instead
+    // emits windowSnapStateChanged, which the tracking adaptor relays and the
+    // placement capture listens to.
+    //
+    // Emitting that here is NOT obviously right and is deliberately left alone:
+    // it also drives clearModeSpecificFloatMarker on the two tiling engines,
+    // and the entry it carries has no context key, so a window that is
+    // legitimately floating or tiled on the desktop it moved TO would be told
+    // "unsnapped" with no way to say which desktop that refers to. Picking the
+    // signal shape is a separate change from closing the occupancy leak, which
+    // is what this function is for.
     state->windowClosed(canonical);
     // The reverse map named this store; with the window gone from it, leaving
     // the entry would keep isWindowTracked answering true for a window no store

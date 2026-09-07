@@ -469,8 +469,12 @@ private Q_SLOTS:
         QVERIFY(a->containsWindow(kStays));
     }
 
-    // An EMPTY activity is "all activities, or unknown" on either side of the
-    // compare, and neither spelling is a mismatch.
+    // An EMPTY reported activity is "all activities, or unknown", never "it
+    // left". This pins the LENIENCY specifically — the !activity.isEmpty()
+    // guard in leftTheContext — not the activity axis itself, which is pinned
+    // by autotile_windowMovedToAnotherActivity_isReleasedFromSourceState and by
+    // the last assertion of the direct-call case. Removing the axis entirely
+    // leaves this passing, because the window never changes desktop.
     void autotile_unknownActivity_keepsTheSlot()
     {
         const QString kActivityA = QStringLiteral("aaaaaaaa-1111-2222-3333-444444444444");
@@ -507,7 +511,11 @@ private Q_SLOTS:
         f.adaptor.reconcileWindowMembership(kWindow, {1}, kActivityA);
         QVERIFY(a->containsWindow(kWindow));
 
-        // Both axes unknown: nothing to check, so nothing is released.
+        // Both axes unknown. This is a no-crash / redundancy check rather than
+        // a gate: leftTheContext already answers false for empty on either
+        // side, so the early return that also covers it cannot be pinned
+        // separately. Kept because the direct contract says an all-unknown call
+        // releases nothing, and that should be readable here.
         f.adaptor.reconcileWindowMembership(kWindow, {}, QString());
         QVERIFY(a->containsWindow(kWindow));
 

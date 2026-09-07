@@ -72,15 +72,24 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
     }
     QSet<QString> affectedScreens;
-    // Per-screen params cache: layoutParamsForScreen costs a ScreenManager
-    // query plus a context-gap provider invocation, and a batch prune of N
-    // dead windows on one screen needs it once, not N times. The params are
-    // content-dependent (the smart-gaps arm reads the live column count), so a
-    // batch that empties a screen down to one column resolves its later
-    // removals against the pre-batch gap verdict; the scheduled retile below
-    // re-resolves and re-anchors before anything paints, which is the same
-    // borrow layoutParamsForScreen already documents for a background context.
-    QHash<QString, ScrollLayoutParams> paramsByScreen;
+    // Per-CONTEXT params cache: resolving them costs a ScreenManager query plus
+    // a context-gap provider invocation, and a batch prune of N dead windows in
+    // one context needs it once, not N times.
+    //
+    // Keyed by the whole key, not by the screen. The gap rules are per (screen,
+    // desktop, activity), so a screen-keyed cache would resolve the first
+    // context a batch happened to touch and then hand those gaps to windows on
+    // that screen's OTHER desktops — and removeWindow re-derives the view
+    // anchor from them, which is the stale-anchor error windowClosed's own
+    // comment says can survive the desktop return.
+    //
+    // The params are content-dependent (the smart-gaps arm reads the live
+    // column count), so a batch that empties a context down to one column
+    // resolves its later removals against the pre-batch gap verdict; the
+    // scheduled retile below re-resolves and re-anchors before anything paints,
+    // which is the same borrow layoutParamsForKey already documents for a
+    // background context.
+    QHash<PhosphorEngine::PlacementStateKey, ScrollLayoutParams> paramsByContext;
     for (const QString& windowId : dead) {
         // Before any state mutation, mirroring windowClosed (and autotile's
         // prune): a preview naming a dead id must not survive to re-add or
@@ -90,9 +99,9 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         PhosphorEngine::PlacementStateKey key;
         ScrollState* state = stateForWindow(windowId, &key);
         if (state) {
-            auto paramsIt = paramsByScreen.find(key.screenId);
-            if (paramsIt == paramsByScreen.end()) {
-                paramsIt = paramsByScreen.insert(key.screenId, layoutParamsForKey(key));
+            auto paramsIt = paramsByContext.find(key);
+            if (paramsIt == paramsByContext.end()) {
+                paramsIt = paramsByContext.insert(key, layoutParamsForKey(key));
             }
             state->strip().removeWindow(windowId, *paramsIt);
             state->removeFloating(windowId);
@@ -747,6 +756,14 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     // moving it twice, and for m_pendingFocusEmitContexts migrateStateKey
     // REMOVES the old key rather than moving it, so a shifted context landing
     // there would be deleted outright.
+    //
+    // Keys rather than taken-out VALUES, unlike the autotile twin. Every mover
+    // in this engine's migrateStateKey is move-only-if-vacant, so the loop
+    // cannot destroy an entry sitting at a destination; autotile's has an
+    // else-arm that ERASES the destination when the moving state has no bag of
+    // its own, which is why it has to hold the values locally. What both need
+    // is the re-check inside moveStatelessDown below: the loop CAN put a live
+    // state's entry on a key collected here, and that entry is not ours.
     // ASCENDING, for the same reason the state loop below is: the prune left
     // removedDesktop vacant, so the lowest entry lands safely and each later
     // target was vacated by the step before it. Descending would find every
@@ -811,8 +828,15 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     // entry still there after the ascending walk belongs to a live state the
     // loop placed there, and that outranks a stateless leftover the prunes
     // would have reaped anyway.
-    const auto moveStatelessDown = [](auto& map, const QList<PhosphorEngine::PlacementStateKey>& keys) {
+    const auto moveStatelessDown = [this](auto& map, const QList<PhosphorEngine::PlacementStateKey>& keys) {
         for (const PhosphorEngine::PlacementStateKey& oldKey : keys) {
+            // Re-check statelessness HERE, not just at collection time: the
+            // state loop above may have migrated a live state onto this key and
+            // brought its own entry with it, and that entry belongs to the
+            // state rather than to the leftover we collected.
+            if (m_states.containsKey(oldKey)) {
+                continue;
+            }
             const auto it = map.constFind(oldKey);
             if (it == map.constEnd()) {
                 continue;
@@ -829,6 +853,9 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     moveStatelessDown(m_burstPendingApplies, statelessBurst);
     moveStatelessDown(m_perScreenOverrides, statelessOverrides);
     for (const PhosphorEngine::PlacementStateKey& oldKey : statelessFocusContexts) {
+        if (m_states.containsKey(oldKey)) {
+            continue;
+        }
         if (!m_pendingFocusEmitContexts.remove(oldKey)) {
             continue;
         }
