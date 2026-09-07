@@ -96,13 +96,27 @@ public:
     /// exists for symmetry, with no production caller.
     void setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
 
-    /// Subscribe to the compositor-fed WindowRegistry so a window's DESKTOP
-    /// membership is reconciled against the engine states here, in the one
-    /// place that can see every state at once, whatever desktop is in view.
+    /// Engines that take part in DESKTOP-MEMBERSHIP reconciliation but not in
+    /// the lifecycle pipeline — snapping.
     ///
-    /// Desktop only. PlacementStateKey also carries an activity, and a window
-    /// moved to another activity strands its slot the same way — that arm does
-    /// not exist yet, in this class or in the effect.
+    /// Separate from setLifecycleEngines on purpose. That list drives window
+    /// dispatch, the replay cache and the relay entry points, and snapping
+    /// belongs to none of them; but a window that leaves a desktop must stop
+    /// being an occupant of the zone it was snapped into, because zone
+    /// occupancy is queried across EVERY store rather than the one in view, so
+    /// a stale entry stays a live navigation target. These engines are released
+    /// through IPlacementEngine::releaseFromContext instead of the pipeline
+    /// release, which carries re-announce bookkeeping they have no use for.
+    /// Borrowed; cleared by clearEngine().
+    void setMembershipEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
+
+    /// Subscribe to the compositor-fed WindowRegistry so a window's CONTEXT
+    /// membership is reconciled against the engine states here, in the one
+    /// place that can see every state at once, whatever context is in view.
+    ///
+    /// Desktop AND activity, the two axes of the state key a window moves
+    /// along. Both strand a slot the same way, and both are answered from the
+    /// registry rather than from what the compositor happens to be showing.
     ///
     /// Every prior fix for "a window moved between virtual desktops left its
     /// slot behind" (#1076 and its family) added an arm to the KWin effect,
@@ -133,13 +147,22 @@ public:
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
     /// The reconcile setWindowRegistry subscribes: release @p windowId from
-    /// any pipeline state whose desktop is absent from @p desktops. An EMPTY
-    /// set means the window's desktops are unknown, or it is on all of them,
-    /// and releases nothing: a sticky window legitimately sits in a state
-    /// keyed by whichever desktop it was adopted on. Public so the contract
-    /// is testable directly, without driving a registry round-trip to reach
-    /// it.
-    void reconcileWindowDesktops(const QString& windowId, const QSet<int>& desktops);
+    /// any state keyed by a context it no longer belongs to.
+    ///
+    /// Both movable axes of the key. @p desktops is the window's whole desktop
+    /// set and @p activity its activity; an EMPTY value on either means "all of
+    /// them, or unknown", and neither can be read as a mismatch — a sticky
+    /// window is on every desktop, and a state keyed with no activity covers
+    /// every activity. A window whose desktops AND activity are both unknown
+    /// releases nothing at all.
+    ///
+    /// The screen is the third component of the key and deliberately not
+    /// checked here: a window does not leave a screen the way it leaves a
+    /// desktop, and the effect relays an output transfer with its own release.
+    ///
+    /// Public so the contract is testable directly, without driving a registry
+    /// round-trip to reach it.
+    void reconcileWindowMembership(const QString& windowId, const QSet<int>& desktops, const QString& activity);
 
     // ── Engine relay entry points ────────────────────────────────────────
     // The composition root connects every pipeline engine's signals here
@@ -352,7 +375,7 @@ public Q_SLOTS:
      *
      * The owning engine is resolved by window id, which is right for these
      * callers because each is the effect telling the daemon about a window
-     * whose engine it does not know. reconcileWindowDesktops has already
+     * whose engine it does not know. reconcileWindowMembership has already
      * identified the holding engine and uses the private overload instead.
      *
      * @param windowId Window identifier from KWin
@@ -647,6 +670,8 @@ private:
     /// Engines sharing the lifecycle pipeline, primary first (see
     /// setLifecycleEngines). Interface-only borrows.
     QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
+    /// Membership-only engines (snapping) — see setMembershipEngines.
+    QVector<PhosphorEngine::IPlacementEngine*> m_membershipEngines;
     /// The registry subscription setWindowRegistry made, so a re-wire
     /// replaces it rather than stacking a second reconcile per change.
     QMetaObject::Connection m_registryDesktopConnection;

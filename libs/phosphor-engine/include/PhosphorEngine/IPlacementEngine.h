@@ -212,6 +212,25 @@ public:
         return std::nullopt;
     }
 
+    /// Drop @p windowId from the state at @p key, without any of the
+    /// re-announce bookkeeping a live-move release carries.
+    ///
+    /// For an engine that takes part in desktop-membership reconciliation but
+    /// is NOT in the tiling lifecycle pipeline — snapping. The pipeline
+    /// engines are released through the adaptor instead, because their release
+    /// has to carry the move-excuse and replay-cache work the tiling dispatch
+    /// depends on; a snapped window has none of that, it simply stops being an
+    /// occupant of the zone it left behind.
+    ///
+    /// Keyed rather than by window id alone: the whole point is to clear the
+    /// state the window is NO LONGER on, which is not the one a current-context
+    /// lookup would find.
+    virtual void releaseFromContext(const PlacementStateKey& key, const QString& windowId)
+    {
+        Q_UNUSED(key)
+        Q_UNUSED(windowId)
+    }
+
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and

@@ -23,6 +23,8 @@
 
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -40,13 +42,14 @@ const QString kInstance = QStringLiteral("11111111-2222-3333-4444-555555555555")
 const QString kWindow = QStringLiteral("app|11111111-2222-3333-4444-555555555555");
 const QString kStays = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
 
-PhosphorEngine::WindowMetadata onDesktop(int desktop, const QList<int>& span = {})
+PhosphorEngine::WindowMetadata onDesktop(int desktop, const QList<int>& span = {}, const QString& activity = QString())
 {
     PhosphorEngine::WindowMetadata meta;
     meta.appId = QStringLiteral("app");
     meta.title = QStringLiteral("t");
     meta.virtualDesktop = desktop;
     meta.virtualDesktops = span;
+    meta.activity = activity;
     return meta;
 }
 
@@ -437,6 +440,121 @@ private Q_SLOTS:
         QVERIFY(!f.engine.isWindowTracked(kWindow));
         QVERIFY(f.engine.isWindowTracked(kStays));
         QVERIFY(!f.engine.heldKeyForWindow(kWindow).has_value());
+    }
+
+    // An ACTIVITY move strands a slot exactly as a desktop move does: the key
+    // carries both, and nothing else releases on the activity axis.
+    void autotile_windowMovedToAnotherActivity_isReleasedFromSourceState()
+    {
+        const QString kActivityA = QStringLiteral("aaaaaaaa-1111-2222-3333-444444444444");
+        const QString kActivityB = QStringLiteral("bbbbbbbb-5555-6666-7777-888888888888");
+
+        AutotileFixture f;
+        f.registry.canonicalizeWindowId(kWindow);
+        f.registry.upsert(kInstance, onDesktop(1, {}, kActivityA));
+        f.engine.setCurrentActivity(kActivityA);
+        PhosphorTiles::TilingState* a = f.openOn(1, {kWindow, kStays}, /*seedRegistry=*/false);
+        QVERIFY(a != nullptr);
+        QCOMPARE(a->windowCount(), 2);
+        QVERIFY(f.engine.heldKeyForWindow(kWindow).has_value());
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->activity, kActivityA);
+
+        // Same desktop throughout — only the activity moves, so a
+        // desktop-only reconcile sees nothing to do.
+        f.registry.upsert(kInstance, onDesktop(1, {}, kActivityB));
+        QCoreApplication::processEvents();
+
+        QVERIFY(!a->containsWindow(kWindow));
+        QVERIFY(!f.engine.isWindowTracked(kWindow));
+        QVERIFY(a->containsWindow(kStays));
+    }
+
+    // An EMPTY activity is "all activities, or unknown" on either side of the
+    // compare, and neither spelling is a mismatch.
+    void autotile_unknownActivity_keepsTheSlot()
+    {
+        const QString kActivityA = QStringLiteral("aaaaaaaa-1111-2222-3333-444444444444");
+
+        AutotileFixture f;
+        f.registry.canonicalizeWindowId(kWindow);
+        f.registry.upsert(kInstance, onDesktop(1, {}, kActivityA));
+        f.engine.setCurrentActivity(kActivityA);
+        PhosphorTiles::TilingState* a = f.openOn(1, {kWindow}, /*seedRegistry=*/false);
+        QVERIFY(a != nullptr);
+        QVERIFY(a->containsWindow(kWindow));
+
+        // The window reports no activity at all. That is "on all of them, or
+        // the compositor did not say", never "it left".
+        f.registry.upsert(kInstance, onDesktop(1, {}, QString()));
+        QCoreApplication::processEvents();
+        QVERIFY(a->containsWindow(kWindow));
+    }
+
+    // The public contract, driven directly rather than through the registry —
+    // which is what the method is public for.
+    void reconcileWindowMembership_directCall_honoursBothAxes()
+    {
+        const QString kActivityA = QStringLiteral("aaaaaaaa-1111-2222-3333-444444444444");
+        AutotileFixture f;
+        f.registry.canonicalizeWindowId(kWindow);
+        f.registry.upsert(kInstance, onDesktop(1, {}, kActivityA));
+        f.engine.setCurrentActivity(kActivityA);
+        PhosphorTiles::TilingState* a = f.openOn(1, {kWindow}, /*seedRegistry=*/false);
+        QVERIFY(a != nullptr);
+        QVERIFY(a->containsWindow(kWindow));
+
+        // Same desktop, same activity: nothing moved.
+        f.adaptor.reconcileWindowMembership(kWindow, {1}, kActivityA);
+        QVERIFY(a->containsWindow(kWindow));
+
+        // Both axes unknown: nothing to check, so nothing is released.
+        f.adaptor.reconcileWindowMembership(kWindow, {}, QString());
+        QVERIFY(a->containsWindow(kWindow));
+
+        // Desktop still matches, activity does not.
+        f.adaptor.reconcileWindowMembership(kWindow, {1}, QStringLiteral("other-activity"));
+        QVERIFY(!a->containsWindow(kWindow));
+    }
+
+    // Snapping keeps per-context stores like the tiling engines, but zone
+    // occupancy is resolved across EVERY store rather than the one in view. So
+    // a window left listed in the zone it was snapped into on a desktop it has
+    // since left stays a live navigation target, and picking it drags the user
+    // to whichever desktop the window is really on now.
+    //
+    // Snap is reconciled through the membership list, not the lifecycle
+    // pipeline: it takes no part in window dispatch or the replay cache.
+    void snapping_windowMovedOffItsDesktop_stopsOccupyingTheZone()
+    {
+        const QString kZone = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorSnapEngine::SnapEngine snap(nullptr, nullptr, nullptr, nullptr);
+        snap.setWindowRegistry(&registry);
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        // Deliberately NOT a lifecycle engine — that list drives dispatch.
+        adaptor.setLifecycleEngines({});
+        adaptor.setMembershipEngines({&snap});
+        adaptor.setWindowRegistry(&registry);
+
+        registry.canonicalizeWindowId(kWindow);
+        registry.upsert(kInstance, onDesktop(1));
+
+        snap.setCurrentDesktopForScreen(kScreen, 1);
+        PhosphorSnapEngine::SnapState* d1 = snap.stateForWindowOnScreen(kWindow, kScreen);
+        QVERIFY(d1 != nullptr);
+        d1->assignWindowToZone(kWindow, kZone, kScreen, 1);
+        QVERIFY(d1->windowsInZone(kZone).contains(kWindow));
+        QVERIFY(snap.heldKeyForWindow(kWindow).has_value());
+        QCOMPARE(snap.heldKeyForWindow(kWindow)->desktop, 1);
+
+        // The window moves to desktop 3. Desktop 1's store must let it go.
+        registry.upsert(kInstance, onDesktop(3));
+        QCoreApplication::processEvents();
+
+        QVERIFY2(!d1->windowsInZone(kZone).contains(kWindow),
+                 "a window that left the desktop must stop occupying the zone it was snapped into there");
+        QVERIFY(!snap.heldKeyForWindow(kWindow).has_value());
     }
 
     // heldKeyForWindow is MEMBERSHIP-grade, and a drag-insert preview is the

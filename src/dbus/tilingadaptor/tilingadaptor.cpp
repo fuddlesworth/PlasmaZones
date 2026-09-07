@@ -68,6 +68,12 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     }
 }
 
+void TilingAdaptor::setMembershipEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines)
+{
+    m_membershipEngines = engines;
+    m_membershipEngines.removeAll(nullptr);
+}
+
 bool TilingAdaptor::ensurePipeline(const char* methodName) const
 {
     if (m_lifecycleEngines.isEmpty()) {
@@ -955,6 +961,7 @@ void TilingAdaptor::clearEngine()
     // borrow is dropped symmetrically and grep-discoverably.
     QObject::disconnect(m_registryDesktopConnection);
     m_registryDesktopConnection = {};
+    m_membershipEngines.clear();
     // The rest are interface-only borrows, no connections to drop. Also neutralise any
     // pending coalesced announce (its lambda re-checks the empty list) and
     // every per-session queue/dedup cache except m_activeLayouts — none of it

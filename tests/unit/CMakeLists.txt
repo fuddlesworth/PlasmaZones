@@ -1398,7 +1398,7 @@ add_test(NAME test_tiling_adaptor_map COMMAND test_tiling_adaptor_map)
 add_executable(test_tiling_adaptor_desktop_reconcile dbus/test_tiling_adaptor_desktop_reconcile.cpp)
 target_link_libraries(test_tiling_adaptor_desktop_reconcile PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorEngine::PhosphorEngine PhosphorTileEngine::PhosphorTileEngine
-                      PhosphorScrollEngine::PhosphorScrollEngine)
+                      PhosphorScrollEngine::PhosphorScrollEngine PhosphorSnapEngine::PhosphorSnapEngine)
 add_test(NAME test_tiling_adaptor_desktop_reconcile COMMAND test_tiling_adaptor_desktop_reconcile)
 
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the

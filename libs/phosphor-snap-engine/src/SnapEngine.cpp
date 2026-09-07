@@ -653,6 +653,47 @@ void SnapEngine::windowClosed(const QString& windowId)
     m_effectReportedWindows.remove(windowId);
 }
 
+std::optional<PhosphorEngine::PlacementStateKey> SnapEngine::heldKeyForWindow(const QString& windowId) const
+{
+    // Not stateForWindow: that falls back to the globals holder, which has no
+    // desktop identity and would answer a key the reconcile could only read as
+    // "left every desktop". The reverse map alone, then membership in the store
+    // it names — the same two-step the tiling engines use.
+    const QString canonical = canonicalWindowId(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    const SnapState* state = m_states.forWindow(canonical, &key);
+    if (!state || key.screenId.isEmpty()) {
+        return std::nullopt;
+    }
+    // Membership, not a bare key: a refused placement can leave the reverse map
+    // pointing at a store that holds nothing for this window.
+    if (state->isWindowSnapped(canonical) || state->isFloating(canonical)
+        || !state->screenForWindow(canonical).isEmpty()) {
+        return key;
+    }
+    return std::nullopt;
+}
+
+void SnapEngine::releaseFromContext(const PhosphorEngine::PlacementStateKey& key, const QString& windowId)
+{
+    SnapState* state = m_states.stateForKey(key);
+    if (!state) {
+        return;
+    }
+    const QString canonical = canonicalWindowId(windowId);
+    // windowClosed, not removeWindowData: this window genuinely stopped living
+    // here, so the store owes its stateChanged. removeWindowData is the silent
+    // phantom-eviction primitive and would leave every consumer of the zone's
+    // occupancy holding the old answer.
+    state->windowClosed(canonical);
+    // The reverse map named this store; with the window gone from it, leaving
+    // the entry would keep isWindowTracked answering true for a window no store
+    // holds — the phantom shape the membership check above exists to reject.
+    if (m_states.keyForWindow(canonical) == key) {
+        m_states.removeWindow(canonical);
+    }
+}
+
 void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 {
     m_lastActiveScreenId = screenId;

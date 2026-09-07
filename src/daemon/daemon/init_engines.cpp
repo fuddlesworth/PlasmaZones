@@ -1212,6 +1212,12 @@ void Daemon::initEnginesAndWiring()
     // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_tilingAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
+    // Snapping reconciles desktop membership but stays OUT of the lifecycle
+    // pipeline: it takes no part in window dispatch, the replay cache or the
+    // relay entry points. Its stake is zone occupancy, which is queried across
+    // every store, so a window that left a desktop has to stop being listed as
+    // an occupant of the zone it was snapped into there.
+    m_tilingAdaptor->setMembershipEngines({snapEngine});
     // Desktop-membership reconcile: the registry's per-window desktop set is
     // the authority on which desktop a window belongs to, and the adaptor
     // sees every engine state, so a window that leaves a desktop is released
