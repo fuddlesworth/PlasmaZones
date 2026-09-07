@@ -83,20 +83,19 @@ PanelFrame {
     }
 
     headerAction: Component {
-        PhosphorButton {
-            text: host.wirelessEnabled ? qsTr("On") : qsTr("Off")
-            variant: host.wirelessEnabled ? PhosphorButton.Filled : PhosphorButton.Outlined
+        PanelToggle {
+            subject: qsTr("Wi-Fi")
+            checked: host.wirelessEnabled
             // Networking disabled wholesale (airplane mode, or NM stopped)
             // leaves no radio to turn on, so the control goes inert rather
             // than offering a write NetworkManager will refuse.
-            enabled: host.networkingEnabled
-            onClicked: {
+            available: host.networkingEnabled
+            onToggled: {
                 // Captured BEFORE the write. setWirelessEnabled issues an
                 // async Properties.Set and the cached value only moves when
                 // the daemon echoes it back, so reading the property again
-                // after the assignment still returns the old state — which
-                // is exactly the trap that would make this scan on the way
-                // down instead of on the way up.
+                // after the assignment still returns the old state — the
+                // trap that would make this scan on the way down.
                 const turningOn = !host.wirelessEnabled;
                 host.wirelessEnabled = turningOn;
                 if (turningOn)
@@ -200,7 +199,9 @@ PanelFrame {
 
                 PhosphorButton {
                     text: qsTr("Join")
-                    variant: PhosphorButton.Filled
+                    // Outlined, not Filled: R1 keeps colour out of a button
+                    // background, and an outline is a stroke.
+                    variant: PhosphorButton.Outlined
                     onClicked: root._connect(apEntry.accessPoint, passphrase.text)
                 }
             }

@@ -109,6 +109,7 @@ set(_phosphor_bar_qml_files
     # so shell.qml instantiates them by bare name.
     qml/Phosphor/Bar/Panels/PanelFrame.qml
     qml/Phosphor/Bar/Panels/PanelRow.qml
+    qml/Phosphor/Bar/Panels/PanelToggle.qml
     qml/Phosphor/Bar/Panels/ValueRow.qml
     qml/Phosphor/Bar/Panels/NetworkPanel.qml
     qml/Phosphor/Bar/Panels/BluetoothPanel.qml

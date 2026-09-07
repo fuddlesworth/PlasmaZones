@@ -386,16 +386,30 @@ anchored to a chip; it is a window with a rule, and the only thing tying it to t
 tether.
 
 **A pane is for a surface you dwell in.** The claim that popouts are windows the engine
-places is one of the three unclonable ones, and it is worth its cost on the control center,
-the notification centre and the expanded map, where the user stays a while and where being
-a tile is the point. It is NOT worth its cost on a glance: making a pane out of "what is my
-battery at" rearranges every window on the output to answer a question that takes a second,
-and does it again on the way out. Those are transients (§4.7), and the list of chips that
-open one is in §5.
+places is one of the three unclonable ones, and it is worth its cost on the notification
+centre and the expanded map, where the user stays a while and where being a tile is the
+point. It is NOT worth its cost on a glance: making a pane out of "what is my battery at"
+rearranges every window on the output to answer a question that takes a second, and does it
+again on the way out. Those are transients (§4.7), and the list of chips that open one is
+in §5.
 
 `pane.calendar` and `pane.network` were in this list and are retired: the clock and the four
 status chips open transients. A3 §7's dashboard keeps its own calendar cell, which is now
 the only other place a calendar is drawn.
+
+**The control center is a transient too**, and it is the case that taught the rule above,
+so it is worth writing down rather than quietly amending. It was the one surface on the pane
+route, and being a pane cost it three separate faults. A pane is a tile and a tile gets the
+whole zone, so five controls were stretched across an 830 px surface. A toplevel is mapped
+where the compositor chooses and the engine's rule moves it afterwards, so it — alone among
+the panels — visibly appeared centred and jumped into place. And because §4.7 says a pane
+does not close when you look elsewhere, it could not be dismissed at all once it stopped
+being one.
+
+None of that was fixable by layout. A surface you open to change one setting is not worth a
+window, however much the engine-placed claim wants somewhere to be true. What remains on
+the pane route is the notification centre and the expanded map, both of which a user
+genuinely leaves open beside their work.
 
 No concave corner (DMS). No detached floating card (Noctalia, HyprPanel). No chip-to-drawer
 morph (Caelestia). The pane is a tile. Its surface is `phosphor-glass` with the window's
@@ -476,7 +490,7 @@ The pane is interactive from the moment it maps (~140 ms).
 
 - **No scrim, ever.** Panes are windows in a tiling WM; darkening the desktop would
   contradict the placement story. Modal dialogs are not panes.
-- **Two classes.** `pane` (control center, notifications, media, expanded map):
+- **Two classes.** `pane` (notifications, expanded map):
   engine-placed, persists until closed, `Esc`, or another pane opens. `transient` (the
   network / bluetooth / audio / battery readouts, the calendar, tray menus, the map's
   right-click menu, power confirmation): `PopupWindow` anchored to the chip with
@@ -514,7 +528,7 @@ with content on it rather than a row of differently coloured icons.
 | **Tray** | Glyphs only, 16 px, 60 % at rest, 100 % on hover. Click: the item's own menu as a `transient`. |
 | **Network / Bluetooth / Audio / Battery** | One group of four glyphs, no backgrounds, separated from their neighbours by a 1 × 12 px hairline at 25 % white. State is brightness: on/connected/charging 90 %, off 35 %. Battery ≤ 15 %: the glyph goes white and pulses under 5 %. Wheel on audio: a rail-line meter that holds 800 ms then releases. Click on any: a **transient** carrying that tile's own controls. **Battery alone may also show a tabular percentage**, because brightness can separate on from off but cannot separate 40 % from 70 %, and that is the number people check most; the other three stay glyph-only. |
 | **Notifications** | Bell glyph with a tabular superscript count. New notification: rail thickens 2 → 4 px over the chip in white and releases over 3 s; the count enters over 100 ms. Click: notifications pane; its top band is the rail gradient like every pane. |
-| **Control center** | A single 8 px dot in the rail's hue at its x, 70 %. White while any tile inside has a live change (VPN connecting, recording). Click or rail-drag: control center **pane** (§4.1). This chip is the only way to the full grid, which is what keeps the pane class earning its cost: the four status chips beside it open transients. |
+| **Control center** | A single 8 px dot in the rail's hue at its x, 70 %. White while any tile inside has a live change (VPN connecting, recording). Click or rail-drag: the control center **transient** — a card grid at the panel width, anchored under this chip like every other panel. It was a pane and the three faults that cost it are in §4.1. This chip is still the only way to the full grid; the four status chips beside it open their own tile's controls. |
 | **Power** | Glyph at 45 %. Click: `transient` confirmation. Hold 700 ms: lock. |
 
 ---

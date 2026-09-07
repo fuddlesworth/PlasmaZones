@@ -41,9 +41,17 @@ fast and leaves slowly along a shaped tail.
 1. **The bar is a live map of the placement engine.** Zones, tile rects or the scrolling
    strip, drawn from the engine's own model, with the viewport lens and off-screen columns
    visible. (A2 §1)
-2. **Popouts are windows the engine places.** The control center is a zone, a tile or a
-   strip column, with the user's gaps and surface pack, tied back to its bar chip by a
-   2 px tether in the rail's hue. (A2 §4, A3 §2)
+2. **Popouts are windows the engine places.** The notification centre and the expanded map
+   are a zone, a tile or a strip column, with the user's gaps and surface pack, tied back
+   to their bar chip by a 2 px tether in the rail's hue. (A2 §4, A3 §2)
+
+   This claim is NARROWER than it was, and the narrowing was earned rather than conceded.
+   The control center used to be the headline example and is now a transient: being a tile
+   meant it took a whole zone for five controls, and being a toplevel meant the compositor
+   mapped it centred before the engine moved it. The claim holds for a surface you leave
+   open beside your work and breaks for one you open to change a setting and close. Stated
+   here so nobody reads the old sentence and puts the control center back on the pane
+   route to make the claim sound bigger. (A2 §4.1)
 3. **Feedback lives on the window it concerns.** OSDs, toasts and polkit prompts are
    bands on the edge of the relevant window, not a centred pill or a top-right stack.
    (A3 §3, §4, §9)
@@ -124,8 +132,8 @@ makes a surface feel placed instead of pasted.
 | Surface | Ground | Pack (default) |
 |---------|--------|----------------|
 | Bar band | `phosphor-glass`, navy tint 0.55, blur 24, glow and sweep off | `border-phosphor` on the rail only (flow 0.02/s, gleam 0.35) |
-| Engine-placed panes (control center, notification center, expanded map, media) | navy 0.96 over blur | the user's window border pack; `border-phosphor` if none |
-| Floating cards (launcher, toast, polkit, transients — including the status and calendar transients) | abyss 0.92–0.96 over blur | `phosphor-glass` |
+| Engine-placed panes (notification center, expanded map) | navy 0.96 over blur | the user's window border pack; `border-phosphor` if none |
+| Floating cards (launcher, toast, polkit, transients — the control center, the status panels and the calendar) | abyss 0.92–0.96 over blur | `phosphor-glass` |
 | Full-screen (dashboard, power, cheatsheet) | void 0.60–0.90; `focus-fade` dims the desktop | `phosphor-motes` on dashboard ground |
 | Lock | void 1.0, wallpaper desaturated through `focus-fade` | `phosphor-motes` in empty regions; `spectrum-bloom` on the outlines |
 | OSD bands | none (compositor-drawn on the window edge) | `border-audio` when the visualiser is on; `glow` bound to value |

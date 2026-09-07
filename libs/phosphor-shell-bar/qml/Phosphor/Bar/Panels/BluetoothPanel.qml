@@ -87,11 +87,11 @@ PanelFrame {
     }
 
     headerAction: Component {
-        PhosphorButton {
-            text: root._powered ? qsTr("On") : qsTr("Off")
-            variant: root._powered ? PhosphorButton.Filled : PhosphorButton.Outlined
-            enabled: root.adapter !== null
-            onClicked: {
+        PanelToggle {
+            subject: qsTr("Bluetooth")
+            checked: root._powered
+            available: root.adapter !== null
+            onToggled: {
                 if (!root.adapter)
                     return;
                 // Captured before the write for the same reason the network
