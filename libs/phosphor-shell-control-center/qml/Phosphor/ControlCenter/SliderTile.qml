@@ -42,7 +42,10 @@ Item {
     property Component detailContent: null
     property bool detailEnabled: true
     readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
-    readonly property bool spansRow: true
+    // A level spans the grid: its underline is the control, and a longer
+    // line is a finer one to drag.
+    property bool spansRow: true
+    property real railT: 0.5
 
     signal moved(real value)
     signal iconActivated

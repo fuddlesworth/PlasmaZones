@@ -158,7 +158,20 @@ Item {
                 // Tiles come from a provider, so a third-party one may
                 // legitimately not span; a tile that declares nothing gets
                 // the rail default, which is to span.
-                item.Layout.fillWidth = item.spansRow === undefined || item.spansRow;
+                // Cards fill their cell in both directions, so the grid
+                // distributes the zone across them instead of leaving the
+                // remainder empty. A tile that wants the full width (a
+                // level, whose underline is its control and reads better
+                // long) spans both columns.
+                const wide = item.spansRow === undefined ? false : item.spansRow;
+                item.Layout.fillWidth = true;
+                item.Layout.fillHeight = true;
+                item.Layout.columnSpan = wide ? 2 : 1;
+                // Step each card along the shared field by its position, so
+                // the grid reads as one gradient rather than a set of
+                // independently coloured cards (05 R1).
+                if (item.railT !== undefined)
+                    item.railT = root.tileIds.length > 1 ? i / (root.tileIds.length - 1) : 0.5;
                 // The tile chrome carries no id of its own; bind the
                 // detail request here so Tile.qml stays a pure view.
                 if (item.detailRequested !== undefined)
@@ -187,17 +200,23 @@ Item {
         root.rebuild();
     }
 
-    ColumnLayout {
+    GridLayout {
         id: grid
 
-        // Anchored to the top three edges rather than filling: a host that
-        // gives the surface more height than the rails need would
-        // otherwise spread the rows down the whole surface.
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
+        // FILLS the surface, and the cards stretch with it.
+        //
+        // This was a ColumnLayout anchored to the top three edges, on the
+        // reasoning that a host giving the surface more height than the
+        // rows need should not spread them down it. But the control center
+        // is placed as a TILE: it gets the whole zone whatever that is, so
+        // "do not spread" meant five thin rows at the top of an 830 px pane
+        // and two thirds of it empty blur. A surface that is going to be
+        // zone-sized has to be designed for the size it will get.
+        anchors.fill: parent
         anchors.margins: Tokens.spacing_m
-        spacing: 0
+        columns: 2
+        columnSpacing: Tokens.spacing_m
+        rowSpacing: Tokens.spacing_m
         // Hidden, not merely covered, while a detail view is open. The
         // detail panel is a sibling rather than a child, so leaving the grid
         // visible underneath would keep every tile in the accessibility tree
