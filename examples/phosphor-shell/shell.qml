@@ -547,8 +547,18 @@ Item {
             "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
-            "keyboardFocus": true,
-            "dismissOnFocusLoss": false,
+            // Closes on an outside click, like every other panel. This was
+            // false, which was right while it was an engine-placed pane —
+            // A2 §4.7: a pane is a tile and tiles do not vanish when you
+            // look elsewhere — and became a trap the moment it stopped
+            // being one: a transient that ignores click-outside has no way
+            // out at all, since it has no close button either.
+            "dismissOnFocusLoss": true,
+            // No keyboard for the same reason the other panels take none:
+            // it is a pointer surface, and holding focus takes it off
+            // whatever the user was typing in. It also kept the surface
+            // alive by holding the grab.
+            "keyboardFocus": false,
             "props": {
                 "railT": railT
             }
