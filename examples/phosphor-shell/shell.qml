@@ -532,6 +532,7 @@ Item {
         // marks it CppOwnership before returning, so the JS GC cannot
         // delete the live screen when this wrapper is collected. Do not
         // reach for a QScreen any other way from QML.
+        root._lastPanelSource = source;
         const target = ControlCenterRegistry.screenOf(source);
         // Anchored under its own chip, like every other panel. It used to
         // take the bar-centre default, which was invisible while it was an
@@ -724,6 +725,7 @@ Item {
         const panel = root.widgetPanels[id];
         if (!panel)
             return;
+        root._lastPanelSource = source;
         // BarItem needs the chip's centre in its screen's pixels.
         // anchorCenterFor returns -1 when it cannot resolve one (a widget
         // with no window yet), which is NOT a coordinate: fall back to the
@@ -762,6 +764,32 @@ Item {
             }
         });
     }
+
+    // The bar cannot see a transient — it is a layer surface the shell
+    // composes — so it is told which chip owns the open one. That drives
+    // the chip's lit state and the tether down to the surface (A2 §4.3).
+    // Both edges are needed: `popoutClosed` fires however the popout went,
+    // including an outside click the shell never hears about otherwise.
+    Connections {
+        target: Popouts
+
+        function onPopoutOpened(popoutId: string, handle: string): void {
+            if (popoutId === "control-center")
+                BarRegistry.setOpenPanel("controlcenter", root._lastPanelSource);
+            else if (popoutId.startsWith("bar.panel."))
+                BarRegistry.setOpenPanel(popoutId.substring("bar.panel.".length), root._lastPanelSource);
+        }
+
+        function onPopoutClosed(popoutId: string, handle: string): void {
+            if (popoutId === "control-center" || popoutId.startsWith("bar.panel."))
+                BarRegistry.setOpenPanel("", null);
+        }
+    }
+
+    // The chip the in-flight open was summoned from. Set immediately before
+    // the request goes out, read by the handler above: PopoutController's
+    // signal carries the id and the handle but not the source item.
+    property Item _lastPanelSource: null
 
     Connections {
         target: BarRegistry

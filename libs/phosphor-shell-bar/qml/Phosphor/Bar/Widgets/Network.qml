@@ -107,7 +107,7 @@ BarWidget {
         color: root.online ? Theme.on_surface : root.limited ? Theme.warning : Theme.on_surface_variant
         // The press reads on the glyph, since the chip has no state layer.
         scale: trigger.pressed ? 0.94 : 1
-        opacity: trigger.hovered ? 1 : 0.85
+        opacity: trigger.lit ? 1 : 0.85
 
         Behavior on scale {
             NumberAnimation {
@@ -117,8 +117,8 @@ BarWidget {
         }
         Behavior on opacity {
             NumberAnimation {
-                duration: trigger.hovered ? Motion.duration_enter : Motion.duration_release
-                easing: trigger.hovered ? Motion.enter : Motion.release
+                duration: trigger.lit ? Motion.duration_enter : Motion.duration_release
+                easing: trigger.lit ? Motion.enter : Motion.release
             }
         }
     }

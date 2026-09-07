@@ -18,7 +18,7 @@ set -eu
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
-NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 
 if [ ! -f "$NEST/env.sh" ]; then
     echo "no nested session in $NEST (run scripts/nested-shell/run-shell.sh first)" >&2
@@ -50,6 +50,24 @@ if [ -f "$NEST/shell.pid" ]; then
 fi
 
 export PHOSPHOR_SOCKET="$NEST/phosphor.sock"
+# The seeded shell.qml is an editable COPY; this script restarts the binary
+# and deliberately does NOT re-seed, so live edits under the nested config
+# survive a restart. That is the intended workflow and it has one sharp
+# edge: edit the REPO's shell.qml, restart here, and the session keeps
+# running the older seeded copy with no sign that it did. It reads as the
+# edit having no effect, which is a very expensive way to be wrong — it
+# cost an afternoon's misdiagnosis once, chasing a fix that was never
+# actually loaded.
+#
+# So say so. Non-destructive on purpose: re-seeding automatically would
+# throw away exactly the live edits the seed exists to allow.
+SEEDED_SHELL="$NEST/home/config/phosphor-shell/shell.qml"
+REPO_SHELL="$REPO/examples/phosphor-shell/shell.qml"
+if [ -f "$SEEDED_SHELL" ] && [ "$REPO_SHELL" -nt "$SEEDED_SHELL" ]; then
+    echo "note: $REPO_SHELL is newer than the seeded copy; this restart will run the OLD one." >&2
+    echo "      cp '$REPO_SHELL' '$SEEDED_SHELL'   (or re-run run-shell.sh to reseed everything)" >&2
+fi
+
 nohup "$REPO/$BUILD/bin/phosphor-shell" > "$NEST/shell.log" 2>&1 &
 echo $! > "$NEST/shell.pid"
 

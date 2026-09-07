@@ -272,6 +272,39 @@ qreal BarController::anchorCenterFor(QQuickItem* item) const
     return globalCenter.x() - screen->geometry().x();
 }
 
+void BarController::setOpenPanel(const QString& id, QQuickItem* source)
+{
+    if (m_openPanelId == id && m_openPanelSource == source) {
+        return;
+    }
+    m_openPanelId = id;
+    m_openPanelSource = source;
+    Q_EMIT openPanelChanged();
+}
+
+QString BarController::openPanelId() const
+{
+    return m_openPanelId;
+}
+
+qreal BarController::openPanelAnchorX() const
+{
+    // Recomputed on read rather than cached at setOpenPanel: the chip's
+    // position moves as the bar lays out (a widget appearing or collapsing
+    // shifts every chip after it), and a tether pinned to where the chip
+    // was when the panel opened would drift off it.
+    return m_openPanelId.isEmpty() ? -1.0 : anchorCenterFor(m_openPanelSource.data());
+}
+
+QString BarController::openPanelScreen() const
+{
+    if (m_openPanelId.isEmpty() || !m_openPanelSource) {
+        return {};
+    }
+    const QScreen* screen = screenOf(m_openPanelSource.data());
+    return screen ? screen->name() : QString();
+}
+
 QStringList BarController::factoryIds() const
 {
     return m_cachedIds;

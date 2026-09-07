@@ -28,6 +28,11 @@ Item {
 
     signal activated
 
+    /// Whether this button's panel is the open one. Same stash and same
+    /// rule as ChipTrigger: BarController puts the registry id on the
+    /// widget, so a button recognises itself without being told its id.
+    readonly property bool panelOpen: BarRegistry.openPanelId !== "" && root._barWidgetId === BarRegistry.openPanelId
+
     implicitWidth: 24
     implicitHeight: 20
 
@@ -73,13 +78,13 @@ Item {
         source: root.iconName
         isMask: true
         color: Theme.on_surface
-        opacity: !root.enabled ? StateLayer.disabled_content : (hover.hovered || root.activeFocus ? 1 : root.restOpacity)
+        opacity: !root.enabled ? StateLayer.disabled_content : (hover.hovered || root.activeFocus || root.panelOpen ? 1 : root.restOpacity)
         scale: tap.pressed ? 0.96 : 1
 
         Behavior on opacity {
             NumberAnimation {
-                duration: hover.hovered ? Motion.duration_enter : Motion.duration_release
-                easing: hover.hovered ? Motion.enter : Motion.release
+                duration: hover.hovered || root.panelOpen ? Motion.duration_enter : Motion.duration_release
+                easing: hover.hovered || root.panelOpen ? Motion.enter : Motion.release
             }
         }
         Behavior on scale {

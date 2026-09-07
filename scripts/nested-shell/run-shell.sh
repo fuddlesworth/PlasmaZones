@@ -42,6 +42,15 @@
 # rendering evidence for this harness.
 #
 # Environment knobs (all inherited by the sibling scripts through env.sh):
+#   PZ_NESTED_SESSION                 — one name for a whole extra session,
+#                                       setting both the directory and the
+#                                       wayland socket so two can run at
+#                                       once without colliding. Every
+#                                       sibling script reads it too:
+#                                         PZ_NESTED_SESSION=ai run-shell.sh 1
+#                                         PZ_NESTED_SESSION=ai ctl.sh list
+#                                       PZ_NESTED_DIR / PZ_NESTED_SOCKET
+#                                       still win where they are set.
 #   PZ_NESTED_DIR / PZ_NESTED_SOCKET  — per-worktree isolation, as for
 #                                       nested-kwin (defaults pz-nested/
 #                                       pznested).
@@ -53,7 +62,7 @@ set -eu
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
-NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 BUILD="${PZ_NESTED_BUILD:-build}"
 
 if [ ! -x "$REPO/$BUILD/bin/phosphor-shell" ]; then

@@ -88,7 +88,7 @@ BarWidget {
     // is an icon plus a readout, and scaling only the icon would leave the
     // percentage sitting still beside it.
     scale: trigger.pressed ? 0.96 : 1
-    opacity: trigger.hovered ? 1 : 0.9
+    opacity: trigger.lit ? 1 : 0.9
 
     Behavior on scale {
         NumberAnimation {
@@ -98,8 +98,8 @@ BarWidget {
     }
     Behavior on opacity {
         NumberAnimation {
-            duration: trigger.hovered ? Motion.duration_enter : Motion.duration_release
-            easing: trigger.hovered ? Motion.enter : Motion.release
+            duration: trigger.lit ? Motion.duration_enter : Motion.duration_release
+            easing: trigger.lit ? Motion.enter : Motion.release
         }
     }
 }

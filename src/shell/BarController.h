@@ -45,6 +45,25 @@ class BarController : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QStringList factoryIds READ factoryIds NOTIFY factoryIdsChanged)
+    /// The registry id of the widget whose panel is open, or "" when none
+    /// is. The bar reads this to light the chip and to drive the tether
+    /// down to the surface (A2 §4.3).
+    ///
+    /// The bar cannot work this out for itself. A transient is a layer
+    /// surface the shell composes; the bar's own QML never sees it, and
+    /// the pane state it used to read (openScreen, paneRect) is only ever
+    /// written by the pane and socket transports. Without this the chips
+    /// stayed dark and every panel appeared with no wire back to the chip
+    /// that opened it.
+    Q_PROPERTY(QString openPanelId READ openPanelId NOTIFY openPanelChanged)
+    /// The open panel's chip centre, in its screen's pixels, or -1 when
+    /// there is no open panel or its chip cannot be resolved. Same
+    /// sentinel as anchorCenterFor, and for the same reason: 0 is a valid
+    /// left-edge anchor.
+    Q_PROPERTY(qreal openPanelAnchorX READ openPanelAnchorX NOTIFY openPanelChanged)
+    /// Name of the screen the open panel is on, so a second output's bar
+    /// does not light its own chip for a panel it is not showing.
+    Q_PROPERTY(QString openPanelScreen READ openPanelScreen NOTIFY openPanelChanged)
 
 public:
     /// One built-in bar widget: the registry id, the label a browser shows,
@@ -113,6 +132,16 @@ public:
     /// by the origin of the one that was clicked.
     [[nodiscard]] Q_INVOKABLE qreal anchorCenterFor(QQuickItem* item) const;
 
+    /// Record that `id`'s panel opened, summoned from `source`. Pass an
+    /// empty id to clear it. The shell calls this from the same place it
+    /// opens and closes the popout, since that is the only place that
+    /// knows both facts.
+    Q_INVOKABLE void setOpenPanel(const QString& id, QQuickItem* source);
+
+    [[nodiscard]] QString openPanelId() const;
+    [[nodiscard]] qreal openPanelAnchorX() const;
+    [[nodiscard]] QString openPanelScreen() const;
+
     // The registered widget ids, sorted for a deterministic order. Exposed
     // for introspection and a future layout/config editor; the default bar
     // layout drives slots from explicit ordered id lists, not this set.
@@ -126,6 +155,7 @@ public:
 
 Q_SIGNALS:
     void factoryIdsChanged();
+    void openPanelChanged();
 
     /// A bar widget was activated (clicked, Space/Enter, or an assistive-tech
     /// press), carrying the registry id of the widget and the widget itself.
@@ -153,6 +183,10 @@ private:
     // Every trigger widget built through createWidgetFor, by id, so
     // activateWidget can press one. QPointer: the bars own the items.
     QMultiHash<QString, QPointer<QQuickItem>> m_triggers;
+    // The open panel's id and the chip it came from. QPointer because the
+    // bars own the chips and a hot reload takes them with it.
+    QString m_openPanelId;
+    QPointer<QQuickItem> m_openPanelSource;
     // Re-reads the registry and emits factoryIdsChanged only when the id
     // set actually differs from the last emission.
     void refreshFactoryIds();

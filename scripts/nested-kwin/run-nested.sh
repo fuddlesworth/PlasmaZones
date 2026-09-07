@@ -116,7 +116,7 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 # unwritable while env.sh reports success from /tmp.
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
 mkdir -p "$RUNTIME_DIR"
-NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 BUILD="${PZ_NESTED_BUILD:-build}"
 HOME_N="$NEST/home"
 
@@ -133,7 +133,7 @@ HOME_N="$NEST/home"
 # a distinct PZ_NESTED_DIR — the state dir holds the env.sh every follow-up
 # script sources, so sharing one across two sessions points them both at
 # whichever started last.
-PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested}"
+PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 # Validated like the numeric arguments above, and for a sharper reason: this
 # one is interpolated into the `sh -c` command text and into env.sh below, so a
 # name carrying a space, a quote or a shell metacharacter either breaks every

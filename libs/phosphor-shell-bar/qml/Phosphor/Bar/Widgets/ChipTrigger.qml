@@ -53,6 +53,19 @@ Item {
     readonly property bool hovered: hover.hovered
     readonly property bool pressed: tap.pressed
 
+    /// Whether THIS chip's panel is the one currently open.
+    ///
+    /// BarController stashes each widget's registry id on the widget as
+    /// `_barWidgetId` so the activation relay can recover it from sender();
+    /// the same stash is what lets a chip recognise itself here without
+    /// being told its own id twice. `parent` is the widget root, since a
+    /// ChipTrigger is declared as its child.
+    readonly property bool panelOpen: parent !== null && BarRegistry.openPanelId !== "" && parent._barWidgetId === BarRegistry.openPanelId
+
+    /// What a host should use for "this chip is lit": open, hovered, or
+    /// both. Kept here so the five chips cannot drift on the rule.
+    readonly property bool lit: root.panelOpen || root.hovered
+
     Accessible.role: Accessible.Button
     Accessible.name: root.actionName
     Accessible.onPressAction: root._activate()
