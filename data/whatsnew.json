@@ -1,6 +1,18 @@
 {
     "releases": [
         {
+            "version": "3.4.14",
+            "date": "2026-09-06",
+            "highlights": [
+                "New: Meta+Alt+Tab and Meta+Alt+Shift+Tab cycle a scrolling column's tabs and wrap at either end, and nine unbound Focus Tab shortcuts go straight to a numbered tab (#1071)",
+                "New: The wheel switches tabs while the pointer is over a tab indicator (#1071)",
+                "New: What's New is a two-pane browser with a rail of versions, a digest of everything since you last read it, and search across the whole history (#1074)",
+                "Changed: The new shortcut and What's New text is translated in all seven languages (#1075)",
+                "Fixed: Tab indicators no longer flicker or redraw the whole band on a screen at a fractional scale (#1072)",
+                "Fixed: Decorations for the OSD, the Layout Picker, the Zone Selector and the Shortcut Cheatsheet can be switched off again (#1073)"
+            ]
+        },
+        {
             "version": "3.4.13",
             "date": "2026-09-06",
             "highlights": [
