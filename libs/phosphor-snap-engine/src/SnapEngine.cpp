@@ -687,20 +687,22 @@ void SnapEngine::releaseFromContext(const PhosphorEngine::PlacementStateKey& key
     // never a legitimate resident.
     //
     // Be clear about what this does NOT do. SnapState::stateChanged has no
-    // production subscriber, so nothing downstream is told: the effect's
-    // per-window mirror and the persisted placement record both keep saying the
-    // window is snapped in the zone on the desktop it left, until some
-    // unrelated event re-captures. The canonical unsnap (uncommitSnap) instead
-    // emits windowSnapStateChanged, which the tracking adaptor relays and the
-    // placement capture listens to.
+    // production subscriber, so this call tells nothing downstream by itself.
+    // The canonical unsnap (uncommitSnap) instead emits windowSnapStateChanged,
+    // which drives three things: the D-Bus relay of the window's state to the
+    // effect, a re-capture of the persisted placement record, and a clear of
+    // the two tiling engines' float markers.
     //
-    // Emitting that here is NOT obviously right and is deliberately left alone:
-    // it also drives clearModeSpecificFloatMarker on the two tiling engines,
-    // and the entry it carries has no context key, so a window that is
-    // legitimately floating or tiled on the desktop it moved TO would be told
-    // "unsnapped" with no way to say which desktop that refers to. Picking the
-    // signal shape is a separate change from closing the occupancy leak, which
-    // is what this function is for.
+    // Emitting that here would be wrong for the third. The marker sets are
+    // per-window, not per-context, so a window legitimately floating in
+    // scrolling or autotile on the desktop it moved TO would have that marker
+    // cleared and be pulled back into the layout. The caller therefore drives
+    // the ONE consumer that matters — the placement re-capture, in
+    // TilingAdaptor::reconcileWindowMembership — and leaves the other two.
+    //
+    // What is still not reported is the effect's per-window snap mirror. It is
+    // corrected by the window's re-announce on its new desktop, and a narrower
+    // signal for it is a separate change from closing the occupancy leak.
     state->windowClosed(canonical);
     // The reverse map named this store; with the window gone from it, leaving
     // the entry would keep isWindowTracked answering true for a window no store

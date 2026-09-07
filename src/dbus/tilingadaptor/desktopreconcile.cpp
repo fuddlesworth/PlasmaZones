@@ -3,6 +3,8 @@
 
 #include "tilingadaptor.h"
 
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+
 #include "core/platform/logging.h"
 
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -176,6 +178,18 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const QSe
                              << held->activity << ") on screen" << held->screenId
                              << "— dropping its zone assignment there";
         engine->releaseFromContext(*held, windowId);
+        // Keep the persisted placement record honest. The release changed the
+        // window's snap state, and the engine signal that normally reports such
+        // a change also clears the tiling engines' float markers, which would
+        // be wrong for a window legitimately floating on the desktop it moved
+        // TO — so the record is refreshed directly instead. Without this the
+        // store still reads "snapped in that zone on that desktop" and a later
+        // restore puts the window back where it no longer is. fromStateChange
+        // because an engine state change is authoritative even for a minimized
+        // window, which is exactly what this is.
+        if (m_windowTrackingAdaptor) {
+            m_windowTrackingAdaptor->captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
+        }
     }
 }
 
