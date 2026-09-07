@@ -16,6 +16,7 @@
 #include "ShellGestures.h"
 #include "ShellMotion.h"
 #include "SocketPopoutTransport.h"
+#include "NotificationController.h"
 #include "ToastController.h"
 
 #include "daemon/rendering/surfaceshaderitem.h"
@@ -283,6 +284,14 @@ int main(int argc, char* argv[])
     PhosphorShellApp::OsdController osdController;
     PhosphorShellApp::ToastController toastController;
 
+    // The notification centre. Constructing it is what makes this process
+    // the session's org.freedesktop.Notifications daemon, so it is declared
+    // once here rather than per engine: the bus name admits one owner, and
+    // a hot reload rebuilding it would drop the name and every retained
+    // notification with it. Same reverse-destruction placement as the
+    // controllers above.
+    PhosphorShellApp::NotificationController notificationController;
+
     // The dashboard's media cell reads one MprisHost for the process.
     // Owned here rather than declared in QML because the dashboard popout
     // is built by the transport against the root context, where a
@@ -547,6 +556,13 @@ int main(int argc, char* argv[])
     });
     engine.addEngineHook([&toastController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ToastRegistry"), &toastController);
+    });
+    // The notification centre's retained list, bound the same way. The
+    // controller IS the model, so the panel binds it directly as
+    // `model: NotificationRegistry` and reads serverActive / unreadCount
+    // off the same object.
+    engine.addEngineHook([&notificationController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"), &notificationController);
     });
     engine.addEngineHook([&dashboardMedia](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("DashboardMedia"), &dashboardMedia);

@@ -23,6 +23,14 @@ class PHOSPHORSERVICENETWORK_EXPORT AccessPoint : public QObject
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(AccessPoint)
 
+    /// The object path this access point was built from. CONSTANT: an
+    /// AccessPoint is constructed for one path and never re-targeted.
+    ///
+    /// Exposed to QML so a consumer can compare a row against
+    /// NetworkDevice::activeAccessPointPath and mark the associated
+    /// network. The accessor below already existed for C++ callers; only
+    /// the Q_PROPERTY is new, since a bare accessor is invisible to QML.
+    Q_PROPERTY(QString dbusPath READ dbusPath CONSTANT)
     Q_PROPERTY(QString ssid READ ssid NOTIFY ssidChanged)
     Q_PROPERTY(int strength READ strength NOTIFY strengthChanged)
     Q_PROPERTY(int frequency READ frequency NOTIFY frequencyChanged)

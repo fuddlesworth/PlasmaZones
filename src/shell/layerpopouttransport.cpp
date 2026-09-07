@@ -178,6 +178,12 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     case PhosphorPopout::Anchor::BarRight:
         placement = QStringLiteral("barRight");
         break;
+    case PhosphorPopout::Anchor::BarItem:
+        // Starts with "bar", so the reserved-band lookup below picks it up
+        // and the panel hangs off the bar's bottom edge like the other bar
+        // anchors. Only the horizontal differs.
+        placement = QStringLiteral("barItem");
+        break;
     case PhosphorPopout::Anchor::Custom:
         placement = QStringLiteral("custom");
         break;
@@ -340,6 +346,15 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
                 qCWarning(lcPopoutTransport) << "popout" << popoutId << "— PopoutHost rejected a reservedTop update";
             }
         });
+    }
+    if (request.anchor == PhosphorPopout::Anchor::BarItem) {
+        // x only: BarItem takes its vertical from the reserved band, so
+        // writing customY here would be writing a value the host's y
+        // binding does not read on this branch.
+        if (!hostItem->setProperty("customX", request.customAnchor.x())) {
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "— PopoutHost rejected the BarItem customX write";
+        }
     }
     if (request.anchor == PhosphorPopout::Anchor::Custom) {
         // Both writes always run. Short-circuiting on the first would leave a

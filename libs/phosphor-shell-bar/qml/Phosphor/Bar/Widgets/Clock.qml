@@ -5,7 +5,9 @@
 // Self-contained: owns a SystemClock (minute precision). HH:MM in the
 // mono face with tabular figures, so the chip never reflows; the minute
 // digit's change is marked by the 2 px spectrum underline tick (05 R7).
-// Hover reveals the locale-formatted date to the right.
+// Hover reveals the locale-formatted date to the right, and a press opens
+// the dashboard, whose calendar is the full view of what this chip shows
+// one line of.
 
 import QtQuick
 import Phosphor.Theme
@@ -14,6 +16,11 @@ import Phosphor.Widgets
 
 BarWidget {
     id: root
+
+    /// Relayed by BarController as BarRegistry.widgetActivated("clock").
+    /// See Network.qml for why this is declared per widget rather than on
+    /// BarWidget.
+    signal activated
 
     // Rail-axis hue of this chip, bound by the slot that mounts it.
     property real railT: 0.5
@@ -33,8 +40,27 @@ BarWidget {
     Accessible.role: Accessible.StaticText
     Accessible.name: root._time + " " + root._date
 
+    // Kept as its own handler rather than folded into the trigger's: the
+    // date reveal predates the press and is a property of the READOUT, so
+    // it must keep working if the trigger is ever gated off.
     HoverHandler {
         id: hover
+    }
+
+    ChipTrigger {
+        id: trigger
+
+        actionName: qsTr("Show calendar")
+        onTriggered: root.activated()
+    }
+
+    scale: trigger.pressed ? 0.97 : 1
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: Motion.duration_tick
+            easing: Motion.reveal
+        }
     }
 
     Row {

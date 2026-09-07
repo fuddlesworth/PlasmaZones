@@ -601,13 +601,129 @@ Item {
         });
     }
 
+    // The status chips' panels, keyed by the bar-widget id BarController
+    // registers (barcontroller.cpp), NOT by the IPC target names below.
+    //
+    // One map rather than a chain of else-ifs, because every entry opens
+    // the same shape in the same way: a Cooperative popout hanging under
+    // the chip that was pressed. A widget missing from this map simply has
+    // no panel, which is how systemmetrics and focusedapp stay inert
+    // without needing a case of their own.
+    //
+    // `keyboard` is per panel and not a shared default, because the two
+    // answers are both wrong for the other case. A panel that takes the
+    // keyboard pulls focus off whatever the user was typing in, which is
+    // unacceptable for a volume slider or a device list. But the network
+    // panel has a passphrase field, and a layer surface that was never
+    // granted keyboard focus cannot receive a keystroke at all — the field
+    // would look editable and silently swallow everything typed into it.
+    readonly property var widgetPanels: ({
+            "network": {
+                "component": networkPanelComponent,
+                "keyboard": true
+            },
+            "bluetooth": {
+                "component": bluetoothPanelComponent,
+                "keyboard": false
+            },
+            "audio": {
+                "component": audioPanelComponent,
+                "keyboard": false
+            },
+            "battery": {
+                "component": batteryPanelComponent,
+                "keyboard": false
+            },
+            "media": {
+                "component": mediaPanelComponent,
+                "keyboard": false
+            },
+            "notification": {
+                "component": notificationPanelComponent,
+                "keyboard": false
+            }
+        })
+
+    Component {
+        id: networkPanelComponent
+
+        NetworkPanel {}
+    }
+
+    Component {
+        id: bluetoothPanelComponent
+
+        BluetoothPanel {}
+    }
+
+    Component {
+        id: audioPanelComponent
+
+        AudioPanel {}
+    }
+
+    Component {
+        id: batteryPanelComponent
+
+        BatteryPanel {}
+    }
+
+    Component {
+        id: mediaPanelComponent
+
+        MediaPanel {}
+    }
+
+    Component {
+        id: notificationPanelComponent
+
+        NotificationPanel {}
+    }
+
+    // Open (or close) the panel belonging to bar widget `id`, hanging under
+    // the chip that fired.
+    //
+    // The popout id is prefixed so each chip's panel is its own logical
+    // popout: with one shared id, pressing network while bluetooth was open
+    // would TOGGLE the open one shut and never open the one that was asked
+    // for. Distinct ids plus the shared Cooperative scope give the wanted
+    // behaviour instead — the previous panel closes, this one opens.
+    function toggleWidgetPanel(id: string, source: Item): void {
+        const panel = root.widgetPanels[id];
+        if (!panel)
+            return;
+        // BarItem needs the chip's centre in its screen's pixels.
+        // anchorCenterFor returns -1 when it cannot resolve one (a widget
+        // with no window yet), which is NOT a coordinate: fall back to the
+        // bar-centre anchor rather than pinning the panel to the left edge.
+        const centre = BarRegistry.anchorCenterFor(source);
+        const anchored = centre >= 0;
+        Popouts.toggle({
+            "popoutId": "bar.panel." + id,
+            "content": panel.component,
+            // screenOf hands back a QScreen the C++ side owns; the
+            // controller marks it CppOwnership before returning, so the JS
+            // GC cannot delete the live screen when this wrapper is
+            // collected. Do not reach for a QScreen any other way from QML.
+            "targetScreen": BarRegistry.screenOf(source),
+            "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "customAnchor": Qt.point(anchored ? centre : 0, 0),
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            // Per panel; see widgetPanels above for why this is not one
+            // shared value.
+            "keyboardFocus": panel.keyboard,
+            "dismissOnFocusLoss": true
+        });
+    }
+
     Connections {
         target: BarRegistry
 
         // `source` is the bar widget that fired. The session menu is
         // screen-centred and ignores it; the control center is anchored to
         // a bar, so it uses the widget's window to pick which output's
-        // capsule to grow out of.
+        // capsule to grow out of; a status chip's panel hangs under the
+        // chip itself.
         function onWidgetActivated(id: string, source: Item): void {
             // A Cooperative open is refused outright while a Modal popout is
             // up, and the refusal is silent: the user would press the button
@@ -621,6 +737,13 @@ Item {
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
                 root.toggleControlCenter(source);
+            else if (id === "clock")
+                // The clock opens the dashboard, whose calendar is the full
+                // view of the one line the chip shows. Screen-centred and
+                // Modal, so it ignores `source` like the power menu does.
+                root.toggleDashboard();
+            else
+                root.toggleWidgetPanel(id, source);
         }
     }
 

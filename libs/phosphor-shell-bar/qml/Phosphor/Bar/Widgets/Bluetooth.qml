@@ -4,9 +4,8 @@
 //
 // Self-contained: owns a BluetoothHost and follows the first adapter's
 // powered state. Hides entirely when the machine has no Bluetooth adapter.
-// Paired-device detail and a connect/disconnect menu are a follow-up
-// (the control center tile binds the same host); this first cut is a
-// robust state glyph.
+// Paired-device detail and connect/disconnect live in BluetoothPanel,
+// which the chip's `activated` opens and which binds its own host.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
@@ -15,6 +14,11 @@ import Phosphor.Service.Bluetooth
 
 BarWidget {
     id: root
+
+    /// Relayed by BarController as BarRegistry.widgetActivated("bluetooth").
+    /// See Network.qml for why this is declared per widget rather than on
+    /// BarWidget.
+    signal activated
 
     BluetoothHost {
         id: host
@@ -47,5 +51,31 @@ BarWidget {
         source: root.powered ? "network-bluetooth-activated" : "network-bluetooth"
         isMask: true
         color: root.powered ? Theme.primary : Theme.on_surface_variant
+        scale: trigger.pressed ? 0.94 : 1
+        opacity: trigger.hovered ? 1 : 0.85
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: Motion.duration_tick
+                easing: Motion.reveal
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: trigger.hovered ? Motion.duration_enter : Motion.duration_release
+                easing: trigger.hovered ? Motion.enter : Motion.release
+            }
+        }
+    }
+
+    ChipTrigger {
+        id: trigger
+
+        actionName: qsTr("Show Bluetooth panel")
+        // An adapter is what the panel acts on: powering the radio, listing
+        // devices, starting discovery all go through one. With none there is
+        // nothing to show, and the chip is hidden anyway.
+        active: host.adapterCount > 0
+        onTriggered: root.activated()
     }
 }

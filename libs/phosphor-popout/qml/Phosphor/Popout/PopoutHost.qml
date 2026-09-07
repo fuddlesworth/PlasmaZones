@@ -83,6 +83,10 @@ FocusScope {
     //                hung just below the top reserved band — the bar's
     //                exclusive zone on this screen, in reservedTop — and
     //                aligned to the bar capsule's inset edges
+    //   "barItem"    hung below the same reserved band, but centred on
+    //                customX (the summoning widget's centre) and clamped
+    //                so a widget near an edge still yields a fully visible
+    //                frame
     //   "custom"     top-left at (customX, customY) in surface coordinates
     // Placement is the host's job, not the surface's: keeping the surface
     // full-bleed is what keeps the scrim, click-outside dismissal and the
@@ -526,6 +530,19 @@ FocusScope {
                 return root.barInset;
             case "barRight":
                 return Math.max(0, Math.round(root.width - width - root.barInset));
+            case "barItem":
+                {
+                    // Centre on the widget, then keep the whole frame on screen.
+                    // The clamp is what makes this usable for the rightmost bar
+                    // widgets, whose centre is close enough to the edge that a
+                    // raw centring would hang half the panel off the output.
+                    // Math.min is applied BEFORE Math.max so that a frame wider
+                    // than the usable width lands at barInset rather than at a
+                    // negative x: the min would otherwise win and push it left.
+                    const centred = root.customX - width / 2;
+                    const rightmost = root.width - width - root.barInset;
+                    return Math.round(Math.max(root.barInset, Math.min(centred, rightmost)));
+                }
             case "custom":
                 return Math.round(root.customX);
             default:
@@ -537,6 +554,7 @@ FocusScope {
             case "barLeft":
             case "barCenter":
             case "barRight":
+            case "barItem":
                 return Math.round(root.reservedTop + Tokens.spacing_m);
             case "custom":
                 return Math.round(root.customY);

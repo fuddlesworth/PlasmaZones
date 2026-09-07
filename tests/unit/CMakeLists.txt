@@ -2402,6 +2402,34 @@ target_link_libraries(test_bar_controller
 target_include_directories(test_bar_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_bar_controller COMMAND test_bar_controller)
 
+# The notification centre, same shape and same reasoning as
+# test_bar_controller: the class ships in the GPL shell binary, so it is
+# tested here rather than from the LGPL service library's own suite (which
+# covers the server and its live model). The server under it runs on a
+# private peer-to-peer bus, so this needs no session daemon.
+#
+# GUARDED, unlike the two above: phosphor-service-notifications is one of
+# the shell-tier libraries the root CMakeLists only adds under
+# BUILD_PHOSPHOR_SHELL, and this target links it rather than compiling its
+# sources. An ungated link to a gated library fails the DEFAULT configure at
+# generate time, which takes the whole suite down instead of one test.
+if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
+    add_executable(test_notification_controller
+        shell/test_notification_controller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/NotificationController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/notificationcontroller.cpp
+    )
+    target_link_libraries(test_notification_controller
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+    )
+    target_include_directories(test_notification_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_notification_controller COMMAND test_notification_controller)
+endif()
+
 # The OSD registry owner, same shape and same reasoning as test_bar_controller.
 add_executable(test_osd_controller
     shell/test_osd_controller.cpp

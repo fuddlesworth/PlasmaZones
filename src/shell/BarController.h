@@ -8,6 +8,13 @@
 #include <QList>
 #include <QMultiHash>
 #include <QObject>
+// Full includes, NOT forward declarations: screenOf() returns QScreen* to
+// QML, and moc needs the COMPLETE type to flag the return as a pointer to
+// a QObject. With only `class QScreen;` here QML does not wrap the return
+// as an object and the JS engine takes an unknown-pointer path that
+// segfaults the shell. ControlCenterController carries the same note for
+// the same accessor; this is not a stylistic include.
+#include <QScreen>
 #include <QPointer>
 #include <QString>
 #include <QStringList>
@@ -81,6 +88,30 @@ public:
     /// bar.activate`, and for a harness that cannot inject pointer input.
     /// False when no live widget carries the id or the id is not a trigger.
     Q_INVOKABLE bool activateWidget(const QString& id);
+
+    /// The output `item` is displayed on, or the primary screen when it
+    /// cannot be resolved (no window yet, or a null item). Never null while
+    /// a screen exists at all.
+    ///
+    /// Turns the `source` of widgetActivated into the targetScreen a
+    /// bar-anchored popout opens on. In C++ rather than QML because
+    /// `item.Window.window.screen` is invisible to qmllint (QQuickWindow's
+    /// `screen` is not in its declarative type info), so a typo there would
+    /// surface only at runtime, as an undefined that quietly opens nothing.
+    [[nodiscard]] Q_INVOKABLE QScreen* screenOf(QQuickItem* item) const;
+
+    /// `item`'s horizontal centre in the pixels of the screen it is on, for
+    /// PopoutRequest.customAnchor under Anchor::BarItem. -1 when it cannot
+    /// be resolved (a null item, or one not yet in a window), which a caller
+    /// should read as "do not use BarItem" rather than as a coordinate:
+    /// 0 is a perfectly valid left-edge anchor and could not carry the
+    /// distinction.
+    ///
+    /// Screen-LOCAL, because that is what PopoutHost places against: its
+    /// surface is full-bleed on one output, so a multi-head desktop's
+    /// virtual-desktop x would put every popout on the leftmost screen off
+    /// by the origin of the one that was clicked.
+    [[nodiscard]] Q_INVOKABLE qreal anchorCenterFor(QQuickItem* item) const;
 
     // The registered widget ids, sorted for a deterministic order. Exposed
     // for introspection and a future layout/config editor; the default bar

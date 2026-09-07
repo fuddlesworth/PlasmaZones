@@ -5,9 +5,15 @@
 // Binds to the process-global PipeWireHost singleton, which resolves
 // `defaultSink` by joining the default-sink name against the live node
 // set. Falls back to the first sink when PipeWire publishes no default.
-// Scroll adjusts the linear amplitude in 5% steps and left-click toggles
-// mute. Volume writes are asynchronous, so the readout updates when
-// PipeWire echoes the new value.
+// Scroll adjusts the linear amplitude in 5% steps, left-click opens
+// AudioPanel and MIDDLE-click toggles mute. Volume writes are
+// asynchronous, so the readout updates when PipeWire echoes the new value.
+//
+// Left-click opens the panel rather than muting because every other status
+// chip in the bar opens its panel on a left-click, and one chip that
+// silences the machine instead is the kind of inconsistency people find by
+// accident. Mute keeps a pointer path (middle-click) and both assistive
+// actions below, so nothing became unreachable.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
@@ -16,6 +22,11 @@ import Phosphor.Service.PipeWire
 
 BarWidget {
     id: root
+
+    /// Relayed by BarController as BarRegistry.widgetActivated("audio").
+    /// See Network.qml for why this is declared per widget rather than on
+    /// BarWidget.
+    signal activated
 
     // Gate on a RESOLVED sink, not merely a live PipeWire connection: with
     // no sink there is no value to show, and a literal "0%" would be a
@@ -97,7 +108,11 @@ BarWidget {
 
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton
+        // Left opens the panel, middle mutes. Both arrive here rather than
+        // splitting the wheel across a MouseArea and the press across a
+        // TapHandler: onWheel lives on MouseArea, and two overlapping input
+        // items would make which one wins a matter of stacking order.
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
         enabled: root.node !== null
 
@@ -109,8 +124,12 @@ BarWidget {
         // carries the full quad because it is the shared button atom and is
         // meant to work wherever a focused surface hosts it.
         Accessible.role: Accessible.Button
-        Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
-        Accessible.onPressAction: root._toggleMute()
+        // The press action is what the left button does, so assistive tech
+        // and the pointer agree on the primary action. Mute stays reachable
+        // through the toggle action below.
+        Accessible.name: qsTr("Show audio panel")
+        Accessible.onPressAction: root.activated()
+        Accessible.onToggleAction: root._toggleMute()
         // The wheel is the only pointer path to the volume itself, so the
         // adjust actions are exposed here too. Increase/decrease belong to
         // the slider vocabulary and not every AT bridge surfaces them on a
@@ -119,7 +138,12 @@ BarWidget {
         Accessible.onIncreaseAction: root._adjust(1)
         Accessible.onDecreaseAction: root._adjust(-1)
 
-        onClicked: root._toggleMute()
+        onClicked: mouse => {
+            if (mouse.button === Qt.MiddleButton)
+                root._toggleMute();
+            else
+                root.activated();
+        }
         // Only a vertical wheel adjusts. A horizontal scroll or trackpad
         // tilt delivers angleDelta.y === 0, which would otherwise fall to
         // the negative branch and silently lower the volume.

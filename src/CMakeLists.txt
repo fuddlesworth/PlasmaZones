@@ -759,6 +759,13 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/qmlcomponentosdfactory.cpp
         shell/ToastController.h
         shell/toastcontroller.cpp
+        # The notification centre: the org.freedesktop.Notifications server
+        # this process owns, plus the retained list the bar's notification
+        # panel reads as the NotificationRegistry context property. The
+        # server's own model tracks only LIVE notifications, so the centre
+        # keeps its own snapshots (see the header).
+        shell/NotificationController.h
+        shell/notificationcontroller.cpp
         # The PolicyKit agent owner (registers the shell as the session's
         # agent, starts each PAM conversation, carries the requester's pid
         # and the prompt's placement) and the picker strip's open state:

@@ -4,8 +4,14 @@
 //
 // Self-contained: owns an MprisHost and follows the first player (MPRIS
 // exposes no "active player", so player 0 is used). Shows a play/pause
-// glyph and the artist + title; clicking toggles playback. Collapses to
-// zero width when no player is present or it has no track metadata.
+// glyph and the artist + title; left-clicking toggles playback and
+// RIGHT-clicking opens MediaPanel, which lists every player with its own
+// transport. Collapses to zero width when no player is present or it has no
+// track metadata.
+//
+// Play/pause keeps the left button because it is the thing a person wants
+// from a now-playing chip nine times out of ten, and it is the one bar
+// widget whose primary action is worth more than opening a panel.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
@@ -14,6 +20,11 @@ import Phosphor.Service.Mpris
 
 BarWidget {
     id: root
+
+    /// Relayed by BarController as BarRegistry.widgetActivated("media").
+    /// See Network.qml for why this is declared per widget rather than on
+    /// BarWidget.
+    signal activated
 
     readonly property int maxTitleWidth: 200
 
@@ -110,11 +121,13 @@ BarWidget {
 
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton
-        cursorShape: Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         // A player that cannot be controlled should not offer a
-        // pointing-hand cursor and a no-op click.
-        enabled: root._controllable
+        // pointing-hand cursor for a no-op left click. The area itself stays
+        // ENABLED regardless, because the right button opens the panel and
+        // an uncontrollable player is exactly when someone wants to look at
+        // the list and pick a different one.
+        cursorShape: root._controllable ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         // The track readout is on the root Indicator; this area is the
         // actionable control, so it announces AND performs the toggle.
@@ -126,7 +139,15 @@ BarWidget {
         Accessible.role: Accessible.Button
         Accessible.name: root.isPlaying ? qsTr("Pause") : qsTr("Play")
         Accessible.onPressAction: root._toggle()
+        // The panel is the secondary action, and assistive tech reaches it
+        // the same way the pointer's secondary button does.
+        Accessible.onShowMenuAction: root.activated()
 
-        onClicked: root._toggle()
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton)
+                root.activated();
+            else
+                root._toggle();
+        }
     }
 }

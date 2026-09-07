@@ -100,14 +100,30 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Widgets/NotificationButton.qml
     qml/Phosphor/Bar/Widgets/PowerButton.qml
     qml/Phosphor/Bar/Widgets/Spacer.qml
+    # The click affordance a status chip overlays on itself to become a
+    # panel trigger.
+    qml/Phosphor/Bar/Widgets/ChipTrigger.qml
+    # The panels the status chips open (Phase 4.3). Shared chrome plus one
+    # per domain; each binds its own service host, the same way the chips
+    # do. Registered as flat types in Phosphor.Bar by the alias loop below,
+    # so shell.qml instantiates them by bare name.
+    qml/Phosphor/Bar/Panels/PanelFrame.qml
+    qml/Phosphor/Bar/Panels/PanelRow.qml
+    qml/Phosphor/Bar/Panels/VolumeRow.qml
+    qml/Phosphor/Bar/Panels/NetworkPanel.qml
+    qml/Phosphor/Bar/Panels/BluetoothPanel.qml
+    qml/Phosphor/Bar/Panels/AudioPanel.qml
+    qml/Phosphor/Bar/Panels/BatteryPanel.qml
+    qml/Phosphor/Bar/Panels/MediaPanel.qml
+    qml/Phosphor/Bar/Panels/NotificationPanel.qml
     # The wire from a chip to its engine-placed pane (A2 §4.3): pure
     # routing math plus the two segments it draws.
     qml/Phosphor/Bar/PaneTether.qml
 )
 
 # Pin each QML file's resource alias to its basename so import resolution
-# doesn't see a doubled path segment, and so the Widgets/ source-tree
-# subdir does not leak into the registered type name (the delegates must
+# doesn't see a doubled path segment, and so the Widgets/ and Panels/
+# source-tree subdirs do not leak into the registered type name (the delegates must
 # register as flat types Clock/Battery/... in Phosphor.Bar so the
 # IBarWidgetFactory URI-by-name lookup resolves them). Same pattern as the
 # sibling libs.
