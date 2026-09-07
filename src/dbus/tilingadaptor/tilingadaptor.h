@@ -141,9 +141,11 @@ public:
     /// pinned to one desktop is the other case where the key is not a
     /// compositor desktop, and the reconcile skips those.
     ///
-    /// Snapping is out of scope: the reconcile walks the tiling-family
-    /// lifecycle engines, and a zone assignment has no stack to close a gap
-    /// in.
+    /// Snapping is in scope, through setMembershipEngines rather than the
+    /// lifecycle list. It has no stack to close a gap in, so it takes no part
+    /// in the reflow half, but a zone assignment left behind on a desktop the
+    /// window has left is not merely stale bookkeeping: zone occupancy is read
+    /// across every store, so the entry stays a live navigation target.
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
     /// The reconcile setWindowRegistry subscribes: release @p windowId from

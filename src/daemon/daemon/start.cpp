@@ -522,6 +522,25 @@ void Daemon::connectDesktopActivity()
                 // post-removal numbering and the clamp that follows has nothing
                 // left to correct. Re-diff
                 // here, where the engines are already correct.
+                //
+                // The disabled-desktop gates are re-keyed FIRST, because both
+                // calls below read them: diffActiveAssignments resolves each
+                // context through isContextDisabled, and hideDisabledAndRefresh
+                // is named for it. Re-keying afterwards would publish one pass
+                // built from the pre-removal numbering.
+                if (m_settings) {
+                    bool gatesChanged = false;
+                    for (const auto mode : PhosphorZones::allModes()) {
+                        QStringList disabled = m_settings->disabledDesktops(mode);
+                        if (renumberDisabledDesktopEntries(disabled, removedPosition)) {
+                            m_settings->setDisabledDesktops(mode, disabled);
+                            gatesChanged = true;
+                        }
+                    }
+                    if (gatesChanged) {
+                        m_settings->save();
+                    }
+                }
                 diffActiveAssignments();
                 if (m_overlayService) {
                     m_overlayService->hideDisabledAndRefresh();
@@ -543,9 +562,11 @@ void Daemon::connectDesktopActivity()
                 // state, their per-output desktop maps and m_lastEngineOrders, so by the time
                 // this runs there is nothing above the count left to prune.
                 //
-                // Still NOT renumbered: the disabled-desktop lists below. They are settings
-                // rather than live state, and nothing re-reports them — a gate on a desktop
-                // above a mid-list removal keeps the number it was written with.
+                // The disabled-desktop lists below are renumbered too, by the
+                // desktopRemovedAt handler above (renumberDisabledDesktopEntries), for the
+                // same reason the engine state is: they store the NUMBER, and nothing
+                // re-reports them. What is left for this handler is the genuine
+                // out-of-range case a removal at the END produces.
                 if (m_settings) {
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
