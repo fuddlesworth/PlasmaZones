@@ -2517,6 +2517,39 @@ if(TARGET PhosphorTheme::PhosphorTheme)
     add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
 endif()
 
+# What it costs to OPEN a bar panel: a fence against a blocking service
+# construction moving back onto the click path. Needs the Phosphor.Bar QML
+# module and every service the panels import, so it is guarded on the
+# shell-tier targets the way test_shell_chrome is.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
+    add_executable(test_panel_open_cost shell/test_panel_open_cost.cpp)
+    target_link_libraries(test_panel_open_cost
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            # The popout host is built per open by the transport, so it is
+            # on the click path too and is measured alongside the panels.
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+    )
+    target_compile_definitions(test_panel_open_cost PRIVATE PZ_QML_IMPORT_DIR="${CMAKE_BINARY_DIR}/qml")
+    add_test(NAME test_panel_open_cost COMMAND test_panel_open_cost)
+endif()
+
 # The toast broker behind the `notify` IpcTarget.
 add_executable(test_toast_controller
     shell/test_toast_controller.cpp
