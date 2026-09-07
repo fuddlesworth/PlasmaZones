@@ -345,15 +345,21 @@ public:
     /// and first deletes any retired textures (this is the GL-current point).
     /// @p clipRegion is the DEVICE-space region of the scene walk in
     /// progress (the pass's damage region); the blit is hardware-clipped to
-    /// it, never painted unclipped. Paint order only yields stacking order
+    /// it, never painted unclipped. It is mapped through the render target's
+    /// transform into buffer space before it reaches the scissor, the same
+    /// way KWin's item renderer maps its own: the scissor takes framebuffer
+    /// rects, and a screen target is Y-flipped (and possibly rotated)
+    /// relative to the device region. Paint order only yields stacking order
     /// when every window above repaints the same pixels afterwards, and KWin
     /// hands each of them only the damage region — pill pixels outside it
     /// would surface over whatever is stacked above the strip until the next
     /// full-damage frame.
-    /// Returns true only when the blit was actually issued: a latched
+    /// Returns true when the pills stand on screen after this pass: a latched
     /// raster/upload failure, an over-limit bounds, or a missing texture
     /// return false, and the caller's pass outcome (what gates pill input)
-    /// must record that nothing is on screen.
+    /// must record that nothing is on screen. A @p clipRegion that misses the
+    /// band entirely still returns true with no draw issued, because the
+    /// pixels the last pass painted are untouched by this one.
     bool paint(KWin::LogicalOutput* output, const KWin::RenderTarget& renderTarget,
                const KWin::RenderViewport& viewport, const KWin::Region& clipRegion, const QPointF& viewOffset);
 

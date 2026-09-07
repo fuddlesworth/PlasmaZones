@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tab indicators no longer vanish when the pointer crosses them**: moving the mouse over a tabbed column's indicator made the whole band disappear until something repainted the entire screen, so it looked like the tabs flickered under the pointer. The band is drawn clipped to whatever part of the screen the compositor is repainting that frame, and that clip was handed over in the wrong orientation. A repaint of the whole screen is the same either way up, which is why the band always came back after a window opened or an animation played, but a small repaint over the band, such as the one a hover or the pointer itself causes, clipped the band to a box that did not contain it and left the pixels underneath showing through. The clip is now mapped the same way the compositor maps its own, so the band holds still under the pointer at every scale, including the fractional one the earlier fix was aimed at. ([#1079](https://github.com/fuddlesworth/PlasmaZones/pull/1079))
+
 ## [3.4.14] - 2026-09-06
 
 ### Added
@@ -2391,7 +2395,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.13...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.14...HEAD
+[3.4.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.13...v3.4.14
 [3.4.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.12...v3.4.13
 [3.4.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.11...v3.4.12
 [3.4.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.10...v3.4.11
