@@ -18,12 +18,18 @@
  * perDesktopState_* tests which drive the global setCurrentDesktop the same way.
  */
 
+#include <QCoreApplication>
+#include <QSignalSpy>
 #include <QTest>
 
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
 #include "helpers/AutotileTestHelpers.h"
+
+#include <optional>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -114,11 +120,11 @@ private Q_SLOTS:
     }
 
     // #1076: a window moved from a tiled desktop onto an unassigned desktop
-    // (the screen runs no tiling there) is released by the effect while the
-    // unassigned desktop is in view. The release must reach the SOURCE
-    // desktop's state by window id even though the screen is not autotile in
-    // the current context, otherwise the slot stays occupied on return.
-    void releaseReachesSourceDesktopFromUnmanagedContext()
+    // (the screen runs no tiling there). The daemon's reconcile has to be able
+    // to ASK which desktop still holds the window while the screen is not
+    // autotile in the current context, and the release then has to reach that
+    // desktop's state, otherwise the slot stays occupied on return.
+    void heldKeyAndReleaseReachSourceDesktopFromUnmanagedContext()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString win = QStringLiteral("win-moved");
@@ -139,7 +145,18 @@ private Q_SLOTS:
         QVERIFY(!engine.isAutotileScreen(kS1));
         QVERIFY(engine.isWindowTracked(win));
 
-        // The effect's arrival arm releases the window from the desktop in view.
+        // The query the daemon's reconcile asks. It answers the BACKGROUND
+        // desktop that still holds the window, while the current-context
+        // predicate beside it correctly answers nothing — that contrast is the
+        // whole difference between the two, and it is what lets the daemon
+        // decide from a context that can say nothing about desktop 1.
+        const std::optional<PhosphorEngine::PlacementStateKey> held = engine.heldKeyForWindow(win);
+        QVERIFY(held.has_value());
+        QCOMPARE(held->desktop, 1);
+        QCOMPARE(held->screenId, kS1);
+        QVERIFY(engine.heldScreenForWindow(win).isEmpty());
+
+        // The release the daemon then issues against that engine.
         engine.windowClosed(win);
         QCoreApplication::processEvents();
         QVERIFY(!engine.isWindowTracked(win));
@@ -151,6 +168,80 @@ private Q_SLOTS:
         QVERIFY(!d1->containsWindow(win));
         QVERIFY(d1->containsWindow(QStringLiteral("win-stays")));
         QCOMPARE(d1->windowCount(), 1);
+    }
+
+    // A window removed from a BACKGROUND desktop's state must not drag the
+    // screen's CURRENT layout through a retile. retileScreen resolves the
+    // current context, so the reflow would land on the wrong desktop and the
+    // mutated one would go untouched either way.
+    //
+    // placementChanged is the discriminator, not state: without a ScreenManager
+    // recalculateLayout is a structural no-op, so the desktop-2 state looks
+    // identical whether or not it was retiled.
+    void removalFromBackgroundDesktop_doesNotRetileTheCurrentOne()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString onD1 = QStringLiteral("win-d1");
+        const QString onD2 = QStringLiteral("win-d2");
+
+        engine.setCurrentDesktopForScreen(kS1, 1);
+        engine.setAutotileScreens({kS1});
+        engine.windowOpened(onD1, kS1);
+        QCoreApplication::processEvents();
+
+        engine.setCurrentDesktopForScreen(kS1, 2);
+        engine.setAutotileScreens({kS1});
+        engine.windowOpened(onD2, kS1);
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        QVERIFY(spy.isValid());
+
+        // Desktop 1's window closes while desktop 2 is in view.
+        engine.windowClosed(onD1);
+        QCoreApplication::processEvents();
+        QVERIFY(!engine.isWindowTracked(onD1));
+        QCOMPARE(spy.count(), 0);
+
+        // The control arm: closing the CURRENT context's window still retiles,
+        // so the assertion above is a real gate rather than a dead spy.
+        spy.clear();
+        engine.windowClosed(onD2);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1);
+    }
+
+    // Deleting a virtual desktop in the middle renumbers every desktop above
+    // it. The engine's state has to move with the numbering, or every window on
+    // a shifted desktop reads as having left it.
+    void renumberAfterRemoval_shiftsStatesAboveTheRemovedDesktop()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString onD1 = QStringLiteral("win-d1");
+        const QString onD2 = QStringLiteral("win-d2");
+        const QString onD3 = QStringLiteral("win-d3");
+
+        for (const auto& [desktop, windowId] : QList<std::pair<int, QString>>{{1, onD1}, {2, onD2}, {3, onD3}}) {
+            engine.setCurrentDesktopForScreen(kS1, desktop);
+            engine.setAutotileScreens({kS1});
+            engine.windowOpened(windowId, kS1);
+            QCoreApplication::processEvents();
+        }
+        QCOMPARE(engine.heldKeyForWindow(onD3)->desktop, 3);
+
+        // Desktop 2 is deleted: its own state goes, and 3 becomes 2.
+        engine.pruneStatesForDesktop(2);
+        engine.renumberDesktopsAfterRemoval(2);
+
+        QVERIFY(!engine.isWindowTracked(onD2));
+        // Untouched below the removal.
+        QVERIFY(engine.heldKeyForWindow(onD1).has_value());
+        QCOMPARE(engine.heldKeyForWindow(onD1)->desktop, 1);
+        // Shifted down one, and still tracked — this is the window the
+        // desktop-membership reconcile would otherwise release.
+        QVERIFY(engine.heldKeyForWindow(onD3).has_value());
+        QCOMPARE(engine.heldKeyForWindow(onD3)->desktop, 2);
+        QVERIFY(engine.isWindowTracked(onD3));
     }
 };
 

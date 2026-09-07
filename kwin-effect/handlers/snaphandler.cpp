@@ -5,6 +5,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "dragtracker.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "snapassisthandler.h"
 #include "compositor/effectlogging.h"
@@ -37,20 +38,6 @@ namespace PlasmaZones {
 static constexpr int kSnapMinimizeFloatDebounceMs = kSpuriousMinimizePairMs;
 static constexpr int kSnapUnfloatRetryDelayMs = 250;
 static constexpr int kSnapMaxUnfloatRetries = 3;
-
-// Per-output "is this window's desktop in view where it lives" reading.
-// The global isOnCurrentDesktop() both over- and under-fires under
-// per-output virtual desktops (some other output switched to this window's
-// desktop, or its own output switched while the global current is
-// elsewhere — see drainDesktopArrivalFor's arm). Falls back to the global
-// reading when the window has no output. Shared by every visibility gate
-// in this file so they cannot drift.
-static bool isOnOwnOutputCurrentDesktop(KWin::EffectWindow* w)
-{
-    KWin::LogicalOutput* const out = w->screen();
-    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
-    return shownHere ? w->isOnDesktop(shownHere) : w->isOnCurrentDesktop();
-}
 
 SnapHandler::SnapHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)

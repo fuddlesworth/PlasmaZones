@@ -568,7 +568,7 @@ public:
 
     QString engineId() const override
     {
-        return QStringLiteral("autotile");
+        return PhosphorEngine::WindowPlacement::autotileEngineId();
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
@@ -1101,7 +1101,9 @@ public:
     /// floats them — an optimistic claim would phantom-key the window);
     /// decides via the store's live-instance-excluding peekForReclaim;
     /// requires the recorded home in the LIVE autotile set AND the record's
-    /// (desktop, activity) to equal the home screen's current key; returns
+    /// (desktop, activity) to match the home screen's current key through
+    /// recordContextMatchesLive, which exempts the sticky and unknown-context
+    /// sentinel records; returns
     /// the REAL adoption outcome verified by membership, sweeping the
     /// phantom key on a refusal.
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
@@ -1677,8 +1679,9 @@ private:
      *
      * Every path that stops managing a window owes this, or applyTiling's
      * drain emits activateWindowRequested for a window this engine no longer
-     * holds. Shared by removeWindow, handoffRelease and the insert refusal
-     * sweep so the three cannot drift; see purgeFromPendingOrders for the
+     * holds. Shared by every drop path — removeWindow, handoffRelease,
+     * the insert refusal, the shared phantom sweep and the off-autotile focus
+     * arm — so none of them can drift; see purgeFromPendingOrders for the
      * pending-order half of the same obligation.
      */
     void purgePendingFocusForWindow(const QString& windowId);
@@ -1928,8 +1931,10 @@ private:
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
     // Consumed by the strict seed in setAutotileScreens() (visible windows,
     // eagerly) and by insertWindow() as remaining windows arrive; purged
-    // per-window via purgeFromPendingOrders (close, insert refusal, handoff
-    // release, the defer gate, the off-autotile focus arm), swept
+    // per-window via purgeFromPendingOrders on every path that stops managing
+    // the window (close, insert refusal, handoff release, the defer gate, the
+    // off-autotile focus arm, the cross-screen claim refusal, the onWindowAdded
+    // skip arm and the shared phantom sweep), swept
     // by pruneStaleWindows, and reaped by the pending-order timeout — which
     // deliberately RETAINS an order holding live minimized placeholders, so
     // those entries persist until the window opens or closes.

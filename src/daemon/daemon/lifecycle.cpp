@@ -595,10 +595,11 @@ void Daemon::stop()
     // raw-Qt-parented RuleAdaptor only runs its own destructor
     // *after* that, as part of QObject child cleanup.
     //
-    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other eleven raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, TilingAdaptor) all ship destructors that don't
+    // SnapAdaptor, TilingAdaptor, AutotileAdaptor, ScrollingAdaptor) all
+    // ship destructors that don't
     // deref any borrowed pointer — most are `= default` / empty-body
     // (no member access), and the two outliers do only self-cleanup
     // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-

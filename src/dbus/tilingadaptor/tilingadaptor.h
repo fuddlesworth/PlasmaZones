@@ -96,9 +96,13 @@ public:
     /// exists for symmetry, with no production caller.
     void setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
 
-    /// Subscribe to the compositor-fed WindowRegistry so a window's desktop
+    /// Subscribe to the compositor-fed WindowRegistry so a window's DESKTOP
     /// membership is reconciled against the engine states here, in the one
-    /// place that can see every (screen, desktop, activity) state at once.
+    /// place that can see every state at once, whatever desktop is in view.
+    ///
+    /// Desktop only. PlacementStateKey also carries an activity, and a window
+    /// moved to another activity strands its slot the same way — that arm does
+    /// not exist yet, in this class or in the effect.
     ///
     /// Every prior fix for "a window moved between virtual desktops left its
     /// slot behind" (#1076 and its family) added an arm to the KWin effect,
@@ -108,13 +112,24 @@ public:
     /// the window, so each (window moved, desktop in view, mode per desktop)
     /// combination needed its own arm and each was a place to forget one.
     /// The engines own the membership, and the registry carries the
-    /// window's authoritative desktop set (x11 numbering, the same the
-    /// engines key their states by), so the invariant is enforced here:
+    /// window's authoritative desktop set, so the invariant is enforced here:
     /// whenever a window's desktop set changes, any state holding it under a
     /// desktop the window no longer belongs to releases it. The effect's arms
     /// keep doing their effect-side work (pre-tile stash, decoration) and
     /// their placement of the arrival; the membership question is no longer
     /// theirs. Pass nullptr on shutdown. Not owned.
+    ///
+    /// Both sides speak x11 desktop NUMBERS, which Plasma renumbers when a
+    /// desktop in the middle is deleted. That is safe only because the daemon
+    /// re-keys engine state on removal (IPlacementEngine::
+    /// renumberDesktopsAfterRemoval); without it the two numberings drift and
+    /// every window on a shifted desktop reads as having left it. A screen
+    /// pinned to one desktop is the other case where the key is not a
+    /// compositor desktop, and the reconcile skips those.
+    ///
+    /// Snapping is out of scope: the reconcile walks the tiling-family
+    /// lifecycle engines, and a zone assignment has no stack to close a gap
+    /// in.
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
     /// The reconcile setWindowRegistry subscribes: release @p windowId from
@@ -122,7 +137,8 @@ public:
     /// set means the window's desktops are unknown, or it is on all of them,
     /// and releases nothing: a sticky window legitimately sits in a state
     /// keyed by whichever desktop it was adopted on. Public so the contract
-    /// is testable without a registry round-trip.
+    /// is testable directly, without driving a registry round-trip to reach
+    /// it.
     void reconcileWindowDesktops(const QString& windowId, const QSet<int>& desktops);
 
     // ── Engine relay entry points ────────────────────────────────────────
@@ -327,7 +343,9 @@ public Q_SLOTS:
      * @brief Drop a LIVE window from engine tracking without a close
      *
      * The drag-bypass revert's tracking drop (the effect's drag_snap /
-     * lifecycle_wiring transitions) and the effect's desktop-departure arm.
+     * lifecycle_wiring transitions) and the effect's desktop arms. The
+     * desktop-membership reconcile is a further caller and goes through the
+     * private overload below.
      * Unlike windowClosed, NO placement capture runs: the window is not
      * dying, and its current frame is transient drag state that must never be
      * recorded as a float-back.
@@ -708,6 +726,13 @@ private:
     /// over-reach: every one of those is the user (or a rule) deliberately
     /// moving a LIVE window, and none is a session restore, so none of them
     /// wants the next announce reclaimed back to a remembered home.
+    ///
+    /// The daemon's own desktop-membership reconcile is the one caller that
+    /// does NOT arm this, and it is the exception that shows what the
+    /// justification above rests on: every effect caller re-announces the
+    /// window in the same breath, so the excuse is consumed immediately. The
+    /// reconcile has no such pairing, and an excuse left standing is spent by
+    /// whatever announce comes next.
     /// The re-announce looks like a first
     /// observation to claimCrossScreenReopen, whose same-instance branch then
     /// matches the window's own stale record (still tiled on the OLD screen —
