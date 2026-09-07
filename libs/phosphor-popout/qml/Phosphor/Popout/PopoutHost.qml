@@ -400,6 +400,11 @@ FocusScope {
     Item {
         id: contentFrame
 
+        // Whether this frame is laid out against a surface that has a
+        // size, and has a size of its own. Until both hold, its x/y/width
+        // bindings are arithmetic on zeroes and it must not be shown.
+        readonly property bool _placed: root.width > 0 && root.height > 0 && width > 0 && height > 0
+
         // Tracks the contentItem currently parented under this
         // frame. Used by rebindContentItem to detach the previous
         // item when the property changes.
@@ -568,23 +573,38 @@ FocusScope {
         //
         // contentFrame can momentarily collapse to 0x0 during Loader
         // spin-up (between Loader.active flipping true and the
-        // instantiated item reporting its implicit size). The opacity
-        // Behavior masks this for the user (frame is invisible while
-        // open=false), and the next binding evaluation - once the
-        // delegate's implicitWidth/Height settle - inflates the frame
-        // before opacity reaches 1. Holding open until implicitWidth
-        // > 0 would require an extra state machine and trade one
-        // hidden transient for another; the opacity-gated transient
-        // is preferable.
+        // instantiated item reporting its implicit size), and the
+        // surface itself has NO SIZE until the compositor configures
+        // it. Both transients are hidden by `_placed` below rather
+        // than assumed to be invisible.
+        //
         // Clamped to the surface. The host fills the output, and a delegate
         // that reports an implicit size larger than the screen would be
         // centred with a negative offset and cut off on BOTH sides at once,
         // with no clip, scroll or shrink anywhere on the path. A short or
         // portrait output, or a fractional scale that shrinks the logical
         // size, reaches this with content that is fine on a typical display.
-        width: _visibleDelegate ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : 0
-        height: _visibleDelegate ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : 0
-        opacity: root.open ? 1 : 0
+        //
+        // The clamp only applies once the surface HAS a size. Before the
+        // configure arrives root.width is 0, and clamping against it
+        // yielded `Math.min(implicitWidth, -2 * spacing_l)` — a NEGATIVE
+        // width — which then fed the x binding above and put the frame
+        // somewhere arbitrary. Measured at -32 px wide, at x 24 instead of
+        // 1366, before snapping into place on the configure.
+        width: _visibleDelegate ? (root.width > 0 ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : _visibleDelegate.implicitWidth) : 0
+        height: _visibleDelegate ? (root.height > 0 ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : _visibleDelegate.implicitHeight) : 0
+        // Nothing is painted until the frame has a real size on a surface
+        // with a real size, so the first frame the user sees is already in
+        // its final position.
+        //
+        // This used to be `root.open ? 1 : 0` on the assumption that the
+        // frame is invisible while open is false. It is not: the transport
+        // sets open=true straight after surface->show(), which is BEFORE
+        // the compositor configures the surface, so the fade-in played over
+        // a frame that was still being laid out against a 0x0 output. That
+        // is the "it starts in the middle and pops into place" the panels
+        // were doing.
+        opacity: root.open && _placed ? 1 : 0
         scale: root.open ? 1 : 0.96
 
         // Hit-blocker. Without this, gaps inside the content area

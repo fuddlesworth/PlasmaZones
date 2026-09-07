@@ -60,6 +60,7 @@ private Q_SLOTS:
     void opensWithinBudget_data();
     void opensWithinBudget();
     void popoutHostCostsLittlePerOpen();
+    void contentIsPlacedBeforeItCouldBeSeen();
 
 private:
     std::unique_ptr<QQmlEngine> m_engine;
@@ -182,6 +183,80 @@ void TestPanelOpenCost::popoutHostCostsLittlePerOpen()
 
     qInfo() << "PopoutHost cold" << coldMs << "ms, warm" << warmMs << "ms";
     QVERIFY(warmMs < kOpenBudgetMs);
+}
+
+// The panels are reported to appear centred for a moment and then jump to
+// the position under their chip. This replays what the transport does, in
+// its order, and watches where the content frame actually lands.
+void TestPanelOpenCost::contentIsPlacedBeforeItCouldBeSeen()
+{
+    QQmlComponent hostComponent(m_engine.get(), QStringLiteral("Phosphor.Popout"), QStringLiteral("PopoutHost"));
+    QVERIFY2(!hostComponent.isError(), qPrintable(hostComponent.errorString()));
+
+    QQmlComponent panelComponent(m_engine.get());
+    panelComponent.setData("import Phosphor.Bar\nPanelFrame { panelWidth: 268 }\n",
+                           QUrl(QStringLiteral("qrc:/placed.qml")));
+    QVERIFY2(!panelComponent.isError(), qPrintable(panelComponent.errorString()));
+    auto* content = qobject_cast<QQuickItem*>(panelComponent.create());
+    QVERIFY(content);
+
+    // Same sequence as LayerPopoutTransport::open: beginCreate, write every
+    // property, then completeCreate.
+    QObject* hostObject = hostComponent.beginCreate(m_engine->rootContext());
+    auto* host = qobject_cast<QQuickItem*>(hostObject);
+    QVERIFY(host);
+    host->setProperty("contentItem", QVariant::fromValue(content));
+    content->setParent(host);
+    host->setProperty("placement", QStringLiteral("barItem"));
+    host->setProperty("reservedTop", 28);
+    host->setProperty("customX", 1500.0);
+    hostComponent.completeCreate();
+
+    QQuickItem* frame = content->parentItem();
+    QVERIFY2(frame, "content has no visual parent; PopoutHost changed shape");
+
+    // FAITHFUL ORDER. The transport completes creation and only then builds
+    // the layer surface; the host's own size arrives when the compositor
+    // configures it. So the first bindings evaluate against a 0x0 surface,
+    // which is the state an earlier version of this case skipped by sizing
+    // the host up front — and skipping it is what made it pass.
+    const qreal firstX = frame->x();
+    const qreal firstW = frame->width();
+    // What the user would actually see at this instant. The transport sets
+    // open=true here, before the configure, so this has to be zero.
+    host->setProperty("open", true);
+    const qreal opacityBeforeConfigure = frame->opacity();
+
+    // The compositor configures the surface to the output.
+    host->setWidth(1920);
+    host->setHeight(1080);
+
+    // Let layout polish run, which is what settles a ColumnLayout's implicit
+    // size and therefore the frame's width.
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+
+    const qreal settledX = frame->x();
+    const qreal settledW = frame->width();
+
+    qInfo() << "frame x" << firstX << "->" << settledX << ", width" << firstW << "->" << settledW
+            << ", opacity before configure" << opacityBeforeConfigure;
+
+    // The frame IS laid out against a 0x0 surface before the configure —
+    // that is unavoidable, the size genuinely is not known yet. What must
+    // not happen is the user seeing it there. So the contract under test is
+    // not "it never moves", it is "it is never VISIBLE while it is in the
+    // wrong place".
+    QCOMPARE(opacityBeforeConfigure, 0.0);
+    QVERIFY2(settledW > 0, "the frame never took a positive width");
+    // The BINDING, not the animated value: opacity reaches 1 through a
+    // Behavior, and a test with no render loop never ticks the animation
+    // driver, so reading opacity here would report 0 forever and assert
+    // nothing. `_placed` is what gates it.
+    QVERIFY2(frame->property("_placed").toBool(),
+             "the frame is still not considered placed after the surface was configured, so it would never fade in");
+
+    host->deleteLater();
 }
 
 QTEST_MAIN(TestPanelOpenCost)
