@@ -49,6 +49,10 @@ Item {
     // is. `created` false means the provider returned null.
     signal tileResolved(string tileId, bool created)
     // Emitted as a detail view opens and after it closes.
+    /// A card asked for a full view that lives outside this surface (a bar
+    /// panel). Carries the bar-widget id, for the host to open.
+    signal panelRequested(string panelId)
+
     signal detailOpened(string tileId)
     signal detailClosed(string tileId)
 
@@ -218,10 +222,20 @@ Item {
                     item.railT = root.tileIds.length > 1 ? i / (root.tileIds.length - 1) : 0.5;
                 // The tile chrome carries no id of its own; bind the
                 // detail request here so Tile.qml stays a pure view.
-                if (item.detailRequested !== undefined)
+                if (item.detailRequested !== undefined) {
+                    // A card that names a bar panel hands the request out
+                    // rather than opening the in-surface detail view: the
+                    // panel already exists and is what the matching chip
+                    // opens, so drilling in here and pressing the chip land
+                    // in the same place.
+                    const panelId = item.detailPanelId === undefined ? "" : item.detailPanelId;
                     item.detailRequested.connect(function () {
-                        root.openDetail(id);
+                        if (panelId !== "")
+                            root.panelRequested(panelId);
+                        else
+                            root.openDetail(id);
                     });
+                }
             }
             // Truthiness, not a null comparison: a factory that falls off
             // the end returns undefined, which `!== null` would report as

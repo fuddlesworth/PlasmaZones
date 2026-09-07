@@ -41,7 +41,15 @@ Item {
     property string detailTitle: ""
     property Component detailContent: null
     property bool detailEnabled: true
-    readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
+    /// The bar panel this row drills into, by the bar-widget id that opens
+    /// it. Mirrors Tile.detailPanelId, and exists on BOTH because a tile
+    /// and a slider are separate types: the control center sets this on
+    /// whichever it is handed, and assigning a property one of them lacks
+    /// is not a warning — the file fails to compile and the tile vanishes
+    /// from the grid, which is exactly what happened to the volume row.
+    property string detailPanelId: ""
+
+    readonly property bool hasDetail: root.detailEnabled && (root.detailContent !== null || root.detailPanelId !== "")
     // A level spans the grid: its underline is the control, and a longer
     // line is a finer one to drag.
     property bool spansRow: true

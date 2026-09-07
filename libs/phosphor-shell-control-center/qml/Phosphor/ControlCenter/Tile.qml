@@ -44,7 +44,14 @@ Item {
     property string detailTitle: ""
     property Component detailContent: null
     property bool detailEnabled: true
-    readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
+    /// The bar panel this card drills into, by the bar-widget id that
+    /// opens it ("network", "bluetooth", "audio"). Set instead of
+    /// `detailContent` when the full view already exists as a panel: the
+    /// chip on the bar and the card in here then open the SAME surface
+    /// rather than two views of the same service drifting apart.
+    property string detailPanelId: ""
+
+    readonly property bool hasDetail: root.detailEnabled && (root.detailContent !== null || root.detailPanelId !== "")
     // Layout hint read by ControlCenter. Every rail spans the pane.
     // Whether this tile wants the grid's full width. A toggle is a card in
     // a column; a level (volume, brightness) reads better across the row,

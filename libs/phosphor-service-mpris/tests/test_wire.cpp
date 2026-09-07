@@ -36,9 +36,15 @@ constexpr auto kPath = "/org/mpris/MediaPlayer2";
 constexpr auto kPlayerIface = "org.mpris.MediaPlayer2.Player";
 constexpr auto kRootIface = "org.mpris.MediaPlayer2";
 
+} // namespace
+
 // Serves org.freedesktop.DBus.Properties for the object below. MprisPlayer
 // pulls its whole initial state through GetAll, so that is the one method
 // this has to answer correctly.
+//
+// Outside the anonymous namespace on purpose: both of these are members of
+// MprisWireTest, which has external linkage, and a member whose type has
+// internal linkage is -Wsubobject-linkage.
 class PropertiesAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
@@ -93,7 +99,6 @@ class FakePlayerObject : public QObject
 {
     Q_OBJECT
 };
-} // namespace
 
 class MprisWireTest : public QObject
 {

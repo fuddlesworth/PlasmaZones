@@ -400,6 +400,16 @@ Item {
         ControlCenter {
             provider: ControlCenterRegistry
             tileIds: ControlCenterRegistry.tileIds
+            // A card drilling in opens the bar panel that card names, which
+            // is the same surface its chip on the bar opens. The control
+            // center closes first: two Cooperative popouts in one scope
+            // would otherwise have the arbiter close this one anyway, and
+            // doing it here makes the hand-off deliberate rather than a
+            // side effect of arbitration.
+            onPanelRequested: panelId => {
+                Popouts.close(Popouts.handleFor("control-center"));
+                root.toggleWidgetPanel(panelId, root._lastPanelSource);
+            }
         }
     }
 
