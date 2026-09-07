@@ -173,6 +173,9 @@ void NotificationController::onNotificationAdded(Notification* notification)
 
     Q_EMIT countChanged();
     setUnreadCount(m_unread + 1);
+    // The toast is fed from HERE rather than from the ingest path, so the
+    // stack and the centre can never show different sets.
+    Q_EMIT notificationArrived(entry.summary, entry.body);
 }
 
 void NotificationController::refreshEntry(Notification* notification)

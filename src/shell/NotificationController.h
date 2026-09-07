@@ -106,6 +106,16 @@ public:
     Q_INVOKABLE void markAllRead();
 
 Q_SIGNALS:
+    /// A notification arrived, carrying what a toast needs to show it.
+    ///
+    /// The server is the single source for both surfaces. Without this the
+    /// shell had two unconnected paths: the `notify` IpcTarget called the
+    /// toast broker directly, so a scripted notification toasted but left
+    /// no record, while a real org.freedesktop.Notifications call reached
+    /// this list and the badge but never toasted. Whichever surface you
+    /// looked at, it disagreed with the other.
+    void notificationArrived(const QString& summary, const QString& body);
+
     void serverActiveChanged();
     void countChanged();
     void unreadCountChanged();
