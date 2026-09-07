@@ -50,8 +50,37 @@ FocusScope {
     // Hue axis for the stroke: the pane's centre on the screen.
     readonly property real hueT: railWidth > 0 ? Spectrum.tForX(railOffset + width / 2, railWidth) : 0.5
 
+    // Whether the engine has had its window to place this pane in.
+    //
+    // A pane is a real toplevel, so the compositor maps it at ITS chosen
+    // position and the engine's rule moves it afterwards. Measured in the
+    // nested harness on a 1024x768 output: mapped at 322,168 (dead centre)
+    // and moved to its zone at 516,36 fifty-three milliseconds later. Any
+    // pixel painted in that window is painted in the wrong place, and the
+    // pane visibly started in the middle of the screen and popped.
+    //
+    // A2 §4.4 already prescribes the answer and the implementation simply
+    // did not follow it: "0-140 ms: Engine places the surface", then
+    // "140-380 ms: Pane content enters". So the enter waits, and the wait
+    // is the spec's placement window rather than a number picked to cover
+    // an observed race.
+    //
+    // A client cannot ask where its toplevel is on Wayland, so this cannot
+    // key on the actual placement; it is a timed window by necessity. The
+    // complete fix is for the pane to be placed on its FIRST configure so
+    // it never maps centred, which lives in the daemon's rule path.
+    property bool _placementWindowElapsed: false
+
+    Timer {
+        id: placementWindow
+
+        interval: Motion.duration_enter_content
+        repeat: false
+        onTriggered: root._placementWindowElapsed = true
+    }
+
     // The content's enter/release, 0..1. One animation, both directions.
-    property real _progress: root.open ? 1 : 0
+    property real _progress: root.open && root._placementWindowElapsed ? 1 : 0
 
     signal dismissed
     signal released
@@ -91,7 +120,28 @@ FocusScope {
         anchors.fill: parent
         radius: Tokens.radius_tile
         color: Theme.surface_container
-        opacity: 0.96
+        // Fades with the rest of the pane, and NOT painted flat from the
+        // instant the toplevel maps.
+        //
+        // A pane is a real window, so the compositor maps it at ITS chosen
+        // position and the engine's rule moves it afterwards. Measured in
+        // the nested harness on a 1024x768 output: mapped at 322,168
+        // 380x460 — dead centre — and moved to 516,36 500x284 fifty-six
+        // milliseconds later. At a flat 0.96 that is three or four frames
+        // of a solid, fully opaque card sitting in the middle of the
+        // screen before it jumps into its zone, which is exactly the
+        // "starts in the centre and pops into place" the panes were doing.
+        //
+        // A2 §4.4 already says the enter belongs AFTER the placement: the
+        // engine places over 0-140 ms and the content enters from 140 ms.
+        // Tying the ground to the same progress makes the whole pane obey
+        // that instead of only its content.
+        //
+        // This HIDES the jump rather than removing it. The complete fix is
+        // for the pane to be placed on its initial configure so it never
+        // maps centred at all, which lives in the daemon's rule path, not
+        // here.
+        opacity: 0.96 * root._progress
     }
 
     DecorationSlot {
@@ -110,14 +160,23 @@ FocusScope {
         t: root.hueT
         active: root.open
         visible: !decorationSlot.active
+        // Fades with the ground, for the same reason: until the placement
+        // window has elapsed this pane may still be sitting wherever the
+        // compositor mapped it, and an outline drawn there is an outline
+        // drawn in the wrong place.
+        opacity: root._progress
     }
 
     // The top-edge band, the rail's gradient over this pane's x-range.
+    // Gated like everything else on this surface: it is the brightest
+    // thing the pane draws, so a band painted at the map position is the
+    // most visible part of the centred flash.
     Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         height: Tokens.rail_thickness
+        opacity: root._progress
         clip: true
 
         SpectrumRail {
@@ -149,10 +208,15 @@ FocusScope {
             contentItem.parent = frame;
     }
     onOpenChanged: {
+        // Arm the placement window on the way in; drop it on the way out so
+        // the next open waits again rather than entering instantly.
+        root._placementWindowElapsed = false;
         if (open) {
+            placementWindow.restart();
             forceActiveFocus();
             return;
         }
+        placementWindow.stop();
         // Closed before the enter ever moved (A2 §4.6, close during open):
         // the value is already 0, so no change will report it.
         if (root._progress === 0)
