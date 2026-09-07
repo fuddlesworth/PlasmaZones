@@ -766,6 +766,7 @@ public:
     void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
+    void renumberDesktopsAfterRemoval(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
@@ -1148,6 +1149,35 @@ private:
     /// serves a REMOVED screen (here the screen survives, only its context
     /// died).
     void pruneContextKeyedScreenArms(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& contextDied);
+
+    /// Move a whole ScrollState from one context key to another, carrying every
+    /// context-keyed structure with it: the reverse map, the strip stash and
+    /// its consumed marker, the mid-burst deferred-apply marker and the
+    /// per-context overrides. Unwinds a drag-insert preview captured on either
+    /// key first, since a preview's keys are plain copies rekeyWindows cannot
+    /// rewrite.
+    ///
+    /// A state already at @p newKey is displaced. Its windows, if any, are
+    /// released into @p displacedWindows and their screen into @p
+    /// displacedScreens; the caller must then run finishDisplacedRelease,
+    /// which emits windowsReleased and only then sweeps the per-window side
+    /// maps the handler reads.
+    ///
+    /// The strip identity announce is deliberately NOT here: callers batch it
+    /// per screen after the release, so a consumer sees the windows leave
+    /// before it is told the screen is showing a different strip.
+    ///
+    /// @return Whether a state existed at @p oldKey and was moved.
+    bool migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
+                         const PhosphorEngine::PlacementStateKey& newKey, QStringList& displacedWindows,
+                         QSet<QString>& displacedScreens);
+
+    /// Emit windowsReleased for the windows migrateStateKey displaced, then
+    /// sweep their per-window side maps. Split from the migration so a caller
+    /// moving several keys releases once, and so the ordering contract holds:
+    /// the handler consumes the float markers and last-applied rects, so those
+    /// may only be dropped after it has run.
+    void finishDisplacedRelease(QStringList& displacedWindows, const QSet<QString>& displacedScreens);
     // engine_core.cpp
     /// Capture @p state's strip STRUCTURE (column groupings, widths,
     /// display, per-tile height intents) before a mode reassignment tears

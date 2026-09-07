@@ -456,6 +456,40 @@ void Daemon::connectDesktopActivity()
                 diffActiveAssignments();
             });
 
+    // A desktop was removed and we know WHICH position it held, so the engines'
+    // per-desktop state can be corrected properly rather than swept by count.
+    // Runs ahead of desktopCountChanged (see desktopRemovedAt's doc), and once
+    // it has, that handler's out-of-range sweep finds nothing left over.
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopRemovedAt, this,
+            [this](int removedPosition) {
+                // Same ordering the count handler documents: a live preview
+                // resolves its state through a create-if-missing lookup, so a
+                // cancel arriving after the prune would resurrect a state for
+                // the desktop that just went away.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviews();
+                }
+                // Prune the removed position, THEN shift everything above it
+                // down one. Both halves are needed and the order is not
+                // optional: the prune leaves the position vacant so the first
+                // migration has somewhere to land.
+                //
+                // Without the shift, every surviving higher state keeps the
+                // number it had before while the compositor reports the new
+                // one, and the desktop-membership reconcile then reads a
+                // window that never moved as having left its desktop.
+                for (PhosphorEngine::PlacementEngineBase* engine :
+                     {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
+                    if (!engine) {
+                        continue;
+                    }
+                    engine->pruneStatesForDesktop(removedPosition);
+                    engine->renumberDesktopsAfterRemoval(removedPosition);
+                }
+                qCInfo(lcDaemon) << "Virtual desktop at position" << removedPosition
+                                 << "was removed — pruned it and renumbered the states above it";
+            });
+
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
             [this](int newCount) {

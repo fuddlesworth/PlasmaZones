@@ -377,6 +377,7 @@ public:
      * virtual desktop is deleted so stale entries don't accumulate.
      */
     void pruneStatesForDesktop(int removedDesktop) override;
+    void renumberDesktopsAfterRemoval(int removedDesktop) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState entries for activities not in the given set
@@ -1491,6 +1492,29 @@ private:
     bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
                                        QStringList& releasedWindows, bool drainOverflow = true,
                                        bool clearScreenOrderMaps = true);
+
+    /**
+     * @brief Move a whole TilingState from one context key to another, with
+     *        everything else keyed alongside it.
+     *
+     * The shared body of the sticky-unpin migration and the post-removal
+     * desktop renumber. Both move a state between keys on the SAME screen and
+     * must carry the same set: the per-key user-tuned split ratio and master
+     * count, the stashed script bag, and every reverse-map entry. A partial
+     * move parts a layout from its script state, and restore never consumes a
+     * stranded bag, so the old key would keep one ready to hand to whatever
+     * state is built there next.
+     *
+     * A state already sitting at @p newKey is displaced. If it holds windows
+     * they go through the full teardown and are reported through
+     * windowsReleased, so the daemon's restore consumers can re-home them —
+     * a bare delete would strand their reverse-map entries pointing at a key
+     * that now resolves to the migrated state, which does not contain them.
+     *
+     * @return Whether a state existed at @p oldKey and was moved.
+     */
+    bool migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
+                         const PhosphorEngine::PlacementStateKey& newKey);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.

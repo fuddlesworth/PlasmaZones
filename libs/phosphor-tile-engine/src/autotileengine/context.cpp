@@ -274,52 +274,9 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                 // global current desktop when per-output desktops aren't in use.
                 const int targetDesktop = currentKeyForScreen(screenId).desktop;
                 if (pinnedDesktop != targetDesktop) {
-                    TilingStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
-                    TilingStateKey newKey{screenId, targetDesktop, m_context.currentActivity()};
-
-                    if (PhosphorTiles::TilingState* migratedState = m_states.stateForKey(oldKey)) {
-                        // If a state already exists at the target key (e.g., created
-                        // by tilingStateForScreen() during a transient lookup), delete it —
-                        // the pinned state has the actual windows.
-                        if (PhosphorTiles::TilingState* existing = m_states.takeState(newKey)) {
-                            existing->deleteLater();
-                        }
-                        m_states.takeState(oldKey);
-                        m_states.insertState(newKey, migratedState);
-
-                        // The migrated state keeps its split ratio / master count, so
-                        // carry its per-key user-tuned flags from oldKey to newKey; if
-                        // it wasn't tuned, ensure newKey isn't left tuned by the
-                        // replaced state deleted above.
-                        if (m_userTunedSplitRatio.remove(oldKey)) {
-                            m_userTunedSplitRatio.insert(newKey);
-                        } else {
-                            m_userTunedSplitRatio.remove(newKey);
-                        }
-                        if (m_userTunedMasterCount.remove(oldKey)) {
-                            m_userTunedMasterCount.insert(newKey);
-                        } else {
-                            m_userTunedMasterCount.remove(newKey);
-                        }
-                        // A bag stashed under oldKey belongs to the layout that is
-                        // moving, so it moves too, on the same terms as the tuned
-                        // flags above. Leaving it behind would mean the layout and
-                        // its script state part ways: restore never consumes an
-                        // entry, so oldKey would keep a bag describing windows that
-                        // now live at newKey, ready to be handed to whatever state
-                        // is built there next. Safe to move because the tag is
-                        // resolved per screen and both keys share a screenId.
-                        if (auto oldIt = m_scriptStateStash.find(oldKey); oldIt != m_scriptStateStash.end()) {
-                            StashedScriptState moved = std::move(oldIt->second);
-                            m_scriptStateStash.erase(oldIt);
-                            m_scriptStateStash.insert_or_assign(newKey, std::move(moved));
-                        } else {
-                            m_scriptStateStash.erase(newKey);
-                        }
-
-                        // Update window-to-key mapping
-                        m_states.rekeyWindows(oldKey, newKey);
-
+                    const TilingStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
+                    const TilingStateKey newKey{screenId, targetDesktop, m_context.currentActivity()};
+                    if (migrateStateKey(oldKey, newKey)) {
                         qCInfo(PhosphorTileEngine::lcTileEngine)
                             << "Migrated screen" << screenId << "state from desktop" << pinnedDesktop << "to"
                             << targetDesktop;
@@ -682,5 +639,132 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Algorithm selection
 // ═══════════════════════════════════════════════════════════════════════════════
+
+bool AutotileEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
+                                     const PhosphorEngine::PlacementStateKey& newKey)
+{
+    if (oldKey == newKey) {
+        return false;
+    }
+    PhosphorTiles::TilingState* migratedState = m_states.stateForKey(oldKey);
+    if (!migratedState) {
+        return false;
+    }
+    // A state already sitting at the target key is displaced. Usually it is an
+    // empty placeholder minted by a transient tilingStateForScreen lookup, but
+    // it does not have to be, and a bare delete would leave its windows'
+    // reverse-map entries pointing at newKey — which rekeyWindows below then
+    // makes resolve to the MIGRATED state, one that does not contain them.
+    // Release them properly first, on the same terms pruneStatesForDesktop
+    // uses: the screen survives, only this context is going away, so neither
+    // the screen-keyed overflow bucket nor the screen order maps are cleared.
+    if (PhosphorTiles::TilingState* existing = m_states.takeState(newKey)) {
+        QStringList releasedWindows;
+        releaseScreenStateForTeardown(newKey.screenId, existing, releasedWindows, /*drainOverflow=*/false,
+                                      /*clearScreenOrderMaps=*/false);
+        m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
+            return key == newKey;
+        });
+        if (!releasedWindows.isEmpty()) {
+            qCWarning(PhosphorTileEngine::lcTileEngine)
+                << "migrateStateKey: displaced a NON-EMPTY state at" << newKey.screenId << "desktop" << newKey.desktop
+                << "— released" << releasedWindows.size() << "window(s)";
+            Q_EMIT windowsReleased(releasedWindows, QSet<QString>{newKey.screenId});
+        }
+        existing->deleteLater();
+    }
+    m_states.takeState(oldKey);
+    m_states.insertState(newKey, migratedState);
+
+    // The migrated state keeps its split ratio / master count, so carry its
+    // per-key user-tuned flags across; if it wasn't tuned, make sure newKey is
+    // not left tuned by the state displaced above.
+    if (m_userTunedSplitRatio.remove(oldKey)) {
+        m_userTunedSplitRatio.insert(newKey);
+    } else {
+        m_userTunedSplitRatio.remove(newKey);
+    }
+    if (m_userTunedMasterCount.remove(oldKey)) {
+        m_userTunedMasterCount.insert(newKey);
+    } else {
+        m_userTunedMasterCount.remove(newKey);
+    }
+    // A bag stashed under oldKey belongs to the layout that is moving, so it
+    // moves too, on the same terms as the tuned flags above. Leaving it behind
+    // would mean the layout and its script state part ways: restore never
+    // consumes an entry, so oldKey would keep a bag describing windows that now
+    // live at newKey, ready to be handed to whatever state is built there next.
+    // Safe to move because the tag is resolved per screen and both keys share a
+    // screenId.
+    if (auto oldIt = m_scriptStateStash.find(oldKey); oldIt != m_scriptStateStash.end()) {
+        StashedScriptState moved = std::move(oldIt->second);
+        m_scriptStateStash.erase(oldIt);
+        m_scriptStateStash.insert_or_assign(newKey, std::move(moved));
+    } else {
+        m_scriptStateStash.erase(newKey);
+    }
+    m_states.rekeyWindows(oldKey, newKey);
+    return true;
+}
+
+void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return;
+    }
+    // ASCENDING, and the sort is load-bearing. The state at removedDesktop is
+    // already gone (pruneStatesForDesktop ran first), so removedDesktop is
+    // vacant when removedDesktop+1 moves in, and each later target was vacated
+    // by the step before it. Descending would collide at every step.
+    // desktopsWithActiveState returns a QSet whose iteration order is
+    // unspecified, so it cannot be walked directly.
+    QList<int> desktops;
+    for (const int desktop : desktopsWithActiveState()) {
+        if (desktop > removedDesktop) {
+            desktops.append(desktop);
+        }
+    }
+    if (desktops.isEmpty()) {
+        m_context.renumberDesktopsAfterRemoval(removedDesktop);
+        return;
+    }
+    std::sort(desktops.begin(), desktops.end());
+
+    QSet<QString> touchedScreens;
+    for (const int desktop : std::as_const(desktops)) {
+        // Snapshot the screen/activity pairs at this desktop before moving any
+        // of them: the move mutates the very map states() iterates.
+        QList<PhosphorEngine::PlacementStateKey> atDesktop;
+        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+            if (it.key().desktop == desktop) {
+                atDesktop.append(it.key());
+            }
+        }
+        for (const PhosphorEngine::PlacementStateKey& oldKey : std::as_const(atDesktop)) {
+            const PhosphorEngine::PlacementStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
+            if (migrateStateKey(oldKey, newKey)) {
+                touchedScreens.insert(oldKey.screenId);
+            }
+        }
+    }
+    // The pins and the per-output desktop map index the same numbering, so they
+    // shift with the states or they name a position whose content moved.
+    m_context.renumberDesktopsAfterRemoval(removedDesktop);
+
+    if (!touchedScreens.isEmpty()) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "renumberDesktopsAfterRemoval: shifted states above desktop" << removedDesktop << "down one on"
+            << touchedScreens.size() << "screen(s)";
+        // Whichever of these screens now shows a re-keyed state has a layout
+        // the compositor has never been told about under this numbering, and
+        // the emit-on-change gate would swallow it. Retile the ones whose
+        // CURRENT context is one of the states that moved.
+        for (const QString& screenId : std::as_const(touchedScreens)) {
+            if (m_autotileScreens.contains(screenId) && m_states.stateForKey(currentKeyForScreen(screenId))) {
+                scheduleRetileForScreen(screenId);
+            }
+        }
+    }
+}
 
 } // namespace PhosphorTileEngine

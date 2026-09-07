@@ -80,6 +80,22 @@ Q_SIGNALS:
     /// something unrelated forced a refresh. Emitted only when the ids or
     /// names actually differ from the previous snapshot.
     void desktopsChanged();
+    /// Exactly one desktop was removed, and this is the 1-based POSITION it
+    /// held before it went. Emitted ahead of desktopCountChanged, because a
+    /// consumer keyed on positions has to act in that order: drop the removed
+    /// position's state first, then shift everything above it down one.
+    ///
+    /// desktopCountChanged cannot carry this. It reports the new count, and
+    /// after a mid-list removal every surviving position is still within it —
+    /// so a consumer seeing only the count cannot tell 2-of-4 was deleted from
+    /// 4-of-4, and pruning "everything past the new count" drops the TOPMOST
+    /// desktop's state instead of the removed one's.
+    ///
+    /// Only for the unambiguous case: exactly one id gone and none added. A
+    /// reorder, a simultaneous add and remove, or a multi-desktop change
+    /// leaves this silent and the count handler's out-of-range sweep is all a
+    /// consumer gets.
+    void desktopRemovedAt(int removedPosition);
     /// A single screen's current virtual desktop changed (per-output virtual
     /// desktops). The primary trigger the daemon's per-screen desktop handler
     /// subscribes to; in single-desktop mode it is driven the same for every

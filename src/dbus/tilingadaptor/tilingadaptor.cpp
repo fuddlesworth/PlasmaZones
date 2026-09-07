@@ -844,6 +844,12 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)
 {
+    releaseWindowTrackingVia(windowId, nullptr, /*armMoveExcuse=*/true);
+}
+
+void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner,
+                                             bool armMoveExcuse)
+{
     if (windowId.isEmpty()) {
         qCDebug(lcDbusTiling) << "releaseWindowTracking: empty window ID";
         return;
@@ -877,7 +883,14 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     // the store's by the engine's takeForReopen (suppressing the
     // reclaim-credit burn). A single flag consumed at the first moment would
     // already be gone by the second — see markInstanceMovedLive.
-    m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    //
+    // Only the ADAPTOR's is optional: it is consumed by the next dispatched
+    // open, so a caller with no re-announce to follow would leave it standing
+    // for a later, unrelated one. The store's is armed unconditionally
+    // because takeForReopen reads it on every path.
+    if (armMoveExcuse) {
+        m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    }
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         m_windowTrackingAdaptor->service()->placementStore().markInstanceMovedLive(windowId);
     }
@@ -885,9 +898,12 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
         return;
     }
     qCDebug(lcDbusTiling) << "releaseWindowTracking: windowId=" << windowId;
-    // Same pre-untrack read as windowClosed, for the same focus re-read.
-    const QString releasingScreen = trackedScreenForWindow(windowId);
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+    // Same pre-untrack read as windowClosed, for the same focus re-read. Both
+    // this and the untrack below go to the NAMED engine when the caller
+    // supplied one — see releaseWindowTrackingVia's doc for why re-deriving
+    // either through the id-based predicate would be wrong there.
+    const QString releasingScreen = owner ? owner->screenForTrackedWindow(windowId) : trackedScreenForWindow(windowId);
+    if (PhosphorEngine::IPlacementEngine* engine = owner ? owner : engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);
     }
     if (!releasingScreen.isEmpty()) {
@@ -928,7 +944,14 @@ void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
 
 void TilingAdaptor::clearEngine()
 {
-    // Interface-only borrows, no connections to drop. Also neutralise any
+    // The registry subscription is the one late-bound borrow here that DOES
+    // hold a connection, so it is severed with the engines rather than left to
+    // the stop path. Harmless today (the surviving lambda would walk an empty
+    // engine list), but the teardown contract in this file is that every
+    // borrow is dropped symmetrically and grep-discoverably.
+    QObject::disconnect(m_registryDesktopConnection);
+    m_registryDesktopConnection = {};
+    // The rest are interface-only borrows, no connections to drop. Also neutralise any
     // pending coalesced announce (its lambda re-checks the empty list) and
     // every per-session queue/dedup cache except m_activeLayouts — none of it
     // may leak into a restart (a stale dedup value could suppress the first

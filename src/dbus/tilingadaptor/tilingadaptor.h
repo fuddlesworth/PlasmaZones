@@ -327,9 +327,15 @@ public Q_SLOTS:
      * @brief Drop a LIVE window from engine tracking without a close
      *
      * The drag-bypass revert's tracking drop (the effect's drag_snap /
-     * lifecycle_wiring transitions). Unlike windowClosed, NO placement
-     * capture runs: the window is not dying, and its current frame is
-     * transient drag state that must never be recorded as a float-back.
+     * lifecycle_wiring transitions) and the effect's desktop-departure arm.
+     * Unlike windowClosed, NO placement capture runs: the window is not
+     * dying, and its current frame is transient drag state that must never be
+     * recorded as a float-back.
+     *
+     * The owning engine is resolved by window id, which is right for these
+     * callers because each is the effect telling the daemon about a window
+     * whose engine it does not know. reconcileWindowDesktops has already
+     * identified the holding engine and uses the private overload instead.
      *
      * @param windowId Window identifier from KWin
      */
@@ -744,6 +750,29 @@ private:
     /// The screen whose engine tracks @p windowId, or empty. Strict, for
     /// the same reason as ownerFocusedWindow.
     QString trackedScreenForWindow(const QString& windowId) const;
+
+    /// Shared body of releaseWindowTracking, with the two engine-dependent
+    /// steps parameterised.
+    ///
+    /// @param owner The engine to release from, or nullptr to resolve it by
+    ///        window id. Naming it matters when the CALLER already knows: the
+    ///        id-based resolution runs isWindowTracked, whose contract is
+    ///        per-engine (ScrollEngine answers off the raw reverse-map key, so
+    ///        a phantom entry can win), and falls back to the first lifecycle
+    ///        engine when nothing answers. A caller that identified the holder
+    ///        through the membership-grade heldKeyForWindow must not have that
+    ///        answer re-derived by a weaker predicate. The screen read for the
+    ///        focus refresh is taken from the same engine for the same reason.
+    /// @param armMoveExcuse Whether to arm the adaptor's move-release
+    ///        one-shot. True for the effect's live-move callers, which
+    ///        re-announce the window immediately afterwards and would
+    ///        otherwise have that announce read as a session restore. FALSE
+    ///        for the desktop reconcile: nothing is guaranteed to re-announce,
+    ///        and an unconsumed one-shot is spent by a later unrelated
+    ///        announce, suppressing a legitimate cross-screen reclaim. The
+    ///        placement store's own move marker is armed either way — that one
+    ///        is consumed by takeForReopen and is load-bearing on both paths.
+    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner, bool armMoveExcuse);
     /// Per-screen map state that follows the managed set: every screen the
     /// coalesced announce dropped loses its retained batch and, if it had a
     /// broadcast focus, announces the empty one; every announced screen is

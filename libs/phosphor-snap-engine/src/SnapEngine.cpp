@@ -300,6 +300,56 @@ void SnapEngine::pruneStatesForDesktop(int removedDesktop)
     m_context.pruneDesktop(removedDesktop);
 }
 
+void SnapEngine::renumberDesktopsAfterRemoval(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return;
+    }
+    // Snapping has no stack to re-flow and no strip to announce, so this is
+    // the whole operation: move each state and its reverse-map entries down
+    // one. It still matters — a zone assignment filed under the number the
+    // desktop had before would be handed to whichever desktop takes that
+    // number next.
+    //
+    // The global holder has an empty screenId and no desktop identity, so it
+    // is excluded here exactly as it is in the prune above.
+    //
+    // ASCENDING: the prune ran first, so removedDesktop is vacant when
+    // removedDesktop+1 moves in, and each later target was vacated by the step
+    // before it.
+    QList<int> desktops;
+    for (const int desktop : desktopsWithActiveState()) {
+        if (desktop > removedDesktop) {
+            desktops.append(desktop);
+        }
+    }
+    std::sort(desktops.begin(), desktops.end());
+    for (const int desktop : std::as_const(desktops)) {
+        QList<PhosphorEngine::PlacementStateKey> atDesktop;
+        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+            if (!it.key().screenId.isEmpty() && it.key().desktop == desktop) {
+                atDesktop.append(it.key());
+            }
+        }
+        for (const PhosphorEngine::PlacementStateKey& oldKey : std::as_const(atDesktop)) {
+            const PhosphorEngine::PlacementStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
+            SnapState* moving = m_states.takeState(oldKey);
+            if (!moving) {
+                continue;
+            }
+            // A state already at the target is a transient placeholder from a
+            // lazy lookup; snapping creates them on placement and they hold no
+            // windows the reverse map has not already been told about.
+            if (SnapState* existing = m_states.takeState(newKey)) {
+                existing->deleteLater();
+            }
+            m_states.insertState(newKey, moving);
+            m_states.rekeyWindows(oldKey, newKey);
+        }
+    }
+    m_context.renumberDesktopsAfterRemoval(removedDesktop);
+}
+
 void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
     const QSet<QString> valid(validActivities.begin(), validActivities.end());

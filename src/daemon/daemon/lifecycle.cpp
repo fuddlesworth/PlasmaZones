@@ -809,6 +809,14 @@ void Daemon::stop()
         // Same contract for the tile-defer liveness resolver, which captures
         // QPointers to both tiling engines.
         concreteSnap->setTilingEngineLiveResolver({});
+        // The window-registry borrow belongs here too. Member order means the
+        // registry outlives the engines, so nothing can deref it in the
+        // teardown gap; this is the grep-discoverable contract, and it matches
+        // the clear the tiling adaptor's identically-named borrow gets below.
+        concreteSnap->setWindowRegistry(nullptr);
+        // The navigation-state provider is a raw borrow of a Qt-child adaptor,
+        // in the same class as the zone-detection pointer noted below.
+        concreteSnap->setNavigationStateProvider(nullptr);
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by

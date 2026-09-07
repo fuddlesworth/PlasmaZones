@@ -248,6 +248,34 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     const bool currentChanged = (newCurrent != m_currentDesktop);
     const bool countChanged = (newCount != m_desktopCount);
 
+    // Which POSITION went, while the old list is still here to compare
+    // against. Ids are stable across a renumber and positions are not, so this
+    // is the only moment the answer exists — see desktopRemovedAt's doc for
+    // why the count alone cannot supply it. Restricted to the unambiguous
+    // one-out-none-in case: anything else and consumers fall back to the
+    // count handler's out-of-range sweep.
+    int removedPosition = 0;
+    if (newIds.size() == m_desktopIds.size() - 1) {
+        const QSet<QString> survivors(newIds.cbegin(), newIds.cend());
+        for (int i = 0; i < m_desktopIds.size(); ++i) {
+            if (!survivors.contains(m_desktopIds.at(i))) {
+                // A second miss means this is not a simple removal.
+                removedPosition = removedPosition == 0 ? i + 1 : -1;
+            }
+        }
+        // Every surviving id must be one we already had, or something was
+        // added in the same turn and the positions do not simply shift.
+        if (removedPosition > 0) {
+            const QSet<QString> previous(m_desktopIds.cbegin(), m_desktopIds.cend());
+            for (const QString& id : newIds) {
+                if (!previous.contains(id)) {
+                    removedPosition = -1;
+                    break;
+                }
+            }
+        }
+    }
+
     m_desktopIds = newIds;
     m_desktopNames = newNames;
     m_desktopCount = newCount;
@@ -266,6 +294,14 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     // state on the 1-based number and re-read only on this signal.
     if (currentChanged) {
         Q_EMIT currentDesktopChanged(m_currentDesktop);
+    }
+    // BEFORE the count, deliberately. A consumer keyed on positions has to
+    // drop the removed position's state and shift the rest down before
+    // anything reasons about the new count — and once it has, the count
+    // handler's "prune everything past newCount" sweep correctly finds
+    // nothing left to do.
+    if (removedPosition > 0) {
+        Q_EMIT desktopRemovedAt(removedPosition);
     }
     // The count notification belongs HERE, where the value is committed.
     // The create/remove handlers used to emit it themselves, which worked

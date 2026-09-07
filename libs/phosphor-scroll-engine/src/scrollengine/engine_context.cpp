@@ -361,133 +361,168 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                 // correctly stays silent for a pinned screen.
                 contextChangedScreens.insert(screenId);
                 const PhosphorEngine::PlacementStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
-                // A pending background-focus emit armed while this screen sat
-                // pinned names the key we are moving off. It can never match
-                // again in this era, and a desktop index KWin later reuses
-                // would make it match the WRONG era, so drop it here rather
-                // than leave it standing. The centering this unpin owes is not
-                // lost with it: the loop at the end of this function arms
-                // m_forceEmitScreens for every screen whose announce fires, and
-                // a migration that moved the key is exactly that case.
-                m_pendingFocusEmitContexts.remove(oldKey);
-                // A live preview's captured keys are plain copies that
-                // rekeyWindows cannot rewrite — migrating under it would
-                // strand the preview on the dead key and commit would then
-                // materialise a fresh empty state there. Every sibling
-                // context-mutating path unwinds the preview the same way.
-                if (m_dragInsertPreview
-                    && (m_dragInsertPreview->targetKey == oldKey
-                        || (m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorKey == oldKey))) {
-                    cancelDragInsertPreview();
-                }
-                if (ScrollState* migrated = m_states.stateForKey(oldKey)) {
-                    if (ScrollState* existing = m_states.stateForKey(newKey)) {
-                        // Normally a placeholder a transient lookup created,
-                        // and empty. If it is NOT, its windows are real and
-                        // discarding the state silently would leave them
-                        // tracked at a key nothing holds, with no
-                        // windowsReleased for the daemon's restore consumers.
-                        // Hand them back through the FULL release, matching
-                        // pruneStatesForRemovedScreen: the placement-record
-                        // snapshot and the unfloat-slot drop happen inside
-                        // releaseScreenState, the float markers and
-                        // last-applied rects survive for the handler, and the
-                        // emit + final sweep run after the loop.
-                        if (!existing->managedWindows().isEmpty()) {
-                            qCWarning(lcScrollEngine)
-                                << "updateStickyScreenPins: releasing" << existing->managedWindows().size()
-                                << "window(s) held by the state the unpin migration displaced on" << screenId;
-                            displacedScreens.insert(screenId);
-                        }
-                        // RELEASE FIRST, then unhook. releaseScreenState's
-                        // placement snapshot goes through capturePlacement ->
-                        // stateForWindow, which resolves the window's reverse-map
-                        // key and then looks THAT key up in the forward map. Take
-                        // the state out first and every one of those lookups
-                        // misses, so capturePlacement returns nullopt for every
-                        // displaced window and not one record is written — the
-                        // exact loss the comment above says this arm prevents.
-                        // removeStatesIf documents the same ordering ("invoke
-                        // onRemove BEFORE dropping the entry") for its callers.
-                        releaseScreenState(existing, displacedWindows);
-                        m_states.takeState(newKey);
-                    }
-                    m_states.takeState(oldKey);
-                    m_states.insertState(newKey, migrated);
-                    m_states.rekeyWindows(oldKey, newKey);
-                    // The stash maps are keyed by context too — left at the
-                    // old key they become unreachable (no live context
-                    // resolves it) until a prune reaps them, and a restore
-                    // for the new key finds nothing. Move-only-if-vacant:
-                    // the new key can already hold a stash awaiting
-                    // re-adoption, and clobbering it would lose those
-                    // pending restores — in that case the old-key entry
-                    // stays for the prunes, exactly the pre-fix behaviour.
-                    // "Vacant" means no STRUCTURE: a cursor-only carrier at
-                    // the new key (an all-floating exit's stash) holds no
-                    // windows to lose, so a structural stash moves over it and
-                    // absorbs its cursor with qMax rather than dropping it —
-                    // and the blueprint IDENTITY that cursor was counting
-                    // against, when the moved entry hands none over of its own.
-                    // The two are only meaningful together (StashedStrip::
-                    // blueprintIdentity): keeping the displaced entry's cursor
-                    // while dropping its identity leaves the consumption site
-                    // unable to tell a resumed template from a swapped one.
-                    if (m_stripStash.contains(oldKey) && m_stripStash.value(newKey).isEmpty()) {
-                        StashedStrip moved = m_stripStash.take(oldKey);
-                        const StashedStrip displaced = m_stripStash.value(newKey);
-                        // Absorb the displaced cursor ONLY when the two cursors
-                        // are counting against the same blueprint — either the
-                        // identities match, or the moved entry has none of its
-                        // own and takes the displaced one below. Two entries
-                        // with DIFFERENT valid identities are counting against
-                        // different templates, and a qMax across them would pair
-                        // this entry's identity with the other's progress, which
-                        // is the pairing the paragraph above says must hold.
-                        const bool sameBlueprint = !moved.blueprintIdentity.isValid()
-                            || !displaced.blueprintIdentity.isValid()
-                            || moved.blueprintIdentity == displaced.blueprintIdentity;
-                        if (sameBlueprint) {
-                            moved.blueprintCursor = qMax(moved.blueprintCursor, displaced.blueprintCursor);
-                        }
-                        if (!moved.blueprintIdentity.isValid() && displaced.blueprintIdentity.isValid()) {
-                            moved.blueprintIdentity = displaced.blueprintIdentity;
-                        }
-                        m_stripStash.insert(newKey, moved);
-                        if (m_stripStashConsumed.contains(oldKey)) {
-                            m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
-                        }
-                    }
-                    // The mid-burst deferred-apply marker is context-keyed too:
-                    // left at the old key it can never drain (endArrivalBurst
-                    // resolves live keys), silently dropping the deferred apply
-                    // and its focusWindowAfter. Same move-only-if-vacant rule
-                    // as the stash.
-                    if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
-                        m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
-                    }
-                    // The per-context rule/template overrides move with the
-                    // state for the same reason: left at the old key the
-                    // migrated strip resolves no template, no preset
-                    // vocabulary and no axis override until the daemon's next
-                    // per-pass push re-seeds them, and its blueprint identity
-                    // compare meets an empty blueprint in the meantime. Same
-                    // move-only-if-vacant rule as the stash above — a map
-                    // already sitting at the new key was resolved FOR that
-                    // context and outranks the one being migrated into it.
-                    // An EMPTY map counts as vacant: the daemon pushes {} for
-                    // every scrolling context that resolves nothing, so
-                    // presence alone no longer says the context was resolved
-                    // to anything worth outranking the migrated map.
-                    if (m_perScreenOverrides.contains(oldKey) && m_perScreenOverrides.value(newKey).isEmpty()) {
-                        m_perScreenOverrides.insert(newKey, m_perScreenOverrides.take(oldKey));
-                    }
+                if (migrateStateKey(oldKey, newKey, displacedWindows, displacedScreens)) {
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;
                 }
             }
         }
     }
+    finishDisplacedRelease(displacedWindows, displacedScreens);
+    // Strip identity last, AFTER the release above, so a consumer sees the
+    // windows leave before it is told the screen is showing a different strip.
+    // Re-check membership: a re-entrant setActiveScreens may have taken the
+    // screen out of the set since the loop collected it, and the announce is
+    // emit-on-change anyway, so a key that ended up where it started is free.
+    for (const QString& screenId : std::as_const(contextChangedScreens)) {
+        if (!m_scrollingScreens.contains(screenId)) {
+            continue;
+        }
+        // Arm and retile with the announcement, the same pairing
+        // setActiveScreens makes: the consumer has just been told to retire
+        // this screen's strip-scoped state, so something has to carry the
+        // batch that repopulates it. The migration moved the strip to a
+        // context whose rects may already match what was last applied, which
+        // is precisely the case the emit-on-change gate would suppress.
+        if (announceStripContextIfChanged(screenId)) {
+            m_forceEmitScreens.insert(screenId);
+            scheduleRetileForScreen(screenId);
+        }
+    }
+}
+
+bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
+                                   const PhosphorEngine::PlacementStateKey& newKey, QStringList& displacedWindows,
+                                   QSet<QString>& displacedScreens)
+{
+    if (oldKey == newKey) {
+        return false;
+    }
+    const QString screenId = oldKey.screenId;
+    // A pending background-focus emit armed against the key we are moving off
+    // can never match again in this era, and a desktop index KWin later reuses
+    // would make it match the WRONG era, so drop it rather than leave it
+    // standing. The centering it owed is not lost: every caller arms
+    // m_forceEmitScreens for the screens whose announce fires, and a migration
+    // that moved the key is exactly that case.
+    m_pendingFocusEmitContexts.remove(oldKey);
+    // A live preview's captured keys are plain copies that rekeyWindows cannot
+    // rewrite — migrating under it would strand the preview on the dead key
+    // and commit would then materialise a fresh empty state there. Every
+    // sibling context-mutating path unwinds the preview the same way.
+    if (m_dragInsertPreview
+        && (m_dragInsertPreview->targetKey == oldKey
+            || (m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorKey == oldKey))) {
+        cancelDragInsertPreview();
+    }
+    ScrollState* migrated = m_states.stateForKey(oldKey);
+    if (!migrated) {
+        return false;
+    }
+    if (ScrollState* existing = m_states.stateForKey(newKey)) {
+        // Normally a placeholder a transient lookup created,
+        // and empty. If it is NOT, its windows are real and
+        // discarding the state silently would leave them
+        // tracked at a key nothing holds, with no
+        // windowsReleased for the daemon's restore consumers.
+        // Hand them back through the FULL release, matching
+        // pruneStatesForRemovedScreen: the placement-record
+        // snapshot and the unfloat-slot drop happen inside
+        // releaseScreenState, the float markers and
+        // last-applied rects survive for the handler, and the
+        // emit + final sweep run after the loop.
+        if (!existing->managedWindows().isEmpty()) {
+            qCWarning(lcScrollEngine) << "updateStickyScreenPins: releasing" << existing->managedWindows().size()
+                                      << "window(s) held by the state the unpin migration displaced on" << screenId;
+            displacedScreens.insert(screenId);
+        }
+        // RELEASE FIRST, then unhook. releaseScreenState's
+        // placement snapshot goes through capturePlacement ->
+        // stateForWindow, which resolves the window's reverse-map
+        // key and then looks THAT key up in the forward map. Take
+        // the state out first and every one of those lookups
+        // misses, so capturePlacement returns nullopt for every
+        // displaced window and not one record is written — the
+        // exact loss the comment above says this arm prevents.
+        // removeStatesIf documents the same ordering ("invoke
+        // onRemove BEFORE dropping the entry") for its callers.
+        releaseScreenState(existing, displacedWindows);
+        m_states.takeState(newKey);
+    }
+    m_states.takeState(oldKey);
+    m_states.insertState(newKey, migrated);
+    m_states.rekeyWindows(oldKey, newKey);
+    // The stash maps are keyed by context too — left at the
+    // old key they become unreachable (no live context
+    // resolves it) until a prune reaps them, and a restore
+    // for the new key finds nothing. Move-only-if-vacant:
+    // the new key can already hold a stash awaiting
+    // re-adoption, and clobbering it would lose those
+    // pending restores — in that case the old-key entry
+    // stays for the prunes, exactly the pre-fix behaviour.
+    // "Vacant" means no STRUCTURE: a cursor-only carrier at
+    // the new key (an all-floating exit's stash) holds no
+    // windows to lose, so a structural stash moves over it and
+    // absorbs its cursor with qMax rather than dropping it —
+    // and the blueprint IDENTITY that cursor was counting
+    // against, when the moved entry hands none over of its own.
+    // The two are only meaningful together (StashedStrip::
+    // blueprintIdentity): keeping the displaced entry's cursor
+    // while dropping its identity leaves the consumption site
+    // unable to tell a resumed template from a swapped one.
+    if (m_stripStash.contains(oldKey) && m_stripStash.value(newKey).isEmpty()) {
+        StashedStrip moved = m_stripStash.take(oldKey);
+        const StashedStrip displaced = m_stripStash.value(newKey);
+        // Absorb the displaced cursor ONLY when the two cursors
+        // are counting against the same blueprint — either the
+        // identities match, or the moved entry has none of its
+        // own and takes the displaced one below. Two entries
+        // with DIFFERENT valid identities are counting against
+        // different templates, and a qMax across them would pair
+        // this entry's identity with the other's progress, which
+        // is the pairing the paragraph above says must hold.
+        const bool sameBlueprint = !moved.blueprintIdentity.isValid() || !displaced.blueprintIdentity.isValid()
+            || moved.blueprintIdentity == displaced.blueprintIdentity;
+        if (sameBlueprint) {
+            moved.blueprintCursor = qMax(moved.blueprintCursor, displaced.blueprintCursor);
+        }
+        if (!moved.blueprintIdentity.isValid() && displaced.blueprintIdentity.isValid()) {
+            moved.blueprintIdentity = displaced.blueprintIdentity;
+        }
+        m_stripStash.insert(newKey, moved);
+        if (m_stripStashConsumed.contains(oldKey)) {
+            m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
+        }
+    }
+    // The mid-burst deferred-apply marker is context-keyed too:
+    // left at the old key it can never drain (endArrivalBurst
+    // resolves live keys), silently dropping the deferred apply
+    // and its focusWindowAfter. Same move-only-if-vacant rule
+    // as the stash.
+    if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
+        m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
+    }
+    // The per-context rule/template overrides move with the
+    // state for the same reason: left at the old key the
+    // migrated strip resolves no template, no preset
+    // vocabulary and no axis override until the daemon's next
+    // per-pass push re-seeds them, and its blueprint identity
+    // compare meets an empty blueprint in the meantime. Same
+    // move-only-if-vacant rule as the stash above — a map
+    // already sitting at the new key was resolved FOR that
+    // context and outranks the one being migrated into it.
+    // An EMPTY map counts as vacant: the daemon pushes {} for
+    // every scrolling context that resolves nothing, so
+    // presence alone no longer says the context was resolved
+    // to anything worth outranking the migrated map.
+    if (m_perScreenOverrides.contains(oldKey) && m_perScreenOverrides.value(newKey).isEmpty()) {
+        m_perScreenOverrides.insert(newKey, m_perScreenOverrides.take(oldKey));
+    }
+    return true;
+}
+
+void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const QSet<QString>& displacedScreens)
+{
     if (!displacedWindows.isEmpty()) {
         // A re-entrant setActiveScreens (see the snapshot note above) may
         // already have released some collected windows through its own
@@ -512,26 +547,6 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
             m_lastAppliedMaximizedToEdges.remove(windowId);
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
-        }
-    }
-    // Strip identity last, AFTER the release above, so a consumer sees the
-    // windows leave before it is told the screen is showing a different strip.
-    // Re-check membership: a re-entrant setActiveScreens may have taken the
-    // screen out of the set since the loop collected it, and the announce is
-    // emit-on-change anyway, so a key that ended up where it started is free.
-    for (const QString& screenId : std::as_const(contextChangedScreens)) {
-        if (!m_scrollingScreens.contains(screenId)) {
-            continue;
-        }
-        // Arm and retile with the announcement, the same pairing
-        // setActiveScreens makes: the consumer has just been told to retire
-        // this screen's strip-scoped state, so something has to carry the
-        // batch that repopulates it. The migration moved the strip to a
-        // context whose rects may already match what was last applied, which
-        // is precisely the case the emit-on-change gate would suppress.
-        if (announceStripContextIfChanged(screenId)) {
-            m_forceEmitScreens.insert(screenId);
-            scheduleRetileForScreen(screenId);
         }
     }
 }
@@ -697,6 +712,71 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     pruneContextKeyedScreenArms([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
+}
+
+void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return;
+    }
+    // ASCENDING, and the sort is load-bearing. pruneStatesForDesktop ran
+    // first, so removedDesktop is vacant when removedDesktop+1 moves in and
+    // each later target was vacated by the step before it. Descending collides
+    // at every step. desktopsWithActiveState is a QSet with unspecified
+    // iteration order, so it cannot be walked directly.
+    QList<int> desktops;
+    for (const int desktop : desktopsWithActiveState()) {
+        if (desktop > removedDesktop) {
+            desktops.append(desktop);
+        }
+    }
+    if (desktops.isEmpty()) {
+        m_context.renumberDesktopsAfterRemoval(removedDesktop);
+        return;
+    }
+    std::sort(desktops.begin(), desktops.end());
+
+    QStringList displacedWindows;
+    QSet<QString> displacedScreens;
+    QSet<QString> touchedScreens;
+    for (const int desktop : std::as_const(desktops)) {
+        // Snapshot the keys at this desktop before moving any of them: the
+        // move mutates the very map states() iterates.
+        QList<PhosphorEngine::PlacementStateKey> atDesktop;
+        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+            if (it.key().desktop == desktop) {
+                atDesktop.append(it.key());
+            }
+        }
+        for (const PhosphorEngine::PlacementStateKey& oldKey : std::as_const(atDesktop)) {
+            const PhosphorEngine::PlacementStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
+            if (migrateStateKey(oldKey, newKey, displacedWindows, displacedScreens)) {
+                touchedScreens.insert(oldKey.screenId);
+            }
+        }
+    }
+    finishDisplacedRelease(displacedWindows, displacedScreens);
+    // The pins and the per-output desktop map index the same numbering as the
+    // keys just moved, so they shift together or they name a position whose
+    // content moved.
+    m_context.renumberDesktopsAfterRemoval(removedDesktop);
+
+    if (!touchedScreens.isEmpty()) {
+        qCInfo(lcScrollEngine) << "renumberDesktopsAfterRemoval: shifted strips above desktop" << removedDesktop
+                               << "down one on" << touchedScreens.size() << "screen(s)";
+        // A screen now showing a re-keyed strip has a layout the compositor
+        // has never seen under this numbering, and the emit-on-change gate
+        // would swallow it — the same pairing the unpin migration makes.
+        for (const QString& screenId : std::as_const(touchedScreens)) {
+            if (!m_scrollingScreens.contains(screenId)) {
+                continue;
+            }
+            if (announceStripContextIfChanged(screenId)) {
+                m_forceEmitScreens.insert(screenId);
+            }
+            scheduleRetileForScreen(screenId);
+        }
+    }
 }
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)

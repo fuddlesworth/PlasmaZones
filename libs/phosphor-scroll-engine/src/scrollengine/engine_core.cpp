@@ -1431,6 +1431,10 @@ void ScrollEngine::retile(const QString& screenId)
     if (!m_scrollingScreens.contains(screenId)) {
         return;
     }
+    // Same drop the all-screens branch makes: this call IS the apply, so a
+    // queued retile for the screen would run a second full pass when it
+    // drains.
+    m_pendingRetiles.remove(screenId);
     applyLayout(screenId);
 }
 
