@@ -354,10 +354,12 @@ public:
     /// hands each of them only the damage region — pill pixels outside it
     /// would surface over whatever is stacked above the strip until the next
     /// full-damage frame.
-    /// Returns true only when the blit was actually issued: a latched
+    /// Returns true when the pills stand on screen after this pass: a latched
     /// raster/upload failure, an over-limit bounds, or a missing texture
     /// return false, and the caller's pass outcome (what gates pill input)
-    /// must record that nothing is on screen.
+    /// must record that nothing is on screen. A @p clipRegion that misses the
+    /// band entirely still returns true with no draw issued, because the
+    /// pixels the last pass painted are untouched by this one.
     bool paint(KWin::LogicalOutput* output, const KWin::RenderTarget& renderTarget,
                const KWin::RenderViewport& viewport, const KWin::Region& clipRegion, const QPointF& viewOffset);
 
