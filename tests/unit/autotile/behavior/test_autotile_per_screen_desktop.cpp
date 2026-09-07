@@ -270,9 +270,15 @@ private Q_SLOTS:
         QVERIFY(engine.heldKeyForWindow(QStringLiteral("win-s2")).has_value());
         QCOMPARE(engine.heldKeyForWindow(QStringLiteral("win-s2"))->desktop, 2);
         // And the screens still resolve to those same states, which is what
-        // fails when the tracker and the state keys disagree.
-        QVERIFY(engine.tilingStateForScreen(kS1)->containsWindow(QStringLiteral("win-s1")));
-        QVERIFY(engine.tilingStateForScreen(kS2)->containsWindow(QStringLiteral("win-s2")));
+        // fails when the tracker and the state keys disagree: the tracker names
+        // a desktop the states are not on, so the lookup mints a fresh empty
+        // one there instead of finding the migrated stack.
+        PhosphorTiles::TilingState* s1 = engine.tilingStateForScreen(kS1);
+        PhosphorTiles::TilingState* s2 = engine.tilingStateForScreen(kS2);
+        QVERIFY(s1 != nullptr);
+        QVERIFY(s2 != nullptr);
+        QVERIFY(s1->containsWindow(QStringLiteral("win-s1")));
+        QVERIFY(s2->containsWindow(QStringLiteral("win-s2")));
     }
 };
 

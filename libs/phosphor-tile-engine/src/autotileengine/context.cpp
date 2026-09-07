@@ -752,10 +752,10 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
         }
     }
 
-    if (desktops.isEmpty()) {
-        m_context.renumberDesktopsAfterRemoval(removedDesktop);
-        return;
-    }
+    // No early return when there is no live state above the removal: the
+    // stateless moves below still have to run, and that is the common case
+    // rather than a corner — a stash outlives the state it was written for.
+    // Sorting and walking an empty list costs nothing.
     std::sort(desktops.begin(), desktops.end());
 
     QSet<QString> touchedScreens;
@@ -776,13 +776,19 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
         }
     }
     // NOW the stateless bags, with every state-owned move already done so the
-    // loop cannot pick one up a second time. Descending, so a bag moving down
-    // never lands on one still waiting its turn, and only onto a VACANT key: a
-    // bag the loop already placed there belongs to a live state and outranks a
-    // stateless leftover, which the prunes would have reaped anyway.
+    // loop cannot pick one up a second time.
+    //
+    // ASCENDING, for the same reason the state loop above is: the prune left
+    // removedDesktop vacant, so the lowest bag lands safely and each later
+    // target was vacated by the step before it. Descending would find every
+    // destination still occupied by the bag that has not moved yet.
+    //
+    // A destination that is STILL occupied after that belongs to a live state
+    // the loop placed there, which outranks a stateless leftover — the prunes
+    // would have reaped the leftover anyway, so it is dropped.
     std::sort(statelessStashKeys.begin(), statelessStashKeys.end(),
               [](const TilingStateKey& a, const TilingStateKey& b) {
-                  return a.desktop > b.desktop;
+                  return a.desktop < b.desktop;
               });
     for (const TilingStateKey& oldKey : std::as_const(statelessStashKeys)) {
         auto it = m_scriptStateStash.find(oldKey);

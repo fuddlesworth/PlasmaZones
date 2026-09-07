@@ -747,12 +747,14 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     // moving it twice, and for m_pendingFocusEmitContexts migrateStateKey
     // REMOVES the old key rather than moving it, so a shifted context landing
     // there would be deleted outright.
-    // Descending, so an entry moving down never lands on one still waiting its
-    // turn.
-    const auto sortDescending = [](QList<PhosphorEngine::PlacementStateKey>& keys) {
+    // ASCENDING, for the same reason the state loop below is: the prune left
+    // removedDesktop vacant, so the lowest entry lands safely and each later
+    // target was vacated by the step before it. Descending would find every
+    // destination still occupied by the entry that has not moved yet.
+    const auto sortAscending = [](QList<PhosphorEngine::PlacementStateKey>& keys) {
         std::sort(keys.begin(), keys.end(),
                   [](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
-                      return a.desktop > b.desktop;
+                      return a.desktop < b.desktop;
                   });
         return keys;
     };
@@ -763,7 +765,7 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
                 keys.append(it.key());
             }
         }
-        return sortDescending(keys);
+        return sortAscending(keys);
     };
     const QList<PhosphorEngine::PlacementStateKey> statelessStash = statelessHashKeys(m_stripStash);
     const QList<PhosphorEngine::PlacementStateKey> statelessStashConsumed = statelessHashKeys(m_stripStashConsumed);
@@ -775,12 +777,12 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
             statelessFocusContexts.append(key);
         }
     }
-    sortDescending(statelessFocusContexts);
+    sortAscending(statelessFocusContexts);
 
-    if (desktops.isEmpty()) {
-        m_context.renumberDesktopsAfterRemoval(removedDesktop);
-        return;
-    }
+    // No early return when there is no live state above the removal: the
+    // stateless moves below still have to run, and that is the common case
+    // rather than a corner — a stash outlives the state it was written for.
+    // Sorting and walking an empty list costs nothing.
     std::sort(desktops.begin(), desktops.end());
 
     QStringList displacedWindows;
@@ -806,8 +808,9 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
 
     // NOW the stateless entries, with every state-owned move already done so
     // the loop cannot pick one up a second time. Only onto a VACANT key: an
-    // entry the loop placed there belongs to a live state and outranks a
-    // stateless leftover, which the prunes would have reaped anyway.
+    // entry still there after the ascending walk belongs to a live state the
+    // loop placed there, and that outranks a stateless leftover the prunes
+    // would have reaped anyway.
     const auto moveStatelessDown = [](auto& map, const QList<PhosphorEngine::PlacementStateKey>& keys) {
         for (const PhosphorEngine::PlacementStateKey& oldKey : keys) {
             const auto it = map.constFind(oldKey);

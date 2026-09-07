@@ -508,6 +508,17 @@ void Daemon::connectDesktopActivity()
                     }
                     m_lastEngineOrders = std::move(renumberedOrders);
                 }
+                // VirtualDesktopManager shifted its own per-screen desktop map for
+                // this removal, but SILENTLY — emitting screenDesktopChanged there
+                // would run the whole context-switch pass against engine state
+                // that had not been renumbered yet. Nothing else re-resolves, so
+                // the published active-layout map and the overlays would keep the
+                // pre-renumber answer for every screen whose number moved. Re-diff
+                // here, where the engines are already correct.
+                diffActiveAssignments();
+                if (m_overlayService) {
+                    m_overlayService->hideDisabledAndRefresh();
+                }
                 qCInfo(lcDaemon) << "Virtual desktop at position" << removedPosition
                                  << "was removed — pruned it and renumbered the states above it";
             });
@@ -584,7 +595,9 @@ void Daemon::connectDesktopActivity()
                 // renumbers a still-in-range screen (desktop 3 becomes 2) leaves
                 // the per-screen map holding the stale number until the effect
                 // re-reports that output's desktop; a diff here would read the
-                // same number this handler cannot correct. pruneContextMapsForDesktop
+                // same number. VirtualDesktopManager shifts that map itself on the
+                // desktopRemovedAt path above, silently, and the handler there does
+                // the re-diff the silence would otherwise cost. pruneContextMapsForDesktop
                 // touches only m_lastEngineOrders, which no resolution reads.
             });
 
