@@ -499,6 +499,13 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
             moved.blueprintIdentity = displaced.blueprintIdentity;
         }
         m_stripStash.insert(newKey, moved);
+        // The one mover here with NO vacancy check, unlike the stash above and
+        // the two maps below. It is inside the stash move, which is already
+        // gated on the destination's stash being empty, and a consumed marker
+        // without a stash to consume is meaningless — so overwriting one is
+        // arguably right. Nobody has been able to construct that state to
+        // confirm it either way; if you are here because a consumed cursor came
+        // back wrong, this asymmetry is the first thing to check.
         if (m_stripStashConsumed.contains(oldKey)) {
             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
         }
