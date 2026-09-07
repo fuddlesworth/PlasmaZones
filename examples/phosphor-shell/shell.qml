@@ -641,6 +641,10 @@ Item {
             "notification": {
                 "component": notificationPanelComponent,
                 "keyboard": false
+            },
+            "clock": {
+                "component": calendarPanelComponent,
+                "keyboard": false
             }
         })
 
@@ -680,6 +684,12 @@ Item {
         NotificationPanel {}
     }
 
+    Component {
+        id: calendarPanelComponent
+
+        CalendarPanel {}
+    }
+
     // Open (or close) the panel belonging to bar widget `id`, hanging under
     // the chip that fired.
     //
@@ -698,6 +708,14 @@ Item {
         // bar-centre anchor rather than pinning the panel to the left edge.
         const centre = BarRegistry.anchorCenterFor(source);
         const anchored = centre >= 0;
+        // Where the panel sits along the screen, 0..1. This is what binds
+        // the panel's stroke and top band to the one screen-wide gradient
+        // rather than giving each panel a private colour: a chip on the
+        // left opens a cyan-leaning surface, one on the right a
+        // rose-leaning one. Falls back to centre when the chip's position
+        // could not be resolved.
+        const screen = BarRegistry.screenOf(source);
+        const railT = anchored && screen && screen.width > 0 ? Math.max(0, Math.min(1, centre / screen.width)) : 0.5;
         Popouts.toggle({
             "popoutId": "bar.panel." + id,
             "content": panel.component,
@@ -705,14 +723,21 @@ Item {
             // controller marks it CppOwnership before returning, so the JS
             // GC cannot delete the live screen when this wrapper is
             // collected. Do not reach for a QScreen any other way from QML.
-            "targetScreen": BarRegistry.screenOf(source),
+            "targetScreen": screen,
             "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             // Per panel; see widgetPanels above for why this is not one
             // shared value.
             "keyboardFocus": panel.keyboard,
-            "dismissOnFocusLoss": true
+            // Transients close on outside click or focus loss (A2 §4.7).
+            // That is the line between this class and a pane: a pane is a
+            // tile and does not vanish when you look elsewhere, and these
+            // are glances.
+            "dismissOnFocusLoss": true,
+            "props": {
+                "railT": railT
+            }
         });
     }
 
@@ -737,12 +762,13 @@ Item {
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
                 root.toggleControlCenter(source);
-            else if (id === "clock")
-                // The clock opens the dashboard, whose calendar is the full
-                // view of the one line the chip shows. Screen-centred and
-                // Modal, so it ignores `source` like the power menu does.
-                root.toggleDashboard();
             else
+                // Everything else, the clock included, opens its transient
+                // under the chip. The clock used to open the DASHBOARD,
+                // which is the every-desktop overview with a calendar cell
+                // in its last row: a full-screen takeover to read a date.
+                // The dashboard keeps its cell and its own gesture; the
+                // clock gets CalendarPanel (A2 §5, A3 §7).
                 root.toggleWidgetPanel(id, source);
         }
     }

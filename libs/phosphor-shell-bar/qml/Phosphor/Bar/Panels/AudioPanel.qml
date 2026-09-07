@@ -80,6 +80,18 @@ PanelFrame {
         return node.volumes[0];
     }
 
+    /// Clamped here, since PwNode forwards the value to PipeWire verbatim
+    /// and the linear-amplitude contract does not include negatives.
+    function _setVolume(node, v) {
+        if (node)
+            node.setVolume(Math.max(0, Math.min(1, v)));
+    }
+
+    function _toggleMute(node) {
+        if (node)
+            node.setMuted(!node.muted);
+    }
+
     /// The friendliest name a node has. `description` is the human string
     /// ("Built-in Audio Analogue Stereo"); `nick` is shorter and often
     /// absent; `name` is the machine id and the last resort.
@@ -91,21 +103,33 @@ PanelFrame {
         return node.nick.length > 0 ? node.nick : node.name;
     }
 
-    VolumeRow {
+    ValueRow {
         width: parent.width
-        node: root._sink
         iconName: root._sinkMuted || root._sinkPercent === 0 ? "audio-volume-muted" : "audio-volume-high"
         label: qsTr("Output")
         sublabel: root._deviceLabel(root._sink)
+        value: root._volumeOf(root._sink)
+        adjustable: root._sink !== null
+        togglable: root._sink !== null
+        toggled: root._sinkMuted
+        railT: 0.45
+        onMoved: v => root._setVolume(root._sink, v)
+        onToggledRequested: root._toggleMute(root._sink)
     }
 
-    VolumeRow {
+    ValueRow {
         width: parent.width
         visible: root._source !== null
-        node: root._source
         iconName: root._source && root._source.muted ? "microphone-sensitivity-muted" : "audio-input-microphone"
         label: qsTr("Input")
         sublabel: root._deviceLabel(root._source)
+        value: root._volumeOf(root._source)
+        adjustable: root._source !== null
+        togglable: root._source !== null
+        toggled: root._source ? root._source.muted : false
+        railT: 0.3
+        onMoved: v => root._setVolume(root._source, v)
+        onToggledRequested: root._toggleMute(root._source)
     }
 
     Text {
@@ -133,13 +157,18 @@ PanelFrame {
             width: parent ? parent.width : 0
             implicitHeight: streamVolume.implicitHeight
 
-            VolumeRow {
+            ValueRow {
                 id: streamVolume
 
                 width: streamRow.width
-                node: streamRow.node
                 iconName: "audio-volume-high"
                 label: root._deviceLabel(streamRow.node)
+                value: root._volumeOf(streamRow.node)
+                togglable: true
+                toggled: streamRow.node ? streamRow.node.muted : false
+                railT: 0.6
+                onMoved: v => root._setVolume(streamRow.node, v)
+                onToggledRequested: root._toggleMute(streamRow.node)
             }
         }
     }

@@ -581,6 +581,12 @@ replaces the widget-panel dashboard entirely: calendar, weather and media are
 three fixed cells in the grid's last row, drawn in the same visual grammar as
 the desktop cells, so the dashboard is one grid of things you can go to.
 
+The calendar cell is the month **at overview scale**, and it is not the way to
+check a date: the clock opens a calendar transient for that (A2 §5). The two are
+the same month drawn for different errands, and the dashboard is never what a
+click on the clock opens — a full-screen takeover to read a date is the wrong
+weight, and it is what the first implementation shipped by mistake.
+
 ### b) Layout
 
 - Full-screen per output. Ground void at 90% over blur.

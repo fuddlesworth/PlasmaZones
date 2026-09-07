@@ -5,6 +5,14 @@
 // Binds to the process-global PipeWireHost singleton, which resolves
 // `defaultSink` by joining the default-sink name against the live node
 // set. Falls back to the first sink when PipeWire publishes no default.
+//
+// GLYPH ONLY, no percentage. A2 §5 groups this chip with network,
+// bluetooth and battery as one run of four glyphs where state is
+// brightness, and battery is the single argued exception to that (its
+// number is the one people actually check). A volume readout on the bar
+// spends width to answer a question the OSD already answers on every
+// change.
+//
 // Scroll adjusts the linear amplitude in 5% steps, left-click opens
 // AudioPanel and MIDDLE-click toggles mute. Volume writes are
 // asynchronous, so the readout updates when PipeWire echoes the new value.
@@ -32,8 +40,10 @@ BarWidget {
     // no sink there is no value to show, and a literal "0%" would be a
     // false readout rather than an absent one.
     available: root.node !== null
-    contentWidth: row.implicitWidth
-    contentHeight: row.implicitHeight
+    contentWidth: root.iconSize
+    contentHeight: root.iconSize
+
+    readonly property int iconSize: 18
 
     // The sink whose volume the bar shows: the default sink when PipeWire
     // publishes one, otherwise the first sink present. The fallback matters
@@ -75,38 +85,42 @@ BarWidget {
         root.node.setVolume(Math.max(0, Math.min(1, cur + steps * 0.05)));
     }
 
+    // The percentage is no longer drawn, so assistive tech is now the only
+    // place it is spoken. Keep it here even though the glyph carries the
+    // coarse state, or the value becomes unreachable without opening the
+    // panel.
     Accessible.role: Accessible.Indicator
     Accessible.name: root.muted ? qsTr("Volume muted") : qsTr("Volume %1 percent").arg(root.volumePercent)
 
-    Row {
-        id: row
+    Kirigami.Icon {
+        anchors.centerIn: parent
+        width: root.iconSize
+        height: root.iconSize
+        source: root.muted || root.volumePercent === 0 ? "audio-volume-muted" : root.volumePercent < 34 ? "audio-volume-low" : root.volumePercent < 67 ? "audio-volume-medium" : "audio-volume-high"
+        isMask: true
+        // State is brightness, not colour: muted sits back at 35%, live
+        // sits at 90%, and the chip never paints a background (A2 §5).
+        color: Theme.on_surface
+        opacity: root.muted ? 0.35 : 0.9
+        scale: pressGuard.pressed ? 0.94 : 1
 
-        spacing: Tokens.spacing_xs
-
-        Kirigami.Icon {
-            width: 18
-            height: 18
-            source: root.muted || root.volumePercent === 0 ? "audio-volume-muted" : root.volumePercent < 34 ? "audio-volume-low" : root.volumePercent < 67 ? "audio-volume-medium" : "audio-volume-high"
-            isMask: true
-            color: root.muted ? Theme.on_surface_variant : Theme.on_surface
-            anchors.verticalCenter: parent.verticalCenter
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Motion.duration_enter
+                easing: Motion.enter
+            }
         }
-
-        Text {
-            // Folded into the root's Accessible.name already; QQuickText
-            // exposes itself as its own StaticText node, so without this
-            // assistive tech reads the composed name and then re-reads
-            // this fragment.
-            Accessible.ignored: true
-            text: root.volumePercent + "%"
-            color: root.muted ? Theme.on_surface_variant : Theme.on_surface
-            font.pixelSize: Tokens.font_size_label_l
-            font.family: Tokens.font_family
-            anchors.verticalCenter: parent.verticalCenter
+        Behavior on scale {
+            NumberAnimation {
+                duration: Motion.duration_tick
+                easing: Motion.reveal
+            }
         }
     }
 
     MouseArea {
+        id: pressGuard
+
         anchors.fill: parent
         // Left opens the panel, middle mutes. Both arrive here rather than
         // splitting the wheel across a MouseArea and the press across a

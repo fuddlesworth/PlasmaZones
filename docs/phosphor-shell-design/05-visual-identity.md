@@ -100,11 +100,32 @@ Layers bottom to top: void/ground → 1 px inset stroke sampling its axis (0.35 
 1.0 active) → gleam (≈12% of the perimeter, alpha 0.6 peak, stationary at the anchor corner
 when resting, one pass per 9 s idle on the rail) → optional margin dust → content.
 
+**All five layers, or it is not this shell.** A surface that draws only the ground and a
+flat stroke is a dark card from any other toolkit, and the first bar-panel implementation
+proved it: correct colours, correct radii, no relationship to the rail above it or the
+window frames beside it. Two layers do the work and are the ones most often dropped. The
+**gleam** is what ties a surface to the rail and to every focused window frame, because the
+same travelling highlight runs on all three. The **stroke's hue** is not a per-surface
+choice: it samples the shared diagonal field (§4.1), so the same panel is cyan-leaning at
+the top left of the screen and rose-leaning at the bottom right, and moving it re-samples.
+
+**Margin dust stays off for bar, panes and transients** (A1 §45), and on for lock and
+launcher. It reads as atmosphere rather than as information, and a surface summoned to
+answer a question should not have weather. Note the two are easy to conflate and are
+opposites: the gleam is ON the stroke and belongs to the frame; dust is OFF it and belongs
+to the space around it.
+
+**Where a panel's motion lives.** Chrome and data, not the field: the gleam idles on the
+stroke, and everything else moves only when a real value moves — an underline retargets from
+where it is (R6), a changed digit ticks and takes its 2 px spectrum underline (R7), a pending
+state breathes purple. Blur is on, because it is depth rather than motion and it is what
+makes a surface feel placed instead of pasted.
+
 | Surface | Ground | Pack (default) |
 |---------|--------|----------------|
 | Bar band | `phosphor-glass`, navy tint 0.55, blur 24, glow and sweep off | `border-phosphor` on the rail only (flow 0.02/s, gleam 0.35) |
-| Engine-placed panes (control center, notification center, expanded map, calendar, media) | navy 0.96 over blur | the user's window border pack; `border-phosphor` if none |
-| Floating cards (launcher, toast, polkit, transients) | abyss 0.92–0.96 over blur | `phosphor-glass` |
+| Engine-placed panes (control center, notification center, expanded map, media) | navy 0.96 over blur | the user's window border pack; `border-phosphor` if none |
+| Floating cards (launcher, toast, polkit, transients — including the status and calendar transients) | abyss 0.92–0.96 over blur | `phosphor-glass` |
 | Full-screen (dashboard, power, cheatsheet) | void 0.60–0.90; `focus-fade` dims the desktop | `phosphor-motes` on dashboard ground |
 | Lock | void 1.0, wallpaper desaturated through `focus-fade` | `phosphor-motes` in empty regions; `spectrum-bloom` on the outlines |
 | OSD bands | none (compositor-drawn on the window edge) | `border-audio` when the visualiser is on; `glow` bound to value |

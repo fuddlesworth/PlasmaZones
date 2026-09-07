@@ -109,13 +109,14 @@ set(_phosphor_bar_qml_files
     # so shell.qml instantiates them by bare name.
     qml/Phosphor/Bar/Panels/PanelFrame.qml
     qml/Phosphor/Bar/Panels/PanelRow.qml
-    qml/Phosphor/Bar/Panels/VolumeRow.qml
+    qml/Phosphor/Bar/Panels/ValueRow.qml
     qml/Phosphor/Bar/Panels/NetworkPanel.qml
     qml/Phosphor/Bar/Panels/BluetoothPanel.qml
     qml/Phosphor/Bar/Panels/AudioPanel.qml
     qml/Phosphor/Bar/Panels/BatteryPanel.qml
     qml/Phosphor/Bar/Panels/MediaPanel.qml
     qml/Phosphor/Bar/Panels/NotificationPanel.qml
+    qml/Phosphor/Bar/Panels/CalendarPanel.qml
     # The wire from a chip to its engine-placed pane (A2 §4.3): pure
     # routing math plus the two segments it draws.
     qml/Phosphor/Bar/PaneTether.qml

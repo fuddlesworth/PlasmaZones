@@ -375,12 +375,27 @@ because nobody else's bar knows where the windows are.
 
 ### 4.1 Decision
 
-A popout is **a real toplevel that the engine places**. The shell opens a surface with
-`appId = org.phosphor.shell.pane.<name>` (control-center, notifications, calendar, media,
-network, power, map-expanded) and lets the daemon place it the way the screen's mode
-places windows. The bundled rule set carries one window rule per pane. The popout is
-therefore not a `PopupWindow` anchored to a chip; it is a window with a rule, and the only
-thing tying it to the bar is a tether.
+A popout is **either a pane or a transient, and which one is decided by weight**, not by
+where it was summoned from. §4.7 defines both classes; this section is about the pane.
+
+A **pane** is a real toplevel that the engine places. The shell opens a surface with
+`appId = org.phosphor.shell.pane.<name>` (control-center, notifications, media,
+map-expanded) and lets the daemon place it the way the screen's mode places windows. The
+bundled rule set carries one window rule per pane. A pane is therefore not a `PopupWindow`
+anchored to a chip; it is a window with a rule, and the only thing tying it to the bar is a
+tether.
+
+**A pane is for a surface you dwell in.** The claim that popouts are windows the engine
+places is one of the three unclonable ones, and it is worth its cost on the control center,
+the notification centre and the expanded map, where the user stays a while and where being
+a tile is the point. It is NOT worth its cost on a glance: making a pane out of "what is my
+battery at" rearranges every window on the output to answer a question that takes a second,
+and does it again on the way out. Those are transients (§4.7), and the list of chips that
+open one is in §5.
+
+`pane.calendar` and `pane.network` were in this list and are retired: the clock and the four
+status chips open transients. A3 §7's dashboard keeps its own calendar cell, which is now
+the only other place a calendar is drawn.
 
 No concave corner (DMS). No detached floating card (Noctalia, HyprPanel). No chip-to-drawer
 morph (Caelestia). The pane is a tile. Its surface is `phosphor-glass` with the window's
@@ -439,8 +454,10 @@ The pane is interactive from the moment it maps (~140 ms).
   the tether goes to full width and the pane under the nearest chip opens on release.
   Below threshold, release retracts the tether over 300 ms decelerated, no overshoot.
 - **Touch**: same from the screen edge, threshold 64 px.
-- **Which pane**: the chip nearest the press x. Over the map: the expanded map pane.
-  Over the clock: calendar. Over an empty band region: the control center.
+- **Which surface**: the chip nearest the press x. Over the map: the expanded map pane.
+  Over the clock: the calendar transient. Over an empty band region: the control center
+  pane. A drag that lands on a transient's chip opens the transient; the gesture does not
+  promote it to a pane.
 - **Cancel**: drag back above the rail, or `Esc`.
 
 ### 4.6 Interruption
@@ -459,11 +476,18 @@ The pane is interactive from the moment it maps (~140 ms).
 
 - **No scrim, ever.** Panes are windows in a tiling WM; darkening the desktop would
   contradict the placement story. Modal dialogs are not panes.
-- **Two classes.** `pane` (control center, notifications, calendar, media, expanded map):
-  engine-placed, persists until closed, `Esc`, or another pane opens. `transient` (tray
-  menus, the map's right-click menu, power confirmation): `PopupWindow` anchored to the
-  chip with `gap = 0`, closes on outside click or focus loss, never engine-placed, has a
-  tether but only a 120 ms opacity enter and release.
+- **Two classes.** `pane` (control center, notifications, media, expanded map):
+  engine-placed, persists until closed, `Esc`, or another pane opens. `transient` (the
+  network / bluetooth / audio / battery readouts, the calendar, tray menus, the map's
+  right-click menu, power confirmation): `PopupWindow` anchored to the chip with
+  `gap = 0`, closes on outside click or focus loss, never engine-placed, has a tether but
+  only a 120 ms opacity enter and release.
+- **Which class a surface takes** is a question about dwell time, not about size or about
+  which chip opened it. If the user is there to read one value and leave, it is a
+  transient; if they are there to change several things, or will leave it open beside their
+  work, it is a pane. A transient that grows a reason to be dwelt in becomes a pane, and the
+  only thing that changes is its class: the content, the tether and the styling are the
+  same, which is what makes this cheap to revisit.
 - **Arbitration**: at most one `pane` and one `transient` per screen. A `transient`
   opened over a `pane` stacks above it. A second `pane` replaces the first. Screens are
   independent. The design README's `PopoutService` owns this table and gains the class
@@ -484,13 +508,13 @@ with content on it rather than a row of differently coloured icons.
 |---|---|
 | **Placement map** | §1. First on the left. |
 | **Focused window** | App glyph + title, max 32 chars, middle-elided, with a 1 px underline in the hue of the focused window's *position* (the same hue as its map cell), so the chip points at the window without an arrow. Title change: 120 ms crossfade. |
-| **Clock** | `HH:MM`, 14 px tabular, white 90 %. A digit change enters over 150 ms (new digit slides up 4 px) and the old releases over 300 ms. Hover shows `:SS` and the date, entering from the right over 150 ms. Click: calendar pane. |
+| **Clock** | `HH:MM`, 14 px tabular, white 90 %. A digit change enters over 150 ms (new digit slides up 4 px) and the old releases over 300 ms. Hover shows `:SS` and the date, entering from the right over 150 ms. Click: calendar **transient**. Reading a date is a glance, so it does not move anyone's windows; the dashboard's calendar cell (A3 §7) is the same month drawn at overview scale. |
 | **System metrics** | Three 2 × 16 px vertical bars (cpu, mem, gpu), no labels, each in the rail's hue at its own x. Height is the value. Above 90 % the bar turns white. A 1 px peak-hold mark releases over 4 s. Hover expands to tabular percentages. |
 | **Media** | Glyph + title. Playback progress is a 1 px line on the rail above the chip, white at 60 %: the rail is the timeline. Paused freezes it. Click: media pane. |
 | **Tray** | Glyphs only, 16 px, 60 % at rest, 100 % on hover. Click: the item's own menu as a `transient`. |
-| **Network / Bluetooth / Audio / Battery** | One group of four glyphs. State is brightness: on/connected/charging 90 %, off 35 %. Battery ≤ 15 %: the glyph goes white and pulses under 5 %. Wheel on audio: a rail-line meter that holds 800 ms then releases. Click on any: control center pane scrolled to that tile. |
+| **Network / Bluetooth / Audio / Battery** | One group of four glyphs, no backgrounds, separated from their neighbours by a 1 × 12 px hairline at 25 % white. State is brightness: on/connected/charging 90 %, off 35 %. Battery ≤ 15 %: the glyph goes white and pulses under 5 %. Wheel on audio: a rail-line meter that holds 800 ms then releases. Click on any: a **transient** carrying that tile's own controls. **Battery alone may also show a tabular percentage**, because brightness can separate on from off but cannot separate 40 % from 70 %, and that is the number people check most; the other three stay glyph-only. |
 | **Notifications** | Bell glyph with a tabular superscript count. New notification: rail thickens 2 → 4 px over the chip in white and releases over 3 s; the count enters over 100 ms. Click: notifications pane; its top band is the rail gradient like every pane. |
-| **Control center** | A single 8 px dot in the rail's hue at its x, 70 %. White while any tile inside has a live change (VPN connecting, recording). Click or rail-drag: control center pane. |
+| **Control center** | A single 8 px dot in the rail's hue at its x, 70 %. White while any tile inside has a live change (VPN connecting, recording). Click or rail-drag: control center **pane** (§4.1). This chip is the only way to the full grid, which is what keeps the pane class earning its cost: the four status chips beside it open transients. |
 | **Power** | Glyph at 45 %. Click: `transient` confirmation. Hold 700 ms: lock. |
 
 ---
