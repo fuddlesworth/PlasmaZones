@@ -139,9 +139,17 @@ BarWidget {
         Accessible.role: Accessible.Button
         Accessible.name: root.isPlaying ? qsTr("Pause") : qsTr("Play")
         Accessible.onPressAction: root._toggle()
-        // The panel is the secondary action, and assistive tech reaches it
-        // the same way the pointer's secondary button does.
-        Accessible.onShowMenuAction: root.activated()
+        // NO Accessible.onShowMenuAction for the panel, however much the
+        // pointer's secondary button suggests one. QQuickAccessibleAttached
+        // declares no such signal, and assigning it is not a warning: the
+        // whole FILE fails to compile, the factory returns null, and the
+        // media chip never mounts at all. It shipped that way and went
+        // unnoticed because the chip is hidden without a player anyway, so
+        // "no chip" looked exactly like "nothing playing".
+        //
+        // The panel keeps its pointer route (right-click, below). Reaching
+        // it from assistive tech needs a real second action; the attached
+        // property's vocabulary is fixed and does not have one to spare.
 
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton)
