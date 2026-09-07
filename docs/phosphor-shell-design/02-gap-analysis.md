@@ -17,13 +17,12 @@ gap withholds, not by effort.
 | Bar keyboard navigation | The placement map is pointer-only. | A2 §1.5 lists the chords. |
 | Filmstrip drag between desktops, Shift-drop as tab, double-click verbs on the map | Listed in A2 §1.5–1.6, unbuilt. | `moveWindowToDesktop` exists on the daemon; the UI does not. |
 | Tiling and scrolling drop proxies | The bar's drop proxy is snapping-only. | `WindowDrag.registerDropProxy` takes any cell list. |
-| Decoration slots on the dashboard, cheatsheet and power menu | Eight surfaces host a `DecorationSlot`; these three do not, so a surface pack stops at their edge. | Layer-routed popouts get no slot from `PopoutHost` the way pane-routed ones do from `PaneHost`; each content surface carries its own. |
 
 ## Surface gaps
 
 | Gap | Notes |
 |---|---|
-| Notification center (history, rules editor) | The toast host has the rules seam; the history popout is unbuilt. |
+| Notification rules editor | The toast host has the rules seam and nothing edits it. The history is built: `NotificationPanel` is the centre, reading the shell's retained list, and the chip opens it. |
 | Theme browser | `ThemePresets` reads `~/.local/share/plasmazones/palettes`; there is no browser beyond the picker strip. |
 | Dock | Not planned for the identity; the bar's map is the window list. |
 | Control-center tiles: night mode, dark mode, airplane, power profile, wallpaper | Five tiles deferred with service blockers. |
@@ -44,6 +43,10 @@ Things an earlier version of this document listed as missing that are now in
 the tree or were dropped on purpose: the launcher, the notification server,
 the OSDs, the control center, the lock screen, the wallpaper picker, the
 polkit agent, the idle and clipboard services, the theme tokens, the matugen
-pipeline, the typed IPC and `phosphorctl`, the plugin registries. The
+pipeline, the typed IPC and `phosphorctl`, the plugin registries, the
+notification centre, and the decoration slot on layer-routed surfaces
+(`PopoutHost` now takes the same `decoration` component `PaneHost` does, so a
+pack reaches the dashboard, the cheatsheet, the power menu and the bar's
+panels). The
 connected-corner bar geometry was dropped: it was a port of another shell's
 signature and it is not ours.
