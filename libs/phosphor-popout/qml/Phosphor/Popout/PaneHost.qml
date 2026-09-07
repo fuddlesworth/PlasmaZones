@@ -50,37 +50,8 @@ FocusScope {
     // Hue axis for the stroke: the pane's centre on the screen.
     readonly property real hueT: railWidth > 0 ? Spectrum.tForX(railOffset + width / 2, railWidth) : 0.5
 
-    // Whether the engine has had its window to place this pane in.
-    //
-    // A pane is a real toplevel, so the compositor maps it at ITS chosen
-    // position and the engine's rule moves it afterwards. Measured in the
-    // nested harness on a 1024x768 output: mapped at 322,168 (dead centre)
-    // and moved to its zone at 516,36 fifty-three milliseconds later. Any
-    // pixel painted in that window is painted in the wrong place, and the
-    // pane visibly started in the middle of the screen and popped.
-    //
-    // A2 §4.4 already prescribes the answer and the implementation simply
-    // did not follow it: "0-140 ms: Engine places the surface", then
-    // "140-380 ms: Pane content enters". So the enter waits, and the wait
-    // is the spec's placement window rather than a number picked to cover
-    // an observed race.
-    //
-    // A client cannot ask where its toplevel is on Wayland, so this cannot
-    // key on the actual placement; it is a timed window by necessity. The
-    // complete fix is for the pane to be placed on its FIRST configure so
-    // it never maps centred, which lives in the daemon's rule path.
-    property bool _placementWindowElapsed: false
-
-    Timer {
-        id: placementWindow
-
-        interval: Motion.duration_enter_content
-        repeat: false
-        onTriggered: root._placementWindowElapsed = true
-    }
-
     // The content's enter/release, 0..1. One animation, both directions.
-    property real _progress: root.open && root._placementWindowElapsed ? 1 : 0
+    property real _progress: root.open ? 1 : 0
 
     signal dismissed
     signal released
@@ -132,15 +103,22 @@ FocusScope {
         // screen before it jumps into its zone, which is exactly the
         // "starts in the centre and pops into place" the panes were doing.
         //
-        // A2 §4.4 already says the enter belongs AFTER the placement: the
-        // engine places over 0-140 ms and the content enters from 140 ms.
-        // Tying the ground to the same progress makes the whole pane obey
-        // that instead of only its content.
+        // Riding _progress costs nothing — the enter animation already
+        // runs — and leaves the pane at a fraction of its opacity while it
+        // is still mis-placed rather than solid.
         //
-        // This HIDES the jump rather than removing it. The complete fix is
-        // for the pane to be placed on its initial configure so it never
-        // maps centred at all, which lives in the daemon's rule path, not
-        // here.
+        // It does NOT close the window: the jump is the compositor's, and a
+        // Wayland client cannot see its own toplevel position. The complete
+        // fix is placing the pane on its first configure, in the daemon's
+        // rule path.
+        //
+        // An earlier attempt also HELD the enter for the 140 ms placement
+        // window of A2 §4.4. That closed the window but delayed every pane
+        // open by 140 ms to hide a flash nobody had actually observed:
+        // screenshot latency is longer than the window it was meant to
+        // catch, so it was never captured, only inferred from the geometry.
+        // Not worth the latency. Do not re-add it without a capture of the
+        // flash first.
         opacity: 0.96 * root._progress
     }
 
@@ -210,13 +188,10 @@ FocusScope {
     onOpenChanged: {
         // Arm the placement window on the way in; drop it on the way out so
         // the next open waits again rather than entering instantly.
-        root._placementWindowElapsed = false;
         if (open) {
-            placementWindow.restart();
             forceActiveFocus();
             return;
         }
-        placementWindow.stop();
         // Closed before the enter ever moved (A2 §4.6, close during open):
         // the value is already 0, so no change will report it.
         if (root._progress === 0)
