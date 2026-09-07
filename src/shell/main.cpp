@@ -440,6 +440,13 @@ int main(int argc, char* argv[])
             paneTransport.setDecorationProvider([&shellChrome]() -> QObject* {
                 return shellChrome.decorationComponent();
             });
+            // The same provider on the layer route, so a surface pack reaches
+            // the launcher, the toasts, the bar's panels and the control
+            // center too. That route had none, so a pack stopped at the edge
+            // of every surface on it.
+            popoutTransport.setDecorationProvider([&shellChrome]() -> QObject* {
+                return shellChrome.decorationComponent();
+            });
             // The zone nearest the chip, from this engine's placement map and
             // the chip rect the bar reported (A2 §4.2).
             auto* map = qmlEngine->singletonInstance<PhosphorShell::PlacementMap*>(QStringLiteral("Phosphor.Shell"),

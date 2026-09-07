@@ -9,6 +9,7 @@
 // parented into a regular Item or into a layer-shell wrapper Item.
 
 import Phosphor.Theme
+import Phosphor.Widgets
 import QtQuick
 
 // FocusScope, not Item, and that is load-bearing. The host claims focus while
@@ -91,6 +92,16 @@ FocusScope {
     // Placement is the host's job, not the surface's: keeping the surface
     // full-bleed is what keeps the scrim, click-outside dismissal and the
     // keyboard grab exactly as they are for every placement.
+    // The surface pack drawn on this popout's frame (A1 §2.4), set by the
+    // transport from the composition root, exactly as PaneHost's is.
+    //
+    // Layer-routed popouts had no slot at all while pane-routed ones did,
+    // so a user's surface pack stopped at the edge of everything on this
+    // route — the launcher, the toasts, the bar's panels — and the control
+    // center LOST its pack the day it moved here from the pane route,
+    // trading the frame A3 §2 promised for a bare stroke.
+    property Component decoration: null
+
     property string placement: "center"
     property int reservedTop: 0
 
@@ -606,6 +617,24 @@ FocusScope {
         // were doing.
         opacity: root.open && _placed ? 1 : 0
         scale: root.open ? 1 : 0.96
+
+        // The surface pack's frame, wrapping the CONTENT FRAME rather than
+        // the surface: this host's surface is full-bleed on the output, so
+        // decorating it would draw the user's window frame around the whole
+        // screen. PaneHost anchors its slot to the surface because there
+        // the surface IS the pane.
+        //
+        // `contentItem` is the frame, which is what a pack captures and
+        // decorates. Declared BEFORE the hit-blocker so the blocker stays
+        // the topmost child and a pack cannot swallow the clicks the
+        // dismiss path depends on.
+        DecorationSlot {
+            anchors.fill: parent
+            component: root.decoration
+            contentItem: contentFrame
+            surfacePath: "shell.phosphor.popout"
+            focused: root.open
+        }
 
         // Hit-blocker. Without this, gaps inside the content area
         // (rounded-corner transparency, padding) propagate clicks
