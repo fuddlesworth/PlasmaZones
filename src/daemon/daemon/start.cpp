@@ -456,18 +456,117 @@ void Daemon::connectDesktopActivity()
                 diffActiveAssignments();
             });
 
+    // A desktop was removed and we know WHICH position it held, so the engines'
+    // per-desktop state can be corrected properly rather than swept by count.
+    // Runs ahead of desktopCountChanged (see desktopRemovedAt's doc), and once
+    // it has, that handler's out-of-range sweep finds nothing left over.
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopRemovedAt, this,
+            [this](int removedPosition) {
+                // Same ordering the count handler documents: a live preview
+                // resolves its state through a create-if-missing lookup, so a
+                // cancel arriving after the prune would resurrect a state for
+                // the desktop that just went away.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviews();
+                }
+                // Prune the removed position, THEN shift everything above it
+                // down one. Both halves are needed and the order is not
+                // optional: the prune leaves the position vacant so the first
+                // migration has somewhere to land.
+                //
+                // Without the shift, every surviving higher state keeps the
+                // number it had before while the compositor reports the new
+                // one, and the desktop-membership reconcile then reads a
+                // window that never moved as having left its desktop.
+                for (PhosphorEngine::PlacementEngineBase* engine :
+                     {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
+                    if (!engine) {
+                        continue;
+                    }
+                    engine->pruneStatesForDesktop(removedPosition);
+                    engine->renumberDesktopsAfterRemoval(removedPosition);
+                }
+                // The daemon's own desktop-keyed memo moves with them. It is
+                // the window order a mode toggle re-seeds from, so leaving it
+                // on the old numbering would hand the desktop that inherits a
+                // number the order belonging to the one before it — and the
+                // deleted desktop's own order would sit under the number its
+                // successor now uses. Built fresh so an entry shifting down
+                // cannot land on one not yet visited.
+                {
+                    QHash<TilingStateKey, QStringList> renumberedOrders;
+                    renumberedOrders.reserve(m_lastEngineOrders.size());
+                    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
+                        TilingStateKey key = it.key();
+                        if (key.desktop == removedPosition) {
+                            continue;
+                        }
+                        if (key.desktop > removedPosition) {
+                            --key.desktop;
+                        }
+                        renumberedOrders.insert(key, it.value());
+                    }
+                    m_lastEngineOrders = std::move(renumberedOrders);
+                }
+                // VirtualDesktopManager shifted its own per-screen desktop map for
+                // this removal, but SILENTLY — emitting screenDesktopChanged there
+                // would run the whole context-switch pass against engine state
+                // that had not been renumbered yet. Nothing else re-resolves, so
+                // the published active-layout map and the overlays would keep the
+                // pre-renumber answer for every screen whose number moved.
+                //
+                // Every screen's number is already correct when this runs:
+                // VirtualDesktopManager shifts the renumbered entries and pulls
+                // down the ones a last-desktop removal left out of range, both
+                // silently, before it emits. So this diff resolves against the
+                // post-removal numbering and the clamp that follows has nothing
+                // left to correct. Re-diff
+                // here, where the engines are already correct.
+                //
+                // The disabled-desktop gates are re-keyed FIRST, because both
+                // calls below read them: diffActiveAssignments resolves each
+                // context through isContextDisabled, and hideDisabledAndRefresh
+                // is named for it. Re-keying afterwards would publish one pass
+                // built from the pre-removal numbering.
+                if (m_settings) {
+                    bool gatesChanged = false;
+                    for (const auto mode : PhosphorZones::allModes()) {
+                        QStringList disabled = m_settings->disabledDesktops(mode);
+                        if (renumberDisabledDesktopEntries(disabled, removedPosition)) {
+                            m_settings->setDisabledDesktops(mode, disabled);
+                            gatesChanged = true;
+                        }
+                    }
+                    if (gatesChanged) {
+                        m_settings->save();
+                    }
+                }
+                diffActiveAssignments();
+                if (m_overlayService) {
+                    m_overlayService->hideDisabledAndRefresh();
+                }
+                qCInfo(lcDaemon) << "Virtual desktop at position" << removedPosition
+                                 << "was removed — pruned it and renumbered the states above it";
+            });
+
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
             [this](int newCount) {
                 // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
+                //
                 // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
-                // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
-                // entries here; mid-range renumbering would require tracking which desktop was
-                // removed (not available from desktopCountChanged). A future improvement could
-                // use KDE's desktop UUIDs instead of 1-based numbers. The same limitation
-                // applies to the per-screen CURRENT-desktop maps (VDM / layout registry /
-                // engine context): they are corrected by the effect's next per-output
-                // desktop report rather than re-derived here.
+                // removing desktop 2 of 4 shifts 3→2 and 4→3), and this handler cannot tell
+                // that happened — after a mid-list removal every surviving number is still
+                // within newCount. The desktopRemovedAt handler above is where that case is
+                // handled: it knows WHICH position went and re-keys the engines' per-desktop
+                // state, their per-output desktop maps and m_lastEngineOrders, so by the time
+                // this runs there is nothing above the count left to prune.
+                //
+                // The disabled-desktop lists below are renumbered too, by the
+                // desktopRemovedAt handler above (renumberDisabledDesktopEntries), for the
+                // same reason the engine state is: they store the NUMBER, and nothing
+                // re-reports them. What is left for this handler is the genuine
+                // out-of-range case a removal at the END produces.
                 if (m_settings) {
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
@@ -524,7 +623,9 @@ void Daemon::connectDesktopActivity()
                 // renumbers a still-in-range screen (desktop 3 becomes 2) leaves
                 // the per-screen map holding the stale number until the effect
                 // re-reports that output's desktop; a diff here would read the
-                // same stale number and could not fix it. pruneContextMapsForDesktop
+                // same number. VirtualDesktopManager shifts that map itself on the
+                // desktopRemovedAt path above, silently, and the handler there does
+                // the re-diff the silence would otherwise cost. pruneContextMapsForDesktop
                 // touches only m_lastEngineOrders, which no resolution reads.
             });
 

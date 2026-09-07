@@ -730,6 +730,62 @@ inline bool pruneDisabledDesktopEntries(QStringList& entries, int maxDesktop)
 }
 
 /**
+ * @brief Re-key disabled-desktop entries for the removal of @p removedDesktop.
+ * @return true if any entry was dropped or renumbered.
+ *
+ * The compositor renumbers on a mid-list removal (delete desktop 2 of 4 and
+ * 3→2, 4→3), and these entries store the NUMBER. Left alone, a gate written
+ * for desktop 4 goes on gating whatever desktop lands on 4 afterwards, which
+ * is a different desktop than the user disabled. Prunes cannot see this: after
+ * the shift every surviving number is still within the count, so there is
+ * nothing out of range to remove. Only the removal position identifies it,
+ * which is what VirtualDesktopManager::desktopRemovedAt carries.
+ *
+ * Entries AT the removed desktop are dropped (that desktop is gone), entries
+ * above it come down one, entries below are untouched. Same rule the engines'
+ * renumberDesktopsAfterRemoval applies to their per-desktop state, so the
+ * settings gates and the live state stay on one numbering.
+ *
+ * Composite key format: "screenId/desktopNumber". Malformed entries are left
+ * alone here — pruneDisabledDesktopEntries is what removes those.
+ */
+inline bool renumberDisabledDesktopEntries(QStringList& entries, int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return false;
+    }
+    bool changed = false;
+    QStringList rekeyed;
+    rekeyed.reserve(entries.size());
+    for (const QString& entry : std::as_const(entries)) {
+        const int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
+        if (slashIdx < 0) {
+            rekeyed.append(entry);
+            continue;
+        }
+        bool ok = false;
+        const int desktop = entry.mid(slashIdx + 1).toInt(&ok);
+        if (!ok || desktop < removedDesktop) {
+            rekeyed.append(entry);
+            continue;
+        }
+        if (desktop == removedDesktop) {
+            // The desktop the gate named no longer exists. Dropping beats
+            // shifting it onto the neighbour that moves into its number: the
+            // user disabled THIS desktop, not whichever one replaces it.
+            changed = true;
+            continue;
+        }
+        rekeyed.append(entry.left(slashIdx + 1) + QString::number(desktop - 1));
+        changed = true;
+    }
+    if (changed) {
+        entries = rekeyed;
+    }
+    return changed;
+}
+
+/**
  * @brief Remove disabled-activity entries whose activity UUID is not in @p validActivityIds.
  * @return true if any entries were removed.
  *

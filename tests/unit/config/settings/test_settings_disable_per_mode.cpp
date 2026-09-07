@@ -602,6 +602,68 @@ private Q_SLOTS:
         store.load();
         QVERIFY(store.count() > 0);
     }
+
+    // =====================================================================
+    // renumberDisabledDesktopEntries — the mid-list removal the prune cannot
+    // see. After the compositor shifts, every surviving number is still
+    // within the count, so nothing is out of range to prune; the gates would
+    // silently move onto different desktops than the user disabled.
+    // =====================================================================
+
+    void testRenumberDisabledDesktops_shiftsOnlyAboveTheRemoved()
+    {
+        QStringList entries{QStringLiteral("DP-1/1"), QStringLiteral("DP-1/3"), QStringLiteral("DP-2/4")};
+        QVERIFY(renumberDisabledDesktopEntries(entries, 2));
+        // Below the removal is untouched; above it comes down exactly one.
+        QCOMPARE(entries, QStringList({QStringLiteral("DP-1/1"), QStringLiteral("DP-1/2"), QStringLiteral("DP-2/3")}));
+    }
+
+    void testRenumberDisabledDesktops_dropsTheEntryAtTheRemoved()
+    {
+        // The desktop the gate named is gone. It must not slide onto the
+        // neighbour that moves into its number — the user disabled THIS one.
+        QStringList entries{QStringLiteral("DP-1/2"), QStringLiteral("DP-1/3")};
+        QVERIFY(renumberDisabledDesktopEntries(entries, 2));
+        QCOMPARE(entries, QStringList({QStringLiteral("DP-1/2")}));
+        // And what survived is the entry that WAS 3, not the one that was 2.
+        QCOMPARE(entries.size(), 1);
+    }
+
+    // Virtual screen ids contain '/', so the desktop suffix is the LAST
+    // segment. Splitting on the first would rewrite the screen id instead.
+    void testRenumberDisabledDesktops_virtualScreenIdSurvives()
+    {
+        QStringList entries{QStringLiteral("DP-1/vs:2/5")};
+        QVERIFY(renumberDisabledDesktopEntries(entries, 3));
+        QCOMPARE(entries, QStringList({QStringLiteral("DP-1/vs:2/4")}));
+    }
+
+    void testRenumberDisabledDesktops_noChangeReportsFalse()
+    {
+        // Everything below the removal, so nothing moves and the caller must
+        // not be told to write and save the settings.
+        QStringList entries{QStringLiteral("DP-1/1"), QStringLiteral("DP-1/2")};
+        QVERIFY(!renumberDisabledDesktopEntries(entries, 5));
+        QCOMPARE(entries, QStringList({QStringLiteral("DP-1/1"), QStringLiteral("DP-1/2")}));
+
+        // A removal position of 0 means "nothing was removed" and must be inert.
+        QStringList untouched{QStringLiteral("DP-1/3")};
+        QVERIFY(!renumberDisabledDesktopEntries(untouched, 0));
+        QCOMPARE(untouched, QStringList({QStringLiteral("DP-1/3")}));
+    }
+
+    // Malformed entries are pruneDisabledDesktopEntries' business, not this
+    // one's. Dropping them here would make a renumber silently do a prune's
+    // job on a list the prune has not run over yet.
+    void testRenumberDisabledDesktops_leavesMalformedAlone()
+    {
+        QStringList entries{QStringLiteral("nodesktopnumber"), QStringLiteral("DP-1/notanint"),
+                            QStringLiteral("DP-1/4")};
+        QVERIFY(renumberDisabledDesktopEntries(entries, 2));
+        QCOMPARE(entries,
+                 QStringList(
+                     {QStringLiteral("nodesktopnumber"), QStringLiteral("DP-1/notanint"), QStringLiteral("DP-1/3")}));
+    }
 };
 
 QTEST_MAIN(TestSettingsDisablePerMode)

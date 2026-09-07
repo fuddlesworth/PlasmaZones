@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the dozen TUs in this
-// directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp, signals.cpp,
-// windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
-// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp) —
+// and the implementation is already partitioned across the thirteen TUs in
+// this directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp,
+// signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
+// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp,
+// wheelchord.cpp) —
 // every one of those TUs calls back
 // through this single declaration, which C++ requires to be whole. Most of the
 // length is the per-member invariant prose the split files depend on: the
@@ -144,10 +145,19 @@ public:
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
     /// Drop a LIVE window from engine tracking without a close (the
-    /// drag-bypass revert). Same effect-side cleanup as onWindowClosed, but
-    /// the daemon relay is Tiling.releaseWindowTracking, which runs NO
+    /// drag-bypass revert, and the desktop arms). The same
+    /// cleanupAutotileTracking teardown as onWindowClosed, minus that one's
+    /// unconditional maximize-ledger scrub, and the daemon relay is
+    /// Tiling.releaseWindowTracking, which runs NO
     /// placement capture — the window is mid-drag and its frame must never
     /// be recorded as a float-back.
+    ///
+    /// The daemon relay fires only when @p screenId is managed in the CURRENT
+    /// context. That gate is deliberately NOT lifted for a window arriving
+    /// from another desktop: which desktop's state still lists a window is
+    /// the daemon's question, answered by TilingAdaptor's desktop-membership
+    /// reconcile off the window's registry desktop set (#1076), never by this
+    /// screen's managed set, which says nothing about the desktop it left.
     void releaseWindowTracking(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)
@@ -342,8 +352,9 @@ public:
 
     /// Cleanup: unmaximize all monocle-maximized windows.
     ///
-    /// Three callers, all of them shedding a dead session's claims: daemon
-    /// loss, effect teardown, and daemon BRING-UP via drainDeadSessionState.
+    /// Four callers: daemon loss, effect teardown, engine disable, and daemon
+    /// BRING-UP via drainDeadSessionState. Three of them shed a dead
+    /// session's claims; engine disable is a live session giving them up.
     /// The bring-up one is not redundant with the teardown pair — it makes
     /// bring-up authoritative on its own rather than on what the loss edge
     /// left behind, and this ledger needs that more than its siblings do,
@@ -1485,8 +1496,9 @@ private:
     /// loadSettings owns the re-announce — announcing there desyncs the
     /// daemon's view from the effect's until that batch lands.
     void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
-    /// The three bring-up property Gets loadSettings dispatches (scrolling
-    /// screens, active layouts, scroll effect behaviour), factored out
+    /// The bring-up property Gets loadSettings dispatches (scrolling screens,
+    /// active layouts, scroll effect behaviour, and the scroll cap's
+    /// blocked-window list), factored out
     /// so their bounded failure retries can re-dispatch exactly one fetch.
     /// Every dispatch bumps the matching per-query generation, so a stale
     /// retry reply loses to any newer query or live-signal write.
@@ -1687,7 +1699,7 @@ private:
     int m_scrollFocusScrollBlockedFetchRetriesLeft = 0;
     quint64 m_scrollFocusScrollBlockedQueryGeneration = 0;
     /// The two tab-indicator bring-up fetches carry the same bounded retry
-    /// and per-dispatch generation guard as their three siblings. The guard
+    /// and per-dispatch generation guard as their four siblings. The guard
     /// matters across a daemon restart: two loadSettings runs put two Gets in
     /// flight, and a late reply from the DEAD session would otherwise
     /// re-install a payload for a screen the new daemon never names and

@@ -219,6 +219,17 @@ public:
     /// `removedDesktop` (a virtual desktop was destroyed / renumbered).
     void pruneDesktop(int removedDesktop);
 
+    /// Shift every stored desktop number ABOVE @p removedDesktop down by one,
+    /// after pruneDesktop has dropped the entries that referenced it.
+    ///
+    /// The companion to the engines' renumberDesktopsAfterRemoval, and it must
+    /// run with them or not at all. Both maps hold POSITIONAL desktop numbers
+    /// that index the same numbering the state keys use, so renumbering the
+    /// stores while dropping these would leave a pinned or per-output value
+    /// naming a position whose content moved — the desync pruneDesktop's own
+    /// comment warns about, in the other direction.
+    void renumberDesktopsAfterRemoval(int removedDesktop);
+
 private:
     /// Current desktop/activity context. `*ContextEverSet` carry "a context was
     /// established" for the switch-arming logic: there is no reserved unset value

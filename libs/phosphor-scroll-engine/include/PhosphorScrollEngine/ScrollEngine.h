@@ -144,6 +144,7 @@ public:
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
                                 int minHeight) override;
     QString heldScreenForWindow(const QString& windowId) const override;
+    std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
     void beginArrivalBurst() override;
     void endArrivalBurst() override;
     void windowClosed(const QString& windowId) override;
@@ -765,6 +766,7 @@ public:
     void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
+    void renumberDesktopsAfterRemoval(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
@@ -909,7 +911,16 @@ public:
     /// (InnerGap / OuterGap* / UsePerSideOuterGap); values present in the
     /// map win over the IScrollSettings gaps. Same lifetime contract as the
     /// other injected closures.
-    using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
+    ///
+    /// Takes the CONTEXT explicitly rather than resolving it daemon-side from
+    /// the screen's current desktop. A mutation on a BACKGROUND state — a
+    /// close on a desktop that is not in view, say — has to resolve gaps for
+    /// the desktop the state belongs to, and a screen-only provider would hand
+    /// it the desktop in view's rules instead. A desktop of 0 with an empty
+    /// activity means "whatever the screen is showing now", which is what
+    /// every current-context caller passes.
+    using ContextGapProvider =
+        std::function<QVariantMap(const QString& screenId, int desktop, const QString& activity)>;
     /// Embedder/test seam: inject screen geometry when NO ScreenManager is
     /// wired (headless hosts). @p availableGeometry supplies the work area,
     /// @p screenGeometry the full rect used for off-canvas parking bounds.
@@ -1147,6 +1158,35 @@ private:
     /// serves a REMOVED screen (here the screen survives, only its context
     /// died).
     void pruneContextKeyedScreenArms(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& contextDied);
+
+    /// Move a whole ScrollState from one context key to another, carrying every
+    /// context-keyed structure with it: the reverse map, the strip stash and
+    /// its consumed marker, the mid-burst deferred-apply marker and the
+    /// per-context overrides. Unwinds a drag-insert preview captured on either
+    /// key first, since a preview's keys are plain copies rekeyWindows cannot
+    /// rewrite.
+    ///
+    /// A state already at @p newKey is displaced. Its windows, if any, are
+    /// released into @p displacedWindows and their screen into @p
+    /// displacedScreens; the caller must then run finishDisplacedRelease,
+    /// which emits windowsReleased and only then sweeps the per-window side
+    /// maps the handler reads.
+    ///
+    /// The strip identity announce is deliberately NOT here: callers batch it
+    /// per screen after the release, so a consumer sees the windows leave
+    /// before it is told the screen is showing a different strip.
+    ///
+    /// @return Whether a state existed at @p oldKey and was moved.
+    bool migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
+                         const PhosphorEngine::PlacementStateKey& newKey, QStringList& displacedWindows,
+                         QSet<QString>& displacedScreens);
+
+    /// Emit windowsReleased for the windows migrateStateKey displaced, then
+    /// sweep their per-window side maps. Split from the migration so a caller
+    /// moving several keys releases once, and so the ordering contract holds:
+    /// the handler consumes the float markers and last-applied rects, so those
+    /// may only be dropped after it has run.
+    void finishDisplacedRelease(QStringList& displacedWindows, const QSet<QString>& displacedScreens);
     // engine_core.cpp
     /// Capture @p state's strip STRUCTURE (column groupings, widths,
     /// display, per-tile height intents) before a mode reassignment tears
@@ -1199,6 +1239,15 @@ private:
     /// one) and windowOpened's height-rule arm, which re-resolves the work
     /// area against the POST-insert column count.
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
+
+    /// layoutParamsForScreen for a NAMED context rather than the screen's
+    /// current one. The gap rules a strip lays out against are per (screen,
+    /// desktop, activity), so a mutation on a background state resolves the
+    /// wrong ones through the screen-only form — the anchor it then derives is
+    /// measured with the desktop-in-view's gaps and can survive the desktop
+    /// return, because updateViewForFocus leaves a fully visible column alone.
+    ScrollLayoutParams layoutParamsForKey(const PhosphorEngine::PlacementStateKey& key,
+                                          int columnCountOverride = -1) const;
 
     /// Auto-resolve the strip axis from a FINAL work area. Private because
     /// callers must not pass a rect that has not been through the outer-gap

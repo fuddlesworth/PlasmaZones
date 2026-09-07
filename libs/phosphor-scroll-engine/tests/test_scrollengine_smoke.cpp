@@ -86,6 +86,7 @@ private Q_SLOTS:
     void handoffReceiveAdoptsFloatingWindow();
     void lastManagedRectSurvivesClose();
     void pruneStaleWindowsReclaimsRectsAndSeeds();
+    void backgroundCloseResolvesGapsForTheWindowsOwnContext();
     void contextKeysSeparateDesktops();
     void floatRestoresDisplayIntent();
     void pruneDropsWindowBookkeeping();
@@ -468,6 +469,49 @@ void TestScrollEngineSmoke::contextKeysSeparateDesktops()
     engine->pruneStatesForDesktop(2);
     QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{1}));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
+}
+
+void TestScrollEngineSmoke::backgroundCloseResolvesGapsForTheWindowsOwnContext()
+{
+    // Gap rules are per (screen, desktop, activity), so a mutation on a state
+    // that is NOT the one in view has to resolve the gaps of the context the
+    // state belongs to. Resolving the screen's CURRENT context instead lays the
+    // background strip out against the wrong rules, and removeWindow re-derives
+    // the view anchor from them.
+    //
+    // Asserted on what the provider is ASKED rather than on pixels: the
+    // question is whether the window's own key is passed through, and a
+    // geometry assertion would additionally depend on the layout maths.
+    QObject owner;
+    ScrollEngine* engine = ScrollTestUtils::makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QList<int> askedDesktops;
+    engine->setContextGapProvider([&askedDesktops](const QString&, int desktop, const QString&) {
+        askedDesktops.append(desktop);
+        QVariantMap gaps;
+        gaps.insert(QStringLiteral("InnerGap"), 6);
+        return gaps;
+    });
+
+    // Per-OUTPUT desktop, not the global one: currentKeyForScreen prefers the
+    // per-output value, so setting only the global leaves the strip on the
+    // screen's own desktop and the close is never a background one.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->heldKeyForWindow(QStringLiteral("app|a"))->desktop, 2);
+
+    // Desktop 3 is in view; desktop 2's strip is now a background one.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 3);
+    askedDesktops.clear();
+
+    engine->windowClosed(QStringLiteral("app|a"));
+
+    QVERIFY2(!askedDesktops.isEmpty(), "the close must resolve layout params at all");
+    // Every resolve this close performs is for the window's own desktop. A
+    // screen-only provider, or one handed the current context, asks for 3.
+    for (const int desktop : std::as_const(askedDesktops)) {
+        QCOMPARE(desktop, 2);
+    }
 }
 
 void TestScrollEngineSmoke::floatRestoresDisplayIntent()

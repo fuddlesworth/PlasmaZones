@@ -169,17 +169,13 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "claimCrossScreenReopen:" << windowId << "adoption on" << homeScreen << "was refused — not claimed";
         // The phantom key the refused open leaves must not outlive the
-        // failed claim (same sweep as the defer gate's): isWindowTracked
-        // would keep answering true for a window this engine does not hold.
-        if (adoptedIt != m_states.windowKeys().constEnd()) {
-            m_states.removeWindow(windowId);
-        }
-        m_windowMinSizes.remove(windowId);
-        // Same sweep the defer gate runs, including the float marker: the
-        // two must not drift, and a marker left for a window this engine
-        // does not hold would re-float it at the next mode transition.
-        m_autotileFloatedWindows.remove(windowId);
-        purgeFromPendingOrders(windowId);
+        // failed claim: isWindowTracked would keep answering true for a
+        // window this engine does not hold. The shared sweep is the whole
+        // drop set, so this path and the defer gate's cannot drift — a
+        // float marker left behind would re-float the window at the next
+        // mode transition, and a pending focus entry would have applyTiling
+        // activate a window another engine owns.
+        sweepPhantomTracking(windowId);
         return false;
     }
     qCInfo(PhosphorTileEngine::lcTileEngine) << "claimCrossScreenReopen:" << windowId << "opened on" << openingScreenId
@@ -206,6 +202,20 @@ QString AutotileEngine::heldScreenForWindow(const QString& windowId) const
         return keyIt.value().screenId;
     }
     return {};
+}
+
+std::optional<PhosphorEngine::PlacementStateKey> AutotileEngine::heldKeyForWindow(const QString& windowId) const
+{
+    // Same membership check as heldScreenForWindow, minus the current-context
+    // scoping: the key is answered from whichever state holds the window, a
+    // background desktop's included. See IPlacementEngine::heldKeyForWindow.
+    const QString canonical = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    const PhosphorTiles::TilingState* state = m_states.forWindow(canonical, &key);
+    if (state && state->containsWindow(canonical)) {
+        return key;
+    }
+    return std::nullopt;
 }
 
 void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& screenId, int minWidth, int minHeight)
@@ -310,22 +320,18 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 // isWindowTracked would keep answering true for a window
                 // snap is about to own, misrouting the daemon's float and
                 // cross-screen handoff dispatch.
-                if (deferKeyIt != m_states.windowKeys().constEnd()) {
-                    m_states.removeWindow(windowId);
-                }
-                // The other per-window caches follow the key (same sweep as
-                // windowFocused's non-autotile arm): a refused earlier open
-                // already stored a min size here, and windowMinimumSize
-                // would keep answering an autotile-screen-capped value for
-                // a window snap now owns.
-                m_windowMinSizes.remove(windowId);
-                m_autotileFloatedWindows.remove(windowId);
-                // Pending seeds too, like every other drop path (cap rejection,
-                // close, handoffRelease). A strict pending order that still
-                // names this window keeps its timeout re-arming for the whole
-                // session, waiting on a window snap now owns — the strict seed
-                // skips minimized entries without removing them.
-                purgeFromPendingOrders(windowId);
+                // The other per-window caches follow the key: a refused
+                // earlier open already stored a min size here, and
+                // windowMinimumSize would keep answering an
+                // autotile-screen-capped value for a window snap now owns.
+                // Pending seeds go too, like every other drop path (cap
+                // rejection, close, handoffRelease). A strict pending order
+                // that still names this window keeps its timeout re-arming
+                // for the whole session, waiting on a window snap now owns —
+                // the strict seed skips minimized entries without removing
+                // them. The shared sweep carries all of it, so this path
+                // cannot drift from the other refusal arms.
+                sweepPhantomTracking(windowId);
                 return;
             }
         }
@@ -844,10 +850,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         if (keyIt != m_states.windowKeys().constEnd()) {
             const PhosphorTiles::TilingState* held = m_states.stateForKey(keyIt.value());
             if (!held || !held->containsWindow(windowId)) {
-                m_states.removeWindow(windowId);
-                m_windowMinSizes.remove(windowId);
-                m_autotileFloatedWindows.remove(windowId);
-                purgeFromPendingOrders(windowId);
+                sweepPhantomTracking(windowId);
             }
         }
         return;
@@ -942,11 +945,27 @@ QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId)
 
 void AutotileEngine::onWindowRemoved(const QString& windowId)
 {
+    // Captured BEFORE the removal: removeWindow takes the reverse-map entry,
+    // so by the time the retile decision is made the key is gone. A window
+    // this engine never tracked yields a default key, whose empty screenId
+    // cannot match the non-empty one below.
+    const PhosphorEngine::PlacementStateKey removedKey = m_states.keyForWindow(windowId);
     const QString screenId = removeTrackedWindowNoRetile(windowId);
     if (screenId.isEmpty()) {
         return;
     }
     qCInfo(PhosphorTileEngine::lcTileEngine) << "onWindowRemoved:" << windowId << "screen=" << screenId;
+    // Background-context guard, matching ScrollEngine::windowClosed's:
+    // retileAfterOperation resolves the screen's CURRENT context, so a
+    // removal from another desktop's state would relayout the wrong screen's
+    // stack and leave the mutated one untouched. The mutated state stays
+    // silent until its desktop returns.
+    if (removedKey != currentKeyForScreen(screenId)) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "onWindowRemoved:" << windowId << "was held on background context desktop=" << removedKey.desktop
+            << "activity=" << removedKey.activity << "— skipping the current-context retile";
+        return;
+    }
     // Retile immediately (not deferred like onWindowAdded). Removals need instant
     // layout recalculation to avoid visible holes. Unlike additions, removals don't
     // arrive in bursts, so coalescing provides no benefit. (The batch prune path

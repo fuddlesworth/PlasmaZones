@@ -201,6 +201,7 @@ set(plasmazones_core_SRCS
     dbus/tilingadaptor/tilingadaptor.cpp
     dbus/tilingadaptor/relay.cpp
     dbus/tilingadaptor/mapmodel.cpp
+    dbus/tilingadaptor/desktopreconcile.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
@@ -228,9 +229,10 @@ generate_export_header(plasmazones_core
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
-# All five TUs below are excluded from unity build:
+# All seven TUs below are excluded from unity build:
 #   configdefaults.cpp — Settings PCH includes that conflict with unity macros
-#   drag.cpp / drag_protocol.cpp / drop.cpp / selector_gate.cpp —
+#   drag.cpp / drag_protocol.cpp / drop.cpp / dragtimers.cpp /
+#   dragzonespan.cpp / selector_gate.cpp —
 #     forward-declaration conflicts with the d-bus-adaptor-generated extern
 #     declarations across these TUs
 set_source_files_properties(

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorengine_export.h>
+
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementState.h>
 
@@ -11,10 +13,15 @@
 #include <type_traits>
 
 #include <QHash>
+#include <QLoggingCategory>
 #include <QString>
 #include <QtGlobal>
 
 namespace PhosphorEngine {
+
+/// Exported because this is a header-only template used from every engine
+/// library, so the category has to resolve outside phosphor-engine.
+Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcPerScreenStates, PHOSPHORENGINE_EXPORT)
 
 /// The two cooperating maps a per-monitor placement engine keeps: a forward map
 /// from PlacementStateKey to the owning per-screen state object (Qt-parent-owned
@@ -151,12 +158,24 @@ public:
     /// Move a window's reverse-map entry from `oldKey` to `newKey`. Only the
     /// reverse map moves; the engine wraps its own remove-from-old / add-to-new
     /// state lifecycle hooks around this call. `oldKey` is the caller's asserted
-    /// current key: the reverse map is authoritative, so `oldKey` only guards against
-    /// a stale-caller bug (in debug builds) rather than driving the move.
+    /// current key: the reverse map is authoritative, so `oldKey` only reports a
+    /// stale-caller bug rather than driving the move.
     void migrate(const QString& windowId, const PlacementStateKey& oldKey, const PlacementStateKey& newKey)
     {
-        Q_ASSERT(!m_windowToKey.contains(windowId) || m_windowToKey.value(windowId) == oldKey);
-        Q_UNUSED(oldKey)
+        // Debug assert AND a release-build warning for the same condition: a
+        // stale-caller bug silently rewrote the reverse map in release, which
+        // is exactly the case that leaves a window resolving to a state that
+        // does not hold it. The move still happens either way — the map is
+        // authoritative and refusing here would strand the window worse — so
+        // this reports rather than guards.
+        const auto it = m_windowToKey.constFind(windowId);
+        if (it != m_windowToKey.constEnd() && it.value() != oldKey) {
+            Q_ASSERT(false);
+            qCWarning(lcPerScreenStates) << "PerScreenStates::migrate: caller asserted" << windowId << "was on desktop"
+                                         << oldKey.desktop << "of screen" << oldKey.screenId
+                                         << "but the reverse map says desktop" << it.value().desktop << "of screen"
+                                         << it.value().screenId << "— migrating from the map's key";
+        }
         m_windowToKey.insert(windowId, newKey);
     }
 

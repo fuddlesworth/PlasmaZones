@@ -25,6 +25,8 @@ class ScreenManager;
 
 namespace PhosphorEngine {
 class IPlacementEngine;
+class WindowRegistry;
+struct WindowMetadata;
 }
 
 namespace PlasmaZones {
@@ -93,6 +95,76 @@ public:
     /// — the empty-list form of THIS setter clears only the parked opens and
     /// exists for symmetry, with no production caller.
     void setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
+
+    /// Engines that take part in DESKTOP-MEMBERSHIP reconciliation but not in
+    /// the lifecycle pipeline — snapping.
+    ///
+    /// Separate from setLifecycleEngines on purpose. That list drives window
+    /// dispatch, the replay cache and the relay entry points, and snapping
+    /// belongs to none of them; but a window that leaves a desktop must stop
+    /// being an occupant of the zone it was snapped into, because zone
+    /// occupancy is queried across EVERY store rather than the one in view, so
+    /// a stale entry stays a live navigation target. These engines are released
+    /// through IPlacementEngine::releaseFromContext instead of the pipeline
+    /// release, which carries re-announce bookkeeping they have no use for.
+    /// Borrowed; cleared by clearEngine().
+    void setMembershipEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
+
+    /// Subscribe to the compositor-fed WindowRegistry so a window's CONTEXT
+    /// membership is reconciled against the engine states here, in the one
+    /// place that can see every state at once, whatever context is in view.
+    ///
+    /// Desktop AND activity, the two axes of the state key a window moves
+    /// along. Both strand a slot the same way, and both are answered from the
+    /// registry rather than from what the compositor happens to be showing.
+    ///
+    /// Every prior fix for "a window moved between virtual desktops left its
+    /// slot behind" (#1076 and its family) added an arm to the KWin effect,
+    /// which decides whether to release a window from proxies of the desktop
+    /// in view: the managed-screen set, the tracked set, the catch-scan on
+    /// desktop return. None of those knows which desktop's state still lists
+    /// the window, so each (window moved, desktop in view, mode per desktop)
+    /// combination needed its own arm and each was a place to forget one.
+    /// The engines own the membership, and the registry carries the
+    /// window's authoritative desktop set, so the invariant is enforced here:
+    /// whenever a window's desktop set changes, any state holding it under a
+    /// desktop the window no longer belongs to releases it. The effect's arms
+    /// keep doing their effect-side work (pre-tile stash, decoration) and
+    /// their placement of the arrival; the membership question is no longer
+    /// theirs. Pass nullptr on shutdown. Not owned.
+    ///
+    /// Both sides speak x11 desktop NUMBERS, which Plasma renumbers when a
+    /// desktop in the middle is deleted. That is safe only because the daemon
+    /// re-keys engine state on removal (IPlacementEngine::
+    /// renumberDesktopsAfterRemoval); without it the two numberings drift and
+    /// every window on a shifted desktop reads as having left it. A screen
+    /// pinned to one desktop is the other case where the key is not a
+    /// compositor desktop, and the reconcile skips those.
+    ///
+    /// Snapping is in scope, through setMembershipEngines rather than the
+    /// lifecycle list. It has no stack to close a gap in, so it takes no part
+    /// in the reflow half, but a zone assignment left behind on a desktop the
+    /// window has left is not merely stale bookkeeping: zone occupancy is read
+    /// across every store, so the entry stays a live navigation target.
+    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
+
+    /// The reconcile setWindowRegistry subscribes: release @p windowId from
+    /// any state keyed by a context it no longer belongs to.
+    ///
+    /// Both movable axes of the key. @p desktops is the window's whole desktop
+    /// set and @p activity its activity; an EMPTY value on either means "all of
+    /// them, or unknown", and neither can be read as a mismatch — a sticky
+    /// window is on every desktop, and a state keyed with no activity covers
+    /// every activity. A window whose desktops AND activity are both unknown
+    /// releases nothing at all.
+    ///
+    /// The screen is the third component of the key and deliberately not
+    /// checked here: a window does not leave a screen the way it leaves a
+    /// desktop, and the effect relays an output transfer with its own release.
+    ///
+    /// Public so the contract is testable directly, without driving a registry
+    /// round-trip to reach it.
+    void reconcileWindowMembership(const QString& windowId, const QSet<int>& desktops, const QString& activity);
 
     // ── Engine relay entry points ────────────────────────────────────────
     // The composition root connects every pipeline engine's signals here
@@ -296,9 +368,17 @@ public Q_SLOTS:
      * @brief Drop a LIVE window from engine tracking without a close
      *
      * The drag-bypass revert's tracking drop (the effect's drag_snap /
-     * lifecycle_wiring transitions). Unlike windowClosed, NO placement
-     * capture runs: the window is not dying, and its current frame is
-     * transient drag state that must never be recorded as a float-back.
+     * lifecycle_wiring transitions) and the effect's desktop arms. The
+     * desktop-membership reconcile is a further caller and goes through the
+     * private overload below.
+     * Unlike windowClosed, NO placement capture runs: the window is not
+     * dying, and its current frame is transient drag state that must never be
+     * recorded as a float-back.
+     *
+     * The owning engine is resolved by window id, which is right for these
+     * callers because each is the effect telling the daemon about a window
+     * whose engine it does not know. reconcileWindowMembership has already
+     * identified the holding engine and uses the private overload instead.
      *
      * @param windowId Window identifier from KWin
      */
@@ -592,6 +672,11 @@ private:
     /// Engines sharing the lifecycle pipeline, primary first (see
     /// setLifecycleEngines). Interface-only borrows.
     QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
+    /// Membership-only engines (snapping) — see setMembershipEngines.
+    QVector<PhosphorEngine::IPlacementEngine*> m_membershipEngines;
+    /// The registry subscription setWindowRegistry made, so a re-wire
+    /// replaces it rather than stacking a second reconcile per change.
+    QMetaObject::Connection m_registryDesktopConnection;
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
     /// Last per-window tab-colour map relayed by relayScrollTabColorsForWindow
@@ -668,6 +753,13 @@ private:
     /// over-reach: every one of those is the user (or a rule) deliberately
     /// moving a LIVE window, and none is a session restore, so none of them
     /// wants the next announce reclaimed back to a remembered home.
+    ///
+    /// The daemon's own desktop-membership reconcile is the one caller that
+    /// does NOT arm this, and it is the exception that shows what the
+    /// justification above rests on: every effect caller re-announces the
+    /// window in the same breath, so the excuse is consumed immediately. The
+    /// reconcile has no such pairing, and an excuse left standing is spent by
+    /// whatever announce comes next.
     /// The re-announce looks like a first
     /// observation to claimCrossScreenReopen, whose same-instance branch then
     /// matches the window's own stale record (still tiled on the OLD screen —
@@ -710,6 +802,29 @@ private:
     /// The screen whose engine tracks @p windowId, or empty. Strict, for
     /// the same reason as ownerFocusedWindow.
     QString trackedScreenForWindow(const QString& windowId) const;
+
+    /// Shared body of releaseWindowTracking, with the two engine-dependent
+    /// steps parameterised.
+    ///
+    /// @param owner The engine to release from, or nullptr to resolve it by
+    ///        window id. Naming it matters when the CALLER already knows: the
+    ///        id-based resolution runs isWindowTracked, whose contract is
+    ///        per-engine (ScrollEngine answers off the raw reverse-map key, so
+    ///        a phantom entry can win), and falls back to the first lifecycle
+    ///        engine when nothing answers. A caller that identified the holder
+    ///        through the membership-grade heldKeyForWindow must not have that
+    ///        answer re-derived by a weaker predicate. The screen read for the
+    ///        focus refresh is taken from the same engine for the same reason.
+    /// @param armMoveExcuse Whether to arm the adaptor's move-release
+    ///        one-shot. True for the effect's live-move callers, which
+    ///        re-announce the window immediately afterwards and would
+    ///        otherwise have that announce read as a session restore. FALSE
+    ///        for the desktop reconcile: nothing is guaranteed to re-announce,
+    ///        and an unconsumed one-shot is spent by a later unrelated
+    ///        announce, suppressing a legitimate cross-screen reclaim. The
+    ///        placement store's own move marker is armed either way — that one
+    ///        is consumed by takeForReopen and is load-bearing on both paths.
+    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner, bool armMoveExcuse);
     /// Per-screen map state that follows the managed set: every screen the
     /// coalesced announce dropped loses its retained batch and, if it had a
     /// broadcast focus, announces the empty one; every announced screen is

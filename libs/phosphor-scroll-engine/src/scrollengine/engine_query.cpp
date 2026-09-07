@@ -21,6 +21,15 @@ namespace PhosphorScrollEngine {
 
 ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, int columnCountOverride) const
 {
+    // Desktop 0 / empty activity is the provider's "whatever the screen shows
+    // now" spelling, which is what every current-context caller wants.
+    return layoutParamsForKey(PhosphorEngine::PlacementStateKey{screenId, 0, QString()}, columnCountOverride);
+}
+
+ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::PlacementStateKey& key,
+                                                    int columnCountOverride) const
+{
+    const QString& screenId = key.screenId;
     ScrollLayoutParams params;
     QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
                                  : (m_availableGeometryProvider ? m_availableGeometryProvider(screenId) : QRect());
@@ -59,7 +68,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     if (m_contextGapProvider) {
         namespace PSK = PhosphorEngine::PerScreenKeys;
         namespace GR = PhosphorEngine::GapResolution;
-        const QVariantMap overrides = m_contextGapProvider(screenId);
+        const QVariantMap overrides = m_contextGapProvider(screenId, key.desktop, key.activity);
         // The shared atomic-layer resolution both sibling pipelines use (the
         // snap-side GeometryUtils and the autotile PerScreenConfigResolver):
         // an override map that carries outer-gap info wins WHOLESALE, and

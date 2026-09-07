@@ -65,6 +65,15 @@ private:
                                  QString(), static_cast<int>(PhosphorProtocol::WindowType::Normal), extended);
     }
 
+    /// A push on an explicit desktop, so the caption-only carry-forward can be
+    /// exercised against a desktop that MOVED between full pushes.
+    void pushOnDesktop(const QString& title, int virtualDesktop, const QVariantMap& extended)
+    {
+        m_wta->setWindowMetadata(QLatin1String(Instance), QLatin1String(App), QStringLiteral("org.kde.dolphin.desktop"),
+                                 title, QString(), 1234, virtualDesktop, QString(),
+                                 static_cast<int>(PhosphorProtocol::WindowType::Normal), extended);
+    }
+
     static QVariantMap snapshot(bool urgent, int width = 640)
     {
         QVariantMap extended;
@@ -101,6 +110,49 @@ private Q_SLOTS:
         delete m_layoutManager;
         m_layoutManager = nullptr;
         m_guard.reset();
+    }
+
+    // A caption tick re-applies virtualDesktop (a plain argument the effect
+    // re-derives every push) but CARRIES the multi-desktop span forward, since
+    // that is an extended field this push does not resend. A window that moved
+    // between the last full push and the tick would then be stored with a fresh
+    // scalar beside a span from before the move, breaking WindowMetadata's
+    // stated invariant that a non-empty span starts with the scalar — and the
+    // desktop-membership reconcile reads the span, so it would answer for a
+    // membership the window no longer has.
+    void captionOnlyRefresh_dropsASpanTheFreshDesktopContradicts()
+    {
+        QVariantMap spanning = snapshot(false);
+        spanning.insert(QString(Key::VirtualDesktops), QVariantList{1, 2});
+        pushOnDesktop(QStringLiteral("t1"), 1, spanning);
+        {
+            const auto stored = m_registry->metadata(QLatin1String(Instance));
+            QVERIFY(stored.has_value());
+            QCOMPARE(stored->virtualDesktop, 1);
+            QCOMPARE(stored->virtualDesktops, QList<int>({1, 2}));
+        }
+
+        // Caption-only tick (empty extended map) while the window now reports
+        // desktop 3. The carried span still says {1,2}, which cannot be right.
+        pushOnDesktop(QStringLiteral("t2"), 3, QVariantMap());
+        {
+            const auto stored = m_registry->metadata(QLatin1String(Instance));
+            QVERIFY(stored.has_value());
+            QCOMPARE(stored->virtualDesktop, 3);
+            QVERIFY2(stored->virtualDesktops.isEmpty(),
+                     "a span the fresh scalar contradicts must be dropped, not carried");
+        }
+
+        // A caption tick that does NOT contradict the span leaves it alone —
+        // the common case, and the one the carry-forward exists for.
+        pushOnDesktop(QStringLiteral("t3"), 1, spanning);
+        pushOnDesktop(QStringLiteral("t4"), 1, QVariantMap());
+        {
+            const auto stored = m_registry->metadata(QLatin1String(Instance));
+            QVERIFY(stored.has_value());
+            QCOMPARE(stored->virtualDesktop, 1);
+            QCOMPARE(stored->virtualDesktops, QList<int>({1, 2}));
+        }
     }
 
     void activateWindow_emitsForTrackedOnly()

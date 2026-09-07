@@ -595,10 +595,11 @@ void Daemon::stop()
     // raw-Qt-parented RuleAdaptor only runs its own destructor
     // *after* that, as part of QObject child cleanup.
     //
-    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other eleven raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, TilingAdaptor) all ship destructors that don't
+    // SnapAdaptor, TilingAdaptor, AutotileAdaptor, ScrollingAdaptor) all
+    // ship destructors that don't
     // deref any borrowed pointer — most are `= default` / empty-body
     // (no member access), and the two outliers do only self-cleanup
     // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
@@ -785,6 +786,9 @@ void Daemon::stop()
         // half-torn-down state. Symmetric with the resolver / router clears above
         // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
         m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
+        // Same contract for the registry subscription: a metadata push landing
+        // in the teardown gap must not walk engines that are being reset.
+        m_tilingAdaptor->setWindowRegistry(nullptr);
     }
 
     // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
@@ -806,6 +810,14 @@ void Daemon::stop()
         // Same contract for the tile-defer liveness resolver, which captures
         // QPointers to both tiling engines.
         concreteSnap->setTilingEngineLiveResolver({});
+        // The window-registry borrow belongs here too. Member order means the
+        // registry outlives the engines, so nothing can deref it in the
+        // teardown gap; this is the grep-discoverable contract, and it matches
+        // the clear the tiling adaptor's identically-named borrow gets above.
+        concreteSnap->setWindowRegistry(nullptr);
+        // The navigation-state provider is a raw borrow of a Qt-child adaptor,
+        // in the same class as the zone-detection pointer noted below.
+        concreteSnap->setNavigationStateProvider(nullptr);
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by

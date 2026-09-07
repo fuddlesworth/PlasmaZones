@@ -128,7 +128,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // A genuine report naming a tile means the float layer lost focus,
     // whether or not the strip's own focus slot moves below.
     state->setFloatingHasFocus(false);
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+    const ScrollLayoutParams params = layoutParamsForKey(key);
     // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
     // screen owns the view for the rest of the hold. screensMatch, not ==,
     // for the applyLayout guard's reason.

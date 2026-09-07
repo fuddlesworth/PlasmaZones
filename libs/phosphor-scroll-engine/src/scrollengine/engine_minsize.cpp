@@ -90,7 +90,7 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // auto-unfloat, because the float may have been rearranged meanwhile and
     // the manual unfloat path already restores the remembered slot.
     if (state->strip().containsWindow(windowId)) {
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        const ScrollLayoutParams params = layoutParamsForKey(key);
         if (params.workArea.isValid()
             && (clampedMinWidth > params.workArea.width() || clampedMinHeight > params.workArea.height())) {
             qCInfo(lcScrollEngine) << "windowMinSizeUpdated:" << windowId << "min" << clampedMinWidth << "x"
@@ -162,7 +162,7 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // acked size with. Comparing physical width/height here while the
     // reconcile reads main/cross would make each guard protect the intent it
     // was not written for.
-    const ScrollLayoutParams resizeParams = layoutParamsForScreen(key.screenId);
+    const ScrollLayoutParams resizeParams = layoutParamsForKey(key);
     const StripAxis resizeAxis = resizeParams.axis;
     const bool mainChanged = resizeAxis.mainSize(lastApplied) != resizeAxis.mainSize(newFrame);
     const bool crossChanged = resizeAxis.crossSize(lastApplied) != resizeAxis.crossSize(newFrame);
