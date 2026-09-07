@@ -289,7 +289,7 @@ bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
         // can differ, and this is the same approximation every other
         // window-keyed strip mutation on this engine lives with; the values
         // that matter to the toggle (work area, axis) are per-screen.
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        const ScrollLayoutParams params = layoutParamsForKey(key);
         const bool changed = state->strip().toggleMaximizeColumnForWindow(canonicalId, params);
         if (changed) {
             if (key == currentKeyForScreen(key.screenId)) {
@@ -364,7 +364,7 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
                                    << "trackedScreen:" << key.screenId;
             return false;
         }
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        const ScrollLayoutParams params = layoutParamsForKey(key);
         const bool changed = state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
         // The RESOLVED rect, not just the flag: "did the column end up covering
         // the raw work area" is the question a maximize report actually needs

@@ -911,7 +911,16 @@ public:
     /// (InnerGap / OuterGap* / UsePerSideOuterGap); values present in the
     /// map win over the IScrollSettings gaps. Same lifetime contract as the
     /// other injected closures.
-    using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
+    ///
+    /// Takes the CONTEXT explicitly rather than resolving it daemon-side from
+    /// the screen's current desktop. A mutation on a BACKGROUND state — a
+    /// close on a desktop that is not in view, say — has to resolve gaps for
+    /// the desktop the state belongs to, and a screen-only provider would hand
+    /// it the desktop in view's rules instead. A desktop of 0 with an empty
+    /// activity means "whatever the screen is showing now", which is what
+    /// every current-context caller passes.
+    using ContextGapProvider =
+        std::function<QVariantMap(const QString& screenId, int desktop, const QString& activity)>;
     /// Embedder/test seam: inject screen geometry when NO ScreenManager is
     /// wired (headless hosts). @p availableGeometry supplies the work area,
     /// @p screenGeometry the full rect used for off-canvas parking bounds.
@@ -1230,6 +1239,15 @@ private:
     /// one) and windowOpened's height-rule arm, which re-resolves the work
     /// area against the POST-insert column count.
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
+
+    /// layoutParamsForScreen for a NAMED context rather than the screen's
+    /// current one. The gap rules a strip lays out against are per (screen,
+    /// desktop, activity), so a mutation on a background state resolves the
+    /// wrong ones through the screen-only form — the anchor it then derives is
+    /// measured with the desktop-in-view's gaps and can survive the desktop
+    /// return, because updateViewForFocus leaves a fully visible column alone.
+    ScrollLayoutParams layoutParamsForKey(const PhosphorEngine::PlacementStateKey& key,
+                                          int columnCountOverride = -1) const;
 
     /// Auto-resolve the strip axis from a FINAL work area. Private because
     /// callers must not pass a rect that has not been through the outer-gap

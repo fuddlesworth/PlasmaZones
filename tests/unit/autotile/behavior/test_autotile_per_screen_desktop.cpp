@@ -19,6 +19,7 @@
  */
 
 #include <QCoreApplication>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -279,6 +280,43 @@ private Q_SLOTS:
         QVERIFY(s2 != nullptr);
         QVERIFY(s1->containsWindow(QStringLiteral("win-s1")));
         QVERIFY(s2->containsWindow(QStringLiteral("win-s2")));
+    }
+
+    // The script-state stash is keyed by context and OUTLIVES the state it was
+    // written for — it is rescued as the state dies — so a renumber that moved
+    // only the live states would leave a bag under the number its desktop had
+    // before. The desktop that inherits that number would then be handed the
+    // deleted desktop's layout, which is what the prune's own erase guards
+    // against on the other path.
+    void renumberAfterRemoval_shiftsAStashWithNoLiveState()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QJsonObject bag{{QStringLiteral("marker"), QStringLiteral("desktop-3")}};
+
+        engine.setCurrentDesktopForScreen(kS1, 3);
+        engine.setAutotileScreens({kS1});
+        engine.windowOpened(QStringLiteral("win-d3"), kS1);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d3 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d3 != nullptr);
+        d3->setScriptState(bag);
+
+        // Taking the screen out of the set tears the state down and rescues the
+        // bag, which leaves desktop 3 holding a stash and NO state — the shape
+        // the stateless shift exists for.
+        engine.setAutotileScreens({});
+        QCoreApplication::processEvents();
+
+        engine.pruneStatesForDesktop(2);
+        engine.renumberDesktopsAfterRemoval(2);
+
+        // Desktop 3 is desktop 2 now. Bringing the screen back there must find
+        // the bag, which only happens if it moved with the numbering.
+        engine.setCurrentDesktopForScreen(kS1, 2);
+        engine.setAutotileScreens({kS1});
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d2 != nullptr);
+        QCOMPARE(d2->scriptState(), bag);
     }
 };
 

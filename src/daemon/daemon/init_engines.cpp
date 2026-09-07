@@ -201,15 +201,22 @@ void Daemon::initEnginesAndWiring()
     // Scrolling provider: resolves against the "scrolling" placement mode
     // so a `Mode Equals "scrolling"` gap rule applies to the strip and
     // stays inert elsewhere.
-    scrollEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-        if (!m_layoutManager || screenId.isEmpty()) {
-            return {};
-        }
-        return GeometryUtils::mergeConfigPerScreenGaps(
-            GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("scrolling"))),
-            m_settings.get(), screenId);
-    });
+    scrollEngine->setContextGapProvider(
+        [this](const QString& screenId, int desktop, const QString& activity) -> QVariantMap {
+            if (!m_layoutManager || screenId.isEmpty()) {
+                return {};
+            }
+            // A desktop of 0 means "the context this screen is showing", which is
+            // what a current-context caller passes; a named desktop comes from a
+            // caller mutating a BACKGROUND state, and its gap rules are the ones
+            // that state was laid out against.
+            const int resolvedDesktop = desktop > 0 ? desktop : currentDesktopForScreen(screenId);
+            const QString resolvedActivity = desktop > 0 ? activity : currentActivity();
+            return GeometryUtils::mergeConfigPerScreenGaps(
+                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                    screenId, resolvedDesktop, resolvedActivity, QStringLiteral("scrolling"))),
+                m_settings.get(), screenId);
+        });
 
     // Snap-restore defer gate (ScrollEngine::windowOpened): bakes BOTH the
     // global snapping toggle and the recorded context's mode into one

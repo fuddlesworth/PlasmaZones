@@ -211,15 +211,14 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // would put two independent placement answers for one window on the wire
         // at once, with the winner decided by D-Bus reply order.
         //
-        // The sticky fall-through takes NEITHER unmanaged branch. Its window
-        // never moved and is visible right now, so stashing-and-wiping it (the
-        // branch just below) would strip a decoration the user is looking at,
-        // and offering it to snapToEmptyZone (the branch after the drain) would
-        // pull it into a zone it was never in. It wants only the managed arm's
-        // release-and-re-add, which is what re-homes it onto the desktop it is
-        // actually on.
+        // The sticky fall-through skips the snapToEmptyZone offer below — its
+        // window never moved, so pulling it into a zone it was never in would
+        // be a placement nobody asked for — but it takes this scrub like any
+        // other arrival on an unmanaged destination. The daemon has released it
+        // from the desktop key it was adopted under, so the effect's tiling
+        // bookkeeping has to go too.
         const bool destinationManaged = m_tilingHandler->isManagedScreen(screenId);
-        if (!destinationManaged && !stickyFallThrough) {
+        if (!destinationManaged) {
             // The desktop in view runs no tiling, but the desktop the window
             // came from may well have, and the window was tiled there: this
             // is the EFFECT-side half of that departure, mirroring the
@@ -249,10 +248,12 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
             // and it must run AFTER the release so it sees the untiled state.
             reconcileDecorationOnPlacementFlip(windowId);
         }
-        // Runs on both branches, and before the placement arms below, so a
-        // window that was parked for a desktop-arrival restore is restored by
-        // the park rather than re-placed from scratch. On a managed
-        // destination it can only spend the park and answer false.
+        // Runs on both branches, and before the PLACEMENT arms below but after
+        // the scrub above, so a window that was parked for a desktop-arrival
+        // restore is restored by the park rather than re-placed from scratch —
+        // and a fired park cannot skip the bookkeeping the scrub owes. On a
+        // managed destination the drain can only spend the park and answer
+        // false.
         if (m_snapHandler && m_snapHandler->drainDesktopArrivalFor(windowId, window)) {
             return;
         }
@@ -301,22 +302,14 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // guard is written for is already excluded by the discriminator above.
         //
         // Past this point everything is the MANAGED arm. The sticky
-        // fall-through skipped both unmanaged branches above, so it arrives
-        // here on a snapping destination too, and the adopt below is not for
-        // it: notifyWindowAdded gates on the same managed set and would
-        // decline, leaving the release that precedes it as a scrub with no
-        // re-add.
-        //
-        // It still owes the unmanaged side its own cleanup, which is the same
-        // work the branch above does for an ordinary arrival. The daemon has
-        // released this window from the desktop key it was adopted under, so
-        // the effect's tiling bookkeeping has to go with it — leaving the id in
-        // m_notifiedWindows would make every later announce decline, which is
-        // the untracked-and-unreachable shape this whole arm exists to close.
+        // fall-through is the one case that reaches here on an UNMANAGED
+        // destination — it skipped the snapToEmptyZone offer above rather than
+        // returning at it — and the adopt below is not for it: notifyWindowAdded
+        // gates on the same managed set and would decline, leaving the release
+        // that precedes it as a scrub with no re-add. Its effect-side cleanup
+        // already ran above the drain, on the branch every unmanaged arrival
+        // takes, so there is nothing left to do here.
         if (!destinationManaged) {
-            m_tilingHandler->savePreTileForDesktopMove(windowId);
-            m_tilingHandler->releaseWindowTracking(windowId, screenId);
-            reconcileDecorationOnPlacementFlip(windowId);
             return;
         }
         if (!stickyFallThrough && m_tilingHandler->isTrackedWindow(windowId)) {

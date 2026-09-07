@@ -695,7 +695,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // FloatRestore could re-slot an unfloat on the NEW screen against
         // the OLD strip's geometry, and lastAppliedRect would keep
         // answering for a context that no longer holds the window.
-        const ScrollLayoutParams oldParams = layoutParamsForScreen(oldKey.screenId);
+        const ScrollLayoutParams oldParams = layoutParamsForKey(oldKey);
         const bool wasFloating = oldState->isFloating(windowId);
         // Windowed fullscreen is per-tile state the fresh insert below would
         // silently default false; read it off the old tile before takeWindow
@@ -1010,7 +1010,7 @@ void ScrollEngine::endArrivalBurst()
         if (!seededFocus.isEmpty()) {
             ScrollState* state = stateForKey(key, false);
             if (state && state->strip().containsWindow(seededFocus)) {
-                state->strip().focusWindow(seededFocus, layoutParamsForScreen(key.screenId));
+                state->strip().focusWindow(seededFocus, layoutParamsForKey(key));
                 restoredFocus = true;
             }
         }
@@ -1043,7 +1043,13 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         return;
     }
     const bool wasActive = state->strip().activeWindowId() == windowId;
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+    // For the window's OWN key, not the screen's current one. removeWindow
+    // re-derives the view anchor as it closes the gap, and a close on a
+    // background desktop resolved through the screen-only form would measure
+    // that anchor with the desktop-in-view's gap rules. updateViewForFocus
+    // leaves a fully visible column's anchor alone, so the error can survive
+    // the desktop return rather than being corrected by it.
+    const ScrollLayoutParams params = layoutParamsForKey(key);
     const bool inStrip = state->strip().removeWindow(windowId, params);
     // Unconditional, not gated on the strip removal failing: the two sets are
     // meant to be disjoint, but a window that somehow sits in BOTH would keep

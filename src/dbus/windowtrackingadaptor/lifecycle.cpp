@@ -788,6 +788,20 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.virtualDesktop = fresh.virtualDesktop;
             meta.activity = fresh.activity;
             meta.windowType = fresh.windowType;
+            // The multi-desktop span is an EXTENDED field, so it is carried
+            // forward rather than re-sent — but virtualDesktop above is
+            // authoritative on this push, and the effect re-derives it from
+            // x11DesktopNumber every time. A window that moved between the last
+            // full push and this caption tick therefore arrives with a fresh
+            // scalar beside a span from before the move, which breaks
+            // WindowMetadata's stated invariant that a non-empty span starts
+            // with the scalar. Drop the span in that case: it describes a
+            // membership the window no longer has, and the next full push
+            // re-establishes it. Consumers then read the scalar, which is the
+            // one field this push actually knows.
+            if (!meta.virtualDesktops.isEmpty() && meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
+                meta.virtualDesktops.clear();
+            }
         }
         // Fresh captionNormal from the caption tick, when the effect sent one.
         if (const auto it = extended.constFind(QString(Key::CaptionNormal)); it != extended.constEnd()) {

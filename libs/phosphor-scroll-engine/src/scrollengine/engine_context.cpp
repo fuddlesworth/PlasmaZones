@@ -92,7 +92,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         if (state) {
             auto paramsIt = paramsByScreen.find(key.screenId);
             if (paramsIt == paramsByScreen.end()) {
-                paramsIt = paramsByScreen.insert(key.screenId, layoutParamsForScreen(key.screenId));
+                paramsIt = paramsByScreen.insert(key.screenId, layoutParamsForKey(key));
             }
             state->strip().removeWindow(windowId, *paramsIt);
             state->removeFloating(windowId);
