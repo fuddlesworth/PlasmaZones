@@ -884,10 +884,14 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     // reclaim-credit burn). A single flag consumed at the first moment would
     // already be gone by the second — see markInstanceMovedLive.
     //
-    // Only the ADAPTOR's is optional: it is consumed by the next dispatched
-    // open, so a caller with no re-announce to follow would leave it standing
-    // for a later, unrelated one. The store's is armed unconditionally
-    // because takeForReopen reads it on every path.
+    // Only the ADAPTOR's is optional. Both are one-shots and both can go
+    // stale, but they are not equally costly to leave standing: the adaptor's
+    // suppresses a cross-screen RECLAIM, which a later unrelated open of the
+    // same instance genuinely wants, while the store's suppresses a
+    // reclaim-CREDIT burn, and the window it names is still alive and still
+    // holds its record — so the credit it protects is the window's own. Arming
+    // it for a live window that has not been reclaimed is what every other
+    // caller does too, and burnReclaimCredit's own guard is what ends it.
     if (armMoveExcuse) {
         m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     }

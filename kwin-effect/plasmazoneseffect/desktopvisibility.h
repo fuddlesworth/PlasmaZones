@@ -4,8 +4,13 @@
 #pragma once
 
 // "Is this window's desktop the one in view WHERE THE WINDOW LIVES" — the
-// per-output reading, for every effect-side gate that used to ask the global
-// question.
+// per-output reading, for the effect-side gates that decide PLACEMENT.
+//
+// Not every global reading in the effect is wrong. A gate asking "should this
+// be painted / hit-tested right now" genuinely wants the session's current
+// desktop, and those are left alone. What must use the per-output form is any
+// gate that decides whether to move, adopt, release or decorate a window,
+// because that decision belongs to the monitor the window is on.
 //
 // Under per-output virtual desktops (#648, Plasma 6.7) each output shows its
 // own desktop, and the global current is only one of them. Asking

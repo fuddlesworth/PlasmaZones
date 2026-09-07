@@ -186,9 +186,12 @@ private Q_SLOTS:
     }
 
     // A title tick that leaves the desktop fields alone must not reconcile at
-    // all. Seeded so the registry and the engine DISAGREE about the desktop:
-    // the guard is then the only thing standing between the retitle and a
-    // release, so deleting it fails this case instead of passing silently.
+    // all. Seeded so the registry and the engine DISAGREE about the desktop, so
+    // the set-equality guard is the only thing standing between the retitle and
+    // a release and deleting it fails this case instead of passing silently.
+    // (The cheap sameDesktopFields check ahead of it is an optimisation, not a
+    // second gate: equal fields imply equal sets, so it cannot be pinned
+    // separately.)
     void autotile_titleTickWithUnchangedDesktopSet_isNotAMove()
     {
         AutotileFixture f;
@@ -263,8 +266,7 @@ private Q_SLOTS:
         AutotileFixture f;
         PhosphorTiles::TilingState* d1 = f.openOn(1, {kWindow, kStays});
         QVERIFY(d1 != nullptr);
-        f.engine.windowOpened(kStays, kScreen);
-        QCoreApplication::processEvents();
+        QCOMPARE(d1->windowCount(), 2);
 
         f.registry.upsert(kInstance, onDesktop(3));
         QCoreApplication::processEvents();
@@ -272,8 +274,10 @@ private Q_SLOTS:
         QCOMPARE(d1->windowCount(), 1);
 
         // Nothing holds the window now, so no engine answers and no release
-        // runs. The window-count assertion is the load-bearing one: it catches
-        // a release that fell through to some other engine's window.
+        // runs. Characterisation rather than regression: with one engine in
+        // the fixture there is no production line whose removal makes the
+        // second report do something. The wrong-engine dispatch it would
+        // otherwise be probing is pinned properly by the two-engine case.
         f.registry.upsert(kInstance, onDesktop(4));
         QCoreApplication::processEvents();
         QVERIFY(!f.engine.isWindowTracked(kWindow));
@@ -437,9 +441,9 @@ private Q_SLOTS:
 
     // heldKeyForWindow is MEMBERSHIP-grade, and a drag-insert preview is the
     // one state where that differs from the reverse-map key: the preview keeps
-    // the key while the window leaves the strip. The reconcile then answers
-    // nullopt and releases nothing, which is the safe direction for a window
-    // the user is still dragging.
+    // the key while the window leaves the strip. A reconcile arriving mid-drag
+    // therefore finds no holder and releases nothing, which is the safe
+    // direction for a window the user is still moving.
     void scrolling_windowDetachedForDragPreview_isNotHeld()
     {
         ScrollFixture f;
@@ -456,6 +460,11 @@ private Q_SLOTS:
         // Tracked, but no state holds it.
         QVERIFY(f.engine.isWindowTracked(kWindow));
         QVERIFY(!f.engine.heldKeyForWindow(kWindow).has_value());
+
+        // A desktop report landing mid-drag must not release it.
+        f.registry.upsert(kInstance, onDesktop(3));
+        QCoreApplication::processEvents();
+        QVERIFY(f.engine.isWindowTracked(kWindow));
 
         f.engine.cancelDragInsertPreview();
         QCoreApplication::processEvents();

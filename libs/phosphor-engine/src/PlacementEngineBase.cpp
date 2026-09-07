@@ -4,17 +4,22 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 
 #include <PhosphorEngine/LayerFocusSwitch.h>
+#include <PhosphorEngine/PerScreenStates.h>
 
 #include <QLoggingCategory>
 
 // Filterable like every other diagnostic in this library (the bare qWarning
 // it replaces could not be silenced per-category).
 Q_LOGGING_CATEGORY(lcPlacementEngineBase, "org.phosphor.engine.placementbase")
-// Defined here rather than in a file of its own: PerScreenStates is a
-// header-only template with no TU to host it.
-Q_LOGGING_CATEGORY(lcPerScreenStates, "org.phosphor.engine.perscreenstates")
 
 namespace PhosphorEngine {
+
+// Defined here rather than in a file of its own: PerScreenStates is a
+// header-only template with no TU to host it. INSIDE the namespace, matching
+// the exported declaration in that header — a definition at global scope
+// declares a different function, and the template's use of it would resolve to
+// the namespaced declaration nothing then defines.
+Q_LOGGING_CATEGORY(lcPerScreenStates, "org.phosphor.engine.perscreenstates")
 
 PlacementEngineBase::PlacementEngineBase(QObject* parent)
     : QObject(parent)

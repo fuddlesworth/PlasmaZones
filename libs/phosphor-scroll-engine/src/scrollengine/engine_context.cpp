@@ -730,6 +730,46 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
             desktops.append(desktop);
         }
     }
+    // The context-keyed side maps OUTLIVE their states: a strip stash is
+    // written as the state is torn down, and the override map is pushed per
+    // context whether or not one exists. migrateStateKey moves only the
+    // entries whose key still has a live state, so the rest are shifted here —
+    // otherwise they keep the number their desktop had before, and
+    // pruneStatesForDesktop's own comment says what that costs ("the index is
+    // handed out again, and the next desktop to take it would resolve the
+    // template of the one the user deleted").
+    //
+    // Restricted to keys with NO live state so nothing moves twice, and built
+    // into fresh containers so an entry shifting down cannot land on one not
+    // yet visited.
+    const auto shiftStatelessKeys = [&](auto& map) {
+        std::decay_t<decltype(map)> shifted;
+        shifted.reserve(map.size());
+        for (auto it = map.begin(); it != map.end(); ++it) {
+            PhosphorEngine::PlacementStateKey key = it.key();
+            if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
+                --key.desktop;
+            }
+            shifted.insert(key, it.value());
+        }
+        map = std::move(shifted);
+    };
+    shiftStatelessKeys(m_stripStash);
+    shiftStatelessKeys(m_stripStashConsumed);
+    shiftStatelessKeys(m_burstPendingApplies);
+    shiftStatelessKeys(m_perScreenOverrides);
+    if (!m_pendingFocusEmitContexts.isEmpty()) {
+        QSet<PhosphorEngine::PlacementStateKey> shiftedContexts;
+        shiftedContexts.reserve(m_pendingFocusEmitContexts.size());
+        for (PhosphorEngine::PlacementStateKey key : std::as_const(m_pendingFocusEmitContexts)) {
+            if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
+                --key.desktop;
+            }
+            shiftedContexts.insert(key);
+        }
+        m_pendingFocusEmitContexts = std::move(shiftedContexts);
+    }
+
     if (desktops.isEmpty()) {
         m_context.renumberDesktopsAfterRemoval(removedDesktop);
         return;

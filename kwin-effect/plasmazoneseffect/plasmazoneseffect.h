@@ -3502,6 +3502,25 @@ private:
     // and erased in the windowDeleted cleanup alongside it.
     QHash<KWin::EffectWindow*, QSet<QString>> m_trackedDesktopsPerWindow;
 
+    // The desktop set a window had immediately BEFORE it went sticky, for the
+    // one question the stamp above cannot answer on an un-stick: the sticky
+    // stamp is empty, so it says nothing about where the engines adopted the
+    // window, and the un-stick arm has to know whether the desktop it landed
+    // on is that one.
+    //
+    // Without it every un-stick reads as a move: the arm would release and
+    // re-add a window that came back to the desktop it was already keyed
+    // under, appending it to the stack instead of leaving its slot alone. With
+    // it, only an un-stick onto a DIFFERENT desktop takes the re-home path,
+    // which is the case the daemon's reconcile has genuinely released.
+    //
+    // Written when the stamp transitions non-empty → empty, consumed and
+    // dropped on the way back out, and erased in the windowDeleted cleanup
+    // beside the stamp. A window with no entry (sticky before PlasmaZones saw
+    // it) reads as "adopted somewhere else", which takes the re-home path —
+    // the conservative answer, since the alternative leaves it untracked.
+    QHash<KWin::EffectWindow*, QSet<QString>> m_preStickyDesktopsPerWindow;
+
     // Windows that already have their per-window connections. setupWindowConnections
     // issues raw connects with lambda slots, so a second call on the same window
     // doubles every per-window handler — and Qt::UniqueConnection is illegal with a

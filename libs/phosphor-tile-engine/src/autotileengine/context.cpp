@@ -658,10 +658,18 @@ bool AutotileEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& ol
     // Release them properly first, on the same terms pruneStatesForDesktop
     // uses: the screen survives, only this context is going away, so neither
     // the screen-keyed overflow bucket nor the screen order maps are cleared.
-    if (PhosphorTiles::TilingState* existing = m_states.takeState(newKey)) {
+    if (PhosphorTiles::TilingState* existing = m_states.stateForKey(newKey)) {
+        // RELEASE FIRST, then unhook, exactly as the scroll twin does and as
+        // removeStatesIf documents for its callers. The teardown's placement
+        // capture resolves each window through the reverse map and then looks
+        // THAT key up in the forward map, so taking the state out first makes
+        // every one of those lookups miss and not one record is written — a
+        // silent loss no test would see, since the release list and the emit
+        // come from the state's own window lists either way.
         QStringList releasedWindows;
         releaseScreenStateForTeardown(newKey.screenId, existing, releasedWindows, /*drainOverflow=*/false,
                                       /*clearScreenOrderMaps=*/false);
+        m_states.takeState(newKey);
         m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
             return key == newKey;
         });
@@ -671,7 +679,7 @@ bool AutotileEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& ol
                 << "— released" << releasedWindows.size() << "window(s)";
             Q_EMIT windowsReleased(releasedWindows, QSet<QString>{newKey.screenId});
         }
-        existing->deleteLater();
+        // No deleteLater here: releaseScreenStateForTeardown already posts one.
     }
     m_states.takeState(oldKey);
     m_states.insertState(newKey, migratedState);
@@ -724,6 +732,31 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
             desktops.append(desktop);
         }
     }
+    // The script-state stash is context-keyed and OUTLIVES its state: it is
+    // written as the state dies, so a stash with no live state is the normal
+    // condition rather than an edge case. The state loop below only moves a
+    // stash when a state exists at the same key, so the leftovers are shifted
+    // here — otherwise a bag stays under the number its desktop had before,
+    // and the desktop that inherits that number is handed someone else's
+    // layout, which is exactly what pruneStatesForDesktop's own erase guards
+    // against. Built into a new map rather than shifted in place, so an entry
+    // moving down cannot land on one not yet visited.
+    if (!m_scriptStateStash.empty()) {
+        std::unordered_map<TilingStateKey, StashedScriptState> shifted;
+        shifted.reserve(m_scriptStateStash.size());
+        for (auto& entry : m_scriptStateStash) {
+            TilingStateKey key = entry.first;
+            // Only entries with NO live state: the ones that have one are
+            // moved by migrateStateKey in the loop below, on its own terms,
+            // and shifting them here as well would move them twice.
+            if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
+                --key.desktop;
+            }
+            shifted.insert_or_assign(std::move(key), std::move(entry.second));
+        }
+        m_scriptStateStash = std::move(shifted);
+    }
+
     if (desktops.isEmpty()) {
         m_context.renumberDesktopsAfterRemoval(removedDesktop);
         return;

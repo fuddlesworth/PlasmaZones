@@ -1375,8 +1375,9 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
         return false;
     }
     // Measured against the window's OWN output, matching the arm in
-    // slotWindowDesktopMoveRequested — the shared helper at the top of this
-    // file carries the full over-/under-fire rationale.
+    // slotWindowDesktopMoveRequested. The shared helper in
+    // plasmazoneseffect/desktopvisibility.h carries the full over- and
+    // under-fire rationale.
     if (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
         return false; // Still waiting for its desktop.
     }

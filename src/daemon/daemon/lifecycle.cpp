@@ -813,7 +813,7 @@ void Daemon::stop()
         // The window-registry borrow belongs here too. Member order means the
         // registry outlives the engines, so nothing can deref it in the
         // teardown gap; this is the grep-discoverable contract, and it matches
-        // the clear the tiling adaptor's identically-named borrow gets below.
+        // the clear the tiling adaptor's identically-named borrow gets above.
         concreteSnap->setWindowRegistry(nullptr);
         // The navigation-state provider is a raw borrow of a Qt-child adaptor,
         // in the same class as the zone-detection pointer noted below.

@@ -76,7 +76,16 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
             previousDesktops = *prevIt;
             hadPreviousDesktops = true;
         }
-        m_trackedDesktopsPerWindow[window] = desktopIdsOf(window);
+        const QSet<QString> currentDesktops = desktopIdsOf(window);
+        m_trackedDesktopsPerWindow[window] = currentDesktops;
+        // Remember where the window lived on the way INTO sticky, because the
+        // sticky stamp itself is empty and the un-stick arm below needs to know
+        // whether the desktop it lands on is the one the engines keyed it
+        // under. Only the transition writes it, so a second edit while sticky
+        // cannot overwrite the answer with an empty set.
+        if (currentDesktops.isEmpty() && hadPreviousDesktops && !previousDesktops.isEmpty()) {
+            m_preStickyDesktopsPerWindow[window] = previousDesktops;
+        }
         // No metadata push here: the daemon's float resolver reads the
         // window's own desktop/activity from the registry, but that is kept
         // fresh by the KWin::Window::desktopsChanged → pushLatest connection
@@ -167,8 +176,22 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         if (!desktopInView || !hadPreviousDesktops) {
             return;
         }
-        const bool stickyFallThrough = previousDesktops.isEmpty();
-        if (!stickyFallThrough && previousDesktops.contains(desktopInView->id())) {
+        // An un-stick: the recorded stamp was empty. It only needs re-homing
+        // when the window is landing somewhere OTHER than the desktop it was
+        // adopted under, because that is the case the daemon's reconcile has
+        // just released it from. Coming back to where it started, its key is
+        // still correct and a release-and-re-add would only cost it its slot.
+        bool stickyFallThrough = false;
+        if (previousDesktops.isEmpty()) {
+            const auto preStickyIt = m_preStickyDesktopsPerWindow.constFind(window);
+            const bool landedWhereItWasAdopted =
+                preStickyIt != m_preStickyDesktopsPerWindow.constEnd() && preStickyIt->contains(desktopInView->id());
+            m_preStickyDesktopsPerWindow.remove(window);
+            if (landedWhereItWasAdopted) {
+                return;
+            }
+            stickyFallThrough = true;
+        } else if (previousDesktops.contains(desktopInView->id())) {
             return;
         }
         const QString windowId = getWindowId(window);
@@ -276,14 +299,26 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // ran an arm for it, so its id is exactly as tracked as before — this
         // guard would send it away with nothing done. The set-grew case the
         // guard is written for is already excluded by the discriminator above.
+        //
+        // Also the point past which everything is the MANAGED arm. The sticky
+        // fall-through skipped both unmanaged branches above, so without this
+        // it would fall into the tiling adopt on a snapping screen, where
+        // releaseWindowTracking scrubs the effect's tiling bookkeeping and
+        // notifyWindowAdded then declines (it gates on the same managed set) —
+        // a scrub with no re-add.
+        if (!destinationManaged) {
+            return;
+        }
         if (!stickyFallThrough && m_tilingHandler->isTrackedWindow(windowId)) {
             return;
         }
         if (stickyFallThrough) {
             // The bucket has to be stashed before the release wipes it. On
             // every other path into this arm the departure arm already stashed
-            // it, but a sticky window never took a departure arm — it is
-            // excluded by the isOnAllDesktops term up top — so without this the
+            // it, but this window never took one: the departure arm is only
+            // reached when the window is NOT on the desktop its own output
+            // shows, and the sticky arm is only reachable when it is — so
+            // without this the
             // release below drops the window's only record of its free
             // geometry and the restore two lines down has nothing to fold
             // back. The window would then be re-added with no free geometry at

@@ -227,6 +227,7 @@ private Q_SLOTS:
             engine.windowOpened(windowId, kS1);
             QCoreApplication::processEvents();
         }
+        QVERIFY(engine.heldKeyForWindow(onD3).has_value());
         QCOMPARE(engine.heldKeyForWindow(onD3)->desktop, 3);
 
         // Desktop 2 is deleted: its own state goes, and 3 becomes 2.

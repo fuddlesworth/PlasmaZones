@@ -301,6 +301,23 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     // handler's "prune everything past newCount" sweep correctly finds
     // nothing left to do.
     if (removedPosition > 0) {
+        // Shift this manager's OWN per-screen map with the same numbering
+        // before telling anyone. The engines re-key their per-output desktop
+        // maps off this signal, so leaving these entries on the old numbering
+        // would leave the two disagreeing, and any later push of
+        // screenDesktop() into an engine would write the stale number back
+        // over the corrected one. Mutate first, emit after, matching
+        // clampScreenDesktopsToCount's re-entrancy note.
+        QList<std::pair<QString, int>> renumbered;
+        for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
+            if (it.value() > removedPosition) {
+                --it.value();
+                renumbered.append({it.key(), it.value()});
+            }
+        }
+        for (const auto& [screenId, desktop] : renumbered) {
+            Q_EMIT screenDesktopChanged(screenId, desktop);
+        }
         Q_EMIT desktopRemovedAt(removedPosition);
     }
     // The count notification belongs HERE, where the value is committed.
