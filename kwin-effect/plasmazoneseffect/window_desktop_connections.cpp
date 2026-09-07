@@ -300,13 +300,23 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // guard would send it away with nothing done. The set-grew case the
         // guard is written for is already excluded by the discriminator above.
         //
-        // Also the point past which everything is the MANAGED arm. The sticky
-        // fall-through skipped both unmanaged branches above, so without this
-        // it would fall into the tiling adopt on a snapping screen, where
-        // releaseWindowTracking scrubs the effect's tiling bookkeeping and
-        // notifyWindowAdded then declines (it gates on the same managed set) —
-        // a scrub with no re-add.
+        // Past this point everything is the MANAGED arm. The sticky
+        // fall-through skipped both unmanaged branches above, so it arrives
+        // here on a snapping destination too, and the adopt below is not for
+        // it: notifyWindowAdded gates on the same managed set and would
+        // decline, leaving the release that precedes it as a scrub with no
+        // re-add.
+        //
+        // It still owes the unmanaged side its own cleanup, which is the same
+        // work the branch above does for an ordinary arrival. The daemon has
+        // released this window from the desktop key it was adopted under, so
+        // the effect's tiling bookkeeping has to go with it — leaving the id in
+        // m_notifiedWindows would make every later announce decline, which is
+        // the untracked-and-unreachable shape this whole arm exists to close.
         if (!destinationManaged) {
+            m_tilingHandler->savePreTileForDesktopMove(windowId);
+            m_tilingHandler->releaseWindowTracking(windowId, screenId);
+            reconcileDecorationOnPlacementFlip(windowId);
             return;
         }
         if (!stickyFallThrough && m_tilingHandler->isTrackedWindow(windowId)) {
@@ -315,10 +325,9 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         if (stickyFallThrough) {
             // The bucket has to be stashed before the release wipes it. On
             // every other path into this arm the departure arm already stashed
-            // it, but this window never took one: the departure arm is only
+            // it, but this window never took one. The departure arm is only
             // reached when the window is NOT on the desktop its own output
-            // shows, and the sticky arm is only reachable when it is — so
-            // without this the
+            // shows, and the sticky arm only when it is. So without this the
             // release below drops the window's only record of its free
             // geometry and the restore two lines down has nothing to fold
             // back. The window would then be re-added with no free geometry at

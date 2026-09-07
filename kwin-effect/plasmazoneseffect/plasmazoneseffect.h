@@ -3514,9 +3514,12 @@ private:
     // it, only an un-stick onto a DIFFERENT desktop takes the re-home path,
     // which is the case the daemon's reconcile has genuinely released.
     //
-    // Written when the stamp transitions non-empty → empty, consumed and
-    // dropped on the way back out, and erased in the windowDeleted cleanup
-    // beside the stamp. A window with no entry (sticky before PlasmaZones saw
+    // Written when the stamp transitions non-empty → empty, dropped when an
+    // un-stick reaches the discriminator that reads it, and erased in the
+    // windowDeleted cleanup beside the stamp. An un-stick that returns EARLIER
+    // than the discriminator leaves the entry standing, which costs nothing:
+    // it is only ever read when the recorded stamp is empty, and the next
+    // sticky transition overwrites it. A window with no entry (sticky before PlasmaZones saw
     // it) reads as "adopted somewhere else", which takes the re-home path —
     // the conservative answer, since the alternative leaves it untracked.
     QHash<KWin::EffectWindow*, QSet<QString>> m_preStickyDesktopsPerWindow;

@@ -734,27 +734,22 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     }
     // The script-state stash is context-keyed and OUTLIVES its state: it is
     // written as the state dies, so a stash with no live state is the normal
-    // condition rather than an edge case. The state loop below only moves a
-    // stash when a state exists at the same key, so the leftovers are shifted
-    // here — otherwise a bag stays under the number its desktop had before,
-    // and the desktop that inherits that number is handed someone else's
-    // layout, which is exactly what pruneStatesForDesktop's own erase guards
-    // against. Built into a new map rather than shifted in place, so an entry
-    // moving down cannot land on one not yet visited.
-    if (!m_scriptStateStash.empty()) {
-        std::unordered_map<TilingStateKey, StashedScriptState> shifted;
-        shifted.reserve(m_scriptStateStash.size());
-        for (auto& entry : m_scriptStateStash) {
-            TilingStateKey key = entry.first;
-            // Only entries with NO live state: the ones that have one are
-            // moved by migrateStateKey in the loop below, on its own terms,
-            // and shifting them here as well would move them twice.
-            if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
-                --key.desktop;
-            }
-            shifted.insert_or_assign(std::move(key), std::move(entry.second));
+    // condition rather than an edge case. migrateStateKey moves a stash only
+    // when a live state sits at the same key, so the leftovers have to be
+    // shifted separately — otherwise a bag stays under the number its desktop
+    // had before, and the desktop that inherits that number is handed someone
+    // else's layout, which is exactly what pruneStatesForDesktop's own erase
+    // guards against.
+    //
+    // Only the KEYS are collected here. The move itself happens AFTER the
+    // state loop, because shifting first would put a bag on a key the loop
+    // then migrates again — moving it twice, which is the opposite of the
+    // problem this solves.
+    QList<TilingStateKey> statelessStashKeys;
+    for (const auto& entry : m_scriptStateStash) {
+        if (entry.first.desktop > removedDesktop && !m_states.containsKey(entry.first)) {
+            statelessStashKeys.append(entry.first);
         }
-        m_scriptStateStash = std::move(shifted);
     }
 
     if (desktops.isEmpty()) {
@@ -780,6 +775,30 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
             }
         }
     }
+    // NOW the stateless bags, with every state-owned move already done so the
+    // loop cannot pick one up a second time. Descending, so a bag moving down
+    // never lands on one still waiting its turn, and only onto a VACANT key: a
+    // bag the loop already placed there belongs to a live state and outranks a
+    // stateless leftover, which the prunes would have reaped anyway.
+    std::sort(statelessStashKeys.begin(), statelessStashKeys.end(),
+              [](const TilingStateKey& a, const TilingStateKey& b) {
+                  return a.desktop > b.desktop;
+              });
+    for (const TilingStateKey& oldKey : std::as_const(statelessStashKeys)) {
+        auto it = m_scriptStateStash.find(oldKey);
+        if (it == m_scriptStateStash.end()) {
+            continue;
+        }
+        const TilingStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
+        if (m_scriptStateStash.contains(newKey)) {
+            m_scriptStateStash.erase(it);
+            continue;
+        }
+        StashedScriptState moved = std::move(it->second);
+        m_scriptStateStash.erase(it);
+        m_scriptStateStash.insert_or_assign(newKey, std::move(moved));
+    }
+
     // The pins and the per-output desktop map index the same numbering, so they
     // shift with the states or they name a position whose content moved.
     m_context.renumberDesktopsAfterRemoval(removedDesktop);

@@ -244,6 +244,36 @@ private Q_SLOTS:
         QCOMPARE(engine.heldKeyForWindow(onD3)->desktop, 2);
         QVERIFY(engine.isWindowTracked(onD3));
     }
+
+    // The per-output desktop map has to move with the state keys, and exactly
+    // ONCE. A renumber that shifts the tracker a second time — because
+    // something re-pushed the screen's desktop in between — leaves every key
+    // derived from it off by one, and a screen sitting just above the removal
+    // lands on the removed number itself, where the prune erases its entry
+    // outright and the screen falls back to the global desktop.
+    void renumberAfterRemoval_shiftsThePerOutputDesktopExactlyOnce()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setCurrentDesktopForScreen(kS1, 4);
+        engine.setCurrentDesktopForScreen(kS2, 3);
+        engine.setAutotileScreens({kS1, kS2});
+        engine.windowOpened(QStringLiteral("win-s1"), kS1);
+        engine.windowOpened(QStringLiteral("win-s2"), kS2);
+        QCoreApplication::processEvents();
+
+        engine.pruneStatesForDesktop(2);
+        engine.renumberDesktopsAfterRemoval(2);
+
+        // 4 → 3 and 3 → 2, each moved once. A double shift would read 2 and 1.
+        QVERIFY(engine.heldKeyForWindow(QStringLiteral("win-s1")).has_value());
+        QCOMPARE(engine.heldKeyForWindow(QStringLiteral("win-s1"))->desktop, 3);
+        QVERIFY(engine.heldKeyForWindow(QStringLiteral("win-s2")).has_value());
+        QCOMPARE(engine.heldKeyForWindow(QStringLiteral("win-s2"))->desktop, 2);
+        // And the screens still resolve to those same states, which is what
+        // fails when the tracker and the state keys disagree.
+        QVERIFY(engine.tilingStateForScreen(kS1)->containsWindow(QStringLiteral("win-s1")));
+        QVERIFY(engine.tilingStateForScreen(kS2)->containsWindow(QStringLiteral("win-s2")));
+    }
 };
 
 QTEST_MAIN(TestAutotilePerScreenDesktop)

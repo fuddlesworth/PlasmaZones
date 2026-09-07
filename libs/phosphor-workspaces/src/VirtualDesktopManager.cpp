@@ -301,22 +301,25 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     // handler's "prune everything past newCount" sweep correctly finds
     // nothing left to do.
     if (removedPosition > 0) {
-        // Shift this manager's OWN per-screen map with the same numbering
-        // before telling anyone. The engines re-key their per-output desktop
-        // maps off this signal, so leaving these entries on the old numbering
-        // would leave the two disagreeing, and any later push of
-        // screenDesktop() into an engine would write the stale number back
-        // over the corrected one. Mutate first, emit after, matching
-        // clampScreenDesktopsToCount's re-entrancy note.
-        QList<std::pair<QString, int>> renumbered;
+        // Shift this manager's OWN per-screen mirror with the same numbering,
+        // SILENTLY. Without the shift, screenDesktop() would keep answering
+        // the pre-removal number and any later push of it into an engine would
+        // write that stale value over the one the engine just corrected.
+        //
+        // No screenDesktopChanged here, deliberately, and the reason is worth
+        // keeping: that signal means "this output switched desktops" and its
+        // subscriber runs the whole context-switch pass — cancelling drag
+        // previews, re-pinning sticky screens, pushing the desktop into all
+        // three engines, re-announcing the screen set and showing the switch
+        // OSD. Emitting it here would run that pass against engine state that
+        // has NOT been renumbered yet, since desktopRemovedAt goes out below,
+        // and the push it makes would then be decremented a SECOND time by the
+        // engines' own renumber. Nothing switched desktops; the desktops were
+        // renumbered underneath everyone, which is what desktopRemovedAt says.
         for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
             if (it.value() > removedPosition) {
                 --it.value();
-                renumbered.append({it.key(), it.value()});
             }
-        }
-        for (const auto& [screenId, desktop] : renumbered) {
-            Q_EMIT screenDesktopChanged(screenId, desktop);
         }
         Q_EMIT desktopRemovedAt(removedPosition);
     }
@@ -581,9 +584,11 @@ void VirtualDesktopManager::clampScreenDesktopsToCount()
 {
     // Clamp only entries above the live count: KWin renumbers on desktop
     // removal, so a screen pinned past the new count is pulled down to it here.
-    // This does NOT re-identify a surviving entry whose desktop was renumbered
-    // by a mid-list removal — the effect re-reports each output's true desktop
-    // shortly after via updateScreenDesktop, which is authoritative for that.
+    // A surviving entry whose desktop was RENUMBERED by a mid-list removal is
+    // not this function's business: applyDesktopListArg shifts those itself
+    // when it works out which position went, before this runs. What is left
+    // here is the genuine out-of-range case, which a removal at the END
+    // produces.
     //
     // Mutate first, then emit the captured value — emitting mid-iteration could
     // re-enter updateScreenDesktop and invalidate the hash iterator, and a

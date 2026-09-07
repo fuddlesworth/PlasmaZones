@@ -742,33 +742,40 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     // Restricted to keys with NO live state so nothing moves twice, and built
     // into fresh containers so an entry shifting down cannot land on one not
     // yet visited.
-    const auto shiftStatelessKeys = [&](auto& map) {
-        std::decay_t<decltype(map)> shifted;
-        shifted.reserve(map.size());
-        for (auto it = map.begin(); it != map.end(); ++it) {
-            PhosphorEngine::PlacementStateKey key = it.key();
-            if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
-                --key.desktop;
-            }
-            shifted.insert(key, it.value());
-        }
-        map = std::move(shifted);
+    // Only the KEYS are collected here. The moves happen AFTER the state loop:
+    // shifting first would put an entry on a key the loop then migrates again,
+    // moving it twice, and for m_pendingFocusEmitContexts migrateStateKey
+    // REMOVES the old key rather than moving it, so a shifted context landing
+    // there would be deleted outright.
+    // Descending, so an entry moving down never lands on one still waiting its
+    // turn.
+    const auto sortDescending = [](QList<PhosphorEngine::PlacementStateKey>& keys) {
+        std::sort(keys.begin(), keys.end(),
+                  [](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
+                      return a.desktop > b.desktop;
+                  });
+        return keys;
     };
-    shiftStatelessKeys(m_stripStash);
-    shiftStatelessKeys(m_stripStashConsumed);
-    shiftStatelessKeys(m_burstPendingApplies);
-    shiftStatelessKeys(m_perScreenOverrides);
-    if (!m_pendingFocusEmitContexts.isEmpty()) {
-        QSet<PhosphorEngine::PlacementStateKey> shiftedContexts;
-        shiftedContexts.reserve(m_pendingFocusEmitContexts.size());
-        for (PhosphorEngine::PlacementStateKey key : std::as_const(m_pendingFocusEmitContexts)) {
-            if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
-                --key.desktop;
+    const auto statelessHashKeys = [&](const auto& map) {
+        QList<PhosphorEngine::PlacementStateKey> keys;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            if (it.key().desktop > removedDesktop && !m_states.containsKey(it.key())) {
+                keys.append(it.key());
             }
-            shiftedContexts.insert(key);
         }
-        m_pendingFocusEmitContexts = std::move(shiftedContexts);
+        return sortDescending(keys);
+    };
+    const QList<PhosphorEngine::PlacementStateKey> statelessStash = statelessHashKeys(m_stripStash);
+    const QList<PhosphorEngine::PlacementStateKey> statelessStashConsumed = statelessHashKeys(m_stripStashConsumed);
+    const QList<PhosphorEngine::PlacementStateKey> statelessBurst = statelessHashKeys(m_burstPendingApplies);
+    const QList<PhosphorEngine::PlacementStateKey> statelessOverrides = statelessHashKeys(m_perScreenOverrides);
+    QList<PhosphorEngine::PlacementStateKey> statelessFocusContexts;
+    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(m_pendingFocusEmitContexts)) {
+        if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
+            statelessFocusContexts.append(key);
+        }
     }
+    sortDescending(statelessFocusContexts);
 
     if (desktops.isEmpty()) {
         m_context.renumberDesktopsAfterRemoval(removedDesktop);
@@ -796,6 +803,36 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
         }
     }
     finishDisplacedRelease(displacedWindows, displacedScreens);
+
+    // NOW the stateless entries, with every state-owned move already done so
+    // the loop cannot pick one up a second time. Only onto a VACANT key: an
+    // entry the loop placed there belongs to a live state and outranks a
+    // stateless leftover, which the prunes would have reaped anyway.
+    const auto moveStatelessDown = [](auto& map, const QList<PhosphorEngine::PlacementStateKey>& keys) {
+        for (const PhosphorEngine::PlacementStateKey& oldKey : keys) {
+            const auto it = map.constFind(oldKey);
+            if (it == map.constEnd()) {
+                continue;
+            }
+            const PhosphorEngine::PlacementStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
+            if (!map.contains(newKey)) {
+                map.insert(newKey, it.value());
+            }
+            map.remove(oldKey);
+        }
+    };
+    moveStatelessDown(m_stripStash, statelessStash);
+    moveStatelessDown(m_stripStashConsumed, statelessStashConsumed);
+    moveStatelessDown(m_burstPendingApplies, statelessBurst);
+    moveStatelessDown(m_perScreenOverrides, statelessOverrides);
+    for (const PhosphorEngine::PlacementStateKey& oldKey : statelessFocusContexts) {
+        if (!m_pendingFocusEmitContexts.remove(oldKey)) {
+            continue;
+        }
+        m_pendingFocusEmitContexts.insert(
+            PhosphorEngine::PlacementStateKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity});
+    }
+
     // The pins and the per-output desktop map index the same numbering as the
     // keys just moved, so they shift together or they name a position whose
     // content moved.

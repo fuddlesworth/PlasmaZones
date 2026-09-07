@@ -525,9 +525,9 @@ void Daemon::connectDesktopActivity()
                 // state, their per-output desktop maps and m_lastEngineOrders, so by the time
                 // this runs there is nothing above the count left to prune.
                 //
-                // Still NOT renumbered, and still corrected by the effect's next per-output
-                // desktop report: the disabled-desktop lists below, which are settings rather
-                // than live state.
+                // Still NOT renumbered: the disabled-desktop lists below. They are settings
+                // rather than live state, and nothing re-reports them — a gate on a desktop
+                // above a mid-list removal keeps the number it was written with.
                 if (m_settings) {
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
@@ -584,7 +584,7 @@ void Daemon::connectDesktopActivity()
                 // renumbers a still-in-range screen (desktop 3 becomes 2) leaves
                 // the per-screen map holding the stale number until the effect
                 // re-reports that output's desktop; a diff here would read the
-                // same stale number and could not fix it. pruneContextMapsForDesktop
+                // same number this handler cannot correct. pruneContextMapsForDesktop
                 // touches only m_lastEngineOrders, which no resolution reads.
             });
 
