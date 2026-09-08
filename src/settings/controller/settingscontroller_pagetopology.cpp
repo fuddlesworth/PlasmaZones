@@ -47,8 +47,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // appearance; animations-transitions, animations-motion and
     // animations-library under animations; decorations-surfaces and
     // decorations-library under decorations. Overlays has no sub-buckets, only
-    // its two leaves. Then the four *-cat collapsible headers (snapping-overlay-cat,
-    // snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
+    // its four leaves. Then the three *-cat collapsible headers
+    // (snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
     // name prefix, so the explicit set sidesteps the asymmetry between a
     // prefix-walk and a direct membership lookup.
     //
@@ -101,12 +101,21 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kDecorationAllLeaves =
         kDecorationDirectChildren + kDecorationSurfacesChildren + kDecorationLibraryChildren;
     // Overlays — the third Appearance sibling beside animations and
-    // decorations. Assignments edits the OverlayShaderTree; library is a
-    // read-only pack browser that edits no config, exactly as
-    // animations-shaders and decorations-shaders are for their trees. Flat
-    // rather than Surfaces/Library sub-buckets: two leaves do not need them.
-    static const QSet<QString> kOverlaysAllLeaves{QStringLiteral("overlays-assignments"),
-                                                  QStringLiteral("overlays-library")};
+    // decorations, holding everything about the zone overlay: when it appears
+    // (behavior), what it looks like (appearance), which shader it draws
+    // (assignments), and the pack browser (library, a read-only surface that
+    // edits no config, exactly as animations-shaders and decorations-shaders
+    // are for their trees). Behavior and Appearance came from a category under
+    // Snapping; only the drag TRIGGERS came with them, not the snapping mode's
+    // own enable key, which stays owned by a Snapping leaf (see
+    // snapping-window-behavior below). Flat rather than sub-buckets: four
+    // leaves do not need them.
+    static const QSet<QString> kOverlaysAllLeaves{
+        QStringLiteral("overlays-behavior"),
+        QStringLiteral("overlays-appearance"),
+        QStringLiteral("overlays-assignments"),
+        QStringLiteral("overlays-library"),
+    };
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -116,10 +125,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // dirty (mirrors the snapping/tiling parent entries above, just one
     // level deeper). Keep in sync with the regVirtual *-cat registrations
     // in buildApplicationController() in the sibling _pageregistration.cpp.
-    static const QSet<QString> kSnappingOverlayChildren{
-        QStringLiteral("snapping-overlay-behavior"),
-        QStringLiteral("snapping-overlay-appearance"),
-    };
+    // (Snapping's own Overlay category is gone: its two leaves are the
+    // Behavior and Appearance entries of kOverlaysAllLeaves above.)
     // Zone Selector and Window are standalone top leaves under "snapping" (no
     // category split) — folded directly into the parent sets below. The window
     // border / title-bar appearance moved to the shared top-level Window
@@ -137,8 +144,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("snapping-shortcuts"),
     };
-    static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren
-        + QSet<QString>{kSnappingSimple, kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
+    static const QSet<QString> kSnappingAllLeaves =
+        QSet<QString>{kSnappingSimple, kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
     // Window (Behavior) and Algorithm are standalone top leaves under "tiling"
     // (no category), so they fold directly into the tiling/placement parent
     // sets below. The window border / title-bar appearance moved to the shared
@@ -173,7 +180,6 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // modes; when collapsed its dirty badge must light if any snapping,
         // tiling, or scrolling leaf is dirty, so its leaf set is their union.
         {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves + kScrollingAllLeaves},
-        {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
         {QStringLiteral("scrolling-config-cat"), kScrollingConfigChildren},
@@ -240,7 +246,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          {
              {CD::renderingGroup(), CD::backendKey()},
              {CD::renderingGroup(), CD::gpuKey()},
-             // Shader Effects moved here from snapping-overlay-appearance, and
+             // Shader Effects moved here from overlays-appearance, and
              // the Shaders.Audio group (the full CAVA parameter set) lives with
              // it: frame rate + audio spectrum drive EVERY shader category
              // (overlay, animation, surface decoration), not just snapping
@@ -274,17 +280,8 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::exclusionsGroup(), CD::minimumWindowWidthKey()},
              {CD::exclusionsGroup(), CD::minimumWindowHeightKey()},
          }},
-        {QStringLiteral("snapping-overlay-behavior"),
+        {QStringLiteral("overlays-behavior"),
          {
-             // The mode's enable master switch. Owned HERE so the sidebar
-             // toggle's pending flip is visible to value-based dirtiness and
-             // survives an unrelated reconcile of this leaf (unowned, the
-             // toggle's dirty mark was erased by the next isPageDirty pass and
-             // the flip lost on exit). It is EXEMPT from per-page Reset via
-             // resetExemptModeEnableKeys() — Reset on a mode's page must not
-             // switch the mode itself off. Discard deliberately includes it:
-             // discarding pending changes includes a pending toggle.
-             {CD::snappingGroup(), CD::enabledKey()},
              {CD::snappingBehaviorGroup(), CD::toggleActivationKey()},
              {CD::snappingBehaviorGroup(), CD::releaseGraceMsKey()},
              // The trigger LIST belongs to whichever page shows its picker, which is the
@@ -305,7 +302,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorDisplayGroup(), CD::showOnAllMonitorsKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::filterByAspectRatioKey()},
          }},
-        {QStringLiteral("snapping-overlay-appearance"),
+        {QStringLiteral("overlays-appearance"),
          {
              {CD::snappingZonesColorsGroup(), CD::highlightKey()},
              {CD::snappingZonesColorsGroup(), CD::inactiveKey()},
@@ -362,6 +359,23 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-window-behavior"),
          {
+             // The mode's enable master switch. Owned by a SNAPPING leaf so the
+             // sidebar toggle's pending flip is visible to value-based
+             // dirtiness and lands a dirty badge in the category the user
+             // flipped it from (unowned, the toggle's dirty mark was erased by
+             // the next isPageDirty pass and the flip lost on exit). It lived
+             // on the overlay Behavior page until that page moved to Appearance
+             // → Overlays with the rest of the overlay settings; the key did
+             // not go with it, because the snapping mode's on/off state is not
+             // an appearance fact and its badge belongs under Placement.
+             // kModeEnableOwners in the sibling _pagestate.cpp names this page
+             // for the same reason and must agree with this entry.
+             //
+             // EXEMPT from per-page Reset via resetExemptModeEnableKeys() —
+             // Reset on a mode's page must not switch the mode itself off.
+             // Discard deliberately includes it: discarding pending changes
+             // includes a pending toggle.
+             {CD::snappingGroup(), CD::enabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::featureEnabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::enabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::triggersKey()},
@@ -391,7 +405,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("tiling-behavior"),
          {
              // Enable master switch: same ownership/exemption contract as the
-             // snapping-overlay-behavior entry documents.
+             // overlays-behavior entry documents.
              {CD::tilingGroup(), CD::enabledKey()},
              {CD::tilingBehaviorGroup(), CD::toggleActivationKey()},
              {CD::tilingBehaviorGroup(), CD::releaseGraceMsKey()},
@@ -420,7 +434,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // keys by concern; the one-owner invariant holds per (group, key).
         // The master switch (Scrolling.enabled) is owned by scrolling-columns
         // under the same ownership/exemption contract the
-        // snapping-overlay-behavior entry documents.
+        // overlays-behavior entry documents.
         //
         // Only the GLOBAL Scrolling.* keys are listed. The New columns card's
         // per-monitor overrides live in the per-screen scrolling store, not in
@@ -625,7 +639,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
 const Settings::ConfigKeyList& SettingsController::resetExemptModeEnableKeys()
 {
     // The three placement enable master switches. Owned by their mode's main
-    // page (see the snapping-overlay-behavior manifest comment) so pending
+    // page (see the overlays-behavior manifest comment) so pending
     // sidebar flips participate in dirty/save/discard, but EXEMPT from
     // per-page Reset: "reset this page to defaults" must not switch the mode
     // itself off or on. resetPage() filters these out of the manifest list it
@@ -670,7 +684,7 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // enforces that on its own.
     static const QHash<QString, QStringList> backing{
         {QStringLiteral("snapping-simple"),
-         {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
+         {QStringLiteral("overlays-behavior"), QStringLiteral("snapping-window-behavior")}},
         {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
         {QStringLiteral("scrolling-simple"),
          {QStringLiteral("scrolling-columns"), QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling-window")}},
@@ -731,8 +745,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("overview"),
         QStringLiteral("snapping-simple"),
         QStringLiteral("snapping-layouts"),
-        QStringLiteral("snapping-overlay-behavior"),
-        QStringLiteral("snapping-overlay-appearance"),
+        QStringLiteral("overlays-behavior"),
+        QStringLiteral("overlays-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
         QStringLiteral("overlays-assignments"),

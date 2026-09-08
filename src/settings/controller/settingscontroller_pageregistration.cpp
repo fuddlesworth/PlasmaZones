@@ -200,7 +200,7 @@ void SettingsController::buildApplicationController()
     // toggle), the same lead-page shape as animations-general.
     regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/snapping/SnappingSimplePage.qml"), QStringLiteral("view-split-left-right"),
-               /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("snapping-overlay-behavior"));
+               /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("overlays-behavior"));
     // The snapping layout library — the browser formerly tabbed into
     // Display → Layouts, now this mode's own leaf. Leads the section (it is
     // the mode's primary artifact; the config tree follows) and stays
@@ -211,17 +211,8 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-layouts"), QStringLiteral("snapping"), PhosphorI18n::tr("Layouts"),
                QStringLiteral("pages/snapping/SnappingLayoutsPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
-               QString(), QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
-    // Advanced-only: its simple face used to be the Triggers card, now
-    // condensed into SnappingSimplePage (its declared counterpart).
-    regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("pages/snapping/SnappingOverlayBehaviorPage.qml"),
-               QStringLiteral("preferences-system"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly,
-               QStringLiteral("snapping-simple"));
-    regVirtual(QStringLiteral("snapping-overlay-appearance"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Appearance"), QStringLiteral("pages/snapping/SnappingOverlayAppearancePage.qml"),
-               QStringLiteral("preferences-desktop-color"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    // (Snapping's Overlay category moved wholesale to Appearance → Overlays,
+    // registered with the rest of that tree below.)
 
     // Zone Selector is a single top leaf under Snapping (not split into
     // Behavior/Appearance): its behaviour is just the enable toggle + trigger
@@ -522,6 +513,17 @@ void SettingsController::buildApplicationController()
     // look like.) No sub-buckets — two leaves do not need a Library tier.
     regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
                QStringLiteral("preferences-desktop-display"));
+    // Behavior and Appearance came from Snapping → Overlay. Behavior is
+    // advanced-only, its simple face being the condensed SnappingSimplePage
+    // (still its declared counterpart: that page re-hosts these very settings,
+    // which is what a counterpart means, even though the two now sit in
+    // different top-level categories).
+    regVirtual(QStringLiteral("overlays-behavior"), QStringLiteral("overlays"), PhosphorI18n::tr("Behavior"),
+               QStringLiteral("pages/overlays/OverlaysBehaviorPage.qml"), QStringLiteral("preferences-system"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly, QStringLiteral("snapping-simple"));
+    regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),
+               QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("preferences-desktop-color"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // Assignments edits the OverlayShaderTree (global default + per-layout
     // overrides) through m_overlaysPage's invokables. Registered as a virtual
     // leaf: the controller stays bound to the "overlays-library" id below
