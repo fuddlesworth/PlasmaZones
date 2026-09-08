@@ -48,8 +48,6 @@ import org.plasmazones.common as PZCommon
  * **Readiness.** The three cores report progress differently, and `showable`
  * and `hasError` below are the one answer a host covers on.
  *
- * **How many run at once.** PackPreviewGate caps it, across every host.
- *
  * ## active vs animating
  *
  * `active` is EXISTENCE: false instantiates nothing at all, so a collapsed row
@@ -185,10 +183,6 @@ Item {
     /// host that has switched us on.
     readonly property bool _wantsPreview: active && previewKind.length > 0 && packId.length > 0 && previewController !== null
 
-    /// Granted by PackPreviewGate, which caps how many previews run at once.
-    /// Written from there, never bound, so it must stay a plain property.
-    property bool _capAllowed: false
-
     /// Invokable-call dependency tick — see DecorationPreviewPane._rev.
     readonly property int _rev: previewController ? previewController.previewRevision : 0
 
@@ -224,21 +218,15 @@ Item {
         });
     }
 
-    readonly property bool _stageActive: _wantsPreview && _capAllowed && !_refreshHold
-
-    on_WantsPreviewChanged: {
-        if (root._wantsPreview)
-            PackPreviewGate.request(root);
-        else
-            PackPreviewGate.release(root);
-    }
-    Component.onCompleted: {
-        // Idempotent: the handler above may already have claimed the slot
-        // during initialisation, and request() keeps our place in that case.
-        if (root._wantsPreview)
-            PackPreviewGate.request(root);
-    }
-    Component.onDestruction: PackPreviewGate.release(root)
+    // No global cap on how many of these run at once. There was one, allowing
+    // two, and it tore down every preview past that — which on the animations
+    // page, where a user expands several event cards, silently killed most of
+    // them with no way to tell why. A preview is already gated on its host
+    // being switched on, which for every host today means the user deliberately
+    // expanded that row or card. If the per-frame cost of many open animation
+    // previews ever does need managing, the fix is to pause the ones scrolled
+    // out of the viewport, not to pick a number and break the rest.
+    readonly property bool _stageActive: _wantsPreview && !_refreshHold
 
     /// Uniform reduce-only fit of the canvas into whatever slot we occupy, so
     /// the composition is never distorted and never magnified.

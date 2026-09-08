@@ -926,9 +926,7 @@ ColumnLayout {
             // Parameters beside a live preview of the picked pack, in the
             // shared body the decoration and pointer chain rows use too.
             // `previewActive` follows the section's own expansion, so a
-            // collapsed card instantiates no shader item. An animation
-            // preview captures its stand-in card every frame, which is why
-            // PackPreviewGate caps how many run at once across the window.
+            // collapsed card instantiates no shader item.
             PackEditorBody {
                 id: paramEditorBody
 

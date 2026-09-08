@@ -324,9 +324,7 @@ ColumnLayout {
                     // `previewActive` follows the row's own expansion rather
                     // than this loader's lifetime: the loader deliberately
                     // outlives the collapse animation, and the preview should
-                    // stop at collapse-start so a row being opened elsewhere
-                    // can take the slot immediately. How many run at once is
-                    // capped globally by PackPreviewGate.
+                    // stop at collapse-start rather than linger through it.
                     PackEditorBody {
                         Layout.fillWidth: true
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
