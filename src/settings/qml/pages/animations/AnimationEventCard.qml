@@ -868,6 +868,9 @@ Item {
                 enableLocking: true
                 enableRandomize: true
                 enableImage: false
+                // Live preview of the picked pack in the expanded shader
+                // section, on the animations page's own preview controller.
+                shaderPreviewController: settingsController.animationsPage.previewController
                 // Live per-field commit — the slider's 30 Hz drag fires
                 // `durationEdited` on every move, writing only the duration
                 // field of the merged Profile JSON; curve edits (mode combo,

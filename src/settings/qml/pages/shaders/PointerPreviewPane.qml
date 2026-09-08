@@ -61,11 +61,26 @@ Item {
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             clip: true
 
-            PointerPreviewCanvas {
-                id: canvas
+            // The stage, hosted through the shared wrapper so this pane and a
+            // chain row show a pack identically. PackPreview owns the fixed
+            // composition canvas, the reduce-only fit into whatever room this
+            // frame has, the layering that fit needs to reach a render node,
+            // and the live-preview cap. This pane owns everything around it:
+            // the frame, the toggles below, the notices, and the cover.
+            //
+            // The fit matters here and not only in a chain row. A pointer
+            // pack's `reach` and trail width are declared in output pixels, so
+            // the stage composes at PreviewCanvas.size whatever this frame's
+            // size is, and this dialog's preview column can be as narrow as 20
+            // grid units. Unfitted, the stage overhangs the frame and the
+            // shader item, being a render node, paints straight past the
+            // frame's `clip`.
+            PackPreview {
+                id: stage
 
                 anchors.fill: parent
                 anchors.margins: 1
+                previewKind: "pointer"
                 previewController: root.previewController
                 packId: root.packId
                 params: root.liveParams
@@ -77,6 +92,10 @@ Item {
                 active: root.active
                 animating: root.animating && !pauseToggle.checked
                 showCursor: cursorToggle.checked
+                // This pane covers the whole framed slot itself, below, rather
+                // than just the stage inside it; two covers would draw the
+                // same notice twice.
+                showPlaceholder: false
             }
 
             // Covers the stage while the shader is still compiling, and stays
@@ -85,8 +104,8 @@ Item {
             PZCommon.ShaderPreviewPlaceholder {
                 anchors.fill: parent
                 anchors.margins: 1
-                visible: !canvas.previewable || !canvas.showable || canvas.hasError
-                text: canvas.hasError ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
+                visible: !stage.showable || stage.hasError
+                text: stage.hasError ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
                 backgroundColor: Kirigami.Theme.alternateBackgroundColor
                 radius: Kirigami.Units.smallSpacing
             }

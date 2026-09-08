@@ -137,8 +137,49 @@ Item {
                 /// `active` imperatively, which would sever the binding.
                 property bool refreshHold: false
 
-                anchors.fill: parent
-                anchors.margins: 1
+                // Pinned to the shared canvas rather than filling the frame.
+                // Every number in the staging below is derived from this
+                // item's size — the card, the canvas ring, the glide travel
+                // and the rects pushed to C++ — so a host-sized field made the
+                // same pack a different shape in every slot it appeared in: at
+                // a 200 px width the move class glided a 76 px card through
+                // 39 px of free space. Pinning it makes those numbers canvas
+                // coordinates, which is the space the shader renders in
+                // anyway, and leaves only the magnification to vary.
+                //
+                // The fit is applied HERE, where the pinned stage meets the
+                // frame that contains it, rather than by a wrapper around this
+                // whole pane: the caption and the notices below the frame are
+                // chrome, and scaling them with the composition would only
+                // soften their text. Reduce-only, because magnifying a composed
+                // texture softens it too, so a frame wider than the canvas
+                // leaves its extra room empty instead.
+                readonly property real _canvasScale: {
+                    const w = parent.width - 2;
+                    const h = parent.height - 2;
+                    const cw = PreviewCanvas.size.width;
+                    const ch = PreviewCanvas.size.height;
+                    if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0)
+                        return 1.0;
+
+                    return Math.min(1.0, w / cw, h / ch);
+                }
+
+                anchors.centerIn: parent
+                width: PreviewCanvas.size.width
+                height: PreviewCanvas.size.height
+                scale: _canvasScale
+                transformOrigin: Item.Center
+                // The shader item is a render node: it draws at full size and
+                // outside any ancestor clip unless the composition it belongs
+                // to is a layer, so without this the scale above never reaches
+                // it and a slot narrower than the canvas gets a full-size pass
+                // painted past the frame. Conditional so the 1:1 case, which is
+                // this dialog's normal one, neither pays for a texture nor
+                // nests the staging's own ShaderEffectSource capture inside an
+                // outer layer.
+                layer.enabled: _canvasScale < 1.0
+                layer.mipmap: true
                 active: root.active && root._previewable && !refreshHold
                 visible: active
 
@@ -178,8 +219,21 @@ Item {
                     /// ancestor clipping, so everything it paints must
                     /// genuinely fit inside the field, not merely be
                     /// clipped at its edge.
-                    readonly property real innerCardW: Math.min(field.width * (root._class === "move" ? 0.38 : (root._cardCanvas ? 0.5 : 0.6)), Kirigami.Units.gridUnit * (root._cardCanvas ? 16 : 22))
-                    readonly property real canvasPad: root._cardCanvas ? Math.round(innerCardW * 0.3) : 0
+                    ///
+                    /// The ring as a fraction of the inner card's width, and
+                    /// the holder's resulting height per unit of that width
+                    /// (the card's own 14/22 plus the ring twice).
+                    readonly property real _ringFactor: root._cardCanvas ? 0.3 : 0
+                    readonly property real _holderPerCardW: 14 / 22 + 2 * _ringFactor
+
+                    /// Capped on the field's HEIGHT as well as its width. On
+                    /// the 236 px canvas the geometry class's half-width card
+                    /// came out 260 px tall and hung 24 px out of the field,
+                    /// which a render node paints rather than clips. The width
+                    /// cap alone was enough only while the field took its
+                    /// height from the host.
+                    readonly property real innerCardW: Math.min(field.width * (root._class === "move" ? 0.38 : (root._cardCanvas ? 0.5 : 0.6)), field.height / _holderPerCardW, Kirigami.Units.gridUnit * (root._cardCanvas ? 16 : 22))
+                    readonly property real canvasPad: Math.round(innerCardW * _ringFactor)
                     /// The inner card's size (canvas minus the ring).
                     readonly property real innerW: cardHolder.width - 2 * canvasPad
                     readonly property real innerH: cardHolder.height - 2 * canvasPad

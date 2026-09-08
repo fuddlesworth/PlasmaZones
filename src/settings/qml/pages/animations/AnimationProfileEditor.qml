@@ -191,13 +191,19 @@ ColumnLayout {
     /// decoration chain packs. Collapsed by default; picking a shader
     /// expands it, whole-row click toggles it. UI-only, not persisted.
     property bool shaderSectionExpanded: false
+    /// Live preview of the picked pack inside the expanded shader section,
+    /// opt-in. Null renders none, which is what a host without an animation
+    /// preview controller wants. An animation event carries exactly ONE pack,
+    /// so the per-layer preview the chain editors show collapses here to
+    /// previewing the pack that is picked.
+    property QtObject shaderPreviewController: null
     // ── Computed ────────────────────────────────────────────────────
     /// Whether the shader section has anything to reveal (full
     /// description or a parameter editor). Mirrors the decoration
     /// rows' `expandable` gate: no picked shader, or a picked shader
     /// with neither text nor params, keeps the row-click inert and
     /// the chevron hidden.
-    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || (shaderParamSchema || []).length > 0)
+    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || (shaderParamSchema || []).length > 0 || shaderPreviewController !== null)
     /// Registry entry for the currently-picked shader, resolved from the
     /// consumer-fed picker model. Null when nothing is picked or the id
     /// has no match (a pack uninstalled while its override survives).
@@ -915,6 +921,23 @@ ColumnLayout {
                 text: root.shaderDescription
                 wrapMode: Text.WordWrap
                 color: Kirigami.Theme.disabledTextColor
+            }
+
+            // The picked pack, running the event class it was authored for,
+            // rendered exactly as the pack browser renders it. Its `active`
+            // follows the section's own expansion, so a collapsed card
+            // instantiates no shader item. An animation preview captures its
+            // stand-in card every frame, which is why PackPreviewGate caps how
+            // many run at once across the whole settings window.
+            PackPreview {
+                Layout.fillWidth: true
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
+                visible: root.shaderPreviewController !== null && root.shaderEffectId.length > 0
+                previewKind: "animation"
+                previewController: root.shaderPreviewController
+                packId: root.shaderEffectId
+                params: root.shaderParams
+                active: visible && shaderExpansionClip.effectiveExpanded
             }
 
             // Inline parameter editor surfaces only when an effect is

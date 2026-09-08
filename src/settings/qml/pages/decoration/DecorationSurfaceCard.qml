@@ -308,6 +308,11 @@ Item {
                     chain: root._chain
                     packParameters: root._params
                     disabledPacks: root._disabledPacks
+                    // Live preview inside each expanded layer row: the same
+                    // stand-in card the pack browser shows, on this page's
+                    // controller.
+                    previewKind: "decoration"
+                    previewController: root.bridge ? root.bridge.previewController : null
                     onChainChangeRequested: function (newChain) {
                         if (root.bridge)
                             root.bridge.setChain(root.surfacePath, newChain);

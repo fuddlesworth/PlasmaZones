@@ -9,21 +9,39 @@ import PlasmaZones
  * @brief The pointer preview's stage: a desktop, a simulated cursor, and the
  * pack's screen-space pass over both.
  *
- * Shared by the browser's detail pane (PointerPreviewPane) and the Pointer
- * page's per-layer card, so a pack can never look like one thing in the
- * catalogue and another on the page that uses it.
+ * Hosted by the browser's detail pane (PointerPreviewPane), which is its only
+ * consumer today. It is kept a separate component from that pane so a second
+ * host can show the same stage rather than reimplementing it, which is what a
+ * per-layer preview in the chain editor would need.
  *
  * ## The canvas contract
  *
  * On screen a pointer pack is one full-output pass, and its uniforms are in
- * output pixels with the origin at the top-left. This item IS that output: the
- * PointerShaderItem fills it, and every position the controller pushes is in
- * this item's own coordinates. So a `reach` of 64 px covers the same fraction
- * of the preview as it does of a real screen only when the preview is
- * screen-sized, which it never is. That is deliberate and it is the same
- * trade the decoration preview makes: a pack's features are shown at their
- * declared size so they stay legible, rather than scaled down into
+ * output pixels with the origin at the top-left. The stage below IS that
+ * output: the PointerShaderItem fills it, and every position the controller
+ * pushes is in the stage's own coordinates. So a `reach` of 64 px covers the
+ * same fraction of the preview as it does of a real screen only when the
+ * preview is screen-sized, which it never is. That is deliberate and it is the
+ * same trade the decoration preview makes: a pack's features are shown at
+ * their declared size so they stay legible, rather than scaled down into
  * illegibility to represent a bigger surface.
+ *
+ * Which is exactly why the stage is pinned to PreviewCanvas.size rather than
+ * filling this item. Declared px against a slot that changes size is a pack
+ * that changes shape: a 64 px halo is a comfortable accent on a detail pane
+ * and very nearly the whole of a 200 px chain row. Composing at one fixed
+ * canvas and letting the HOST scale the finished composition makes the two the
+ * same render at two magnifications. This item never applies that scale
+ * itself; it renders at canvas size and the host decides how big to show it.
+ *
+ * The stage is layered for the same reason DecorationChainPreview sets
+ * `layeredStages` on its decoration (SurfaceDecoration.layeredStages): the
+ * shader item is a render node that computes its own viewport and overwrites
+ * the scissor Qt set for a clip, so a scaled host would otherwise get a
+ * full-size pass drawn at a scaled position, spilling over the rows beside it.
+ * Layering makes the node render into an FBO sized to its own item, which the
+ * scene graph then composites with the host's transform and clip like any
+ * other texture.
  *
  * ## The simulated pointer
  *
@@ -42,6 +60,11 @@ import PlasmaZones
  */
 Item {
     id: root
+
+    /// The composition is canvas-sized, so a host that does not size this item
+    /// explicitly gets the canvas.
+    implicitWidth: PreviewCanvas.size.width
+    implicitHeight: PreviewCanvas.size.height
 
     /// PointerPreviewController, handed down by the host.
     required property QtObject previewController
@@ -94,13 +117,13 @@ Item {
     readonly property real _pressTurns: 0.03
     readonly property bool _pressed: _phase >= _pressAt && _phase < _pressAt + _pressTurns
 
-    /// Cursor position in this item's coordinates. A Lissajous eight inset far
-    /// enough from the edges that a wide trail and a large click ring stay
-    /// inside the stage, since the shader item is a render node and paints
-    /// outside any QML clip.
-    readonly property real _inset: Math.min(width, height) * 0.22
-    readonly property real cursorX: width / 2 + (width / 2 - _inset) * Math.sin(2 * Math.PI * _phase)
-    readonly property real cursorY: height / 2 + (height / 2 - _inset) * Math.sin(4 * Math.PI * _phase)
+    /// Cursor position in STAGE coordinates, which is the space the shader
+    /// renders in. A Lissajous eight inset far enough from the edges that a
+    /// wide trail and a large click ring stay inside the stage, since the
+    /// shader item is a render node and paints outside any QML clip.
+    readonly property real _inset: Math.min(PreviewCanvas.size.width, PreviewCanvas.size.height) * 0.22
+    readonly property real cursorX: PreviewCanvas.size.width / 2 + (PreviewCanvas.size.width / 2 - _inset) * Math.sin(2 * Math.PI * _phase)
+    readonly property real cursorY: PreviewCanvas.size.height / 2 + (PreviewCanvas.size.height / 2 - _inset) * Math.sin(4 * Math.PI * _phase)
 
     // Re-upload translated parameters as the host's editor moves them.
     onParamsChanged: {
@@ -122,117 +145,139 @@ Item {
         }
     }
 
-    // The desktop the cursor moves over. A trail or a halo reads completely
-    // differently over a photograph than over flat grey, so the preview judges
-    // a pack against the ground it will actually paint on.
-    Image {
-        anchors.fill: parent
-        source: root._wallpaperUrl
-        fillMode: Image.PreserveAspectCrop
-        sourceSize.width: Math.max(1, Math.round(width))
-        sourceSize.height: Math.max(1, Math.round(height))
-        asynchronous: true
-        visible: status === Image.Ready
-    }
+    // Everything visible composes HERE, at the fixed canvas size, and the
+    // composition is what a host scales. See the canvas contract above.
+    Item {
+        id: canvasStage
 
-    // The stand-in cursor. A plain arrow rather than the user's cursor theme:
-    // the theme's sprite is not reachable from the settings app, and a pack is
-    // judged on what it paints around the pointer rather than on the pointer.
-    Canvas {
-        id: cursorArrow
+        anchors.centerIn: parent
+        width: PreviewCanvas.size.width
+        height: PreviewCanvas.size.height
 
-        width: Kirigami.Units.gridUnit
-        height: Kirigami.Units.gridUnit * 1.4
-        // Hotspot at the tip, so the drawn arrow points at the position the
-        // shader is told about rather than trailing behind it.
-        x: Math.round(root.cursorX)
-        y: Math.round(root.cursorY)
-        z: root._paintsAboveCursor ? 0 : 2
-        visible: root.showCursor
-        antialiasing: true
+        // Mandatory, not an optimisation. The shader item below is a render
+        // node that ignores the scissor Qt sets for a clip and derives its
+        // viewport from its own size and mapped origin, so without a layer a
+        // scaled host would get a full-size pass drawn at a scaled position,
+        // painting over whatever sits beside the preview. Layering routes the
+        // node through an FBO the scene graph composites normally.
+        layer.enabled: true
+        // A host's fit is reduce-only, so the layer is only ever minified;
+        // mipmaps are what keep that minification from aliasing the trail.
+        layer.mipmap: true
+        layer.smooth: true
 
-        onPaint: {
-            var ctx = getContext("2d");
-            ctx.reset();
-            var w = width;
-            var h = height;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(0, h);
-            ctx.lineTo(w * 0.28, h * 0.74);
-            ctx.lineTo(w * 0.48, h * 1.06);
-            ctx.lineTo(w * 0.72, h * 0.94);
-            ctx.lineTo(w * 0.52, h * 0.63);
-            ctx.lineTo(w, h * 0.6);
-            ctx.closePath();
-            ctx.fillStyle = "white";
-            ctx.fill();
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = "black";
-            ctx.stroke();
+        // The desktop the cursor moves over. A trail or a halo reads completely
+        // differently over a photograph than over flat grey, so the preview judges
+        // a pack against the ground it will actually paint on.
+        Image {
+            anchors.fill: parent
+            source: root._wallpaperUrl
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: Math.max(1, Math.round(width))
+            sourceSize.height: Math.max(1, Math.round(height))
+            asynchronous: true
+            visible: status === Image.Ready
         }
-    }
 
-    // The pack itself, in a Loader so the shader item only exists while the
-    // host shows a previewable pack and is torn down when it stops.
-    Loader {
-        id: shaderLoader
+        // The stand-in cursor. A plain arrow rather than the user's cursor theme:
+        // the theme's sprite is not reachable from the settings app, and a pack is
+        // judged on what it paints around the pointer rather than on the pointer.
+        Canvas {
+            id: cursorArrow
 
-        /// One-frame teardown pulse driven by root.on_RevChanged — folded into
-        /// the `active` binding rather than written to `active` imperatively,
-        /// which would sever the binding.
-        property bool refreshHold: false
+            width: Kirigami.Units.gridUnit
+            height: Kirigami.Units.gridUnit * 1.4
+            // Hotspot at the tip, so the drawn arrow points at the position the
+            // shader is told about rather than trailing behind it.
+            x: Math.round(root.cursorX)
+            y: Math.round(root.cursorY)
+            z: root._paintsAboveCursor ? 0 : 2
+            visible: root.showCursor
+            antialiasing: true
 
-        anchors.fill: parent
-        z: root._paintsAboveCursor ? 2 : 1
-        active: root.active && root.previewable && !refreshHold
-        visible: active
-
-        sourceComponent: Item {
-            id: stage
-
-            property alias shaderItem: shaderItem
-            property bool configured: false
-
-            PointerShaderItem {
-                id: shaderItem
-
-                anchors.fill: parent
-                // A pointer pack ticks continuously while the pointer is live,
-                // so iTime free-runs in seconds rather than sweeping a
-                // progress value. Frozen with the rest of the preview when the
-                // app is not frontmost.
-                playing: root.animating
-
-                Component.onCompleted: {
-                    root.previewController.resetPointer();
-                    stage.configured = root.previewController.configurePreviewItem(shaderItem, root.packId, root.params);
-                }
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                var w = width;
+                var h = height;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, h);
+                ctx.lineTo(w * 0.28, h * 0.74);
+                ctx.lineTo(w * 0.48, h * 1.06);
+                ctx.lineTo(w * 0.72, h * 0.94);
+                ctx.lineTo(w * 0.52, h * 0.63);
+                ctx.lineTo(w, h * 0.6);
+                ctx.closePath();
+                ctx.fillStyle = "white";
+                ctx.fill();
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = "black";
+                ctx.stroke();
             }
+        }
 
-            // The pointer clock. Drives the lap phase and hands every sample to
-            // the controller, which feeds the shipped PointerHistory sampler.
-            Timer {
-                id: pointerClock
+        // The pack itself, in a Loader so the shader item only exists while the
+        // host shows a previewable pack and is torn down when it stops.
+        Loader {
+            id: shaderLoader
 
-                property real lastMs: 0
+            /// One-frame teardown pulse driven by root.on_RevChanged — folded into
+            /// the `active` binding rather than written to `active` imperatively,
+            /// which would sever the binding.
+            property bool refreshHold: false
 
-                interval: 16
-                repeat: true
-                running: stage.configured && root.animating
-                onRunningChanged: {
-                    // A fresh lap on resume, so a preview that was frozen for a
-                    // while does not report one enormous frame delta.
-                    lastMs = 0;
-                    if (running)
+            anchors.fill: parent
+            z: root._paintsAboveCursor ? 2 : 1
+            active: root.active && root.previewable && !refreshHold
+            visible: active
+
+            sourceComponent: Item {
+                id: stage
+
+                property alias shaderItem: shaderItem
+                property bool configured: false
+
+                PointerShaderItem {
+                    id: shaderItem
+
+                    anchors.fill: parent
+                    // A pointer pack ticks continuously while the pointer is live,
+                    // so iTime free-runs in seconds rather than sweeping a
+                    // progress value. Frozen with the rest of the preview when the
+                    // app is not frontmost.
+                    playing: root.animating
+
+                    Component.onCompleted: {
                         root.previewController.resetPointer();
+                        stage.configured = root.previewController.configurePreviewItem(shaderItem, root.packId, root.params);
+                    }
                 }
-                onTriggered: {
-                    var now = Date.now();
-                    var dt = pointerClock.lastMs > 0 ? now - pointerClock.lastMs : pointerClock.interval;
-                    pointerClock.lastMs = now;
-                    root._phase = (root._phase + dt / 1000 / root._lapSeconds) % 1;
-                    root.previewController.drivePointer(shaderItem, root.cursorX, root.cursorY, dt, root._pressed);
+
+                // The pointer clock. Drives the lap phase and hands every sample to
+                // the controller, which feeds the shipped PointerHistory sampler.
+                Timer {
+                    id: pointerClock
+
+                    property real lastMs: 0
+
+                    interval: 16
+                    repeat: true
+                    running: stage.configured && root.animating
+                    onRunningChanged: {
+                        // A fresh lap on resume, so a preview that was frozen for a
+                        // while does not report one enormous frame delta.
+                        lastMs = 0;
+                        if (running)
+                            root.previewController.resetPointer();
+                    }
+                    onTriggered: {
+                        var now = Date.now();
+                        var dt = pointerClock.lastMs > 0 ? now - pointerClock.lastMs : pointerClock.interval;
+                        pointerClock.lastMs = now;
+                        root._phase = (root._phase + dt / 1000 / root._lapSeconds) % 1;
+                        root.previewController.drivePointer(shaderItem, root.cursorX, root.cursorY, dt, root._pressed);
+                    }
                 }
             }
         }

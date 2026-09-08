@@ -320,6 +320,14 @@ set_source_files_properties(qml/pages/animations/CurvePresets.qml PROPERTIES QT_
 # TriggerLabels is a singleton for the same reason: the trigger bit tables are
 # shared between the trigger editor and the profile diff.
 set_source_files_properties(qml/components/TriggerLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+# PreviewCanvas is a singleton for the same reason: the fixed composition size
+# is shared by the decoration, pointer and animation preview panes and by their
+# hosts, none of which can be handed it before they lay themselves out.
+set_source_files_properties(qml/pages/shaders/PreviewCanvas.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+# PackPreviewGate is a singleton because the cap it enforces is global: the
+# decoration cards, the pointer page and the animation event cards each host
+# previews and none of them knows about the others.
+set_source_files_properties(qml/pages/shaders/PackPreviewGate.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
@@ -546,6 +554,9 @@ qt_add_qml_module(plasmazones-settings
         # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
         # invisible instances, Rules + shader browser directly).
         qml/components/StayOpenMenuItem.qml
+        qml/pages/shaders/PreviewCanvas.qml
+        qml/pages/shaders/PackPreview.qml
+        qml/pages/shaders/PackPreviewGate.qml
         qml/pages/shaders/DecorationChainPreview.qml
         qml/pages/shaders/DecorationPreviewPane.qml
         qml/pages/shaders/AnimationPreviewPane.qml

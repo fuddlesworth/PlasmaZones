@@ -139,6 +139,10 @@ SettingsFlickable {
                     chain: root._chain
                     packParameters: root._params
                     disabledPacks: root._disabledPacks
+                    // Live preview inside each expanded layer row: the same
+                    // stage the pack browser shows, on this page's controller.
+                    previewKind: "pointer"
+                    previewController: root.bridge ? root.bridge.previewController : null
                     // The component's defaults name decoration packs and "this
                     // surface's chain", neither of which exists here.
                     emptyChainText: i18n("No pointer packs.")

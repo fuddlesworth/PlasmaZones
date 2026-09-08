@@ -67,6 +67,16 @@ ColumnLayout {
     // as before; a host in another family overrides the ones that name its
     // packs. Properties rather than a branch on a domain enum, so a new host
     // supplies its own copy without this file having to learn about it.
+    // Live per-layer preview, opt-in. Empty kind means no preview at all,
+    // which is what the rules-action embed wants: a rule chain is edited
+    // against no particular surface, and there is no controller in that
+    // context to render one with. A host that has one names its family
+    // ("decoration" or "pointer") and hands its bridge's controller down.
+    // Both are needed — either alone renders nothing.
+    property string previewKind: ""
+    property QtObject previewController: null
+    readonly property bool _previewEnabled: previewKind.length > 0 && previewController !== null
+
     property string emptyChainText: i18n("No decoration packs.")
     property string emptyChainAddHintText: i18n("No decoration packs. Add one below.")
     // Shown only where the add row is hidden, which today is the rules embed.
@@ -223,8 +233,11 @@ ColumnLayout {
             // several sentences and the collapsed header can only afford one
             // elided line, so the expansion is where the full text lives —
             // param-less packs stay expandable for exactly that reason.
-            expandable: packDelegate._hasParams || packDelegate._description.length > 0
-            expansionContent: (packDelegate._hasParams || packDelegate._description.length > 0) ? expansionComponent : null
+            // A preview counts as something to reveal too, so a param-less,
+            // description-less pack still opens where a host asked for one.
+            readonly property bool _hasExpansion: packDelegate._hasParams || packDelegate._description.length > 0 || root._previewEnabled
+            expandable: packDelegate._hasExpansion
+            expansionContent: packDelegate._hasExpansion ? expansionComponent : null
 
             readonly property bool _layerEnabled: root._isLayerEnabled(packDelegate.packId)
 
@@ -304,6 +317,28 @@ ColumnLayout {
                         text: packDelegate._description
                         wrapMode: Text.WordWrap
                         opacity: packDelegate._layerEnabled ? 0.7 : 0.4
+                    }
+
+                    // This layer's pack, rendered exactly as the browser's
+                    // detail dialog renders it. Lives inside the lazy
+                    // expansion, so a collapsed row instantiates no shader
+                    // item at all — which is what makes a preview per row
+                    // affordable in the first place. `active` follows the
+                    // row's own expansion rather than the loader's lifetime:
+                    // the loader deliberately outlives the collapse animation,
+                    // and the preview should stop at collapse-start so a row
+                    // being opened elsewhere can take the slot immediately.
+                    // How many run at once is capped globally by
+                    // PackPreviewGate.
+                    PackPreview {
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        visible: root._previewEnabled
+                        previewKind: root.previewKind
+                        previewController: root.previewController
+                        packId: packDelegate.packId
+                        params: packDelegate._values
+                        active: root._previewEnabled && packDelegate.expanded
                     }
 
                     PZCommon.ShaderParamsEditor {
