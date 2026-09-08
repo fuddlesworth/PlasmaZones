@@ -121,14 +121,20 @@ PLASMAZONES_EXPORT void installMotionProfileTree(PhosphorAnimation::PhosphorProf
 /// feel different from windows feel different from OSDs) without
 /// reintroducing the per-leaf shadowing problem
 /// that motivated their deletion: every entry is registered under the
-/// `kShellAnimationFamilySeedsOwnerTag` partition, so a Settings-UI
-/// edit (direct-owner) or a user-authored JSON (loader-tagged owner)
-/// at any leaf or at the family parent itself silently wins.
+/// `kShellAnimationFamilySeedsOwnerTag` partition, which the registry treats
+/// as its low-precedence layer, so a per-event override from
+/// `Animations/MotionProfileTree` at any leaf or at the family parent itself
+/// silently wins.
 ///
 /// MUST be called AFTER curves are loaded (so curve names like
 /// `widget-out` resolve via `CurveRegistry::tryCreate`) and BEFORE
-/// the profile loader's initial scan (so a user JSON at a seeded
-/// path can correctly overwrite the seed).
+/// `installMotionProfileTree` (so a config override at a seeded path lands in
+/// the upper layer above the seed rather than racing it).
+///
+/// MUST also be re-run whenever the curve registry reloads, for the same
+/// reason the timing tree is re-installed then: each seeded Profile holds the
+/// curve it RESOLVED at parse time, so a curve edited on disk leaves every
+/// seed on the pre-edit object until they are built again.
 PLASMAZONES_EXPORT void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,
                                                    const PhosphorAnimation::CurveRegistry& curves);
 

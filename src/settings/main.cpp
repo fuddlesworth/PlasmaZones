@@ -28,7 +28,6 @@
 
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorRendering/ShaderEffect.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <QApplication>
