@@ -1728,7 +1728,18 @@ private:
     /**
      * @brief Shared toggle-float implementation for toggleFocusedWindowFloat/toggleWindowFloat
      *
-     * Toggles the floating state, retiles, and emits windowFloatingChanged.
+     * Flips the floating state, retiles, and emits windowFloatingChanged with
+     * user-intent semantics (the downstream handler restores pre-tile
+     * geometry). Two contract points a caller must know:
+     *
+     * - Membership is checked FIRST and a state that does not contain the
+     *   window is refused with a warning and no mutation. The check cannot be
+     *   dropped: toggleWindowFloatAs resolves the state through a cross-screen
+     *   fallback, so the callee cannot assume containment.
+     * - When the retile's overflow pass re-floats the window (an unfloat that
+     *   landed at or above the tiled cap), the net change is nothing and the
+     *   outcome is announced on the PASSIVE windowFloatingStateSynced channel
+     *   instead, so the user's free-float position is not overwritten.
      */
     void performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
 
