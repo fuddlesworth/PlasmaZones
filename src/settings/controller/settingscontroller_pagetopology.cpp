@@ -100,22 +100,21 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kDecorationDirectChildren{QStringLiteral("window-appearance")};
     static const QSet<QString> kDecorationAllLeaves =
         kDecorationDirectChildren + kDecorationSurfacesChildren + kDecorationLibraryChildren;
-    // Overlays — the third Appearance drill-down beside animations and
-    // decorations: the zone overlay's look, its saved shader sets, and the pack
-    // library.
+    // Overlays drill-down — a Library sub-bucket holding the saved sets and the
+    // pack browser, mirroring decorations. The two direct children are the
+    // config pages: the overlay's look, and which shader each layout draws.
     //
-    // snapping-shader-sets is deliberately ABSENT from this set, like the
-    // per-mode library pages below: its files are written immediately and it
-    // owns no config key, so it can never be dirty and listing it would only
-    // add a dead hop to the hot isPageDirty walk. Applying a set writes the
-    // assignments key, which snapping-shader-assignments reports — and that
-    // page is under Snapping, because the assignment tree is keyed on LAYOUTS.
-    // snapping-shaders is the pack browser and owns no config either, but it is
-    // listed because it is this category's regPage identity.
-    static const QSet<QString> kOverlaysAllLeaves{
-        QStringLiteral("overlays-appearance"),
-        QStringLiteral("snapping-shaders"),
-    };
+    // overlays-sets is deliberately ABSENT from these sets, like the per-mode
+    // library pages below: its files are written immediately and it owns no
+    // config key, so it can never be dirty and listing it would only add a dead
+    // hop to the hot isPageDirty walk. Applying a set writes the assignments
+    // key, and overlays-assignments reports that. overlays-shaders is the pack
+    // browser and owns no config either, but it is listed because it is this
+    // category's regPage identity.
+    static const QSet<QString> kOverlaysLibraryChildren{QStringLiteral("overlays-shaders")};
+    static const QSet<QString> kOverlaysDirectChildren{QStringLiteral("overlays-appearance"),
+                                                       QStringLiteral("overlays-assignments")};
+    static const QSet<QString> kOverlaysAllLeaves = kOverlaysDirectChildren + kOverlaysLibraryChildren;
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -145,12 +144,6 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kSnappingConfigChildren{
         QStringLiteral("snapping-ordering"),
         QStringLiteral("snapping-shortcuts"),
-        // The shader ASSIGNMENTS page, which owns the OverlayShaderTree key.
-        // The pack library and the saved sets are under Appearance → Overlays;
-        // neither owns config, so neither is missing from here in the sense
-        // that matters — this set exists to light the collapsed Configuration
-        // header, and only a config-owning page can make it dirty.
-        QStringLiteral("snapping-shader-assignments"),
     };
     static const QSet<QString> kSnappingAllLeaves =
         QSet<QString>{kSnappingSimple, kSnappingZoneSelector, kSnappingWindowBehavior, kSnappingOverlayBehavior}
@@ -204,6 +197,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves + kOverlaysAllLeaves},
         {QStringLiteral("decorations"), kDecorationAllLeaves},
         {QStringLiteral("overlays"), kOverlaysAllLeaves},
+        {QStringLiteral("overlays-library"), kOverlaysLibraryChildren},
         // No "rules" or "virtualscreens" entries — both are top-level
         // leaves, so their dirty state propagates without a parent-bucket
         // intermediary.
@@ -341,11 +335,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
          }},
-        {QStringLiteral("snapping-shader-assignments"),
+        {QStringLiteral("overlays-assignments"),
          {
              // The whole OverlayShaderTree blob (baseline + per-layout
              // overrides) is one key, owned solely by this page — the browser
-             // leaf (snapping-shaders) edits no config.
+             // leaf (overlays-shaders) edits no config.
              {CD::overlaysGroup(), CD::overlayShaderTreeKey()},
          }},
         {QStringLiteral("snapping-zoneselector"),
@@ -752,9 +746,9 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("overlays-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
-        QStringLiteral("snapping-shader-assignments"),
-        QStringLiteral("snapping-shader-sets"),
-        QStringLiteral("snapping-shaders"),
+        QStringLiteral("overlays-assignments"),
+        QStringLiteral("overlays-sets"),
+        QStringLiteral("overlays-shaders"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-simple"),
         QStringLiteral("tiling-library"),

@@ -173,15 +173,18 @@ public:
     // Decorations.WindowFiltering sub-group is the border-pass window filter.
     P_CONFIG_GROUP(decorationsGroup, "Decorations")
 
-    // Zone-overlay shader assignments (OverlayShaderTree: global baseline +
-    // per-layout-UUID overrides). A Snapping.* group because a v2 group name
-    // mirrors where its page lives, and the pages that edit it — Shaders,
-    // Shader Sets, Shader Library — sit under Snapping → Configuration. They
-    // sit there because the tree is keyed on LAYOUTS, which only exist in
-    // snapping mode. The overlay's colours and fonts are the part that is an
-    // appearance question, and those keys live in the Snapping.Zones.* groups
-    // this one sits beside, read by the Overlays page under Appearance.
-    P_CONFIG_GROUP(overlaysGroup, "Snapping.OverlayShaders")
+    // Overlays — zone-overlay shader assignments (OverlayShaderTree: global
+    // baseline + per-layout-UUID overrides). Top-level and singular like
+    // Animations and Decorations, and for the same reason: the three are
+    // siblings under Appearance in the settings tree, and a v2 group name
+    // mirrors where its page lives. A zone overlay only draws in snapping mode,
+    // but so does every zone, and which shader it draws is a look rather than a
+    // placement decision.
+    //
+    // The overlay's colours and fonts are NOT here: those keys predate this
+    // group and still live in the Snapping.Zones.* groups the Appearance page
+    // reads. Only the assignments moved.
+    P_CONFIG_GROUP(overlaysGroup, "Overlays")
 
     // Decorations.Performance — what the decoration chain is allowed to keep
     // redrawing. An animated pack (a drifting mote layer, an orbiting gleam)
@@ -859,7 +862,7 @@ public:
         // reads unambiguously as "reading from v1 source" vs "writing to v2
         // destination".
         // Not a v1 spelling: a one-shot marker the v8 overlay-shader lift
-        // stamps into the Snapping.OverlayShaders group so it merges from the layout-settings
+        // stamps into the Overlays group so it merges from the layout-settings
         // sidecar at most once (see relocateOverlayShaderAssignments). It lives
         // in Legacy rather than beside the live keys because nothing but that
         // migration reads or writes it, and it is deliberately NOT schema-

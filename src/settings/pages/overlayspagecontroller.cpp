@@ -37,7 +37,7 @@ QVariantMap profileToMap(const OverlayShaderProfile& profile)
 OverlaysPageController::OverlaysPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                                PhosphorZones::IZoneLayoutRegistry* layoutRegistry, ISettings* settings,
                                                ShaderPreviewController* previewController, QObject* parent)
-    : PhosphorControl::PageController(QStringLiteral("snapping-shaders"), parent)
+    : PhosphorControl::PageController(QStringLiteral("overlays-shaders"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_layoutRegistry(layoutRegistry)
     , m_settings(settings)

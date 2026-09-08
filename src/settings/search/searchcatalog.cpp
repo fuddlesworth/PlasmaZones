@@ -132,7 +132,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
-    search->setPageKeywords(QStringLiteral("snapping-shaders"),
+    search->setPageKeywords(QStringLiteral("overlays-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
     // Tiling & scrolling
@@ -1072,7 +1072,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
     // decoration sets. Every page that hosts a ShaderBrowserPage carries its
     // "userShaders" card, so each one registers the anchor.
-    addSection(search, QStringLiteral("snapping-shaders"), QStringLiteral("userShaders"),
+    addSection(search, QStringLiteral("overlays-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
@@ -1094,11 +1094,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("User sets"));
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("savedDecorationSets"),
                PhosphorI18n::tr("Saved sets"));
-    addSection(search, QStringLiteral("snapping-shader-sets"), QStringLiteral("saveOverlaySet"),
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("saveOverlaySet"),
                PhosphorI18n::tr("Save current state"));
-    addSection(search, QStringLiteral("snapping-shader-sets"), QStringLiteral("importOverlaySets"),
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("importOverlaySets"),
                PhosphorI18n::tr("User sets"));
-    addSection(search, QStringLiteral("snapping-shader-sets"), QStringLiteral("savedOverlaySets"),
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("savedOverlaySets"),
                PhosphorI18n::tr("Saved sets"));
 
     // The per-event animation anchors live in their own TU

@@ -247,18 +247,7 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/snapping/SnappingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    // Which shader each layout draws. Under Snapping because the assignment
-    // tree is keyed on LAYOUTS, which only exist in snapping mode. The pack
-    // library and the saved sets are registered under Appearance → Overlays
-    // with the overlay's other appearance surfaces.
-    //
-    // A virtual leaf: the controller stays bound to the "snapping-shaders" id
-    // (regPage, under Overlays), and dirty tracking rides the global
-    // overlayShaderTreeChanged NOTIFY loop either way.
-    regVirtual(QStringLiteral("snapping-shader-assignments"), QStringLiteral("snapping-config-cat"),
-               PhosphorI18n::tr("Shaders"), QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
-               QStringLiteral("preferences-desktop-display"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    // (The overlay shader pages are registered under Appearance → Overlays.)
     // Tiling children — organised by subject (Window / Algorithm / Configuration)
     // to match the snapping reorg. Tiling has no drag-overlay or selector popup,
     // so its only interaction surface (the drag-insert indicator) folds into
@@ -524,26 +513,33 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
-    // Overlays — the third Appearance drill-down, beside Animations and
-    // Decorations. Which shader a zone overlay draws is a display preference
-    // like those two, not a property of the layout the zones came from, which
-    // is why it sits here rather than under Snapping. (Snapping → Overlay is a
-    // different thing: when the drag overlay appears and what its rectangles
-    // look like.) No sub-buckets — two leaves do not need a Library tier.
     // Overlays — the third Appearance drill-down beside Animations and
-    // Decorations: the zone overlay's look, its saved shader sets, and the pack
-    // library. The two pages that did NOT come here are the ones keyed on
-    // snapping's own artifacts, namely which shader each LAYOUT draws and when
-    // the overlay appears while you DRAG; both stay under Snapping.
+    // Decorations, and shaped like Decorations: the config leaves first, then a
+    // collapsible Library bucket holding the saved sets and the pack browser.
+    // Everything about the zone overlay's LOOK lives here, including which
+    // shader each layout draws. Only when the overlay appears while you drag
+    // stayed under Snapping, because that is an activation decision.
     regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
                QStringLiteral("preferences-desktop-display"));
+    // Appearance leads, the way Decoration → General does, with the divider
+    // closing the config block before the Library bucket.
     regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),
                QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("preferences-desktop-color"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("snapping-shader-sets"), QStringLiteral("overlays"), PhosphorI18n::tr("Sets"),
+    // "Assignments", not "Shaders": Library → Shaders below is the pack
+    // browser, named the way the decoration tree names its own, and two
+    // entries reading "Shaders" in one drill-down would be a coin flip.
+    regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Assignments"),
+               QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
+               QStringLiteral("preferences-desktop-display"),
+               /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
+
+    regVirtual(QStringLiteral("overlays-library"), QStringLiteral("overlays"), PhosphorI18n::tr("Library"), QString(),
+               QStringLiteral("folder-open"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("overlays-sets"), QStringLiteral("overlays-library"), PhosphorI18n::tr("Overlay Sets"),
                QStringLiteral("pages/overlays/OverlaySetsPage.qml"), QStringLiteral("color-palette"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regPage(m_overlaysPage.get(), QStringLiteral("overlays"), PhosphorI18n::tr("Library"),
+    regPage(m_overlaysPage.get(), QStringLiteral("overlays-library"), PhosphorI18n::tr("Shaders"),
             QStringLiteral("pages/overlays/OverlaysLibraryPage.qml"), QStringLiteral("folder-templates"),
             /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 

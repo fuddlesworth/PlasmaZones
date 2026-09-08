@@ -412,7 +412,7 @@ const QHash<QString, QString>& regPageMemberToPageId()
         {QStringLiteral("m_generalPage"), QStringLiteral("general")},
         {QStringLiteral("m_rulesPage"), QStringLiteral("rules")},
         {QStringLiteral("m_editorPage"), QStringLiteral("editor")},
-        {QStringLiteral("m_overlaysPage"), QStringLiteral("snapping-shaders")},
+        {QStringLiteral("m_overlaysPage"), QStringLiteral("overlays-shaders")},
         {QStringLiteral("m_tilingBehaviorPage"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("m_tilingAlgorithmPage"), QStringLiteral("tiling-algorithm")},
         {QStringLiteral("m_windowAppearancePage"), QStringLiteral("window-appearance")},
