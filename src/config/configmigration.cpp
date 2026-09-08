@@ -440,6 +440,9 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
+                // The chain never ran on this path, so the v8 import has to be
+                // driven directly — see finalizeV8MotionImport.
+                finalizeV8MotionImport(jsonPath);
                 return finalizeV4Conversion(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
@@ -456,9 +459,12 @@ bool ConfigMigration::ensureJsonConfigImpl()
 
     const QString iniPath = ConfigDefaults::legacyConfigFilePath();
     if (!QFile::exists(iniPath)) {
-        // Fresh install — no old config. Still run the v4 finalizer so a
-        // stray assignments.json from a partial earlier conversion is folded
-        // into rules.json rather than left orphaned.
+        // Fresh install, or a config that was just removed as empty — no old
+        // config to migrate. Still run both finalizers: the v4 one folds a
+        // stray assignments.json from a partial earlier conversion into
+        // rules.json rather than leaving it orphaned, and the v8 one recovers
+        // per-event timing files the chain never got to look at.
+        finalizeV8MotionImport(jsonPath);
         return finalizeV4Conversion(jsonPath);
     }
 

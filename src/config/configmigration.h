@@ -164,6 +164,13 @@ public:
     /// @p imports is about the CONTENT, not the path. Settings import writes a
     /// foreign export over the live config path and then migrates it, so the
     /// path being the live one does not make the document this machine's.
+    /// Recover pre-v8 per-event timing files on the ensureJsonConfig exits the
+    /// version chain never reaches (corrupt-with-no-INI, whitespace-only, fresh
+    /// install). Idempotent, and a no-op unless the config is already stamped
+    /// v8 and carries no MotionProfileTree. Mirrors finalizeV4Conversion, which
+    /// exists on the same exits for the same reason.
+    static bool finalizeV8MotionImport(const QString& jsonPath);
+
     static bool runMigrationChain(const QString& jsonPath, ExternalImports imports = ExternalImports::Enabled);
 
     /// Run the migration chain in-memory. Two callers: ensureJsonConfig's

@@ -379,6 +379,60 @@ private Q_SLOTS:
         QVERIFY2(resolved.curve != nullptr, "a bezier spec the migration copied verbatim must still parse");
     }
 
+    /// The chain is not the only way into this migration, and the other way
+    /// has to work.
+    ///
+    /// `ensureJsonConfig` reaches the version chain only for a config that
+    /// exists, parses, and is stamped below current. A config lost to
+    /// corruption, or emptied, skips it — and the Store then stamps `_version =
+    /// 8` on the file it writes, so the next launch short-circuits and the
+    /// chain never runs. Every step before v8 only rewrites config, so skipping
+    /// them costs nothing. v8 IMPORTS external state, so skipping it silently
+    /// strands the user's timing files on disk forever.
+    ///
+    /// SCOPE: this drives the finalizer directly, so it pins the RECOVERY and
+    /// its idempotency, not the wiring. Deleting the calls in
+    /// ensureJsonConfig's skip-exits leaves this green — verified. Covering the
+    /// wiring needs a slot that drives ensureJsonConfig itself against an
+    /// isolated config dir and resets the process-level migration guard between
+    /// cases, which belongs with test_configmigration.cpp's own ensureJsonConfig
+    /// coverage rather than here.
+    void theFinalizerRecoversFilesTheChainNeverSaw()
+    {
+        QVERIFY(writeProfileFile(
+            QStringLiteral("osd.show"),
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 265}}));
+
+        // A config already stamped v8 and carrying no tree — exactly what the
+        // Store leaves behind on the exits that bypass the chain.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString jsonPath = tmp.path() + QStringLiteral("/config.json");
+        {
+            QFile f(jsonPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            const QByteArray payload = QJsonDocument(QJsonObject{{QStringLiteral("_version"), 8}}).toJson();
+            QCOMPARE(f.write(payload), static_cast<qint64>(payload.size()));
+        }
+
+        QVERIFY(ConfigMigration::finalizeV8MotionImport(jsonPath));
+
+        QFile back(jsonPath);
+        QVERIFY(back.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(back.readAll()).object();
+        QCOMPARE(entryFor(root, QStringLiteral("osd.show")).value(QStringLiteral("duration")).toInt(), 265);
+
+        // Idempotent: a second run must not disturb what the first wrote, for
+        // the same reason the step itself never overwrites an existing key.
+        QVERIFY(ConfigMigration::finalizeV8MotionImport(jsonPath));
+        QFile again(jsonPath);
+        QVERIFY(again.open(QIODevice::ReadOnly));
+        QCOMPARE(entryFor(QJsonDocument::fromJson(again.readAll()).object(), QStringLiteral("osd.show"))
+                     .value(QStringLiteral("duration"))
+                     .toInt(),
+                 265);
+    }
+
     void anAlreadyMigratedRootIsLeftAlone()
     {
         QVERIFY(writeProfileFile(
