@@ -112,10 +112,6 @@ ShaderSetStore::ShaderSetStore(Config config, QObject* parent)
     // std::bad_function_call.
     Q_ASSERT(m_config.setsDir);
     Q_ASSERT(m_config.snapshot);
-    // A domain that stages set files must be able to un-stage them: without the
-    // rollback hook a failed write leaves the page dirty with nothing to
-    // discard. rollbackSnapshot() degrades to a re-notify in release.
-    Q_ASSERT(!m_config.fileSnapshot || m_config.snapshotRollback);
     Q_ASSERT(m_config.validate);
     Q_ASSERT(m_config.apply);
 }
@@ -154,36 +150,6 @@ void ShaderSetStore::notifyLiveStateChanged()
         Qt::QueuedConnection);
 }
 
-bool ShaderSetStore::mutationAllowed()
-{
-    if (!m_config.mutationGuard) {
-        return true;
-    }
-    const QString refusal = m_config.mutationGuard();
-    if (refusal.isEmpty()) {
-        return true;
-    }
-    qCWarning(lcConfig) << "ShaderSetStore: mutation blocked:" << refusal;
-    Q_EMIT toastRequested(refusal);
-    return false;
-}
-
-bool ShaderSetStore::snapshotFile(const QString& filePath)
-{
-    if (!m_config.fileSnapshot) {
-        return true; // the domain does not stage set files
-    }
-    if (m_config.fileSnapshot(filePath)) {
-        return true;
-    }
-    // Writing now would destroy content we failed to capture, and Discard
-    // could not restore it. Refuse instead.
-    qCWarning(lcConfig) << "ShaderSetStore: refusing to write" << filePath
-                        << "— could not capture its pre-edit content";
-    Q_EMIT toastRequested(PhosphorI18n::tr("Could not back up the existing set, so it was left untouched."));
-    return false;
-}
-
 bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) const
 {
     // Both checks come BEFORE the open. importSet hands this a user-chosen path,
@@ -216,27 +182,6 @@ bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) cons
     return true;
 }
 
-void ShaderSetStore::rollbackSnapshot(const QString& filePath)
-{
-    if (m_config.snapshotRollback) {
-        // The hook owns the dirty-state signal: it alone knows whether the entry
-        // was really dropped.
-        m_config.snapshotRollback(filePath);
-        return;
-    }
-    // A domain that stages but cannot roll back has still moved its dirty state,
-    // so it must at least re-notify. The ctor asserts the pairing, and this is
-    // the release-build twin of that assert.
-    notifyPendingChanges();
-}
-
-void ShaderSetStore::notifyPendingChanges()
-{
-    if (m_config.fileSnapshot) {
-        Q_EMIT pendingChangesChanged();
-    }
-}
-
 bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& root)
 {
     QSaveFile file(filePath);
@@ -246,12 +191,9 @@ bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& ro
     if (!written) {
         qCWarning(lcConfig) << "ShaderSetStore: could not write" << filePath << ":" << file.errorString();
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write the set to disk."));
-        // snapshotFile() staged this path for Discard, but the write never
         // landed, so the file is untouched. Un-stage it rather than leave the
         // page claiming an unsaved change that does not exist. The rollback hook
         // emits the dirty-state change itself, and only when it really dropped
-        // something, so there is no notifyPendingChanges() here.
-        rollbackSnapshot(filePath);
         return false;
     }
     return true;
@@ -354,7 +296,7 @@ QVariantList ShaderSetStore::availableSets() const
 
 bool ShaderSetStore::applySet(const QString& name)
 {
-    if (name.isEmpty() || !mutationAllowed()) {
+    if (name.isEmpty()) {
         return false;
     }
     const QString filePath = setFilePath(name);
@@ -387,7 +329,6 @@ bool ShaderSetStore::applySet(const QString& name)
     }
     // Live state moved, so every row's `active` flag is stale.
     Q_EMIT setsChanged();
-    notifyPendingChanges();
     return true;
 }
 
@@ -437,9 +378,6 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     // Trim here, so the mutators and canUseSetName cannot disagree about what a
     // name IS. Every QML caller trims already; this makes it an invariant.
     const QString name = rawName.trimmed();
-    if (!mutationAllowed()) {
-        return false;
-    }
     if (name.isEmpty()) {
         // The Save button is disabled for blank text, so this is a programmatic
         // caller. Refuse it the same way updateSet does, with the reason.
@@ -493,9 +431,6 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not create the sets folder."));
         return false;
     }
-    if (!snapshotFile(filePath)) {
-        return false;
-    }
 
     root.insert(kNameKey, name);
     if (!description.isEmpty()) {
@@ -508,13 +443,12 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     }
 
     Q_EMIT setsChanged();
-    notifyPendingChanges();
     return true;
 }
 
 bool ShaderSetStore::removeSet(const QString& name)
 {
-    if (name.isEmpty() || !mutationAllowed()) {
+    if (name.isEmpty()) {
         return false;
     }
     const QString filePath = setFilePath(name);
@@ -527,26 +461,19 @@ bool ShaderSetStore::removeSet(const QString& name)
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete “%1”.").arg(name));
         return false;
     }
-    if (!snapshotFile(filePath)) {
-        return false;
-    }
     if (!file.remove()) {
         qCWarning(lcConfig) << "ShaderSetStore::removeSet: could not remove" << filePath;
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete “%1”.").arg(name));
-        // The delete never landed, so the file is untouched and the snapshot it
-        // staged has to go back. rollbackSnapshot owns the dirty-state signal.
-        rollbackSnapshot(filePath);
         return false;
     }
     Q_EMIT setsChanged();
-    notifyPendingChanges();
     return true;
 }
 
 bool ShaderSetStore::updateSet(const QString& oldName, const QString& rawNewName, const QString& description)
 {
     const QString newName = rawNewName.trimmed();
-    if (oldName.isEmpty() || !mutationAllowed()) {
+    if (oldName.isEmpty()) {
         return false;
     }
     if (newName.isEmpty()) {
@@ -587,23 +514,7 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& rawNewName
         root.insert(kDescriptionKey, description);
     }
 
-    if (!snapshotFile(oldPath)) {
-        return false;
-    }
-    if (newPath != oldPath && !snapshotFile(newPath)) {
-        // oldPath is staged for a rename that is not going to happen.
-        rollbackSnapshot(oldPath);
-        return false;
-    }
-
     if (!writeSetFile(newPath, root)) {
-        // writeSetFile rolled newPath back. On a rename, oldPath is this
-        // function's own second staging and nothing touched it either. When the
-        // paths are the same (a description-only or case-only edit) there is
-        // nothing left to roll back.
-        if (newPath != oldPath) {
-            rollbackSnapshot(oldPath);
-        }
         return false;
     }
     // Only drop the old file once the new one is safely committed. If the
@@ -618,7 +529,6 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& rawNewName
     }
 
     Q_EMIT setsChanged();
-    notifyPendingChanges();
     return true;
 }
 
@@ -663,7 +573,7 @@ bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath
 
 bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
 {
-    if (sourcePathOrUrl.isEmpty() || !mutationAllowed()) {
+    if (sourcePathOrUrl.isEmpty()) {
         return false;
     }
     // The drop zone hands over raw file:// URLs; the file dialog hands over
@@ -717,15 +627,11 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     }
     root.insert(kNameKey, name);
 
-    if (!snapshotFile(destPath)) {
-        return false;
-    }
     if (!writeSetFile(destPath, root)) {
         return false;
     }
 
     Q_EMIT setsChanged();
-    notifyPendingChanges();
     return true;
 }
 

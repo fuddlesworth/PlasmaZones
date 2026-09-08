@@ -68,17 +68,6 @@ std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) con
     return std::nullopt;
 }
 
-Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path,
-                                                        const QString& /*lowPrecedenceOwnerTag*/) const
-{
-    // The tag argument is ignored: seed-ness is now decided by which store an
-    // entry lives in, chosen at write time against the registry's configured
-    // tag. Passing a DIFFERENT tag here used to select a different layer;
-    // there is no longer any layer for it to select. Retained so existing
-    // callers keep compiling, and it simply forwards.
-    return resolveWithInheritance(path);
-}
-
 Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path) const
 {
     // Build the chain root-first so the overlay walk runs shallow →

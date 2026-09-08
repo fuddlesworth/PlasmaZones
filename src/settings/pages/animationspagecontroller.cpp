@@ -134,7 +134,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // m_lastHadPendingChanges from the real post-construction state (just
     // below), so it does not need to have observed any signal fired during
     // construction.
-    m_presets = new AnimationPresetLibrary(profilesDirFn, /*snapshot=*/{}, /*rollback=*/{}, this);
+    m_presets = new AnimationPresetLibrary(profilesDirFn, this);
     // Set and preset file CRUD is IMMEDIATE, matching decoration
     // (decorationpagecontroller_sets.cpp wires no snapshot hooks at all).
     // Saving, deleting, renaming or importing one used to be staged and undone
@@ -210,8 +210,6 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             &AnimationsPageController::userPresetsChanged);
     connect(m_presets, &AnimationPresetLibrary::toastRequested, this, &AnimationsPageController::toastRequested);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
-            &AnimationsPageController::pendingChangesChanged);
-    connect(m_motionSets, &ShaderSetStore::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
     // A set's `active` flag is derived from the live state of every event it
     // covers, so it goes stale whenever one of those is edited anywhere else.
