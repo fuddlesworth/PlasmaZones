@@ -165,7 +165,7 @@ private Q_SLOTS:
     }
 
     /// clearShaderOverride on a path with NO override is a no-op: it returns
-    /// false and emits nothing (mirrors clearOverride_noFileReturnsFalseNoSignal
+    /// false and emits nothing (mirrors clearOverride_noEntryReturnsFalseNoSignal
     /// and the clearShaderOverrideDescendants no-op case). Without this the QML
     /// refresh would re-dirty the page on every combo tick.
     void clearShaderOverride_noOverrideReturnsFalseNoSignal()

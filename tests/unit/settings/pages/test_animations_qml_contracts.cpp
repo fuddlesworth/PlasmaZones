@@ -942,7 +942,16 @@ private Q_SLOTS:
         // transition finishes, so a `visible`-only gate never tears the pane
         // down on a fast pack switch and the previous pack's stale
         // composition leads the open (stale / unavailable / preview).
-        QVERIFY2(src.contains(QLatin1String("root._decorationArmed")),
+        // Scoped to the Loader's OWN `active:` line rather than searched for
+        // across the whole file: `root._decorationArmed` also appears in the
+        // arm function and in _teardownPanes, both of which this slot
+        // separately requires, so a whole-file search is satisfied by them and
+        // holds with the gate deleted.
+        static const QRegularExpression decoWsRe(QStringLiteral("\\s+"));
+        const QString flatSrc = QString(src).replace(decoWsRe, QStringLiteral(" "));
+        const int decoLoaderAt = flatSrc.indexOf(QLatin1String("active: root.visible && root._decorationPreview"));
+        QVERIFY2(decoLoaderAt >= 0, "the decoration pane's Loader `active:` binding was not found");
+        QVERIFY2(flatSrc.mid(decoLoaderAt, 120).contains(QLatin1String("root._decorationArmed")),
                  "the decoration pane's Loader must gate on _decorationArmed — `visible` alone cannot "
                  "tear it down on a fast pack switch, so the previous pack's stale composition shows first");
 
@@ -956,14 +965,37 @@ private Q_SLOTS:
         QVERIFY2(teardownBody.contains(QLatin1String("_rendererActive = false"))
                      && teardownBody.contains(QLatin1String("_decorationArmed = false")),
                  "_teardownPanes must drop BOTH panes' flags");
-        QVERIFY2(!src.contains(QLatin1String("active: root.visible && root._decorationPreview\n")),
-                 "the decoration Loader has lost its _decorationArmed gate");
+        // The positive, whitespace-insensitive check above covers this: it
+        // finds the binding wherever it sits and requires the third conjunct on
+        // it. The exact-literal negation that used to stand here matched one
+        // spelling including a trailing newline, so any reformat of the gate
+        // defeated it silently.
 
         // A pack switch on a still-visible dialog must reset: aboutToShow is
         // not guaranteed to re-fire on a popup that never finished closing.
         const int effectChanged = src.indexOf(QLatin1String("onEffectChanged:"));
         QVERIFY2(effectChanged >= 0, "onEffectChanged handler not found");
-        const QString effectChangedBody = src.mid(effectChanged, 200);
+        // Brace-counted rather than a fixed character window: a window is wrong
+        // in both directions, letting a statement added ahead of the reset push
+        // it out of range, and letting a short handler spill into whatever
+        // follows and be satisfied from outside it.
+        const QString effectChangedBody = [&] {
+            int depth = 0;
+            bool opened = false;
+            for (int i = effectChanged; i < src.size(); ++i) {
+                if (src.at(i) == QLatin1Char('{')) {
+                    ++depth;
+                    opened = true;
+                } else if (src.at(i) == QLatin1Char('}')) {
+                    --depth;
+                    if (opened && depth == 0) {
+                        return src.mid(effectChanged, i - effectChanged + 1);
+                    }
+                }
+            }
+            return QString();
+        }();
+        QVERIFY2(!effectChangedBody.isEmpty(), "could not delimit the onEffectChanged handler body");
         QVERIFY2(effectChangedBody.contains(QLatin1String("_resetPreview")),
                  "onEffectChanged must reset the preview while visible, or a fast pack switch keeps "
                  "the previous pack's pane alive under the new effect");
@@ -981,6 +1013,10 @@ private Q_SLOTS:
         for (const QString& browserFile :
              {QStringLiteral("/ShaderBrowserPage.qml"), QStringLiteral("/ShaderBrowserCard.qml")}) {
             const QString bsrc = readFile(browserDir + browserFile);
+            // Checked before the negations below, which a missing file would
+            // otherwise satisfy vacuously — the exact case they exist to catch
+            // is one of these files being renamed or moved.
+            QVERIFY2(!bsrc.isEmpty(), qPrintable(QStringLiteral("could not read ") + browserFile));
             QVERIFY2(!bsrc.contains(QLatin1String("previewLive: groupCard.bodyLive && root._appActive"))
                          && !bsrc.contains(QLatin1String("_inViewport && root._appActive")),
                      qPrintable(browserFile

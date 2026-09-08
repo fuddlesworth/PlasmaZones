@@ -293,7 +293,7 @@ private Q_SLOTS:
     /// empty object. The two resolve identically, but the card's Override toggle
     /// and the pending-changes walk both key on the file existing — so an empty
     /// file leaves the toggle stuck on with nothing behind it.
-    void clearingTheLastFieldRemovesTheFileOutright()
+    void clearingTheLastFieldRemovesTheEntryOutright()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -317,7 +317,7 @@ private Q_SLOTS:
         }
         QCOMPARE(primaryAnnouncements, 1);
 
-        QVERIFY2(!c.hasOverride(kPrimary), "the override file survived as an empty object");
+        QVERIFY2(!c.hasOverride(kPrimary), "the entry survived as an empty object");
     }
 
     /// A path that does not carry the field is skipped rather than rewritten,
@@ -354,7 +354,7 @@ private Q_SLOTS:
 
     /// The degenerate half of the same rule: a path with no override file at
     /// all must not have one created for it.
-    void clearingAFieldCreatesNoFileForAPathWithoutOne()
+    void clearingAFieldCreatesNoEntryForAPathWithoutOne()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());

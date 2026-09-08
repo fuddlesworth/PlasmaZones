@@ -112,7 +112,7 @@ private Q_SLOTS:
         QVERIFY(set.value(QStringLiteral("coverageCount")).toInt() >= 2);
     }
 
-    void applySet_writesPerPathFiles()
+    void applySet_writesPerPathEntries()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());

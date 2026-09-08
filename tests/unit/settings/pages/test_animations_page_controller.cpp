@@ -291,7 +291,7 @@ private Q_SLOTS:
         QCOMPARE(stored.value(QStringLiteral("curve")).toString(), QStringLiteral("0.33,1,0.68,1"));
     }
 
-    void hasOverride_reflectsFileExistence()
+    void hasOverride_reflectsAStoredEntry()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -327,7 +327,7 @@ private Q_SLOTS:
         QCOMPARE(raw.value(QStringLiteral("minDistance")).toInt(), 8);
     }
 
-    void clearOverride_removesFileAndEmits()
+    void clearOverride_removesTheEntryAndEmits()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -345,7 +345,7 @@ private Q_SLOTS:
         QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
     }
 
-    void clearOverride_noFileReturnsFalseNoSignal()
+    void clearOverride_noEntryReturnsFalseNoSignal()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -372,8 +372,8 @@ private Q_SLOTS:
     }
 
     // Backs the per-page "Reset to defaults" on the animation pages: clears
-    // every per-event override file, returning them to built-in defaults.
-    void clearAllOverrides_removesEveryOverrideFile()
+    // every per-event timing entry, returning them to built-in defaults.
+    void clearAllOverrides_removesEveryEntry()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -397,7 +397,7 @@ private Q_SLOTS:
 
     // Per-page kebab Reset: clearing ONE surface's scope must leave every other
     // surface's override files standing (the cross-page-isolation bug fix).
-    void clearOverridesUnder_clearsOnlyScopedFiles()
+    void clearOverridesUnder_clearsOnlyScopedEntries()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -421,7 +421,7 @@ private Q_SLOTS:
 
     // Per-page kebab Discard: reverting ONE surface's scope restores only that
     // surface's files and leaves the others staged (still pending).
-    void revertPendingUnder_restoresOnlyScopedFiles()
+    void revertPendingUnder_restoresOnlyScopedEntries()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -498,6 +498,9 @@ private Q_SLOTS:
         // signal — the controller's own forwarder gates the outward
         // `dirtyChanged` on a real flip — so an extra emission is allowed and a
         // WRONG last one is not.
+        // A loop over a possibly-empty list, deliberately: this leg pins that
+        // nothing WRONG is announced, and the leg below pins that something is
+        // announced at all. Neither is sufficient alone and the pair is.
         for (const bool announcedState : std::as_const(announced))
             QCOMPARE(announcedState, true);
 
@@ -518,8 +521,9 @@ private Q_SLOTS:
         QCOMPARE(announced.last(), false);
     }
 
-    // hasScopedPendingOverrides reports the file half of a per-page dirty check and
-    // must ignore edits outside the queried scope.
+    // hasScopedPendingOverrides reports the TIMING half of a per-page dirty
+    // check — a value comparison against the committed tree — and must ignore
+    // edits outside the queried scope.
     void hasScopedPendingOverrides_reflectsOnlyScope()
     {
         QTemporaryDir tmp;
