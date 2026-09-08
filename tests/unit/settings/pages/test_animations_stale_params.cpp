@@ -33,8 +33,6 @@
  *     reported
  */
 
-#include <QRegularExpression>
-#include <QSignalSpy>
 #include <QTest>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>

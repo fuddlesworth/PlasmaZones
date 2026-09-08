@@ -39,7 +39,6 @@
  * resolved one — to see which of the two states it is actually in.
  */
 
-#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 

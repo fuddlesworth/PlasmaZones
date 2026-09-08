@@ -12,15 +12,18 @@ import QtQuick
  * events it covers are replaced, events it does not cover are preserved.
  *
  * An override means BOTH halves of what the event card holds — the timing
- * (curve, duration) from the profiles dir, and the animation pack assigned to
- * that event from the shader profile tree. Carrying only the timing would
+ * (curve, duration) from the motion profile tree, and the animation pack
+ * assigned to that event from the shader profile tree. Both are config keys.
+ * Carrying only the timing would
  * capture half of what the user sets in one place, and would leave this page
  * doing strictly less than its Decoration Sets counterpart, whose single tree
  * holds pack ids and parameters together.
  *
- * Saving captures only path-named override files. User presets in the same
- * directory are intentionally excluded so a set stays portable and
- * self-contained.
+ * Saving captures the two trees' entries for the events it covers, plus the
+ * pack each remaining event resolves to, so a set describes a whole look
+ * rather than only the parts the user happened to change. The saved-curve
+ * PRESET library is a separate thing and is never captured: a preset is a
+ * named entry in a library, not a property of any event.
  *
  * Everything below is domain copy over the shared ShaderSetsPage.
  */

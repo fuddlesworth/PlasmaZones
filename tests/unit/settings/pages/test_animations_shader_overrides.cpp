@@ -43,7 +43,6 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include "config/settings.h"
-#include "phosphor_i18n.h"
 #include "settings/pages/animationspagecontroller.h"
 #include "helpers/AnimationsControllerFixture.h"
 

@@ -31,24 +31,16 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include <QDir>
-#include <QFile>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
-#include <QScopeGuard>
 #include <QVariant>
-
-#include <unistd.h> // geteuid — the read-only-directory write-failure test is a no-op as root
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/Profile.h>
 
 #include "config/settings.h"
 #include "helpers/IsolatedConfigGuard.h"
-#include "phosphor_i18n.h"
 #include "settings/pages/animationspagecontroller.h"
 #include "helpers/AnimationsControllerFixture.h"
 

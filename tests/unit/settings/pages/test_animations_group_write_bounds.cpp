@@ -30,21 +30,15 @@
  * there is no per-path partial failure to count and no snapshot to strand.
  */
 
-#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
-#include <QDir>
-#include <QFile>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
-#include <QScopeGuard>
 #include <QVariant>
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
-#include "phosphor_i18n.h"
 #include "settings/pages/animationspagecontroller.h"
 #include "helpers/AnimationsControllerFixture.h"
 

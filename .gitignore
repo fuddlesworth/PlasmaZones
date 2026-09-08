@@ -307,7 +307,8 @@ PlasmaZones.wiki/
 # -----------------------------------------------------------------------------
 # Claude Flow / AI Development Tools
 # -----------------------------------------------------------------------------
-# .claude/ is ignored except the checked-in review agents and the code-audit skill
+# .claude/ is ignored except the checked-in review agents and the code-audit
+# and shader-theme skills
 .claude/*
 !.claude/agents/
 .claude/agents/*
@@ -315,6 +316,7 @@ PlasmaZones.wiki/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/code-audit/
+!.claude/skills/shader-theme/
 !.claude/settings.json
 .mcp.json
 claude-flow.config.json

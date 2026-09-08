@@ -31,7 +31,6 @@
 #include "config/configdefaults.h"
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
-#include "phosphor_i18n.h"
 #include "animations_controller_detail.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -252,6 +251,15 @@ bool AnimationsPageController::writeOverridesBatch(const QList<QPair<QString, QV
     }
     QVariantMap tree = motionTree();
     for (const auto& [path, profileJson] : edits) {
+        // Same gate its single-path sibling applies. Both current callers
+        // filter before they get here, so this is parity rather than a live
+        // hole — but it is the only tree writer without it, and an entry at a
+        // path outside the taxonomy is exactly the thing no page's scoped walk
+        // can later see or remove.
+        if (!isValidEventPath(path)) {
+            qCWarning(lcConfig) << "writeOverridesBatch: skipping invalid event path" << path;
+            continue;
+        }
         QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
         obj.remove(JsonNameKey);
         tree = treeWithOverrideForPath(tree, path, obj);
