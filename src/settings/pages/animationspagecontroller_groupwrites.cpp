@@ -553,8 +553,28 @@ int AnimationsPageController::applyShaderGroupWrite(
         ++written;
         ++mutated;
     }
-    if (mutated > 0)
+    if (mutated > 0) {
+        // Suppress the tree-changed handler's path-agnostic broadcast for THIS
+        // write, and announce the paths actually touched instead.
+        //
+        // Without this a parameter drag — which reaches here per pointer move —
+        // made every visible card re-run its whole shader and timing refresh,
+        // several steps of which rebuild the ShaderProfileTree from the store.
+        // Only the writing card is excluded by its own latch; every other card
+        // on the page paid for a change that did not concern it. The timing
+        // side has carried the same depth counter, for the same reason, since
+        // it was written.
+        //
+        // Per-path is safe for the set store on the other end: its
+        // notifyLiveStateChanged collapses a burst into one setsChanged on the
+        // next event-loop turn, so N announcements still cost one sets walk.
+        ++m_selfShaderWriteDepth;
         m_settings->setShaderProfileTree(tree);
+        --m_selfShaderWriteDepth;
+        for (const QString& path : paths) {
+            Q_EMIT shaderProfileChanged(path);
+        }
+    }
     return written;
 }
 
@@ -910,7 +930,15 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
     const PhosphorAnimationShaders::ShaderProfileTree tree =
         m_settings ? m_settings->shaderProfileTree() : PhosphorAnimationShaders::ShaderProfileTree{};
 
-    const auto keyFor = [this, compareCurve, &tree](const QString& path) {
+    // The TIMING tree read once too, for the same reason the shader tree is:
+    // rawProfile() reaches motionTree() on every call, and each of those copies
+    // the whole stored map out of the settings store. This runs from
+    // refreshFromTree for every visible card, at drag rate, so a per-path read
+    // here made the cost (visible cards x group size) whole-tree copies per
+    // tick — the read-in-a-loop shape this file's own header forbids.
+    const QVariantMap timingTree = motionTree();
+
+    const auto keyFor = [this, compareCurve, &tree, &timingTree](const QString& path) {
         // The shader axis is compared only where a shader can actually be
         // stored. A non-supporting path holds nothing there permanently, so
         // comparing it against a supporting path's real leg would report a
@@ -918,7 +946,11 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
         const QVariantMap shader = (supportsShaderLeg(path) && tree.hasOverride(path))
             ? shaderProfileToMap(tree.directOverride(path))
             : QVariantMap();
-        return comparableStateKey(rawProfile(path), shader, compareCurve);
+        // Same sanitising rawProfile() applies, taken from the hoisted tree so
+        // the comparison key is identical either way.
+        const QVariantMap timing =
+            isValidEventPath(path) ? sanitizedProfileMap(treeProfileForPath(timingTree, path)) : QVariantMap();
+        return comparableStateKey(timing, shader, compareCurve);
     };
 
     const QByteArray primary = keyFor(primaryPath);

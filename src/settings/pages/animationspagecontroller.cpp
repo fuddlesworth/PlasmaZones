@@ -256,9 +256,18 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
                 // Path-agnostic broadcast — the tree is a single Q_PROPERTY so we
-                // can't tell which path moved without diffing. QML pages refresh
-                // every visible event card on this signal which is cheap enough.
-                Q_EMIT shaderProfileChanged(QString());
+                // can't tell which path moved without diffing, and a change we
+                // did not make (a Discard, a profile switch, a set apply) really
+                // could have moved anything.
+                //
+                // Gated on the depth counter, like the timing arm below: a
+                // group write this controller made announces its own paths, and
+                // broadcasting over it would defeat the cards' path filter at
+                // drag rate — which is exactly when the parameter sliders reach
+                // that writer.
+                if (m_selfShaderWriteDepth == 0) {
+                    Q_EMIT shaderProfileChanged(QString());
+                }
                 // The live tree moved, so the value-based dirty compare must
                 // be re-run on the next hasPendingChanges() query.
                 m_treeDirtyCache.reset();

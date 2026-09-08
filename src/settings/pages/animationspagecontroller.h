@@ -990,6 +990,12 @@ private:
     /// filter at drag rate. A counter rather than a bool because the write
     /// helpers can nest.
     int m_selfTreeWriteDepth = 0;
+    /// The shader tree's counterpart, and it exists for the same reason. The
+    /// group writers reach `setShaderProfileTree` at drag rate from the
+    /// parameter sliders, and the tree-changed handler's broadcast made every
+    /// visible card re-walk both its shader and its timing chain on each tick.
+    /// Raised across our own write, which then announces the paths it touched.
+    int m_selfShaderWriteDepth = 0;
     /// Last emitted stockSuppressedEvents() value; maybeEmitStockSuppressedEventsChanged
     /// gates the NOTIFY on an actual list change so tree edits that cannot
     /// affect the suppression set stop re-running the rule editor's
