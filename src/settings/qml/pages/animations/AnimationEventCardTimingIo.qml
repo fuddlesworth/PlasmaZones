@@ -16,10 +16,12 @@ import org.phosphor.animation
  * The card keeps a thin forwarder for each, so every call site still reads
  * `root._foo(...)`.
  *
- * The asymmetry between the two commits mirrors the shader side's and is just
- * as easy to "tidy" into a bug. Duration is drag-rate, so a refused write is
- * dropped without restoring the slider. Curve is discrete, so a refused write
- * DOES restore: there is no later tick to correct it.
+ * Neither commit reads a return value, and neither needs to: since schema v8
+ * the write path has no refusal left to report. What differs between them is
+ * refresh, not failure handling. Duration is drag-rate, so it deliberately
+ * does not re-seed the slider per tick — the handle would fight the pointer.
+ * Curve is discrete, so it refreshes through `_setOverrideMerged`'s finally
+ * and picks up whatever actually landed.
  */
 QtObject {
     id: timingIo

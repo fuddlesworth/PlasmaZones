@@ -187,6 +187,43 @@ private Q_SLOTS:
         QCOMPARE(seedEntry->duration.value_or(0.0), 200.0);
     }
 
+    /// `registerProfile`'s SEED BRANCH, driven directly.
+    ///
+    /// The slot above sets the low-precedence tag AFTER registering, so what it
+    /// actually exercises is the migration loop inside setLowPrecedenceOwnerTag
+    /// — invert the seed branch and it still passes, because the migration puts
+    /// the entry back where the assertions expect it. This one sets the tag
+    /// first, which is the ordering every composition root uses, so the branch
+    /// itself decides where the entry lands.
+    ///
+    /// It matters more than a coverage gap: that branch is where a seed-tagged
+    /// write silently leaves an untagged entry standing at the same path, which
+    /// is what let a cleared global profile keep outranking every family seed
+    /// for the rest of a session.
+    void testSeedBranchPlacesSeedsInTheirOwnLayerWhenTheTagIsSetFirst()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        // Landed in the seed layer, not the upper one. Inverting the branch
+        // fails here rather than anywhere downstream.
+        QVERIFY(!m_registry.snapshot().contains(QStringLiteral("window")));
+        QVERIFY(m_registry.snapshotExcludingLowPrecedence().isEmpty());
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 200.0);
+
+        // And a byte-identical UNTAGGED write at the same path is a separate
+        // entry in the upper layer rather than an update of the seed — the two
+        // stores coexist, which is the property the layer split exists for.
+        m_registry.registerProfile(QStringLiteral("window"), seed);
+        QVERIFY(m_registry.snapshot().contains(QStringLiteral("window")));
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+    }
+
     /// A user override at a seeded path must WIN without destroying the seed,
     /// and clearing it must reveal the seed again.
     ///
