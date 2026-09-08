@@ -30,14 +30,18 @@ constexpr QLatin1String kTreeBaseline{"baseline"};
 constexpr QLatin1String kTreeOverrides{"overrides"};
 constexpr QLatin1String kNodeShaderId{"shaderId"};
 constexpr QLatin1String kNodeParameters{"parameters"};
-// One-shot marker stamped into the Overlays group by the same
-// atomic write as the lift. Once present, later runs only STRIP the sidecar
-// and never merge from it again — so an override the user removed after a
-// failed sidecar strip cannot be resurrected from the stale sidecar copy on
-// the retry. JsonBackend round-trips unknown keys, so ordinary Settings
-// saves preserve it. Pinned locally like the sidecar spellings above: this
-// is migration-internal state, not a settings key.
-constexpr QLatin1String kLiftedMarkerKey{"SidecarLifted"};
+// One-shot marker stamped into the Overlays group by the same atomic write as
+// the lift. Once present, later runs only STRIP the sidecar and never merge
+// from it again — so an override the user removed after a failed sidecar strip
+// cannot be resurrected from the stale sidecar copy on the retry. JsonBackend
+// round-trips unknown keys, so ordinary Settings saves preserve it. The
+// spelling lives with the other migration-only spellings in ConfigKeys::Legacy
+// rather than inline here; see v8SidecarLiftedKey for why it is not a declared
+// settings key.
+QString liftedMarkerKey()
+{
+    return ConfigKeys::Legacy::v8SidecarLiftedKey();
+}
 
 /// Remove the two relocated shader keys from every object-valued sidecar
 /// entry, dropping entries left empty. Returns true when anything changed.
@@ -167,11 +171,11 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         }
         QJsonObject root = doc.object();
         QJsonObject group = groupObjectAtPath(root, ConfigKeys::overlaysGroup());
-        // The lift merges from the sidecar at most ONCE (see kLiftedMarkerKey).
+        // The lift merges from the sidecar at most ONCE (see liftedMarkerKey()).
         // On a retry after a failed sidecar strip, the user may have edited OR
         // REMOVED lifted assignments meanwhile; the config is authoritative,
         // so a marked config takes nothing more from the stale sidecar.
-        const bool alreadyLifted = group.value(kLiftedMarkerKey).toBool();
+        const bool alreadyLifted = group.value(liftedMarkerKey()).toBool();
         QJsonObject tree = group.value(ConfigKeys::overlayShaderTreeKey()).toObject();
         QJsonObject overrides = tree.value(kTreeOverrides).toObject();
         bool treeDirty = false;
@@ -189,7 +193,7 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
                 tree.insert(kTreeOverrides, overrides);
                 group.insert(ConfigKeys::overlayShaderTreeKey(), tree);
             }
-            group.insert(kLiftedMarkerKey, true);
+            group.insert(liftedMarkerKey(), true);
             setGroupAtSegments(root, ConfigKeys::overlaysGroup().split(QLatin1Char('.')), group);
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root)) {
                 qWarning("ConfigMigration: failed to write lifted overlay shader tree to %s", qPrintable(jsonPath));

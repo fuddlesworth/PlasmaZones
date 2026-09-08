@@ -116,7 +116,7 @@ SettingsFlickable {
         // `OverlaysPageController` — exposes `availableShaderEffects()`
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
-        readonly property var snappingShadersPage: settingsController.snappingShadersPage
+        readonly property var overlaysPage: settingsController.overlaysPage
         // `DecorationPageController` — exposes `availableShaderEffects()` (the
         // surface-pack catalog) for the decorationChain editor in ActionRow
         // (OverrideDecorationChain) and its read-only name resolution.

@@ -323,7 +323,7 @@ ExpandableRowDelegate {
                     // so this branch is parity with the rule preview's kind
                     // vocabulary rather than a path current diffs exercise.
                     if (kind === "overlayShader")
-                        return diffColumn.resolvePack(settingsController.snappingShadersPage, value);
+                        return diffColumn.resolvePack(settingsController.overlaysPage, value);
                 }
                 // A desktop is a number, so it sits outside the string guard.
                 // Like overlayShader, no described config key emits this kind

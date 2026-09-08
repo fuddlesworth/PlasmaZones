@@ -8,7 +8,7 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Snapping → Shaders — zone-overlay shader assignments.
  *
- * Edits the OverlayShaderTree through the snappingShadersPage bridge: one
+ * Edits the OverlayShaderTree through the overlaysPage bridge: one
  * always-present global-default card (path "") followed by one override
  * card per layout, each of which inherits the global default until its
  * toggle engages an override. Pack browsing and installation live on the
@@ -21,9 +21,17 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: page
 
-    readonly property var bridge: settingsController.snappingShadersPage
+    readonly property var bridge: settingsController.overlaysPage
 
     property var _layouts: []
+
+    /// The leading group of a layout UUID, braces stripped — enough to tell
+    /// two stale overrides apart on screen without printing all 36 characters.
+    function _shortId(id) {
+        var bare = String(id).replace(/[{}]/g, "");
+        var dash = bare.indexOf("-");
+        return dash > 0 ? bare.substring(0, dash) : bare.substring(0, 8);
+    }
 
     // Reassigning a plain array resets the Repeater wholesale (every card
     // delegate is destroyed and recreated, dropping per-card latch and
@@ -88,7 +96,12 @@ SettingsFlickable {
 
                 Layout.fillWidth: true
                 assignmentPath: modelData.id
-                cardLabel: modelData.missing ? i18n("Deleted layout") : (modelData.name.length > 0 ? modelData.name : i18n("Unnamed layout"))
+                // A deleted layout has no name left to show, so two stale
+                // overrides would otherwise render as the same label with no
+                // way to tell which card clears which. The id's leading group
+                // is enough to tell them apart and is what the layout files
+                // are named by.
+                cardLabel: modelData.missing ? i18n("Deleted layout %1", page._shortId(modelData.id)) : (modelData.name.length > 0 ? modelData.name : i18n("Unnamed layout"))
             }
         }
     }

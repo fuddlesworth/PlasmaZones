@@ -1032,7 +1032,7 @@ QtObject {
             readonly property var _param: parent.modelData
 
             items: {
-                var controller = row.appSettings ? row.appSettings.snappingShadersPage : null;
+                var controller = row.appSettings ? row.appSettings.overlaysPage : null;
                 return controller ? controller.availableShaderEffects() : [];
             }
             currentId: row.action[_param.key] || ""

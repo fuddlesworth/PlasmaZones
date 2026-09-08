@@ -15,6 +15,7 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
+#include <QScopedValueRollback>
 #include <QSet>
 
 #include <algorithm>
@@ -48,18 +49,23 @@ OverlaysPageController::OverlaysPageController(PlasmaZones::ShaderRegistry* shad
     }
     if (m_settings) {
         // The assignment store is the config tree; every mutation (local
-        // setter, D-Bus write, global reload) funnels through this one
-        // NOTIFY. Always a full-refresh emit — the tree write does not
-        // say which node moved, and the cards are cheap to re-read.
+        // setter, D-Bus write, profile apply, page reset) funnels through this
+        // one NOTIFY, which does not say which node moved. When the write came
+        // from one of this controller's own setters, m_writingPath does say,
+        // and the cards use it to skip a refresh they do not need. Any other
+        // writer gets the honest whole-tree answer.
         connect(m_settings, &ISettings::overlayShaderTreeChanged, this, [this]() {
-            Q_EMIT shaderProfileChanged(QString());
+            if (m_writingPath.has_value())
+                Q_EMIT shaderProfileChanged(*m_writingPath, /*wholeTree=*/false);
+            else
+                Q_EMIT shaderProfileChanged(QString(), /*wholeTree=*/true);
         });
     }
     if (m_layoutRegistry) {
         // Layout add / remove / rename changes the assignment card list
         // and the labels the usage chips render.
         connect(m_layoutRegistry, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged, this, [this]() {
-            Q_EMIT shaderProfileChanged(QString());
+            Q_EMIT shaderProfileChanged(QString(), /*wholeTree=*/true);
         });
     }
 }
@@ -145,6 +151,36 @@ QVariantMap OverlaysPageController::resolvedShaderProfile(const QString& path) c
     return profileToMap(path.isEmpty() ? tree.baseline() : tree.resolve(path));
 }
 
+QVariantMap OverlaysPageController::nodeState(const QString& path) const
+{
+    QVariantMap out;
+    if (!m_settings) {
+        out.insert(QLatin1String("hasOverride"), false);
+        out.insert(QLatin1String("raw"), profileToMap({}));
+        out.insert(QLatin1String("resolved"), profileToMap({}));
+        return out;
+    }
+    // One read, one parse. The three separate getters each re-read the config
+    // key and rebuild the whole tree, and a card wants all three every time.
+    const OverlayShaderTree tree = m_settings->overlayShaderTree();
+    const bool isBaseline = path.isEmpty();
+    out.insert(QLatin1String("hasOverride"), !isBaseline && tree.hasOverride(path));
+    out.insert(QLatin1String("raw"), profileToMap(isBaseline ? tree.baseline() : tree.directOverride(path)));
+    out.insert(QLatin1String("resolved"), profileToMap(isBaseline ? tree.baseline() : tree.resolve(path)));
+    return out;
+}
+
+void OverlaysPageController::writeTreeAnnouncing(const OverlayShaderTree& tree, const QString& path)
+{
+    // Parked across the write only. setOverlayShaderTree emits its NOTIFY
+    // synchronously from inside the write, so the handler above reads this
+    // while it is set; the rollback restores the empty state before anything
+    // else can write, which is what keeps a foreign write from borrowing this
+    // path and announcing itself as a single-node change.
+    QScopedValueRollback<std::optional<QString>> announcing(m_writingPath, path);
+    m_settings->setOverlayShaderTree(tree);
+}
+
 void OverlaysPageController::setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params)
 {
     if (!m_settings)
@@ -155,7 +191,7 @@ void OverlaysPageController::setShaderOverride(const QString& path, const QStrin
         tree.setBaseline(node);
     else
         tree.setOverride(path, node);
-    m_settings->setOverlayShaderTree(tree);
+    writeTreeAnnouncing(tree, path);
 }
 
 bool OverlaysPageController::clearOverride(const QString& path)
@@ -165,7 +201,7 @@ bool OverlaysPageController::clearOverride(const QString& path)
     OverlayShaderTree tree = m_settings->overlayShaderTree();
     if (!tree.clearOverride(path))
         return false;
-    m_settings->setOverlayShaderTree(tree);
+    writeTreeAnnouncing(tree, path);
     return true;
 }
 
@@ -173,16 +209,12 @@ QVariantList OverlaysPageController::shaderParameters(const QString& effectId) c
 {
     if (!m_shaderRegistry || effectId.isEmpty())
         return {};
-    // The registry's flattened rows already carry each pack's
-    // ParameterInfo maps; pull the matching row's list rather than
-    // duplicating the effect→variant mapping here.
-    const QVariantList effects = m_shaderRegistry->availableShadersVariant();
-    for (const QVariant& v : effects) {
-        const QVariantMap m = v.toMap();
-        if (m.value(QLatin1String("id")).toString() == effectId)
-            return m.value(QLatin1String("parameters")).toList();
-    }
-    return {};
+    // shaderInfo() is the keyed lookup and returns the same row shape as the
+    // flattened list, so it carries the pack's ParameterInfo maps too. The
+    // list form rebuilds every installed pack's row from scratch on each call,
+    // which is a whole-registry walk to read one pack's parameters — and a
+    // card calls this on every refresh.
+    return m_shaderRegistry->shaderInfo(effectId).value(QLatin1String("parameters")).toList();
 }
 
 QString OverlaysPageController::userShaderDirectoryPath() const

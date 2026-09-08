@@ -267,7 +267,7 @@ ColumnLayout {
         if (kind === "overlayShader") {
             // Overlay shaders come from the overlays-library registry, not the
             // animation one (mirrors ActionRow's _overlayShaderEditor source).
-            var ssCtl = root.appSettings ? root.appSettings.snappingShadersPage : null;
+            var ssCtl = root.appSettings ? root.appSettings.overlaysPage : null;
             if (!ssCtl)
                 return rawStr;
 

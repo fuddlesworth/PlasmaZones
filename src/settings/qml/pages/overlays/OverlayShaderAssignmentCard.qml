@@ -31,7 +31,7 @@ Item {
     required property string cardLabel
     property bool isBaseline: false
 
-    readonly property var bridge: settingsController.snappingShadersPage
+    readonly property var bridge: settingsController.overlaysPage
 
     // Session-local "the user opened the editor" latch — see
     // DecorationSurfaceCard._editorLatch for the full rationale.
@@ -66,26 +66,66 @@ Item {
         root._paramDefs = (root.bridge && root._editShaderId.length > 0) ? root.bridge.shaderParameters(root._editShaderId) : [];
     }
 
+    function _paramsEqual(a, b) {
+        if (a === b)
+            return true;
+        if (!a || !b)
+            return false;
+        for (var k in a) {
+            if (a[k] !== b[k])
+                return false;
+        }
+        for (var k2 in b) {
+            if (!(k2 in a))
+                return false;
+        }
+        return true;
+    }
+
     function refresh() {
         if (!root.bridge)
             return;
         var wasOverride = root._hasOverride;
-        root._hasOverride = root.bridge.hasOverride(root.assignmentPath);
+        // What the pending write was computed against, read before the state
+        // below moves underneath it.
+        var prevEditShaderId = root._editShaderId;
+        var prevEditParams = root._editParams;
+
+        var state = root.bridge.nodeState(root.assignmentPath);
+        root._hasOverride = state.hasOverride;
         // An EXTERNAL clear (page reset/discard, a D-Bus write) closes the
         // latched editor; our own OFF path clears the latch before writing.
-        if (wasOverride && !root._hasOverride) {
+        if (wasOverride && !root._hasOverride)
             root._editorLatch = false;
-            // A pending debounced parameter write would recreate the
-            // override the external clear just removed.
+        root._raw = state.raw;
+        root._resolved = state.resolved;
+
+        // Drop a pending debounced write whenever the node moved under it.
+        //
+        // The flush is 200ms behind the last drag tick, so anything that
+        // rewrites this node in that window — a page Reset or Discard, a
+        // profile apply, a D-Bus write, an external shader switch — would
+        // otherwise be undone by a timer firing after the page already
+        // reported clean, silently re-staging the value the user just
+        // reverted and re-dirtying the page.
+        //
+        // Two independent signals, because neither covers the other.
+        //
+        // CONTENT is what a params-only revert moves, and a params-only revert
+        // is exactly what Reset and Discard perform. It leaves the override in
+        // place with the same shader id, so a structural check alone never
+        // fires — and on the baseline card hasOverride is false on both sides
+        // by construction, so a structural check is no signal there at all.
+        //
+        // EXISTENCE still matters on top of it: an external clear whose
+        // baseline happens to carry the same shader and parameters is a
+        // content no-op, and flushing into it would recreate the very override
+        // the clear removed. The reverse direction counts too — an override
+        // appearing externally means the pending write was computed against
+        // the inherited node, which is no longer what this card edits.
+        if (root._pendingParams !== null && (wasOverride !== root._hasOverride || prevEditShaderId !== root._editShaderId || !root._paramsEqual(prevEditParams, root._editParams)))
             root._dropPendingParams();
-        }
-        root._raw = root.bridge.rawShaderProfile(root.assignmentPath);
-        root._resolved = root.bridge.resolvedShaderProfile(root.assignmentPath);
-        // An external write that SWITCHED this node's shader mid-debounce
-        // must also drop the pending edit, or the flush would overwrite the
-        // external change with the stale pre-write shader and params.
-        if (root._pendingParams !== null && root._editShaderId !== root._pendingShaderId)
-            root._dropPendingParams();
+
         root._refreshParamDefs();
     }
 
@@ -163,8 +203,14 @@ Item {
 
     Connections {
         target: root.bridge
-        function onShaderProfileChanged() {
-            root.refresh();
+        function onShaderProfileChanged(path, wholeTree) {
+            // A single-node write only concerns this card when it IS that
+            // node, or when the baseline moved and this card has no override
+            // of its own — the baseline is what it resolves to then. Without
+            // this every card on the page re-ran a full refresh for every
+            // parameter commit on any other card.
+            if (wholeTree || path === root.assignmentPath || (path.length === 0 && !root._hasOverride))
+                root.refresh();
         }
         function onShaderEffectsChanged() {
             root._refreshEffects();

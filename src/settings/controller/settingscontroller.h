@@ -167,7 +167,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
     Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
-    Q_PROPERTY(OverlaysPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
+    Q_PROPERTY(OverlaysPageController* overlaysPage READ overlaysPage CONSTANT)
     Q_PROPERTY(WindowAppearanceController* windowAppearancePage READ windowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -524,7 +524,7 @@ public:
     }
     SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const;
-    OverlaysPageController* snappingShadersPage() const;
+    OverlaysPageController* overlaysPage() const;
     WindowAppearanceController* windowAppearancePage() const;
     TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const

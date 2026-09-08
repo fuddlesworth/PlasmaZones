@@ -117,7 +117,7 @@ ColumnLayout {
             return [];
 
         // Named for its registry, for the same shadowing reason as above.
-        var overlayShadersController = row.appSettings ? row.appSettings.snappingShadersPage : null;
+        var overlayShadersController = row.appSettings ? row.appSettings.overlaysPage : null;
         if (!overlayShadersController)
             return [];
 

@@ -1881,6 +1881,27 @@ target_link_libraries(test_overlays_page_controller
 )
 add_test(NAME test_overlays_page_controller COMMAND test_overlays_page_controller)
 
+# Contracts between the Appearance -> Overlays QML and its controller, pinned
+# by parsing the QML source. Needs P_SOURCE_DIR to read the source tree, which
+# is what keeps it out of the controller suite above.
+add_executable(test_overlays_qml_contracts
+    settings/pages/test_overlays_qml_contracts.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+)
+target_compile_definitions(test_overlays_qml_contracts PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_overlays_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        PhosphorAudio::PhosphorAudio
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_overlays_qml_contracts COMMAND test_overlays_qml_contracts)
+
 # Data surface behind the settings app's live decoration preview: chain
 # composition, the extended-FBO padding request, and the degraded paths a
 # browsing user can reach (unknown pack, no registry). Links only the preview

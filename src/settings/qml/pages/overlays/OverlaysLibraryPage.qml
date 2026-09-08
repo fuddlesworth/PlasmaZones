@@ -18,7 +18,7 @@ import QtQuick
  * in their own packs.
  */
 ShaderBrowserPage {
-    bridge: settingsController.snappingShadersPage
+    bridge: settingsController.overlaysPage
     settingsCategory: "OverlaysLibraryFilterBar"
     infoBannerText: i18n("Browse installed snapping overlay shaders. Assign a shader on the Shaders page, as a global default or per layout.")
     // Closures (not pre-evaluated strings) so `i18ncp` runs with the

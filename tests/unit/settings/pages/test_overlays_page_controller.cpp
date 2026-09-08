@@ -16,8 +16,10 @@
  *   - shaderEffectUsages lists the baseline row first, then override rows
  *     sorted case-insensitively by label, with an EMPTY label for a layout
  *     the registry cannot name (the browser renders label || path)
- *   - shaderProfileChanged re-fires (with an empty path) from
- *     ISettings::overlayShaderTreeChanged
+ *   - shaderProfileChanged re-fires from ISettings::overlayShaderTreeChanged,
+ *     naming the node when this controller made the write and reporting a
+ *     whole-tree change when anything else did
+ *   - nodeState agrees with the three separate reads it replaces
  *
  * Constructed with null shader and layout registries: the paths exercised
  * here are registry-independent (the registries only feed the pack listing
@@ -123,6 +125,10 @@ private Q_SLOTS:
         QVERIFY(c.shaderEffectUsages(QStringLiteral("unused-pack")).isEmpty());
     }
 
+    /// The signal's two arms. A write this controller made names the node it
+    /// moved, so a card can skip a refresh it does not need; a write from
+    /// anywhere else says only "the whole tree may have moved", because the
+    /// settings NOTIFY genuinely does not carry that information.
     void testShaderProfileChanged_refiresFromSettings()
     {
         StubSettings settings;
@@ -131,17 +137,67 @@ private Q_SLOTS:
 
         c.setShaderOverride(kLayoutA, QStringLiteral("pack"), {});
         QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy.constFirst().constFirst().toString(), QString()); // always full-refresh
+        QCOMPARE(spy.constFirst().at(0).toString(), kLayoutA);
+        QCOMPARE(spy.constFirst().at(1).toBool(), false);
 
         // A same-value write is a no-op at the settings layer: no re-fire.
         c.setShaderOverride(kLayoutA, QStringLiteral("pack"), {});
         QCOMPARE(spy.count(), 1);
 
-        // An external settings write (D-Bus, reload) reaches the page too.
+        // A baseline write names the baseline, whose path IS the empty string
+        // — so the empty path alone cannot mean "everything changed", which is
+        // what the second argument is for.
+        c.setShaderOverride(QString(), QStringLiteral("base-pack"), {});
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toString(), QString());
+        QCOMPARE(spy.at(1).at(1).toBool(), false);
+
+        // Clearing an override is a single-node change too.
+        QVERIFY(c.clearOverride(kLayoutA));
+        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.at(2).at(0).toString(), kLayoutA);
+        QCOMPARE(spy.at(2).at(1).toBool(), false);
+
+        // An external settings write (D-Bus, a profile apply, a page reset)
+        // reaches the page as a whole-tree change: the write did not come
+        // through this controller, so no path can be claimed for it.
         OverlayShaderTree tree = settings.overlayShaderTree();
         tree.setBaseline({QStringLiteral("new-pack"), {}});
         settings.setOverlayShaderTree(tree);
-        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.count(), 4);
+        QCOMPARE(spy.at(3).at(1).toBool(), true);
+    }
+
+    /// nodeState is the one-read form of hasOverride + rawShaderProfile +
+    /// resolvedShaderProfile, which a card calls together on every refresh.
+    /// It must agree with all three, or a card would see a different tree than
+    /// the rest of the page.
+    void testNodeState_matchesTheThreeSeparateReads()
+    {
+        StubSettings settings;
+        OverlaysPageController c(nullptr, nullptr, &settings, nullptr);
+        OverlayShaderTree tree;
+        tree.setBaseline({QStringLiteral("base-pack"), {{QStringLiteral("speed"), 1.0}}});
+        tree.setOverride(kLayoutA, {QStringLiteral("pack-a"), {{QStringLiteral("speed"), 2.0}}});
+        settings.setOverlayShaderTree(tree);
+
+        // An overridden layout, an inheriting layout, and the baseline.
+        for (const QString& path : {kLayoutA, kLayoutB, QString()}) {
+            const QVariantMap state = c.nodeState(path);
+            QCOMPARE(state.value(QStringLiteral("hasOverride")).toBool(), c.hasOverride(path));
+            QCOMPARE(state.value(QStringLiteral("raw")).toMap(), c.rawShaderProfile(path));
+            QCOMPARE(state.value(QStringLiteral("resolved")).toMap(), c.resolvedShaderProfile(path));
+        }
+
+        // And the values themselves are what the tree says, so a stub that
+        // returned three empty maps could not satisfy the loop above.
+        const QVariantMap inheriting = c.nodeState(kLayoutB);
+        QCOMPARE(inheriting.value(QStringLiteral("hasOverride")).toBool(), false);
+        QCOMPARE(inheriting.value(QStringLiteral("resolved")).toMap().value(QStringLiteral("shaderId")).toString(),
+                 QStringLiteral("base-pack"));
+        QCOMPARE(
+            c.nodeState(kLayoutA).value(QStringLiteral("raw")).toMap().value(QStringLiteral("shaderId")).toString(),
+            QStringLiteral("pack-a"));
     }
 };
 

@@ -9,8 +9,11 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <optional>
+
 namespace PlasmaZones {
 class ISettings;
+class OverlayShaderTree;
 class ShaderRegistry;
 class ShaderPreviewController;
 }
@@ -123,6 +126,14 @@ public:
     /// An empty shaderId in the result means "no shader".
     Q_INVOKABLE QVariantMap resolvedShaderProfile(const QString& path) const;
 
+    /// The three reads above in one call: `{hasOverride, raw, resolved}`.
+    ///
+    /// A card needs all three together on every refresh, and each of the
+    /// separate getters re-reads the config key and re-parses the whole tree,
+    /// so calling them in sequence parsed it three times per card. This parses
+    /// once. The separate getters remain for callers that genuinely want one.
+    Q_INVOKABLE QVariantMap nodeState(const QString& path) const;
+
     /// Engage @p effectId (with @p params) at @p path — the baseline for
     /// "", a per-layout override otherwise. An empty @p effectId on a
     /// layout path explicitly suppresses the baseline shader for that
@@ -174,12 +185,27 @@ Q_SIGNALS:
 
     /// Emitted whenever the assignment tree mutates (any setter, a D-Bus
     /// write, a global reload — forwarded from
-    /// `ISettings::overlayShaderTreeChanged`) and when the layout
-    /// catalogue changes (add / remove / rename). Cards and the
-    /// browser's "Used in:" chips re-resolve on this tick. Always fires
-    /// with an EMPTY path ("any assignment may have changed"); consumers
-    /// treat it as a full refresh trigger.
-    void shaderProfileChanged(const QString& path);
+    /// `ISettings::overlayShaderTreeChanged`) and when the layout catalogue
+    /// changes (add / remove / rename). Cards and the browser's "Used in:"
+    /// chips re-resolve on this tick.
+    ///
+    /// @p wholeTree true means "any assignment may have changed" and every
+    /// consumer must re-read; @p path is empty and carries no meaning. That is
+    /// the honest answer for a write this controller did not make (a D-Bus
+    /// write, a profile apply, a page reset), since the tree write does not
+    /// say which node moved.
+    ///
+    /// @p wholeTree false means exactly one node changed, and @p path names
+    /// it — "" for the baseline, a layout UUID otherwise. Only this
+    /// controller's own setters can say that, so only they emit it.
+    ///
+    /// The distinction matters because a parameter edit commits per drag
+    /// pause: without it every visible card re-ran its full refresh, and each
+    /// of those re-parsed the whole tree and re-flattened the pack registry.
+    /// A card filters on @p path, but must still refresh when the BASELINE
+    /// changed and it has no override of its own, because that moves what it
+    /// resolves to.
+    void shaderProfileChanged(const QString& path, bool wholeTree);
 
     /// User-facing transient notification request. QML chrome wires
     /// this to `window.showToast()` so a failed shader-pack install
@@ -198,6 +224,17 @@ private:
     /// Layout display name for @p layoutId (UUID-with-braces), or an
     /// empty string when the registry has no such layout.
     QString layoutNameFor(const QString& layoutId) const;
+
+    /// Write @p tree and announce it as a single-node change at @p path.
+    ///
+    /// The settings NOTIFY that carries the write back cannot say which node
+    /// moved, so the two setters park the path here for the duration of their
+    /// own write and the NOTIFY handler reports it. Set only across a write
+    /// this controller makes; empty at every other time, which is what makes
+    /// a foreign write announce itself as a whole-tree change.
+    void writeTreeAnnouncing(const OverlayShaderTree& tree, const QString& path);
+
+    std::optional<QString> m_writingPath;
 
     PlasmaZones::ShaderRegistry* m_shaderRegistry = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry = nullptr;

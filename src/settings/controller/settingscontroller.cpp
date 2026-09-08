@@ -977,7 +977,7 @@ SnappingEffectsController* SettingsController::snappingEffectsPage() const
     return m_snappingEffectsPage;
 }
 
-OverlaysPageController* SettingsController::snappingShadersPage() const
+OverlaysPageController* SettingsController::overlaysPage() const
 {
     return m_overlaysPage.get();
 }
