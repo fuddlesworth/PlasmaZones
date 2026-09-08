@@ -87,6 +87,23 @@ public:
     /// animations controller's in-flight-discard guard.
     using MutationGuardFn = std::function<QString()>;
 
+    /// True when @p live already holds everything @p setProfile would write —
+    /// i.e. applying that one entry would change nothing at its path.
+    ///
+    /// Optional. The default is exact equality, which is right for a domain
+    /// whose `apply` REPLACES the whole profile at a path: after applying,
+    /// live equals the set, so anything else means it has not been applied.
+    /// That is the decoration domain.
+    ///
+    /// A domain whose entry has independent HALVES, either of which may be
+    /// absent, has to supply one. Motion is that case: an entry carries a
+    /// timing half, a pack half, or both, and `apply` writes only the halves
+    /// present — a pack-only entry deliberately leaves the path's timing
+    /// alone. Under exact equality such an entry can never match a path that
+    /// legitimately carries timing the set never mentioned, so the whole set
+    /// reads as inactive because of one field it does not own.
+    using EntrySatisfiedFn = std::function<bool(const QJsonObject& setProfile, const QJsonObject& live)>;
+
     struct Config
     {
         DirFn setsDir;
@@ -96,6 +113,7 @@ public:
         FileSnapshotFn fileSnapshot; // optional
         FileSnapshotRollbackFn snapshotRollback; // optional, pairs with fileSnapshot
         MutationGuardFn mutationGuard; // optional
+        EntrySatisfiedFn entrySatisfied; // optional, defaults to exact equality
         /// Current on-disk format. Save stamps it; apply and import refuse a
         /// NEWER file, so a set written by a future build (carrying fields
         /// this build drops on parse) fails cleanly instead of committing a

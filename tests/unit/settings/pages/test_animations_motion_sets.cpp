@@ -352,6 +352,50 @@ private Q_SLOTS:
     }
 
     // ─── Motion sets: active flag, metadata edit, portability, guard ───────
+    /// A pack-only entry stays satisfied when its path ALSO carries timing the
+    /// set never mentions.
+    ///
+    /// An entry holds a timing half, a pack half, or both, and applying writes
+    /// only the halves present — a pack-only entry deliberately leaves the
+    /// path's timing alone. The `active` check compared the whole profile, so
+    /// such an entry could never match a path that legitimately carried timing,
+    /// and one field the set does not own kept the WHOLE set reading as
+    /// inactive. Reported from a real config: a theme's set assigned a pack to
+    /// `scrolling.view` while the user's own timing override sat on the same
+    /// path, and the set stayed dark immediately after applying it.
+    void motionSets_packOnlyEntryIgnoresTimingItDoesNotCarry()
+    {
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        TestHelpers::PopulatedControllerFixture fx;
+        auto& c = fx.c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+        QVERIFY(sets);
+
+        const QString path = QStringLiteral("window.appearance.open");
+        const QStringList available = TestHelpers::pickerIdsFor(c, path);
+        QVERIFY(!available.isEmpty());
+
+        // A set whose entry at this path carries ONLY a pack.
+        QVERIFY(c.setShaderOverride(path, available.at(0), QVariantMap{}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("PackOnly"), QString()));
+        QVERIFY(rowFor(sets, QStringLiteral("PackOnly")).value(QStringLiteral("active")).toBool());
+
+        // Now give the SAME path a timing override the set knows nothing about.
+        // Applying the set would not touch it, so the set is still fully applied.
+        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 640}}));
+        QVERIFY2(rowFor(sets, QStringLiteral("PackOnly")).value(QStringLiteral("active")).toBool(),
+                 "timing the set does not carry must not clear its active flag");
+
+        // The pack half still counts, though: moving it away clears the flag.
+        QVERIFY(available.size() >= 2);
+        QVERIFY(c.setShaderOverride(path, available.at(1), QVariantMap{}));
+        QVERIFY2(!rowFor(sets, QStringLiteral("PackOnly")).value(QStringLiteral("active")).toBool(),
+                 "the half the set DOES carry must still clear the flag when it moves");
+    }
+
     /// Assigning a PACK refreshes the set rows, the same way editing a timing
     /// value does.
     ///

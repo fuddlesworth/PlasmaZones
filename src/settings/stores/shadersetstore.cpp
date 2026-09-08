@@ -54,12 +54,22 @@ QStringList coverageSections(const QJsonObject& root)
     return sections;
 }
 
-/// True when every entry @p set carries is already live in @p live with an
-/// equal profile. Containment, NOT equality: applying a set MERGES (paths it
-/// does not cover keep their current values), so unrelated live overrides
-/// must not clear the "active" badge — otherwise a set would fail to light up
-/// the instant after the user applied it.
-bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
+/// True when every entry @p set carries is already satisfied in @p live.
+///
+/// Containment, NOT equality, in BOTH directions.
+///
+/// Across paths: applying a set merges, so a path the set does not cover keeps
+/// its current value and must not clear the "active" badge — otherwise a set
+/// would fail to light up the instant after the user applied it.
+///
+/// And WITHIN one path, which is what @p satisfied decides. A domain whose
+/// apply replaces the whole profile wants exact equality (the default); one
+/// whose entry has independent halves wants only the halves the entry carries
+/// compared. Getting this wrong the second way is invisible until an entry
+/// carries one half: a pack-only motion entry never matched a path that also
+/// held timing, so one field the set does not own kept the whole set dark.
+bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live,
+                        const ShaderSetStore::EntrySatisfiedFn& satisfied)
 {
     const QJsonArray setOverrides = set.value(kOverridesKey).toArray();
     // An empty set covers nothing; it is never "active". No baseline to compare:
@@ -78,7 +88,11 @@ bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
     for (const QJsonValue& v : setOverrides) {
         const QJsonObject entry = v.toObject();
         const auto it = liveByPath.constFind(entry.value(kPathKey).toString());
-        if (it == liveByPath.cend() || *it != entry.value(kProfileKey).toObject()) {
+        if (it == liveByPath.cend()) {
+            return false;
+        }
+        const QJsonObject setProfile = entry.value(kProfileKey).toObject();
+        if (satisfied ? !satisfied(setProfile, *it) : (*it != setProfile)) {
             return false;
         }
     }
@@ -330,7 +344,7 @@ QVariantList ShaderSetStore::availableSets() const
         // file may carry entries applySet later rejects, and one carrying zero
         // renders without the count badge (the card hides it at 0).
         row.insert(QLatin1String("coverageCount"), root.value(kOverridesKey).toArray().size());
-        row.insert(QLatin1String("active"), payloadContainedIn(root, live));
+        row.insert(QLatin1String("active"), payloadContainedIn(root, live, m_config.entrySatisfied));
         // File mtime, for the row's "Updated …" line.
         row.insert(QLatin1String("modified"), info.lastModified());
         result.append(row);

@@ -358,6 +358,32 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
         return root;
     };
 
+    // ── Active: an entry is satisfied when the halves it CARRIES match. An
+    //    entry may hold a timing half, a pack half, or both, and `apply` below
+    //    writes only the ones present — a pack-only entry deliberately leaves
+    //    the path's timing alone, and a timing-only entry leaves its pack
+    //    alone. The store's default check is exact equality, which is right
+    //    for a domain whose apply replaces the whole profile (decoration) and
+    //    wrong here: a pack-only entry would never match a path that also
+    //    carries timing, so one field the set does not own would keep the
+    //    whole set reading as inactive.
+    //
+    //    Each half is compared WHOLE, because apply replaces a half it writes
+    //    rather than merging into it.
+    config.entrySatisfied = [](const QJsonObject& setProfile, const QJsonObject& live) -> bool {
+        if (setProfile.contains(kShaderKey) && setProfile.value(kShaderKey) != live.value(kShaderKey)) {
+            return false;
+        }
+        QJsonObject setTiming = setProfile;
+        setTiming.remove(kShaderKey);
+        if (setTiming.isEmpty()) {
+            return true; // carries no timing, so the path's timing is not its business
+        }
+        QJsonObject liveTiming = live;
+        liveTiming.remove(kShaderKey);
+        return setTiming == liveTiming;
+    };
+
     config.validate = [](const QJsonObject& root) -> bool {
         QList<StagedEntry> staged;
         return stageEntries(root, &staged);
