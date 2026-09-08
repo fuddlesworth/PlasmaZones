@@ -58,16 +58,23 @@ namespace PlasmaZones::motionset {
 ///                        / engaged-empty "no pack" / parameters-only over an
 ///                        inherited pack), because each state needs a different
 ///                        controller API.
-/// @param resolvedShaderId What @p path actually renders with, ancestor chain
-///                         and built-in default included
+/// @param resolvedShaderIds What every shader-supported path renders with,
+///                         keyed by path, ancestor chain and built-in default
+///                         included
 ///                         (`resolveShaderWithDefault(...).effectiveEffectId()`).
-///                         The self-containment sweep needs this rather than
-///                         the built-in default: a leaf whose pack comes from a
-///                         category ancestor would otherwise be captured as
-///                         something the sender is not using, and — because the
-///                         live snapshot it is compared against shares the same
-///                         mistake — the set would still read as active while
-///                         describing a different look.
+///                         The self-containment sweep needs the RESOLVED id
+///                         rather than the built-in default: a leaf whose pack
+///                         comes from a category ancestor would otherwise be
+///                         captured as something the sender is not using, and —
+///                         because the live snapshot it is compared against
+///                         shares the same mistake — the set would still read
+///                         as active while describing a different look.
+///
+///                         Answered for every path in ONE call, like
+///                         @p readShaders and for the same reason: resolving a
+///                         path rebuilds the whole ShaderProfileTree from the
+///                         store, and the sweep runs on the GUI thread on every
+///                         setsChanged.
 /// @param knowsEffectId   Whether this build has the named pack installed.
 ///                        Validation refuses a set naming a pack the recipient
 ///                        does not have, rather than letting the write refuse
@@ -81,7 +88,7 @@ makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> se
            std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
            std::function<QVariantMap()> readShaders,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*shader*/)> writeShader,
-           std::function<QString(const QString& /*path*/)> resolvedShaderId,
+           std::function<QVariantMap()> resolvedShaderIds,
            std::function<bool(const QString& /*effectId*/)> knowsEffectId);
 
 } // namespace PlasmaZones::motionset

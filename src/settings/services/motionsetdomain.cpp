@@ -246,7 +246,7 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
                                   std::function<bool(const QString&, const QVariantMap&)> writeOverride,
                                   std::function<QVariantMap()> readShaders,
                                   std::function<bool(const QString&, const QVariantMap&)> writeShader,
-                                  std::function<QString(const QString&)> resolvedShaderId,
+                                  std::function<QVariantMap()> resolvedShaderIds,
                                   std::function<bool(const QString&)> knowsEffectId)
 {
     // The domain cannot function without these: a missing callable is a wiring
@@ -258,11 +258,11 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     Q_ASSERT(readShaders);
     Q_ASSERT(writeShader);
     // Both of these degrade SILENTLY rather than loudly, which is why they are
-    // asserted alongside the rest: a null resolvedShaderId skips the entire
+    // asserted alongside the rest: a null resolvedShaderIds skips the entire
     // self-containment sweep, so the set saves with almost nothing in it, and a
     // null knowsEffectId drops the pack-installed gate, putting mid-batch
     // refusals back. Neither surfaces as an obvious failure at the callsite.
-    Q_ASSERT(resolvedShaderId);
+    Q_ASSERT(resolvedShaderIds);
     Q_ASSERT(knowsEffectId);
 
     ShaderSetStore::Config config;
@@ -277,7 +277,7 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     //    keeps the on-disk set stable across saves and so diffable.
     //    Active-detection does NOT depend on it: the store indexes live
     //    overrides by path into a hash.
-    config.snapshot = [readTimings = std::move(readTimings), readShaders, resolvedShaderId]() -> QJsonObject {
+    config.snapshot = [readTimings = std::move(readTimings), readShaders, resolvedShaderIds]() -> QJsonObject {
         using namespace PhosphorAnimation;
 
         if (!readTimings) {
@@ -349,6 +349,12 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
         // A path that already emitted above is skipped, so a deliberate
         // "no pack here" (the engaged-empty sentinel) is never overwritten by
         // the default it was chosen to suppress.
+        // Resolved ONCE for the whole sweep, like readShaders above. Resolving
+        // a single path rebuilds the entire ShaderProfileTree out of the store
+        // — a read, a fromVariantMap, a fromJson and a prune walk — so asking
+        // per path made this a full rebuild per supported path, on the GUI
+        // thread, on every setsChanged.
+        const QVariantMap resolved = resolvedShaderIds ? resolvedShaderIds() : QVariantMap{};
         for (const QString& path : shaderSupportedEventPaths()) {
             if (emitted.contains(path)) {
                 continue;
@@ -358,7 +364,7 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
             // capturing the default instead would describe a look the sender
             // is not using while still reading as active, because the live
             // side of the comparison is this same snapshot.
-            const QString resolvedId = resolvedShaderId ? resolvedShaderId(path) : QString();
+            const QString resolvedId = resolved.value(path).toString();
             if (resolvedId.isEmpty()) {
                 continue;
             }

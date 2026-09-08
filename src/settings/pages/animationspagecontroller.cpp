@@ -10,6 +10,8 @@
 #include "settings/stores/animationpresetlibrary.h"
 #include "animationpreviewcontroller.h"
 #include "animations_controller_detail.h"
+// shaderSupportedEventPaths — the set the motion-set sweep resolves over.
+#include "core/types/animationshadersupportedpaths.h"
 #include "settings/services/motionsetdomain.h"
 #include "settings/stores/shadersetstore.h"
 
@@ -149,20 +151,26 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 return motionTree();
             },
             motionSetsDirFn, writeOverrideFn, readShadersFn, writeShaderFn,
-            [this](const QString& path) {
-                // What the path RENDERS with:
-                // ancestor chain and built-in
-                // default included. readShaders
-                // above answers direct overrides
-                // only, which is the right shape
-                // for the entries a set stores
-                // and the wrong one for the
+            [this]() {
+                // What every shader-supported path RENDERS with: ancestor
+                // chain and built-in default included. readShaders above
+                // answers direct overrides only, which is the right shape for
+                // the entries a set stores and the wrong one for the
                 // self-containment sweep.
+                //
+                // One tree read for all of them. Resolving per path rebuilt
+                // the whole ShaderProfileTree each time, on the GUI thread,
+                // once per path, on every setsChanged.
+                QVariantMap out;
                 if (m_settings == nullptr) {
-                    return QString();
+                    return out;
                 }
-                return PhosphorAnimationShaders::resolveShaderWithDefault(m_settings->shaderProfileTree(), path)
-                    .effectiveEffectId();
+                const auto tree = m_settings->shaderProfileTree();
+                for (const QString& path : PlasmaZones::shaderSupportedEventPaths()) {
+                    out.insert(path,
+                               PhosphorAnimationShaders::resolveShaderWithDefault(tree, path).effectiveEffectId());
+                }
+                return out;
             },
             [this](const QString& effectId) {
                 // Mirrors acceptableShaderEffectId's
