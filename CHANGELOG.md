@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pressing the float shortcut a second time puts a tiled window back in the layout**: in tiling mode the shortcut floated a window and then refused to take it back, so the window stayed floating however many times you pressed. The engine asked the layout state to flip the window's floating bit and read the answer as whether the flip had worked, but the answer was the bit's new value, so the press that turned floating back off read as a failure. The flip itself had already landed. Everything that follows it, re-tiling the screen and telling the rest of PlasmaZones the window came back, was skipped, which left the layout believing the window was tiled while the window stayed floating on screen. ([#1076](https://github.com/fuddlesworth/PlasmaZones/discussions/1076), [#1085](https://github.com/fuddlesworth/PlasmaZones/pull/1085))
+
 ## [3.4.15] - 2026-09-07
 
 ### Fixed

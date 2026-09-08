@@ -30,7 +30,7 @@ void addNumberedWindows(PhosphorTiles::TilingState& state, int count)
  * Tests cover:
  * - Master count (default, set/get, clamping, signals, isMaster, master/stack lists)
  * - Split ratio (default, set/get, clamping, increase/decrease, signals)
- * - Per-window floating state (set, toggle, tiled count, lists, signals)
+ * - Per-window floating state (set, untracked guard, tiled count, lists, signals)
  */
 class TestTilingStateConfig : public QObject
 {
@@ -239,33 +239,14 @@ private Q_SLOTS:
 
     void testFloating_untrackedWindow()
     {
+        // containsWindow is what a caller checks before flipping — setFloating
+        // itself carries no "did it work" return to misread, which is the
+        // ambiguity discussion #1076 was caused by and this state no longer
+        // exposes. The engine's own pin for that regression lives in
+        // TestAutotileEngineCore::testToggleFloat_unfloatLegRetilesAndAnnounces.
         PhosphorTiles::TilingState state(QStringLiteral("test"));
 
         // Setting floating on untracked window should be ignored
-        state.setFloating(QStringLiteral("nonexistent"), true);
-        QVERIFY(!state.isFloating(QStringLiteral("nonexistent")));
-    }
-
-    void testFloating_flipRoundTrips()
-    {
-        // The engine spells a toggle as setFloating(!isFloating). Both legs
-        // must land: the unfloat leg is the one discussion #1076 lost when
-        // the caller branched on a bool that meant "floating after the flip".
-        PhosphorTiles::TilingState state(QStringLiteral("test"));
-        state.addWindow(QStringLiteral("win1"));
-
-        state.setFloating(QStringLiteral("win1"), !state.isFloating(QStringLiteral("win1")));
-        QVERIFY(state.isFloating(QStringLiteral("win1")));
-
-        state.setFloating(QStringLiteral("win1"), !state.isFloating(QStringLiteral("win1")));
-        QVERIFY(!state.isFloating(QStringLiteral("win1")));
-    }
-
-    void testFloating_membershipIsTheUntrackedGuard()
-    {
-        // containsWindow is what a caller checks before flipping; the float
-        // state itself carries no "did it work" return to misread.
-        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(!state.containsWindow(QStringLiteral("nonexistent")));
         state.setFloating(QStringLiteral("nonexistent"), true);
         QVERIFY(!state.isFloating(QStringLiteral("nonexistent")));
