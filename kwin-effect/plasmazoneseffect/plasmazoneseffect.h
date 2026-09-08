@@ -2545,6 +2545,16 @@ private:
     /// (today: only animationEasingCurve loadSettingAsync at construction
     /// time) outlives the animator on shutdown.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
+
+    /// Digest of the last MotionProfileTree payload actually parsed.
+    ///
+    /// One Save fetches this key twice: loadCachedSettings pulls it on
+    /// settingsChanged and the tree's own motionProfileTreeChanged slot pulls
+    /// it again. Rebuilding a ProfileTree resolves a curve per node, and this
+    /// runs synchronously on the compositor thread in a D-Bus reply handler, so
+    /// the second pass is pure waste. Hashed rather than kept whole: the
+    /// payload is bounded by the fetch cap, not by anything small.
+    QByteArray m_motionProfileTreeDigest;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
     /// Scrolling-strip view motion, one spring per output. Separate from
     /// m_windowAnimator by GRANULARITY, not by kind: a scroll moves the whole

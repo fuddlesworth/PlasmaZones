@@ -427,6 +427,9 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
                         "writes this, so it is not meant to be edited by hand.")},
+        {CD::motionProfileTreeKey(), CD::motionProfileTree(), QMetaType::QVariantMap,
+         QStringLiteral("Per-context overrides of animation timing, holding each context's easing curve and duration. "
+                        "The animations page writes this, so it is not meant to be edited by hand.")},
     };
 }
 

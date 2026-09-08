@@ -10,6 +10,8 @@
 #include "settings/stores/animationpresetlibrary.h"
 #include "animationpreviewcontroller.h"
 #include "animations_controller_detail.h"
+// shaderSupportedEventPaths — the set the motion-set sweep resolves over.
+#include "core/types/animationshadersupportedpaths.h"
 #include "settings/services/motionsetdomain.h"
 #include "settings/stores/shadersetstore.h"
 
@@ -17,31 +19,13 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QFuture>
-#include <QFutureWatcher>
 #include <QLoggingCategory>
-#include <QSaveFile>
-#include <QScopeGuard>
 #include <QSet>
-#include <QtConcurrent/QtConcurrent>
 
 namespace PlasmaZones {
 
-namespace {
-
-/// Ceiling on a single snapshotted profile file. The snapshot map holds these
-/// in memory for the session, and the file is a filesystem boundary a user can
-/// hand-place anything at. Derived from the shared cap so it cannot drift
-/// from ShaderSetStore's set-file cap or the other profile readers.
-constexpr qint64 kMaxSnapshotBytes = animfileutil::kMaxJsonFileBytes;
-
-} // namespace
-
-/// `JsonNameKey`, `profileToVariantMap`, `readProfileJson`,
-/// `mergeMissingFields`, and `fillLibraryDefaults` live in
+/// `JsonNameKey`, `profileToVariantMap`, `mergeMissingFields`, and
+/// `fillLibraryDefaults` live in
 /// `animations_controller_detail.h` so the sibling TU that uses them
 /// (animationspagecontroller_overrides.cpp) shares the exact same
 /// implementations without relying on unity-build TU merging.
@@ -67,51 +51,155 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
 {
-    // Forward the snapshot helper as a callable so the sub-services can
-    // capture pre-edit content without coupling to the controller's
-    // m_pendingFileSnapshots layout. The bool return matters: a false means
-    // the pre-edit content could NOT be captured, and a caller that writes
-    // anyway loses it permanently. Both consumers honour it and refuse the
-    // write (ShaderSetStore::snapshotFile, AnimationPresetLibrary's mutators).
-    auto snapshotFn = [this](const QString& filePath) -> bool {
-        return snapshotFileIfFirst(filePath);
-    };
-    // The companion to snapshotFn. A sub-service that snapshots a file and then
-    // fails to write it has staged a file it never touched, so the page would
-    // report unsaved changes with nothing to discard. This drops that entry
-    // again — but only when the file on disk still matches what was staged, so
-    // a snapshot covering an EARLIER edit that did land is never thrown away.
-    auto snapshotRollbackFn = [this](const QString& filePath) -> bool {
-        return dropFileSnapshotIfUnchanged(filePath);
-    };
     auto profilesDirFn = [this]() {
         return userProfilesDir();
     };
     auto motionSetsDirFn = [this]() {
         return userMotionSetsDir();
     };
-    auto writeOverrideFn = [this](const QString& path, const QVariantMap& profile) {
-        return setOverride(path, profile);
+    // One write for the whole timing half of a set, not one per path. See the
+    // apply closure in motionsetdomain for why the difference is observable.
+    auto writeOverrideFn = [this](const QList<QPair<QString, QVariantMap>>& edits) {
+        if (!writeOverridesBatch(edits))
+            return false;
+        for (const auto& [path, profile] : edits)
+            Q_EMIT overrideChanged(path);
+        return true;
     };
-    // The store is reachable straight from QML (`animationsPage.setsBridge`),
-    // so the in-flight-discard gate the old controller-level forwarders
-    // enforced has to travel WITH it — otherwise a set write could land
-    // mid-revert and be clobbered by the worker's restore walk.
-    auto mutationGuardFn = [this]() -> QString {
-        if (m_asyncRevertInFlight)
-            return PhosphorI18n::tr("Cannot modify sets while a discard is in progress.");
-        return QString();
+    // The SHADER half of a motion set. Both halves of an event are set on one
+    // card in the UI, so a set has to carry both or it captures half of what
+    // the user sees as a single thing.
+    auto readShadersFn = [this]() {
+        return allRawShaderProfiles();
     };
+    auto writeShaderFn = [this](const QString& path, const QVariantMap& shader) {
+        const QVariantMap params = shader.value(JsonShaderParametersKey).toMap();
 
+        // ── De-seed, the counterpart of the snapshot capturing built-in
+        // defaults (see motionsetdomain's snapshot). Decoration does this in
+        // Settings::setDecorationProfileTree: a set carries the seeded look so
+        // it is self-contained, and the write side then strips whatever still
+        // matches locally, so applying a set REPRODUCES the default rather than
+        // freezing it as a user override.
+        //
+        // Without this, applying any motion set would convert every built-in
+        // default it carried into an explicit stored override, permanently
+        // opting those events out of future default improvements — which is
+        // exactly the failure the capture was meant to avoid.
+        //
+        // Compared against what the path would resolve to with its OWN
+        // override removed, not against the built-in default. Those differ
+        // wherever the pack comes from an ancestor: comparing to the built-in
+        // default would leave the de-seed unfired and store a direct leaf
+        // override that permanently shadows the recipient's own category
+        // assignment — the very shadowing this block exists to prevent, just
+        // one level up. This is the clear-then-regenerate-then-compare shape
+        // Settings::setDecorationProfileTree already uses.
+        // The absence test is on the KEY, not on the map being empty. A set
+        // entry can carry an explicit `parameters: {}`, which means "this pack
+        // with no tuning" and is a real override the user chose. Keying off
+        // `params.isEmpty()` cannot tell that from "no parameters at all", so
+        // it de-seeded such an entry, leaving the path with nothing stored and
+        // the set's badge reading inactive right after a successful apply.
+        if (!shader.contains(JsonShaderParametersKey) && shader.contains(JsonEffectIdKey)) {
+            const QString id = shader.value(JsonEffectIdKey).toString();
+            QString inheritedId;
+            if (m_settings != nullptr) {
+                auto candidate = m_settings->shaderProfileTree();
+                candidate.clearOverride(path);
+                inheritedId = PhosphorAnimationShaders::resolveShaderWithDefault(candidate, path).effectiveEffectId();
+            }
+            if (!id.isEmpty() && id == inheritedId) {
+                // Drop any stored override so the path resolves through the
+                // default again. A path that carries no override is ALREADY in
+                // the requested state, and that is a success — clearShaderOverride
+                // reports "nothing to clear" as false, which is the right answer
+                // for an explicit user clear and the wrong one here.
+                if (rawShaderProfile(path).isEmpty()) {
+                    return true;
+                }
+                return clearShaderOverride(path);
+            }
+        }
+        // The three states the shader tree models, each needing its own API.
+        // An engaged-empty effectId is NOT a clear: it is the sentinel for
+        // "this event deliberately runs no pack", which also blocks a parent's
+        // pack from cascading in, and setShaderOverride stores exactly that for
+        // an empty id. Routing it to clearShaderOverride would drop the entry
+        // and silently re-enable inheritance.
+        if (shader.contains(JsonEffectIdKey))
+            return setShaderOverride(path, shader.value(JsonEffectIdKey).toString(), params);
+        // No effectId at all: the event inherits its pack and overrides only
+        // the parameter map. setShaderParametersOnPaths starts from the stored
+        // profile, so it preserves that unset state.
+        //
+        // Its return is a COUNT, and 0 is ambiguous — it means "nothing needed
+        // writing" but also "every path was refused", so it cannot be used as a
+        // success test. The set domain gates the path on eventPathSupportsShaderLeg
+        // before any write happens, which removes the refusal case here; the
+        // remaining 0 really is a no-op.
+        setShaderParametersOnPaths({path}, params);
+        return true;
+    };
     // Sub-services are constructed before the dirty-forwarder wiring below.
     // Nothing is missed by that ordering: the forwarder seeds
     // m_lastHadPendingChanges from the real post-construction state (just
     // below), so it does not need to have observed any signal fired during
     // construction.
-    m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, snapshotRollbackFn, this);
-    m_motionSets = new ShaderSetStore(motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn,
-                                                            snapshotRollbackFn, mutationGuardFn),
-                                      this);
+    m_presets = new AnimationPresetLibrary(profilesDirFn, this);
+    // Set and preset file CRUD is IMMEDIATE, matching decoration
+    // (decorationpagecontroller_sets.cpp wires no snapshot hooks at all).
+    // Saving, deleting, renaming or importing one used to be staged and undone
+    // by Discard here, so the same footer button meant two different things on
+    // the two pages: on Decoration it never touched your sets, on Animations it
+    // silently reverted them.
+    //
+    // The per-event overrides a set APPLIES are still staged, exactly as
+    // decoration's tree writes are — they are config keys, and Discard is
+    // `Settings::load()`.
+    m_motionSets = new ShaderSetStore(
+        motionset::makeConfig(
+            [this]() {
+                return motionTree();
+            },
+            motionSetsDirFn, writeOverrideFn, readShadersFn, writeShaderFn,
+            [this]() {
+                // What every shader-supported path RENDERS with: ancestor
+                // chain and built-in default included. readShaders above
+                // answers direct overrides only, which is the right shape for
+                // the entries a set stores and the wrong one for the
+                // self-containment sweep.
+                //
+                // One tree read for all of them. Resolving per path rebuilt
+                // the whole ShaderProfileTree each time, on the GUI thread,
+                // once per path, on every setsChanged.
+                QVariantMap out;
+                if (m_settings == nullptr) {
+                    return out;
+                }
+                const auto tree = m_settings->shaderProfileTree();
+                for (const QString& path : PlasmaZones::shaderSupportedEventPaths()) {
+                    out.insert(path,
+                               PhosphorAnimationShaders::resolveShaderWithDefault(tree, path).effectiveEffectId());
+                }
+                return out;
+            },
+            [this](const QString& effectId) {
+                // Mirrors acceptableShaderEffectId's
+                // membership gate, including its
+                // startup grace: an unscanned
+                // registry answers "known" for
+                // everything, because refusing
+                // every set during that window
+                // would be worse than accepting
+                // one that the write then checks
+                // again anyway.
+                if (effectId.isEmpty() || m_shaderRegistry == nullptr || m_shaderRegistry->effectIds().isEmpty()) {
+                    return true;
+                }
+                return m_shaderRegistry->hasEffect(effectId);
+            }),
+        this);
     // Live-preview data source for the shader browser's detail dialog. Both
     // borrows are the controller's own, so the lifetimes already agree.
     m_preview = new AnimationPreviewController(shaderRegistry, settings, this);
@@ -135,11 +223,23 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     connect(m_presets, &AnimationPresetLibrary::toastRequested, this, &AnimationsPageController::toastRequested);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    connect(m_motionSets, &ShaderSetStore::pendingChangesChanged, this,
-            &AnimationsPageController::pendingChangesChanged);
-    // A set's `active` flag is derived from the live override files, so it
-    // goes stale whenever an event's profile is edited anywhere else.
+    // A set's `active` flag is derived from the live state of every event it
+    // covers, so it goes stale whenever one of those is edited anywhere else.
+    //
+    // BOTH halves, because a motion set carries both. The timing half moves on
+    // `overrideChanged` and the pack half on `shaderProfileChanged`, and only
+    // the first was wired: assigning a pack left every row's badge showing
+    // whatever it said before, so a set the user had just made current never
+    // lit up and one they had just edited away from stayed lit. Harmless while
+    // a set carried timing alone, which is why it survived — the pack half
+    // could not affect the flag it was missing from.
+    //
+    // The decoration domain has one signal for its whole tree
+    // (`DecorationPageController::profilesChanged`), so it has never had a
+    // half to forget. This is the animation side's two-signal tax.
     connect(this, &AnimationsPageController::overrideChanged, m_motionSets, &ShaderSetStore::notifyLiveStateChanged);
+    connect(this, &AnimationsPageController::shaderProfileChanged, m_motionSets,
+            &ShaderSetStore::notifyLiveStateChanged);
     // A set apply's per-path overrideChanged emissions ride through the
     // writeOverride callback (which the controller wires to its own
     // setOverride). ShaderSetStore therefore exposes no overrideChanged
@@ -166,30 +266,64 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // lambda no longer distinguishes own-writes from reloads or touches any
         // flag — it just refreshes the cards and re-evaluates the dirty state.
         //
-        // The async guard stays: SettingsController::discard() pairs our async
-        // discard() with a follow-up Settings::load() that fires this NOTIFY
-        // while the worker is still running. The worker's finished handler owns
-        // the terminal pendingChangesChanged + discardResult sequence, so the
-        // lambda must not fire pendingChangesChanged in that window or it would
-        // race the terminal emit and break the chrome's wait-counter.
+        // There is no guard here, and none is owed: the async discard worker
+        // this once had to step around went with the per-file staging, so
+        // Discard is now a synchronous Settings::load() and every NOTIFY it
+        // fires is one this lambda should act on.
         connect(
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
                 // Path-agnostic broadcast — the tree is a single Q_PROPERTY so we
-                // can't tell which path moved without diffing. QML pages refresh
-                // every visible event card on this signal which is cheap enough.
-                Q_EMIT shaderProfileChanged(QString());
+                // can't tell which path moved without diffing, and a change we
+                // did not make (a Discard, a profile switch, a set apply) really
+                // could have moved anything.
+                //
+                // Gated on the depth counter, like the timing arm below: a
+                // group write this controller made announces its own paths, and
+                // broadcasting over it would defeat the cards' path filter at
+                // drag rate — which is exactly when the parameter sliders reach
+                // that writer.
+                if (m_selfShaderWriteDepth == 0) {
+                    Q_EMIT shaderProfileChanged(QString());
+                }
                 // The live tree moved, so the value-based dirty compare must
                 // be re-run on the next hasPendingChanges() query.
                 m_treeDirtyCache.reset();
                 // Tree assignment is the primary input of the stock-suppression
                 // gate (see stockSuppressedEvents).
                 maybeEmitStockSuppressedEventsChanged();
-                if (m_asyncRevertInFlight)
-                    return;
                 Q_EMIT pendingChangesChanged();
             },
             Qt::DirectConnection);
+        // The TIMING half of the same dirty state. Without this the memoised
+        // verdict never learns the tree moved, so a page with real unsaved
+        // timing edits reports itself clean and the footer never appears.
+        connect(
+            m_settings, &ISettings::motionProfileTreeChanged, this,
+            [this]() {
+                m_treeDirtyCache.reset();
+                Q_EMIT pendingChangesChanged();
+
+                // Cards do not refresh on `pendingChangesChanged` (it is just
+                // the flag), so without a broadcast here every timing write
+                // this controller did NOT make — a Settings::load() on
+                // Discard, a settings-profile activation, a motion-set apply,
+                // the v8 migration — left every card showing its pre-change
+                // duration, curve, override toggle and inherit breadcrumb,
+                // with the next edit committing the stale value back. The
+                // shader tree's twin above already relays exactly this.
+                //
+                // Gated on the depth counter so a write this controller DID
+                // make keeps its per-path emissions and the prefix filter
+                // cards apply to them. Broadcasting unconditionally would
+                // defeat that filter and make every visible card re-walk its
+                // whole chain on every slider tick.
+                if (m_selfTreeWriteDepth == 0) {
+                    Q_EMIT overrideChanged(QString());
+                }
+            },
+            Qt::DirectConnection);
+
         // The animations master toggle gates the whole suppression predicate:
         // with animations off no pack owns any event and every stock effect
         // is (re)loaded, so the conflict chip must come back.
@@ -237,52 +371,6 @@ QString AnimationsPageController::previewKind() const
 void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
 {
     m_userProfilesDirOverride = dir;
-    // Every cached entry was keyed on a path resolved against the OLD directory.
-    invalidateDiskProfileCache();
-}
-
-void AnimationsPageController::setProfileStoreRefresher(std::function<void()> refresher)
-{
-    m_profileStoreRefresher = std::move(refresher);
-}
-
-void AnimationsPageController::forgetCachedOverrideFiles()
-{
-    invalidateDiskProfileCache();
-    if (m_selfDrivenRescanDepth > 0) {
-        // Our own refreshProfileStore() is on the stack: it called the loader's
-        // synchronous rescanNow(), which emitted profilesChanged straight back
-        // into here. Dropping the memo is right, but the broadcast is not — the
-        // caller is about to emit a precise overrideChanged per affected path,
-        // so a tree-wide reload on top of it just refreshes every other card
-        // twice for one user action.
-        return;
-    }
-    // …and tell the page. Dropping the memo alone only guarantees the NEXT read
-    // is honest; an open card does not re-read on its own, so a hand-edit to the
-    // profiles directory would still show the pre-edit value until something
-    // unrelated rebound it. The empty path is the tree-wide reload broadcast the
-    // cards already understand (AnimationEventCard's `_pathAffectsThisCard`
-    // returns true for it), which is right here: an external write can have
-    // touched any path.
-    Q_EMIT overrideChanged(QString());
-}
-
-void AnimationsPageController::refreshProfileStore()
-{
-    // Marks the loader's synchronous profilesChanged as self-inflicted for the
-    // duration of the rescan; see forgetCachedOverrideFiles.
-    ++m_selfDrivenRescanDepth;
-    const auto leave = qScopeGuard([this] {
-        --m_selfDrivenRescanDepth;
-    });
-    // Unconditional, not inside the `if`: a refresh is the point at which the
-    // controller admits the files on disk may have moved under it, and that is
-    // true whether or not a refresher happens to be wired (the async revert
-    // worker rewrites files in a process with no refresher installed).
-    invalidateDiskProfileCache();
-    if (m_profileStoreRefresher)
-        m_profileStoreRefresher();
 }
 
 bool AnimationsPageController::isValidEventPath(const QString& path) const
@@ -301,104 +389,46 @@ bool AnimationsPageController::isValidEventPath(const QString& path) const
     return kKnownPathSet.contains(path);
 }
 
-// ─── Pending-changes snapshot machinery ────────────────────────────────
-
-bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
+bool AnimationsPageController::isRemovableEventPath(const QString& path) const
 {
-    if (filePath.isEmpty())
-        return false;
-    if (m_pendingFileSnapshots.contains(filePath))
+    if (isValidEventPath(path))
         return true;
-    QFile f(filePath);
-    if (!f.exists()) {
-        m_pendingFileSnapshots.insert(filePath, std::nullopt);
-        return true;
-    }
-    // A hand-placed profile file is a filesystem boundary like any other. Cap it
-    // rather than slurping an arbitrarily large blob into the snapshot map for
-    // the rest of the session, and refuse (so callers bail) rather than write
-    // over content we cannot restore.
-    const QFileInfo info(filePath);
-    if (!info.isFile() || info.size() > kMaxSnapshotBytes) {
-        qCWarning(lcConfig) << "snapshotFileIfFirst: refusing to snapshot" << filePath
-                            << "— not a regular file, or over the" << kMaxSnapshotBytes << "byte cap";
+    if (path.isEmpty() || m_settings == nullptr)
         return false;
-    }
-    if (!f.open(QIODevice::ReadOnly)) {
-        // Mid-session permission drift on an existing file would
-        // silently lose pre-edit content if a write proceeded without
-        // a snapshot — log so the journal flags the data-loss path,
-        // and return false so direct callers can refuse the write.
-        qCWarning(lcConfig) << "snapshotFileIfFirst: cannot read existing file" << filePath << "for revert snapshot —"
-                            << f.errorString();
+    if (path.contains(QLatin1Char('/')) || path.contains(QLatin1Char('\\')) || path.contains(QLatin1String("..")))
         return false;
-    }
-    m_pendingFileSnapshots.insert(filePath, f.readAll());
-    return true;
+    return treeHasOverrideForPath(m_settings->motionProfileTree(), path)
+        || treeHasOverrideForPath(m_settings->committedMotionProfileTree(), path);
 }
 
-bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath, SnapshotDropSignal signalPolicy)
-{
-    const auto it = m_pendingFileSnapshots.constFind(filePath);
-    if (it == m_pendingFileSnapshots.cend())
-        return false;
-
-    // The snapshot is the ONLY copy of the file's pre-edit content, so it may be
-    // dropped only when the file still holds exactly that content: the write it
-    // was taken for never landed. A mismatch means some earlier write did land,
-    // and the entry is still Discard's way back.
-    QFile f(filePath);
-    if (it.value().has_value()) {
-        // Compare sizes first: it settles the common mismatch without a read, and
-        // it keeps this off the unbounded-readAll path that snapshotFileIfFirst
-        // already refuses to take.
-        if (QFileInfo(filePath).size() != it.value()->size())
-            return false;
-
-        if (!f.exists() || !f.open(QIODevice::ReadOnly) || f.readAll() != *it.value())
-            return false;
-    } else if (f.exists()) {
-        // Staged as "did not exist", but something created it since.
-        return false;
-    }
-
-    // Sampled before the removal so the emit below can compare against it.
-    // It is always true on the Emit path — `m_pendingFileSnapshots` still holds
-    // this file, so hasPendingChanges() takes its non-empty early-out — but it
-    // is written as a sample rather than a hardcoded true so the comparison
-    // below survives any future change to what makes the page dirty.
-    const bool wasPending = signalPolicy == SnapshotDropSignal::Emit && hasPendingChanges();
-    m_pendingFileSnapshots.remove(filePath);
-    // Sole owner of the signal for this transition: the sub-services used to
-    // emit alongside their rollback call, which fired twice for one flip and
-    // once even when the rollback declined to drop. A batch caller takes that
-    // ownership back for the duration of its loop (see SnapshotDropSignal).
-    if (signalPolicy == SnapshotDropSignal::Emit && wasPending != hasPendingChanges())
-        Q_EMIT pendingChangesChanged();
-    return true;
-}
+// ─── Pending-changes ───────────────────────────────────────────────────
 
 bool AnimationsPageController::hasPendingChanges() const
 {
-    // Value-based, not a sticky flag: the shader tree is dirty exactly when the
-    // live tree differs from the committed baseline. This lets a per-page kebab
-    // revert only ONE surface's tree paths and have hasPendingChanges() report
-    // the truth — a sticky bool would either stay set after a scoped revert
-    // (phantom "unsaved changes" footer) or get cleared wholesale by an external
-    // scoped write (dropping OTHER pages' still-pending tree edits). Files stay
-    // snapshot-based because a file has no committed-baseline value to diff.
-    if (!m_pendingFileSnapshots.isEmpty())
-        return true;
+    // Value-based, not a sticky flag: a tree is dirty exactly when the live
+    // value differs from the committed baseline. This lets a per-page kebab
+    // revert only ONE surface's paths and have hasPendingChanges() report the
+    // truth — a sticky bool would either stay set after a scoped revert
+    // (phantom "unsaved changes" footer) or get cleared wholesale by an
+    // external scoped write (dropping OTHER pages' still-pending edits).
+    //
+    // BOTH halves of an event are covered, because both are config: the pack
+    // in `Animations/ShaderProfileTree` and the timing in
+    // `Animations/MotionProfileTree`. Until schema v8 the timing half was
+    // per-event FILES with no baseline to diff, so it needed a snapshot map,
+    // an async restore worker and a disk memo in front of them. None of that
+    // survived the move.
     if (m_settings == nullptr)
         return false;
-    // The tree compare is the expensive half: each side is a config-store
-    // read, a JSON parse, and a prune, and this predicate runs several times
-    // per mutation at slider-drag rate. Memoised; invalidated wherever either
-    // side can move — the live tree via the shaderProfileTreeChanged lambda in
-    // the ctor, the committed baseline via refreshDirtyState() (which is the
-    // documented external poke for exactly that baseline-moved case).
-    if (!m_treeDirtyCache.has_value())
-        m_treeDirtyCache = m_settings->shaderProfileTree() != m_settings->committedShaderProfileTree();
+    // The compare is the expensive half: each side is a config-store read plus
+    // a parse, and this predicate runs several times per mutation at
+    // slider-drag rate. Memoised; invalidated wherever either side can move —
+    // the live values via the tree-changed lambdas in the ctor, the committed
+    // baseline via refreshDirtyState().
+    if (!m_treeDirtyCache.has_value()) {
+        m_treeDirtyCache = m_settings->shaderProfileTree() != m_settings->committedShaderProfileTree()
+            || m_settings->motionProfileTree() != m_settings->committedMotionProfileTree();
+    }
     return *m_treeDirtyCache;
 }
 
@@ -422,38 +452,27 @@ bool AnimationsPageController::isDirty() const
 
 void AnimationsPageController::apply()
 {
-    // Refuse Apply while an asyncRevertPending worker is still
-    // rewriting profile files from its captured snapshot. Without
-    // this, an apply() call mid-revert would clear m_pendingFileSnapshots
-    // — letting the worker's still-running file restores silently UNDO
-    // writes the user wanted to keep, then emit discardResult(true) on a
-    // now-clean page. Symmetric to the per-mutator guards (setOverride
-    // etc.) and to RuleController::m_asyncCommitInFlight.
-    if (m_asyncRevertInFlight) {
-        Q_EMIT applyResult(false, PhosphorI18n::tr("Cannot save while a discard is in progress."));
-        return;
-    }
     commitPending();
-    // commitPending is synchronous (just clears the snapshot map; the
-    // per-edit writes already hit disk through setOverride, and shader-tree
-    // dirtiness is value-based against the committed baseline). Signal
-    // completion immediately so the chrome's applyAllAsync wait-counter ticks down.
+    // commitPending is synchronous — every per-edit write already landed in
+    // config through setOverride, and dirtiness is value-based against the
+    // committed baseline. Signal completion immediately so the chrome's
+    // applyAllAsync wait-counter ticks down.
     Q_EMIT applyResult(true, QString());
 }
 
 void AnimationsPageController::discard()
 {
-    // The async revert moves the QSaveFile loop off the GUI thread
-    // (motion-set discards can touch dozens of profile files) and
-    // emits the inherited discardResult on completion — chrome
-    // wait-counter then ticks down.
-    asyncRevertPending();
+    // Nothing here touches the filesystem, so there is no worker to dispatch:
+    // `Settings::load()` in the caller does the reverting and this drops the
+    // page's own view of it. The inherited discardResult still goes out so the
+    // chrome's wait-counter ticks down.
+    revertPending();
+    Q_EMIT discardResult(true, QString());
 }
 
 void AnimationsPageController::commitPending()
 {
     const bool had = hasPendingChanges();
-    m_pendingFileSnapshots.clear();
     // No shader-tree flag to clear: tree dirtiness is value-based now. The tree's
     // committed baseline is refreshed by Settings::save() (captureBaseline), which
     // runs in the same apply pass; SettingsController::save() calls
@@ -478,329 +497,60 @@ void AnimationsPageController::refreshDirtyState()
     Q_EMIT pendingChangesChanged();
 }
 
-namespace {
-/// Restore one snapshotted file: "was absent" (nullopt) → remove any file
-/// the edit created; otherwise an atomic QSaveFile rewrite of the
-/// snapshotted bytes. Pure file I/O with no member access, so it is safe
-/// on the async worker thread. Shared by revertPending, revertPendingUnder
-/// and the asyncRevertPending worker — a fix in the restore arm (say a
-/// permissions edge in the QSaveFile path) must reach all three callers.
-bool restoreSnapshotFile(const QString& filePath, const std::optional<QByteArray>& content)
-{
-    if (!content.has_value()) {
-        return !QFile::exists(filePath) || QFile::remove(filePath);
-    }
-    QSaveFile f(filePath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-    f.write(*content);
-    return f.commit();
-}
-} // namespace
-
 bool AnimationsPageController::revertPending()
 {
     // discard() / revertPending() is the StagingDomain contract for "undo
-    // everything since the last apply". This method restores every snapshotted
-    // profile file from disk and returns whether the snapshot map fully emptied
-    // (a retained entry is a restore that FAILED, so a caller must not declare
-    // the session clean while one stands). It owns the FILE half only — the
-    // shader tree is value-based and reverted by the caller (see below).
+    // everything since the last apply". Every value this page writes is a
+    // config key, so the actual revert is `Settings::load()` in the caller;
+    // this drops the page's own memo of the dirty verdict and re-emits so an
+    // OPEN page rebinds.
     //
-    // IMPORTANT CALLER CONTRACT: the in-memory shader tree on m_settings
-    // (Settings::shaderProfileTree) is NOT reverted here — that state is
-    // owned by Settings, not this page, and is refreshed only by a
-    // subsequent Settings::load(). SettingsController::discard() pairs
-    // discard() with a follow-up load(); any future direct caller of
-    // discard() MUST do the same, otherwise hasPendingChanges() returns
-    // false while m_settings->shaderProfileTree() still holds unsaved
-    // edits.
-    using namespace PhosphorAnimation;
-
-    // The async worker is mid-way through rewriting these same files, and it
-    // merges its results back into m_pendingFileSnapshots when it lands. A
-    // synchronous restore running underneath it would race that walk on disk
-    // and then have its map edits overwritten by the worker's reply.
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "revertPending: blocked while an async discard is in flight";
-        return false;
-    }
-    if (!hasPendingChanges())
-        return true;
-
-    const QString profilesDir = userProfilesDir();
-    const QString setsDir = userMotionSetsDir();
-    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
-
-    QStringList overrideEvents;
-    bool anyPreset = false;
-    bool anyMotionSet = false;
-
-    // Failed restores are kept in the snapshot map so a follow-up revert
-    // can retry. Successful restores are removed below.
-    QHash<QString, std::optional<QByteArray>> retained;
-
-    for (auto it = m_pendingFileSnapshots.cbegin(); it != m_pendingFileSnapshots.cend(); ++it) {
-        const QString& filePath = it.key();
-        const auto& content = it.value();
-
-        if (!restoreSnapshotFile(filePath, content)) {
-            qCWarning(lcConfig) << "AnimationsPageController::revertPending: failed to restore" << filePath;
-            retained.insert(filePath, content);
-            continue;
-        }
-
-        // Classify so the right signal goes out for the restored file.
-        // QDir-vs-QDir comparison normalises trailing slashes, "..", and
-        // duplicate slashes so a string compare can't false-negative on
-        // a path that's semantically equal but lexically different
-        // (e.g. setsDir with a trailing slash from QStandardPaths).
-        const QFileInfo info(filePath);
-        const QDir absDir(info.absolutePath());
-        const QString stem = info.completeBaseName();
-        if (absDir == QDir(setsDir)) {
-            anyMotionSet = true;
-        } else if (absDir == QDir(profilesDir)) {
-            if (knownPathSet.contains(stem))
-                overrideEvents.append(stem);
-            else
-                anyPreset = true;
-        }
-    }
-    m_pendingFileSnapshots = std::move(retained);
-
-    // No shader-tree flag to clear: tree dirtiness is value-based, and reverting
-    // the tree is the caller's job (Settings::load() on global discard, or the
-    // scoped tree revert in SettingsController::discardPage for a per-page
-    // discard). This method owns the FILE half only.
-
-    // Bulk emit so QML sub-pages refresh exactly the rows that moved. One
-    // registry catch-up for the whole batch, ahead of the first signal — a
-    // restore that removed a file (its snapshot was "was absent") leaves the
-    // same stale entry behind that clearOverride does.
-    if (!overrideEvents.isEmpty())
-        refreshProfileStore();
-    for (const QString& path : overrideEvents)
-        Q_EMIT overrideChanged(path);
-    if (anyPreset)
-        Q_EMIT userPresetsChanged();
-    if (anyMotionSet && m_motionSets)
+    // IMPORTANT CALLER CONTRACT: the in-memory trees on m_settings are NOT
+    // reverted here — that state is owned by Settings and is refreshed only by
+    // a subsequent Settings::load(). SettingsController::discard() pairs
+    // discard() with a follow-up load(); any future direct caller MUST do the
+    // same, otherwise hasPendingChanges() returns false while m_settings still
+    // holds unsaved edits.
+    m_treeDirtyCache.reset();
+    // Empty path is the tree-wide reload broadcast the cards already
+    // understand (AnimationEventCard's `_pathAffectsThisCard` returns true for
+    // it), which is right here: a reload can have moved any path.
+    Q_EMIT overrideChanged(QString());
+    Q_EMIT shaderProfileChanged(QString());
+    Q_EMIT userPresetsChanged();
+    if (m_motionSets != nullptr)
         m_motionSets->notifyLiveStateChanged();
     Q_EMIT pendingChangesChanged();
-    // True means every snapshotted FILE restored — NOT that the page is clean;
-    // the shader tree is not covered here and can still be diverged. A retained
-    // entry is a file whose restore FAILED, and a caller that goes on to declare
-    // the session clean (an import, a defaults reset) must not do so while one is
-    // still staged: the next Discard would write it back over the new state.
-    return m_pendingFileSnapshots.isEmpty();
+    return true;
 }
 
 bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
 {
-    // Scoped synchronous revert for the per-page kebab Discard: restore ONLY the
-    // snapshotted override files at eventPaths, leaving every other page's staged
-    // file edits (and any preset / motion-set snapshots) pending. Mirrors
-    // revertPending's per-file restore, filtered to the in-scope file keys. Same
-    // async-in-flight refusal — a concurrent worker owns the snapshot map.
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "revertPendingUnder: blocked while an async discard is in flight";
+    // Scoped sibling for the per-page kebab Discard: restore ONLY the timing
+    // overrides at eventPaths from the committed baseline, leaving every other
+    // page's staged edits pending. One tree write for the batch.
+    if (m_settings == nullptr)
         return false;
-    }
-
-    QStringList restoredEvents;
-    bool allRestored = true;
+    const QVariantMap committed = m_settings->committedMotionProfileTree();
+    QVariantMap live = m_settings->motionProfileTree();
+    QStringList restored;
     for (const QString& path : eventPaths) {
-        if (!isValidEventPath(path))
+        if (!isRemovableEventPath(path))
             continue;
-        const QString filePath = profileFilePath(path);
-        const auto it = m_pendingFileSnapshots.constFind(filePath);
-        if (it == m_pendingFileSnapshots.cend())
-            continue; // no staged edit for this path
-
-        if (!restoreSnapshotFile(filePath, it.value())) {
-            qCWarning(lcConfig) << "revertPendingUnder: failed to restore" << filePath;
-            allRestored = false;
-            continue; // keep the snapshot so a retry can pick it up
-        }
-        m_pendingFileSnapshots.remove(filePath);
-        restoredEvents.append(path);
+        const QJsonObject baseline = treeProfileForPath(committed, path);
+        if (treeProfileForPath(live, path) == baseline)
+            continue; // not staged
+        live = treeWithOverrideForPath(live, path, baseline);
+        restored.append(path);
     }
-
-    // Refresh exactly the rows that moved; one dirty re-eval for the batch,
-    // and one registry catch-up ahead of it for the restores that deleted a
-    // file (same stale-entry hazard as clearOverride).
-    if (!restoredEvents.isEmpty())
-        refreshProfileStore();
-    for (const QString& path : restoredEvents)
+    if (restored.isEmpty())
+        return true;
+    writeMotionTree(live);
+    m_treeDirtyCache.reset();
+    for (const QString& path : restored)
         Q_EMIT overrideChanged(path);
-    if (!restoredEvents.isEmpty())
-        Q_EMIT pendingChangesChanged();
-    return allRestored;
-}
-
-bool AnimationsPageController::asyncRevertInFlight() const
-{
-    return m_asyncRevertInFlight;
-}
-
-void AnimationsPageController::asyncRevertPending()
-{
-    // POD payload threaded between GUI thread and the worker.
-    // Captured by value into the QtConcurrent lambda + returned by
-    // value through QFuture so it lifecycles cleanly across threads.
-    struct WorkerResult
-    {
-        QHash<QString, std::optional<QByteArray>> retained;
-        QStringList overrideEvents;
-        bool anyPreset = false;
-        bool anyMotionSet = false;
-    };
-
-    using namespace PhosphorAnimation;
-
-    if (m_asyncRevertInFlight) {
-        // Second invocation while a worker is running would race the
-        // first — the second worker's reply could overwrite the live
-        // m_pendingFileSnapshots map AFTER the first worker already
-        // truncated some files on disk, producing inconsistent state.
-        // Surface a quick failure so the framework's discard counter
-        // ticks down and the user knows to retry.
-        Q_EMIT discardResult(false, PhosphorI18n::tr("A discard is already in progress. Try again in a moment."));
-        return;
-    }
-    if (!hasPendingChanges()) {
-        Q_EMIT discardResult(true, QString());
-        return;
-    }
-    if (m_pendingFileSnapshots.isEmpty()) {
-        // Pending because the SHADER TREE diverges, with no file snapshots to
-        // restore: the worker would iterate nothing, but dispatching it still
-        // holds m_asyncRevertInFlight across a thread-pool hop, during which
-        // every mutator refuses and toasts. Complete synchronously instead;
-        // the framework's paired Settings::load() is what actually undoes the
-        // tree divergence. The poke matches the worker path's unconditional
-        // emit (downstream is flip-gated, so it costs one comparison).
-        Q_EMIT pendingChangesChanged();
-        Q_EMIT discardResult(true, QString());
-        return;
-    }
-
-    // Snapshot every input the worker needs by value. The worker
-    // touches nothing else on `this` — that's what keeps the I/O
-    // loop safe on a non-GUI thread.
-    const QString profilesDir = userProfilesDir();
-    const QString setsDir = userMotionSetsDir();
-    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
-    const QHash<QString, std::optional<QByteArray>> snapshots = m_pendingFileSnapshots;
-    // Track the keys the worker is going to process so the finished
-    // handler can MERGE results back into m_pendingFileSnapshots.
-    // Today the m_asyncRevertInFlight guard rejects concurrent
-    // setOverride / clearOverride / clearAllOverrides /
-    // setShaderOverride / clearShaderOverride* / addUserPreset /
-    // removeUserPreset calls, and — through the
-    // mutationGuard closure handed to ShaderSetStore — every set
-    // mutator (applySet / saveCurrentAsSet / removeSet / updateSet /
-    // importSet) during the worker
-    // run, so a fresh post-discard mutator would be the only way new
-    // entries could appear — kept the merge as belt-and-braces against
-    // a future change that opens the mutator gate (or a post-discard
-    // race between the worker reply and a user click on Save).
-    const QSet<QString> dispatchedKeys(snapshots.keyBegin(), snapshots.keyEnd());
-
-    m_asyncRevertInFlight = true;
-    auto* watcher = new QFutureWatcher<WorkerResult>(this);
-    connect(
-        watcher, &QFutureWatcher<WorkerResult>::finished, this,
-        [this, watcher, dispatchedKeys]() {
-            const WorkerResult result = watcher->result();
-            watcher->deleteLater();
-
-            // Back on the GUI thread — merge retained map with the live
-            // map: keys we dispatched + the worker did NOT retain (i.e.
-            // successfully restored) are removed from the live map; keys
-            // the worker retained are kept (its content matches what we
-            // dispatched — concurrent edits to those keys would also be
-            // dropped, but that's correct: the user asked to discard
-            // them and the file restore failed).
-            for (const QString& key : dispatchedKeys) {
-                if (!result.retained.contains(key))
-                    m_pendingFileSnapshots.remove(key);
-            }
-            // No shader-tree flag to clear: tree dirtiness is value-based. The
-            // global discard that dispatched this worker pairs it with a
-            // Settings::load() that re-baselines the tree, so hasPendingChanges()
-            // reads clean once the files are restored below.
-
-            // The worker restored files off the GUI thread, so the registry
-            // is behind on every one of them. Catch it up before the batch of
-            // signals the page refreshes on (see clearOverride).
-            if (!result.overrideEvents.isEmpty())
-                refreshProfileStore();
-            for (const QString& path : result.overrideEvents)
-                Q_EMIT overrideChanged(path);
-            if (result.anyPreset)
-                Q_EMIT userPresetsChanged();
-            if (result.anyMotionSet && m_motionSets)
-                m_motionSets->notifyLiveStateChanged();
-            Q_EMIT pendingChangesChanged();
-            // Emit discardResult LAST and clear the in-flight flag AFTER
-            // the emit so any DirectConnection slot wired to
-            // discardResult still observes m_asyncRevertInFlight==true and
-            // routes through the worker-aware paths (e.g. test harnesses
-            // that read state on the result signal). The mutator gate
-            // re-opens together with the flag clear.
-            // Two source strings, not one "file(s)" spelling: Qt's plural tr()
-            // falls back to the single source verbatim when untranslated, so a
-            // combined form reads "file(s)" to every English user. Both arms
-            // keep %n, and the n>1 arm carries the real count for locales with
-            // more than two plural forms.
-            const int retainedCount = static_cast<int>(result.retained.size());
-            const QString errorMsg = result.retained.isEmpty()
-                ? QString()
-                : (retainedCount == 1 ? PhosphorI18n::tr("Could not restore %n profile file. It remains pending.",
-                                                         nullptr, retainedCount)
-                                      : PhosphorI18n::tr("Could not restore %n profile files. They remain pending.",
-                                                         nullptr, retainedCount));
-            Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
-            m_asyncRevertInFlight = false;
-        },
-        Qt::DirectConnection);
-
-    QFuture<WorkerResult> future = QtConcurrent::run([profilesDir, setsDir, knownPathSet, snapshots]() {
-        WorkerResult result;
-        for (auto it = snapshots.cbegin(); it != snapshots.cend(); ++it) {
-            const QString& filePath = it.key();
-            const auto& content = it.value();
-
-            if (!restoreSnapshotFile(filePath, content)) {
-                qCWarning(lcConfig) << "AnimationsPageController::asyncRevertPending: failed to restore" << filePath;
-                result.retained.insert(filePath, content);
-                continue;
-            }
-
-            // QDir-vs-QDir comparison normalises trailing slashes, "..",
-            // and duplicate slashes so a string compare can't
-            // false-negative on a path that's semantically equal but
-            // lexically different. Worker-thread safety: QDir's normalised
-            // comparison is pure-function (no thread-local state).
-            const QFileInfo info(filePath);
-            const QDir absDir(info.absolutePath());
-            const QString stem = info.completeBaseName();
-            if (absDir == QDir(setsDir)) {
-                result.anyMotionSet = true;
-            } else if (absDir == QDir(profilesDir)) {
-                if (knownPathSet.contains(stem))
-                    result.overrideEvents.append(stem);
-                else
-                    result.anyPreset = true;
-            }
-        }
-        return result;
-    });
-    watcher->setFuture(future);
+    Q_EMIT pendingChangesChanged();
+    return true;
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────
@@ -889,34 +639,15 @@ QVariantList AnimationsPageController::userPresets() const
 
 bool AnimationsPageController::addUserPreset(const QString& name, const QVariantMap& profileJson)
 {
-    // Defence-in-depth: the sub-services write through the snapshot
-    // callback wired by the controller ctor, so a concurrent mutator
-    // here while asyncRevertPending's worker is rewriting profile files
-    // would race the worker on disk. NOTHING in the QML gates on `discarding`
-    // except Main.qml's own Apply/Discard buttons — the animations page stays
-    // fully interactive — so this guard is the only thing standing between a
-    // mid-discard edit and that race, and the toast is the user's only signal.
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "addUserPreset: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
     return m_presets && m_presets->addUserPreset(name, profileJson);
 }
 
 bool AnimationsPageController::removeUserPreset(const QString& name)
 {
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "removeUserPreset: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
     return m_presets && m_presets->removeUserPreset(name);
 }
 
 // Motion sets live entirely in the shared ShaderSetStore reached through
-// `setsBridge()` — QML talks to it directly. The in-flight-discard gate the
-// old forwarders enforced now travels with the store as its mutationGuard
-// (wired in the constructor).
+// `setsBridge()` — QML talks to it directly.
 
 } // namespace PlasmaZones

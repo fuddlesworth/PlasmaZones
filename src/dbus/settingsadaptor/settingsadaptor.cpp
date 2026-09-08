@@ -62,9 +62,10 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
 
     // The per-event motion-profile registry is a second source of
-    // settings-shaped state: editing a `window.open` duration rewrites
-    // a `profiles/*.json` file, the daemon's ProfileLoader file-watch
-    // rescans it into the registry, and the registry fires
+    // settings-shaped state: editing a `window.open` duration writes the
+    // `Animations/MotionProfileTree` config key, the daemon's
+    // motionProfileTreeChanged handler re-installs the tree into the registry,
+    // and the registry fires
     // profileChanged / profilesReloaded / ownerReloaded. The kwin-effect
     // (a separate process) must re-fetch `motionProfileTree` when that
     // happens, so bridge the registry mutations to a DEDICATED

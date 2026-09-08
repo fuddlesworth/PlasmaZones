@@ -64,9 +64,11 @@ namespace {
 // `resolveWithInheritance()` walking the parent chain so a parent-node
 // edit (e.g. "All Popups → 2000 ms" written to `popup`)
 // propagates to every leaf under it. Unset paths fall through to
-// library defaults (150 ms OutCubic). User-authored JSONs at
-// `~/.local/share/plasmazones/profiles/<path>.json` are still loaded
-// by ProfileLoader for advanced users who want file-based overrides.
+// library defaults (150 ms OutCubic). Per-event overrides come from the
+// `Animations/MotionProfileTree` config key, installed into the registry by
+// `installMotionProfileTree`. The pre-v8 `plasmazones/profiles/<path>.json`
+// files are read once by the v7→v8 migration and never again — nothing
+// watches that directory now, so editing one has no effect.
 //
 // **Within-family scale-leg coupling (intentional, scoped).** Each
 // surface family's hide-leg-scale reuses the surface family's

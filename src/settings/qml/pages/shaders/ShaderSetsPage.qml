@@ -141,6 +141,21 @@ SettingsFlickable {
                     wrapMode: Text.WordWrap
                 }
 
+                // A set captures what is on screen, including edits that have
+                // not been saved yet. That is what a user tuning values and
+                // then naming them expects, but it also means Discard can leave
+                // the set file holding the only copy of values the user just
+                // threw away. Say so while it is true.
+                Label {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    visible: settingsController.needsSave
+                    text: i18n("This captures your current values, including the changes you have not saved yet.")
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.WordWrap
+                }
+
                 // Stacked, not side-by-side: a 50/50 row made the description
                 // column unreadably narrow at the typical settings width. The
                 // Save button sits bottom-right so focus order matches

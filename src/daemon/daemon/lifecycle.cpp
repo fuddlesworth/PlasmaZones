@@ -36,7 +36,6 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
@@ -488,11 +487,11 @@ void Daemon::stop()
     // Animation-loader teardown, ALSO above the m_running gate for the same
     // ctor-origin reason as the statics it pairs with: setupAnimationProfiles
     // runs from the ctor, so an init-without-start teardown reaches the
-    // member destructors with both loaders (and their QFileSystemWatchers)
+    // member destructors with the curve loader (and its QFileSystemWatcher)
     // still live — exactly the construct-without-start fixture the reset
     // comment below names. NOTE the deliberate asymmetry this creates for a
-    // stop() → start() cycle: nothing rebuilds the loaders (they are
-    // ctor-only), so live reload of `plasmazones/{curves,profiles}` does not
+    // stop() → start() cycle: nothing rebuilds the loader (it is ctor-only),
+    // so live reload of `plasmazones/curves` does not
     // survive the cycle — the seeds and the low-precedence tag DO survive,
     // so inheritance keeps resolving, and a restarted daemon has no bus
     // presence anyway (see the partition-shedding rationale above).
@@ -512,10 +511,7 @@ void Daemon::stop()
     // window where stale path-change signals could fire into a
     // half-destroyed object — visible in tests that re-construct the
     // daemon, and theoretically observable in production on a
-    // configure-reload cycle. ProfileLoader's destructor issues its
-    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // per-daemon `m_profileRegistry` value member sheds those entries here.
-    m_profileLoader.reset();
+    // configure-reload cycle.
     m_curveLoader.reset();
 
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
@@ -1015,24 +1011,23 @@ void Daemon::stop()
     // neither `init()` nor `start()` calls it. A stop()→start() cycle on the
     // same instance is supported (see the re-publish of the three QML statics
     // and the idle re-arm in `start()`), and shedding them would bring it back
-    // with an empty seed partition and an empty low-precedence tag —
-    // `resolveWithInheritance` degrades to a single-layer walk and every shell
-    // `PhosphorMotionAnimation { profile: … }` resolves against nothing.
-    // Leaving them in place is what makes the cycle come back whole.
+    // with an empty seed store: pass 1 of `resolveWithInheritance` would find
+    // nothing and every shell `PhosphorMotionAnimation { profile: … }` would
+    // resolve against library defaults. Leaving them in place is what makes the
+    // cycle come back whole. The config-backed timing partition survives for
+    // the same reason and by the same route — `installMotionProfileTree` is
+    // also reached only from the ctor-origin setup.
     //
-    // The one partition stop() still sheds is the loader-owned user-JSON
-    // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
-    // effect of the loader teardown ABOVE (the loader resets are hoisted above
-    // the m_running gate): `m_profileLoader` / `m_curveLoader`
-    // are reset so their destructors run NOW (issuing their own
-    // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
-    // than in the `~Daemon` body, where they would fire path-change signals
-    // into a half-destroyed object. The user-JSON entries are optional
-    // overrides on top of the seeds, so losing them across a cycle only drops
-    // the user's authored tweaks, not the shell's ability to resolve — and the
-    // seeds that remain keep inheritance working. The raw-JSON snapshot is
-    // cleared with them, since it mirrors exactly the entries those destructors
-    // drop. (The clears and resets themselves run ABOVE the m_running gate,
+    // `m_curveLoader` is reset ABOVE the m_running gate so its destructor runs
+    // NOW (issuing its own `clearOwner(ownerTag)` and tearing down the
+    // QFileSystemWatcher) rather than in the `~Daemon` body, where it would
+    // fire path-change signals into a half-destroyed object. What it owns is
+    // CURVES, not profiles, so its teardown costs the cycle live curve reload
+    // and nothing else — and it is the only sender of `curvesChanged`, so after
+    // a cycle nothing re-parses the timing tree against a reloaded registry
+    // either. The raw-JSON snapshot is cleared alongside because it caches
+    // curve-resolved profiles, not because any destructor drops matching
+    // entries. (The clears and resets themselves run ABOVE the m_running gate,
     // hoisted next to the QML-static null-outs they pair with — the loaders
     // are ctor-origin, so an init-without-start teardown needs them too.)
 

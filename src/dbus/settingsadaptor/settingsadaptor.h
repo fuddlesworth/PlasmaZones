@@ -358,7 +358,7 @@ private:
     static constexpr int SaveDebounceMs = 500; // 500ms debounce
 
     // Debounced motion-profile-tree change notifier. A single
-    // ProfileLoader rescan calls reloadFromOwner(), which emits one
+    // installMotionProfileTree calls reloadFromOwner(), which emits one
     // profileChanged per touched path plus a closing ownerReloaded —
     // N+1 registry signals for one logical change. Without coalescing,
     // each would emit motionProfileTreeChanged() and the kwin-effect

@@ -126,9 +126,19 @@ void appendDidYouMean(QTextStream& out, const QString& diagnostic, const QString
     }
 }
 
-std::optional<PackModel> detectPackModel(const QString& packDir)
+namespace {
+
+/// The family directory names the runtime registries scan under
+/// `plasmazones/`. An installed pack always sits directly inside one of them,
+/// so the name identifies the family without guessing at metadata.
+bool isKnownFamilyDir(const QString& name)
 {
-    const QDir shared(QFileInfo(packDir).absolutePath() + QStringLiteral("/shared"));
+    return name == QLatin1String("animations") || name == QLatin1String("overlays") || name == QLatin1String("surface");
+}
+
+/// Which family's marker header @p shared holds, if any.
+std::optional<PackModel> modelFromSharedDir(const QDir& shared)
+{
     if (shared.exists(QStringLiteral("animation_uniforms.glsl"))) {
         return PackModel::Animation;
     }
@@ -137,6 +147,48 @@ std::optional<PackModel> detectPackModel(const QString& packDir)
     }
     if (shared.exists(QStringLiteral("common.glsl"))) {
         return PackModel::Overlay;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+QStringList packSharedRoots(const QString& packDir)
+{
+    QStringList roots;
+    const QString parent = QFileInfo(packDir).absolutePath();
+    roots << QDir::cleanPath(parent + QStringLiteral("/shared"));
+
+    // An INSTALLED pack has no sibling `shared/`: the helpers ship once into
+    // the system prefix while the pack itself sits in the user's data dir, so
+    // a sibling-only lookup fails on exactly the packs this tool exists to
+    // check. Widen to the XDG chain for the pack's family, which is the same
+    // set of include roots the runtime registries resolve against — so this
+    // stays a marker lookup rather than becoming a guess, and detection can
+    // still never disagree with what the stage bakes will see.
+    const QString family = QFileInfo(parent).fileName();
+    if (isKnownFamilyDir(family)) {
+        const QStringList installed = QStandardPaths::locateAll(
+            QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/") + family + QStringLiteral("/shared"),
+            QStandardPaths::LocateDirectory);
+        for (const QString& dir : installed) {
+            const QString clean = QDir::cleanPath(dir);
+            if (!roots.contains(clean)) {
+                roots << clean;
+            }
+        }
+    }
+    return roots;
+}
+
+std::optional<PackModel> detectPackModel(const QString& packDir)
+{
+    // Sibling first, so a source tree (or any self-contained pack tree) keeps
+    // its existing behaviour bit for bit and never consults the system.
+    for (const QString& root : packSharedRoots(packDir)) {
+        if (const std::optional<PackModel> model = modelFromSharedDir(QDir(root))) {
+            return model;
+        }
     }
     return std::nullopt;
 }

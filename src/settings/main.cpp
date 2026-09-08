@@ -26,9 +26,9 @@
 #include "daemon/rendering/zoneshaderitem.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorRendering/ShaderEffect.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <QApplication>
@@ -177,12 +177,15 @@ int main(int argc, char* argv[])
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML
     // `PhosphorMotionAnimation { profile: "..." }` lookups resolve. The
-    // shipped tree carries no bundled profile JSONs (timings are driven
-    // entirely by the Settings UI's per-node overrides); the bootstrap
-    // loader stays wired so user-authored JSONs at
-    // `~/.local/share/plasmazones/profiles/<path>.json` are still
-    // picked up. Must outlive the QML engine (Behavior bindings keep
-    // registry handles).
+    // shipped tree carries no bundled profile JSONs; timings are driven
+    // entirely by the Settings UI's per-node overrides, which are applied
+    // from config further down. Must outlive the QML engine (Behavior
+    // bindings keep registry handles).
+    // Declared BEFORE the controller, deliberately: bindToSettings below wires
+    // connections that capture this bootstrap and are scoped to the settings
+    // object the controller owns, so the bootstrap has to outlive it. Reverse
+    // these two declarations and those connections hold a dangling pointer
+    // through the controller's teardown, which nothing here can detect.
     PlasmaZones::AnimationBootstrap animationBootstrap;
 
     // Publish the bootstrap-owned registries + a fresh clock manager as
@@ -201,50 +204,6 @@ int main(int argc, char* argv[])
     });
 
     PlasmaZones::SettingsController controller;
-
-    // The animations page writes and deletes the very profile files the
-    // bootstrap loader watches, and that watch is debounced by 50 ms with no
-    // rescan signal reaching the open page. Hand the page a synchronous
-    // catch-up so a removal (the per-field revert links, a per-page
-    // Discard) is reflected the moment it happens instead of on the next
-    // launch.
-    //
-    // QPointer, not a raw pointer: declaration order already guarantees
-    // `animationBootstrap` outlives `controller` (and so the page holding this
-    // callable), but that is an invariant of this function's layout, not
-    // something the callable can check. The guard makes the lifetime rule
-    // enforce itself if either declaration ever moves.
-    //
-    // Null-checked like every other page accessor in this file and in
-    // SettingsController's own call sites. Construction is unconditional today,
-    // so this cannot fire — but one file carrying two contradictory nullability
-    // contracts for the same pointer is how the check that matters gets dropped.
-    if (auto* animationsPage = controller.animationsPage()) {
-        animationsPage->setProfileStoreRefresher(
-            [loader = QPointer<PhosphorAnimation::ProfileLoader>(animationBootstrap.profileLoader())]() {
-                if (!loader) {
-                    // Never silently: a null here means the loader outlived its
-                    // declared order and the page is back to reading a stale
-                    // registry, which is exactly the bug this wiring exists to
-                    // fix — it must not degrade quietly into it.
-                    qCWarning(PlasmaZones::lcCore)
-                        << "profile-store refresher fired after the animation bootstrap was destroyed";
-                    return;
-                }
-                loader->rescanNow();
-            });
-
-        // The other direction. The page memoises the override files it reads,
-        // and drops that memo itself on every edit IT makes — but the profiles
-        // directory is a filesystem boundary the user can also edit by hand
-        // (the page offers to open it). The bootstrap loader already watches
-        // that directory, so its change signal is the notification that
-        // somebody else wrote, and the page has to forget what it cached.
-        if (auto* loader = animationBootstrap.profileLoader()) {
-            QObject::connect(loader, &PhosphorAnimation::ProfileLoader::profilesChanged, animationsPage,
-                             &PlasmaZones::AnimationsPageController::forgetCachedOverrideFiles);
-        }
-    }
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a
     // non-owning pointer to `controller`, which must outlive it (guaranteed by
@@ -322,6 +281,18 @@ int main(int argc, char* argv[])
         // duplicate, delete, import, reparent, and activation.
         QObject::connect(controller.profilesPage()->bridge(), &PlasmaZones::ProfileStore::profilesChanged,
                          searchController.get(), &PhosphorControl::SearchController::invalidate);
+    }
+
+    // Apply the user's per-event animation TIMING overrides
+    // (`Animations/MotionProfileTree`) to the bootstrap registry, and keep
+    // them applied. The bootstrap ctor cannot do this itself: it runs before
+    // the controller exists, and the tree changes while the app is open.
+    // Without it this process resolves every event at the family seed while
+    // the daemon animates at the user's value.
+    if (auto* appSettings = controller.settings()) {
+        // One call rather than four hand-written steps. The editor does the
+        // same, and the two had already drifted doing it separately.
+        animationBootstrap.bindToSettings(*appSettings, /*keepLive=*/true);
     }
 
     QQmlApplicationEngine engine;

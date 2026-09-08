@@ -146,7 +146,7 @@ static int bakeCompositorStage(QTextStream& out, const QString& packDir,
         ? PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
                                               AnimationShaderRegistry::animationEntryCandidates())
         : raw;
-    const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+    const QStringList includePaths = packSharedRoots(packDir);
     QString err;
     QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
     if (src.isEmpty()) {
@@ -530,7 +530,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             // Animation runtime include paths are `shared`-only (see
             // surfaceanimator.cpp animIncludePaths, which appends only each
             // search path's `/shared` subdir), so the animation gate matches it.
-            const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+            const QStringList includePaths = packSharedRoots(packDir);
             QString err;
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
@@ -585,7 +585,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // teaching bakeCompositorStage the per-pass uniform contract, which is a
     // larger change than the stage bake was.
     if (eff.isMultipass && !PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
-        const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+        const QStringList includePaths = packSharedRoots(packDir);
         for (const QString& declaredBuf : eff.bufferShaderPaths) {
             // fromJson leaves these RELATIVE (unlike the fragment path, which
             // the block at the top of this function resolves), so resolve
@@ -642,12 +642,19 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                                           /*scaffold=*/false);
         }
     } else {
-        const QString animIncludeDir = QFileInfo(packDir).absolutePath() + QStringLiteral("/shared");
+        const QStringList animIncludeDirs = packSharedRoots(packDir);
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
-            const QString sharedVert = animIncludeDir + QStringLiteral("/animation.vert");
-            if (QFile::exists(sharedVert)) {
-                vertPath = sharedVert;
+            // The default vertex stage lives beside the family's shared
+            // helpers, so it has to be looked up across the same roots: an
+            // installed pack finds it in the system prefix, not next to
+            // itself.
+            for (const QString& dir : animIncludeDirs) {
+                const QString sharedVert = dir + QStringLiteral("/animation.vert");
+                if (QFile::exists(sharedVert)) {
+                    vertPath = sharedVert;
+                    break;
+                }
             }
         }
         if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
@@ -660,7 +667,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                 const QString rawVert = QString::fromUtf8(vertFile.readAll());
                 QString vertErr;
                 const QString expandedVert = ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(),
-                                                                          {animIncludeDir}, &vertErr);
+                                                                          animIncludeDirs, &vertErr);
                 if (expandedVert.isEmpty()) {
                     out << "  " << vertLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << vertErr
                         << "\n";

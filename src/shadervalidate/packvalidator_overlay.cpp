@@ -374,7 +374,10 @@ int validatePack(const QString& packDir, QTextStream& out)
 
     // ── stage compiles (reproduce the runtime assembly) ──
     const QString packsRoot = QFileInfo(packDir).absolutePath();
-    const QStringList includePaths = {packsRoot + QStringLiteral("/shared"), packsRoot};
+    // Sibling shared/ first, then the family's XDG roots, so an
+    // INSTALLED pack (whose helpers live in the system prefix, not
+    // beside it) resolves its includes the way the runtime does.
+    const QStringList includePaths = QStringList(packSharedRoots(packDir)) << packsRoot;
     const QString preamble = ShaderRegistry::paramPreamble(info);
 
     if (QFile::exists(info.sourcePath)) {
