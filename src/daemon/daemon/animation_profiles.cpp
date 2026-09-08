@@ -84,6 +84,12 @@ void Daemon::setupAnimationProfiles()
     // in production today but the narrower scope is the correct
     // contract for a registry that may be shared with other consumers.
     PhosphorProfileRegistry& registry = m_profileRegistry;
+    // Note these clears run BEFORE the seed tag is set below, so at this point
+    // the seed tag is still empty and clearOwner takes its non-seed branch.
+    // That is correct on this path only because it is construction: there are
+    // no seeds yet to miss. Anywhere the registry is already seeded, clearing
+    // the seed partition has to happen with the tag SET, or it walks the wrong
+    // store and silently clears nothing.
     registry.clearOwner(QString(kPlasmaZonesUserProfilesOwnerTag));
     registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
     for (const QString* path : kSettingsDrivenProfilePaths) {

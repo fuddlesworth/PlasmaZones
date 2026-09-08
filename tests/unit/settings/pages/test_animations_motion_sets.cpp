@@ -709,6 +709,13 @@ private Q_SLOTS:
     /// it. The same footer button used to mean two different things on the two
     /// pages: on Decoration it never touched your sets, on Animations it
     /// silently reverted them.
+    ///
+    /// A REGRESSION PIN, not a live guard. The staging apparatus that made
+    /// Discard reach set files is gone, so nothing in production can be deleted
+    /// to make this fail: it holds because the code that broke it no longer
+    /// exists. It is here to fail if that apparatus ever comes back, which is a
+    /// different job from covering a live branch, and worth saying out loud so
+    /// the slot is not mistaken for coverage of one.
     void motionSetCrudIsImmediate()
     {
         QTemporaryDir tmp;

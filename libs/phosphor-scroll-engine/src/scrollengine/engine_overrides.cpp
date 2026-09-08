@@ -155,8 +155,14 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& sc
 
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap& overrides) const
 {
+    // Bounded against the enumerators, not against literals: a fourth mode
+    // added to CenterFocusedColumn would otherwise be silently rejected here
+    // and fall back to the global, which is the kind of miss that reads as
+    // "the per-screen override does not work" rather than as a missed update.
     int mode = 0;
-    if (overrideInt(overrides, ScrollPerScreenKeys::centerFocusedColumn(), mode) && mode >= 0 && mode <= 2) {
+    if (overrideInt(overrides, ScrollPerScreenKeys::centerFocusedColumn(), mode)
+        && mode >= static_cast<int>(CenterFocusedColumn::Never)
+        && mode <= static_cast<int>(CenterFocusedColumn::OnOverflow)) {
         return static_cast<CenterFocusedColumn>(mode);
     }
     return m_centerFocusedColumn;

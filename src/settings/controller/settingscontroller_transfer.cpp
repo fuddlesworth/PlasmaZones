@@ -541,7 +541,18 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // LayoutRegistry D-Bus surface, which is a wider change than this path.
         // Until then an import does not carry quick-layout slots across, which
         // is what the refusal wording above tells the user.
-        DaemonDBus::notifyReload();
+        if (!DaemonDBus::notifyReload()) {
+            // Same shape as the rules arm below, and the same stakes: the
+            // daemon is still holding its pre-import config, and a backend sync
+            // rewrites the whole document from that in-memory root, so the
+            // imported values get put back at some later flush from any source.
+            qCWarning(PlasmaZones::lcCore) << "importAllSettings: the daemon did not reload config.json after the "
+                                              "import; it is still serving the pre-import settings";
+            Q_EMIT settingsTransferFailed(
+                PhosphorI18n::tr("Your settings were imported, but PlasmaZones is still running the old ones. "
+                                 "Restart PlasmaZones, or the imported settings may be overwritten."));
+            ok = false;
+        }
         if (!DaemonDBus::notifyRulesReload()) {
             // The config landed but the daemon is still serving its pre-import
             // rules, and the revert inside adoptOnDiskState below is about to

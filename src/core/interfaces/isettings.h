@@ -188,16 +188,16 @@ public:
     // JSON-string facade routes through it for the Q_PROPERTY meta-object
     // dirty-tracking loop. Lives on the interface so page controllers and the
     // settings adaptor depend on ISettings, not the concrete Settings.
+    virtual PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const = 0;
+    virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
+    virtual QString decorationProfileTreeJson() const = 0;
+    virtual void setDecorationProfileTreeJson(const QString& json) = 0;
+
     /// JSON-string facade over IAnimationSettings::motionProfileTree, for the
     /// Q_PROPERTY meta-object dirty-tracking loop. Same role
     /// `shaderProfileTreeJson` plays for the pack half.
     virtual QString motionProfileTreeJson() const = 0;
     virtual void setMotionProfileTreeJson(const QString& json) = 0;
-
-    virtual PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const = 0;
-    virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
-    virtual QString decorationProfileTreeJson() const = 0;
-    virtual void setDecorationProfileTreeJson(const QString& json) = 0;
 
     // Decorations.Performance — an animated pack repaints every window carrying
     // it on every vsync, and that alone keeps the GPU in its top performance

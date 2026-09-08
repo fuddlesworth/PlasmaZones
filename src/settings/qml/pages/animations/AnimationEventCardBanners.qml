@@ -86,7 +86,7 @@ ColumnLayout {
                 // decoration has one axis and can drop the sentence, while here
                 // half of it is true and has to be kept.
                 if (root.shaderIsolationRoot.length > 0) {
-                    return i18nc("%1 is an inheritance chain, %2 an event-path root", "Timing inherits from: %1. The animation is not inherited from outside %2.", root.parentChain, root.shaderIsolationRoot);
+                    return i18nc("%1 is an inheritance chain, %2 an event-path root", "Timing inherits from: %1. The animation is not inherited from outside %2.", root.parentChain, settingsController.animationsPage.eventLabel(root.shaderIsolationRoot));
                 }
                 return i18n("Inheriting from: %1", root.parentChain);
             }

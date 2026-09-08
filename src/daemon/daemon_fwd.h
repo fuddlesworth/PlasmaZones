@@ -86,7 +86,6 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
 class RuleAdaptor;
-class ZoneSelectorController;
 class UnifiedLayoutController;
 class TilingAdaptor;
 class AutotileAdaptor;

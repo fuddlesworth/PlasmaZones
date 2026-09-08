@@ -212,22 +212,31 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged,
             out.shader = shader.toVariantMap();
         }
         // Whatever is left is the timing half, in exactly the shape one
-        // entry's `profile` takes in the timing tree.
-        out.timing = profile.toVariantMap();
-        if (!out.timing.isEmpty()) {
-            // Judge what the timing half actually SAYS, not merely that it is
-            // non-empty — decoration's rule, adapted (see knownTimingFields).
-            bool anyRecognised = false;
-            for (auto it = out.timing.cbegin(); it != out.timing.cend(); ++it) {
+        // entry's `profile` takes in the timing tree, pruned to the recognised
+        // fields rather than taken verbatim. What is
+        // left after this is exactly what the write stores, because the
+        // persistence boundary applies the same allowlist — so a hand-edited
+        // set carrying junk alongside a real field no longer has that junk
+        // survive into the staged entry, get compared against a stored profile
+        // that never had it, and read as permanently inactive.
+        {
+            const QVariantMap raw = profile.toVariantMap();
+            for (auto it = raw.cbegin(); it != raw.cend(); ++it) {
                 if (knownTimingFields().contains(it.key())) {
-                    anyRecognised = true;
-                    break;
+                    out.timing.insert(it.key(), it.value());
+                } else {
+                    qCWarning(lcConfig) << "motionset: dropping unrecognised timing field" << it.key() << "at" << path;
                 }
             }
-            if (!anyRecognised) {
-                qCWarning(lcConfig) << "motionset: timing half carries no recognised field for path" << path
-                                    << "— keys:" << out.timing.keys();
-                return false;
+            if (!raw.isEmpty()) {
+                // Judge what the timing half actually SAYS, not merely that it
+                // is non-empty — decoration's rule, adapted.
+                const bool anyRecognised = !out.timing.isEmpty();
+                if (!anyRecognised) {
+                    qCWarning(lcConfig) << "motionset: timing half carries no recognised field for path" << path
+                                        << "— keys:" << raw.keys();
+                    return false;
+                }
             }
         }
         if (out.timing.isEmpty() && !out.hasShader) {
@@ -276,7 +285,8 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     //    keeps the on-disk set stable across saves and so diffable.
     //    Active-detection does NOT depend on it: the store indexes live
     //    overrides by path into a hash.
-    config.snapshot = [readTimings = std::move(readTimings), readShaders, resolvedShaderIds]() -> QJsonObject {
+    config.snapshot = [readTimings = std::move(readTimings), readShaders = std::move(readShaders),
+                       resolvedShaderIds = std::move(resolvedShaderIds)]() -> QJsonObject {
         if (!readTimings) {
             return QJsonObject{};
         }
@@ -299,7 +309,16 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
             // so the sweep below only sees paths this walk never reached.
             const auto shaderIt = shaders.find(entryName);
             if (shaderIt != shaders.end()) {
-                profile.insert(kShaderKey, QJsonObject::fromVariantMap(shaderIt.value().toMap()));
+                // Gated on the SHADER taxonomy, which is narrower than the
+                // motion one this loop walks: widget.*, cursor.*, panel.* and
+                // editor.* are built-in event paths with no shader leg. Without
+                // this the snapshot could emit a shader half that stageEntries
+                // then refuses, so the set would save and never validate again.
+                // It only held because a prune two layers away kept such
+                // entries out of the map.
+                if (eventPathSupportsShaderLeg(entryName)) {
+                    profile.insert(kShaderKey, QJsonObject::fromVariantMap(shaderIt.value().toMap()));
+                }
                 shaders.erase(shaderIt);
             }
             QJsonObject entry;
@@ -316,7 +335,7 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
             emitted.insert(v.toObject().value(kPathKey).toString());
         }
         for (auto it = shaders.cbegin(); it != shaders.cend(); ++it) {
-            if (!knownEventPaths().contains(it.key())) {
+            if (!knownEventPaths().contains(it.key()) || !eventPathSupportsShaderLeg(it.key())) {
                 continue;
             }
             QJsonObject profile;
