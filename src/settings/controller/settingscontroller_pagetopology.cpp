@@ -115,9 +115,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // stores sets as FILES rather than config keys, so neither contributes
     // dirty state — both are listed for the collapse behaviour alone.
     static const QString kPointerPage = QStringLiteral("pointer-chain");
-    static const QString kPointerSets = QStringLiteral("pointer-sets");
-    static const QString kPointerShaders = QStringLiteral("pointer-shaders");
-    static const QSet<QString> kPointerAllLeaves{kPointerPage, kPointerSets, kPointerShaders};
+    static const QSet<QString> kPointerLibraryChildren{QStringLiteral("pointer-sets"),
+                                                       QStringLiteral("pointer-shaders")};
+    static const QSet<QString> kPointerAllLeaves = QSet<QString>{kPointerPage} + kPointerLibraryChildren;
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -196,6 +196,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("decorations-library"), kDecorationLibraryChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
         {QStringLiteral("pointer"), kPointerAllLeaves},
+        {QStringLiteral("pointer-library"), kPointerLibraryChildren},
         // "appearance" wraps the Animations, Decoration and Pointer trees (the
         // window-appearance page rides kDecorationAllLeaves as Decoration →
         // General); its collapsed badge lights if any of them is dirty.

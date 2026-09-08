@@ -527,19 +527,25 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
-    // The pointer family's own leaves, under the "pointer" parent registered
-    // above. "Chain" is the ordered stack of packs plus the master switch and
-    // owns both Pointer.* keys; "Sets" is the named-snapshot library, the
-    // sibling of Decoration → Library → Decoration Sets; "Packs" is the
-    // read-only installed-pack browser, the sibling of Decoration → Library →
-    // Shaders.
+    // Chain is the family's General page: the ordered stack of packs plus the
+    // master switch, and the owner of both Pointer.* keys. It hangs directly
+    // off the family parent with a divider under it, the slot
+    // window-appearance occupies under Decoration and animations-general
+    // under Animations.
     regVirtual(QStringLiteral("pointer-chain"), QStringLiteral("pointer"), PhosphorI18n::tr("Chain"),
                QStringLiteral("pages/pointer/PointerPage.qml"), QStringLiteral("input-mouse"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("pointer-sets"), QStringLiteral("pointer"), PhosphorI18n::tr("Sets"),
+               /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
+    // Library — the collapsible section every shader family groups its saved
+    // sets and its installed-pack browser under (animations-library,
+    // decorations-library). Same no-QML virtual node, same folder-open icon,
+    // so the pointer sidebar reads like its two siblings rather than as a flat
+    // run of leaves.
+    regVirtual(QStringLiteral("pointer-library"), QStringLiteral("pointer"), PhosphorI18n::tr("Library"), QString(),
+               QStringLiteral("folder-open"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("pointer-sets"), QStringLiteral("pointer-library"), PhosphorI18n::tr("Pointer Sets"),
                QStringLiteral("pages/pointer/PointerSetsPage.qml"), QStringLiteral("color-palette"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("pointer-shaders"), QStringLiteral("pointer"), PhosphorI18n::tr("Packs"),
+    regVirtual(QStringLiteral("pointer-shaders"), QStringLiteral("pointer-library"), PhosphorI18n::tr("Shaders"),
                QStringLiteral("pages/pointer/PointerShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // Every page declared its simple/advanced tier at registration above.

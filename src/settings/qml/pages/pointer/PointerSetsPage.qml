@@ -4,7 +4,7 @@
 import QtQuick
 
 /**
- * @brief Pointer → Sets.
+ * @brief Appearance → Pointer → Library → Pointer Sets.
  *
  * A pointer set is a snapshot of the whole pointer chain (every pack layer
  * with its parameters) persisted as one JSON file under
