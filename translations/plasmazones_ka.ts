@@ -10758,63 +10758,63 @@
         <translation>თქვენი პარამეტრები შემოტანილია, მაგრამ ფანჯრის წესების ხელახლა ჩატვირთვა ვერ მოხერხდა. გადატვირთეთ PlasmaZones წესების შეცვლამდე, თორემ შემოტანილი წესები დაიკარგება.</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="388"/>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="432"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="395"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="439"/>
         <source>File path cannot be empty</source>
         <comment>@info</comment>
         <translation>ფაილის ბილიკი ცარიელი ვერ იქნება</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="392"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="399"/>
         <source>No shader selected to save</source>
         <comment>@info</comment>
         <translation>შესანახად შეიდერი არჩეული არაა</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="408"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="415"/>
         <source>Failed to save preset: %1</source>
         <comment>@info</comment>
         <translation>შაბლონის შენახვა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="418"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="425"/>
         <source>Failed to write preset file: %1</source>
         <comment>@info</comment>
         <translation>შაბლონის ფაილის ჩაწერა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="439"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="446"/>
         <source>Failed to open preset file: %1</source>
         <comment>@info</comment>
         <translation>შაბლონის ფაილის გახსნა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="447"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="454"/>
         <source>Invalid preset file: %1</source>
         <comment>@info</comment>
         <translation>არასწორი შაბლონის ფაილი: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="451"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="458"/>
         <source>Preset file must contain a JSON object</source>
         <comment>@info</comment>
         <translation>შაბლონის ფაილი JSON ობიექტს უნდა შეიცავდეს</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="458"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="465"/>
         <source>Preset file missing shader ID</source>
         <comment>@info</comment>
         <translation>შაბლონის ფაილს აკლია შეიდერის ID</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="463"/>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="468"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="470"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="475"/>
         <source>Shader in preset is no longer available</source>
         <comment>@info</comment>
         <translation>შაბლონში მითითებული შეიდერი აღარაა ხელმისაწვდომი</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="478"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="485"/>
         <source>Preset file has malformed parameters</source>
         <comment>@info</comment>
         <translation>შაბლონის ფაილს არასწორი პარამეტრები აქვს</translation>
@@ -12860,19 +12860,19 @@
         <translation>გადაათრიეთ ზონის ზომის შესაცვლელად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="498"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="511"/>
         <source>by %1</source>
         <comment>@info shader author</comment>
         <translation>%1-ის მიერ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="501"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="514"/>
         <source>v%1</source>
         <comment>@info shader version</comment>
         <translation>v%1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="954"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="991"/>
         <source>No error details available.</source>
         <comment>@info shader preview</comment>
         <translation>შეცდომის დეტალები ხელმისაწვდომი არაა.</translation>
@@ -12884,13 +12884,13 @@
         <translation>აირჩიეთ %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1031"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1068"/>
         <source>Save Shader Preset</source>
         <comment>@title:window</comment>
         <translation>შეიდერის შაბლონის შენახვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1046"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1083"/>
         <source>Load Shader Preset</source>
         <comment>@title:window</comment>
         <translation>შეიდერის შაბლონის ჩატვირთვა</translation>
@@ -18907,14 +18907,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="156"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="462"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="475"/>
         <source>User</source>
         <comment>@info shader source badge</comment>
         <translation>მომხმარებელი</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="182"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="486"/>
         <source>%n parameter</source>
         <translation>
             <numerusform>%n პარამეტრი</numerusform>
@@ -18932,43 +18932,43 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="340"/>
         <source>Yes</source>
         <comment>@info bool true</comment>
         <translation>დიახ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="340"/>
         <source>No</source>
         <comment>@info bool false</comment>
         <translation>არა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="386"/>
         <source>Load Preset…</source>
         <comment>@action:button</comment>
         <translation>შაბლონის ჩატვირთვა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="397"/>
         <source>Save Preset…</source>
         <comment>@action:button</comment>
         <translation>შაბლონის შენახვა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="597"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="610"/>
         <source>Parameters</source>
         <comment>@title:group shader parameters section</comment>
         <translation>პარამეტრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="713"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="726"/>
         <source>[%1 .. %2]</source>
         <comment>@info parameter range</comment>
         <translation>[%1 .. %2]</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="716"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="729"/>
         <source>default %1</source>
         <comment>@info parameter default value</comment>
         <translation>ნაგულისხმევი %1</translation>
@@ -19050,26 +19050,26 @@
         <translation>ეს პაკეტი იმის ნიმუშს იღებს, რაც ფანჯრის უკან არის. გადახედვაში ნამდვილი ფანჯრების ნაცვლად თქვენი ფონია გამოყენებული.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1033"/>
         <source>Select Image</source>
         <comment>@title:window</comment>
         <translation>სურათის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="998"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1035"/>
         <source>Images (*.png *.jpg *.jpeg *.bmp *.webp)</source>
         <comment>@item:inlistbox image file filter</comment>
         <translation>სურათები (*.png *.jpg *.jpeg *.bmp *.webp)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1034"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1048"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1071"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1085"/>
         <source>Shader presets (*.json)</source>
         <comment>@item:inlistbox preset file filter</comment>
         <translation>შეიდერის შაბლონები (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1061"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1098"/>
         <source>This preset was saved for a different shader.</source>
         <comment>@info</comment>
         <translation>ეს შაბლონი სხვა შეიდერისთვის იყო შენახული.</translation>

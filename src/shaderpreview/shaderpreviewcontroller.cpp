@@ -338,6 +338,13 @@ QImage ShaderPreviewController::loadWallpaperTexture() const
     return PhosphorShaders::ShaderRegistry::loadWallpaperImage();
 }
 
+QString ShaderPreviewController::wallpaperPath() const
+{
+    // The same resolver the decoration preview uses, so the two previews agree
+    // on what "the desktop" is.
+    return PhosphorShaders::ShaderRegistry::wallpaperPath();
+}
+
 QVariant ShaderPreviewController::audioSpectrumVariant() const
 {
     return QVariant::fromValue(m_audioSpectrum);

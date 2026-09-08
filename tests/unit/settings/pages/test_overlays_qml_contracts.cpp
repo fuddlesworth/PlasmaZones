@@ -149,6 +149,36 @@ private Q_SLOTS:
                  "into an identical baseline would be re-overridden by the flush");
     }
 
+    /// The zone preview draws the user's wallpaper behind the zones.
+    ///
+    /// Parsed rather than rendered, like the assertions above: this lives in
+    /// the SHARED browser dialog, whose zone pane is the overlay preview.
+    ///
+    /// It matters because every overlay pack is translucent somewhere — that is
+    /// what an overlay is — so over the flat black ground this pane used to
+    /// paint, all of them read as far more opaque than they will be in use, and
+    /// a pack whose whole point is what shows through cannot be judged at all.
+    /// The decoration and animation panes have shown the wallpaper for the same
+    /// reason; this one was the odd surface out.
+    void theZonePreviewDrawsTheWallpaperBehindTheZones()
+    {
+        const QString path =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml");
+        const QString src = flattened(readSource(path));
+        QVERIFY2(!src.isEmpty(), "cannot read ShaderBrowserDetailDialog.qml");
+
+        QVERIFY2(src.contains(QStringLiteral("previewController.wallpaperPath()")),
+                 "the zone preview no longer resolves a wallpaper path, so it has nothing to draw");
+        QVERIFY2(src.contains(QStringLiteral("source: root._zoneWallpaperUrl")),
+                 "nothing binds the zone pane's backdrop image to the resolved wallpaper");
+        // The backdrop is for EVERY pack. Gating it on the pack's useWallpaper
+        // flag would restore the old behaviour for all but a handful of packs,
+        // since that flag means "this shader SAMPLES the wallpaper", which is a
+        // different feed entirely (livePreviewPane._wallpaperTex).
+        QVERIFY2(!src.contains(QStringLiteral("source: root._shaderInfo.wallpaper")),
+                 "the backdrop is gated on the pack sampling the wallpaper, but it must be drawn for every pack");
+    }
+
     /// A card must not re-run its full refresh for a single-node change to a
     /// different node. Every parameter commit used to refresh every card on
     /// the page, and each of those re-parsed the tree and re-read the pack
