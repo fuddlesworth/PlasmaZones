@@ -473,6 +473,19 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
         Q_EMIT toastRequested(PhosphorI18n::tr("There is nothing to capture yet."));
         return false;
     }
+    // Non-empty is not the same as applicable. The snapshot copies profile
+    // bodies verbatim out of a config key the user can hand-edit, and the
+    // domain's own validator rejects an entry whose halves carry nothing it
+    // recognises — so without this a set could save, list as a row, and then
+    // fail whole-set on every apply, export-and-reimport and import, with
+    // nothing on screen explaining why. Validate with the same predicate the
+    // apply path uses, so the two cannot disagree about what a valid set is.
+    if (m_config.validate && !m_config.validate(root)) {
+        qCWarning(lcConfig) << "ShaderSetStore::saveCurrentAsSet: refusing a snapshot its own validator rejects"
+                            << filePath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not capture the current settings."));
+        return false;
+    }
 
     const QString dirPath = setsDirectory();
     if (dirPath.isEmpty() || !QDir().mkpath(dirPath)) {
