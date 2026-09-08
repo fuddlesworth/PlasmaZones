@@ -182,7 +182,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 29> seeds{{
+    constexpr std::array<FamilySeed, 27> seeds{{
         // ── Popups ────────────────────────────────────────────────
         // Family parent — leaves (popup.layoutPicker.*,
         // popup.zoneSelector.*, popup.snapAssist.*, popup.cheatsheet.*)
@@ -240,11 +240,27 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         {QLatin1StringView{"widget.pulse.slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
 
         // ── Windows ───────────────────────────────────────────────
-        // Family ease-out for open/move/focus/maximize;
-        // close is the notable ease-in exception. (No resize legs exist —
-        // they were dropped from the taxonomy, see profilepaths.cpp.)
-        {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
-        {QLatin1StringView{"window.appearance.close"}, QLatin1StringView{"cubic-in"}, 150.0},
+        // NO window seeds. There used to be two — a `window` family root at
+        // 200 ms widget-out and a `window.appearance.close` leaf at 150 ms
+        // cubic-in — and they were preview noise with a user-visible cost.
+        //
+        // Window legs are animated by the COMPOSITOR, and the D-Bus getter
+        // strips this layer before shipping the tree, deliberately: a `window`
+        // seed arriving as an override would pin every window leg's duration
+        // and turn the global animation settings into a no-op, which is #795.
+        // So no seed here ever reached the effect.
+        //
+        // They did reach the settings page, which resolves an unoverridden
+        // path through this same registry. The result was a card confidently
+        // reporting 200 ms for an animation the compositor was playing at the
+        // user's global duration — preview and reality disagreeing out of the
+        // box, which is the one thing this architecture exists to prevent.
+        //
+        // Nothing in-process resolves a `window.*` profile (the shell, editor
+        // and settings QML animate their own surfaces, which keep their seeds
+        // below), so removing them costs no behaviour and closes the gap at
+        // its source. Do NOT re-add one without a consumer that the getter's
+        // exclusion does not cut off.
 
         // ── Editor ────────────────────────────────────────────────
         // Layout-editor fill-preview / snap-resize animations on the

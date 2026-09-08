@@ -173,7 +173,7 @@ void Daemon::setupAnimationProfiles()
         // library default until it is parsed again.
         //
         // The seeds need this as much as the tree does: their curve specs are
-        // real files in data/curves, so editing one leaves all 29 family seeds
+        // real files in data/curves, so editing one leaves every family seed
         // pinned to the pre-edit curve object for the life of the process.
         seedShellAnimationFamilies(m_profileRegistry, m_curveRegistry);
         installMotionProfileTree(m_profileRegistry, m_curveRegistry, m_settings->motionProfileTree(),
@@ -363,7 +363,7 @@ void Daemon::publishActiveAnimationProfile()
         //
         // Published untagged it sits in the resolver's upper layer and, being
         // fully engaged whether or not the user ever opened the page,
-        // overwrites every field of all 29 family seeds on every path —
+        // overwrites every field of every family seed on every path —
         // leaving the seed table inert and every surface animating with one
         // uniform feel. Published under the seed tag it sits alongside the
         // seeds at the chain root, where the deeper per-family seeds
