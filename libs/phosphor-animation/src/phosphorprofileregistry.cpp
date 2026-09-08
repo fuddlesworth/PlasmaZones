@@ -32,7 +32,22 @@ PhosphorProfileRegistry::PhosphorProfileRegistry(QObject* parent)
 {
 }
 
-PhosphorProfileRegistry::~PhosphorProfileRegistry() = default;
+PhosphorProfileRegistry::~PhosphorProfileRegistry()
+{
+    // Unpublish, but only if the published pointer is still THIS registry.
+    //
+    // Every composition root in this repo clears the static by hand before its
+    // registry goes out of scope, and one of them publishes twice. That is an
+    // unenforceable convention across a library boundary: an embedder that
+    // forgets leaves `defaultRegistry()` pointing at freed memory, and the QML
+    // motion bindings dereference it on the next profile resolve.
+    //
+    // compare_exchange rather than a bare store, because a plain
+    // `store(nullptr)` here would let a short-lived registry that never
+    // published unpublish somebody else's on its way out.
+    PhosphorProfileRegistry* self = this;
+    s_defaultRegistry.compare_exchange_strong(self, nullptr, std::memory_order_acq_rel, std::memory_order_relaxed);
+}
 
 void PhosphorProfileRegistry::setDefaultRegistry(PhosphorProfileRegistry* registry)
 {
@@ -168,7 +183,15 @@ void PhosphorProfileRegistry::setLowPrecedenceOwnerTag(const QString& tag)
                     m_profiles.insert(it.key(), it.value());
                     m_owners.insert(it.key(), oldTag);
                     moved.append(it.key());
+                    continue;
                 }
+                // A non-seed entry already holds this path, so the seed cannot
+                // move there without destroying it. The seed is dropped — but
+                // it still has to be ANNOUNCED, because overlay is per-field:
+                // the seed may have carried a field the surviving entry leaves
+                // unset, so what this path resolves to changes even though the
+                // entry that wins does not.
+                moved.append(it.key());
             }
             m_seedProfiles.clear();
         }
@@ -184,6 +207,11 @@ void PhosphorProfileRegistry::setLowPrecedenceOwnerTag(const QString& tag)
                 }
             }
             for (const QString& path : std::as_const(promote)) {
+                // Overwrites any seed already at this path. That can only
+                // happen when the previous tag also had one here, which the
+                // demote loop above has already cleared, so there is nothing
+                // left to lose — but do not reorder these two loops without
+                // reconsidering that.
                 m_seedProfiles.insert(path, m_profiles.value(path));
                 m_profiles.remove(path);
                 m_owners.remove(path);

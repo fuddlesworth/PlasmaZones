@@ -84,7 +84,15 @@ public:
     /// Register or replace at @p path, stamped with an owner tag.
     void registerProfile(const QString& path, const Profile& profile, const QString& ownerTag);
 
-    /// Remove @p path. Fires profileChanged if it existed.
+    /// Remove @p path from the NON-SEED layer. Fires profileChanged if there
+    /// was one.
+    ///
+    /// Deliberately does not touch the seed layer, so unregistering an override
+    /// at a seeded path REVEALS the seed rather than dropping to library
+    /// defaults — that reveal is the whole reason the two stores exist. A path
+    /// that carries only a seed is therefore unaffected, and `hasProfile()` and
+    /// `resolve()` keep answering for it afterwards. To remove a seed, use
+    /// `clearOwner()` with the low-precedence tag, or `clear()`.
     void unregisterProfile(const QString& path);
 
     /// Replace the subset owned by @p ownerTag with @p profiles.
