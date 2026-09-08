@@ -544,7 +544,18 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // percent reads as "nothing to move" rather than reaching qRound, the
     // same guard the drag auto-scroll tick applies to its public qreal: no
     // in-tree caller can pass one, but this is exported library API.
-    const int deltaPx = std::isfinite(percent) ? qRound(percent / 100.0 * params.axis.mainSize(params.workArea)) : 0;
+    //
+    // Finite is not enough on its own. `qRound` of a double past int's range is
+    // undefined, and a caller outside this repo can pass 1e12 as easily as a
+    // NaN — the same hazard `setColumnWidth` guards against a few functions
+    // below, and for the same reason. Bounded before the round rather than
+    // after, since after is already too late. The band is far wider than any
+    // meaningful scroll (a hundred viewports) and far inside int.
+    constexpr qreal kMaxScrollPx = 1e6;
+    const qreal rawPx = std::isfinite(percent)
+        ? qBound(-kMaxScrollPx, percent / 100.0 * params.axis.mainSize(params.workArea), kMaxScrollPx)
+        : 0.0;
+    const int deltaPx = qRound(rawPx);
     scrollViewResolved(deltaPx, screen, state, params);
 }
 

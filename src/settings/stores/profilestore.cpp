@@ -342,9 +342,26 @@ QHash<QUuid, ProfileStore::Record> ProfileStore::loadAll() const
             continue;
         }
         Record rec;
-        if (readProfileFile(dir.absoluteFilePath(name), &rec)) {
-            result.insert(rec.id, rec);
+        if (!readProfileFile(dir.absoluteFilePath(name), &rec)) {
+            continue;
         }
+        // Identity comes from the file's `id`, but every write and delete
+        // resolves the path FROM that id, so the two have to agree or the
+        // record is unreachable: `removeProfile` would delete a path that does
+        // not exist and still report success, leaving the profile to reappear
+        // on the next load, and a rename would write a SECOND file claiming the
+        // same id. A hand-placed or hand-renamed file is exactly how that
+        // happens, and the profiles directory is one the user can open.
+        //
+        // The shader set store refuses the same class for the same reason (see
+        // its slug round-trip check in availableSets).
+        if (QFileInfo(name).completeBaseName() != rec.id.toString(QUuid::WithoutBraces)) {
+            qCWarning(lcConfig) << "ProfileStore: skipping" << name << "— its filename does not match its id"
+                                << rec.id.toString(QUuid::WithoutBraces)
+                                << ", so it could be listed but never saved or deleted";
+            continue;
+        }
+        result.insert(rec.id, rec);
     }
     m_recordCache = result;
     return result;
