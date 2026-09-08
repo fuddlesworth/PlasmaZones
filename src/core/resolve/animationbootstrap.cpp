@@ -7,9 +7,11 @@
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
+#include <PhosphorAnimation/ProfileTree.h>
 
 #include <QDir>
+#include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QStandardPaths>
 #include <QStringList>
@@ -71,9 +73,7 @@ QStringList discoverDataDirs(QLatin1StringView xdgRelative)
 }
 } // namespace
 
-AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistry& curveRegistry,
-                                                 PhosphorAnimation::PhosphorProfileRegistry& profileRegistry,
-                                                 QLatin1StringView ownerTag, QObject* parent)
+AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistry& curveRegistry, QObject* parent)
 {
     using namespace PhosphorAnimation;
 
@@ -93,33 +93,15 @@ AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistr
     QDir().mkpath(writableUserDir(QLatin1StringView{"plasmazones/curves"}));
     QDir().mkpath(writableUserDir(QLatin1StringView{"plasmazones/profiles"}));
 
-    // Construct loaders with NO initial load — callers run the scan
+    // Construct the loader with NO initial load — callers run the scan
     // explicitly (runInitialCurveLoad → seedShellAnimationFamilies →
-    // runInitialProfileLoad) AFTER they have wired any consumer-side
+    // installMotionProfileTree) AFTER they have wired any consumer-side
     // signals so the initial scan's emits are observed.
     //
     // Registry reference is captured at loader construction — this
     // prevents any later async rescan from landing on a different
     // registry than the one the caller initialized against.
     handles.curveLoader = std::make_unique<CurveLoader>(curveRegistry, parent);
-    handles.profileLoader = std::make_unique<ProfileLoader>(profileRegistry, curveRegistry, ownerTag, parent);
-
-    // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
-    // whose `curve` spec references a user-authored curve name that
-    // wasn't yet in CurveRegistry at parse time is stored with
-    // `curve = nullptr` (falls back to library default at animation
-    // time). When the user drops or edits a curve JSON AFTER the
-    // profile files were scanned, we need to re-parse every profile
-    // so the newly-available curve gets resolved. Without this wire,
-    // drop-order-matters: curves-before-profiles works, profiles-
-    // before-curves silently loses the curve reference until the
-    // profile file itself is touched.
-    //
-    // ProfileLoader::requestRescan goes through DirectoryLoader's
-    // debounced rescan path, so a curve-pack edit that changes many
-    // files coalesces into one profile rescan.
-    QObject::connect(handles.curveLoader.get(), &CurveLoader::curvesChanged, handles.profileLoader.get(),
-                     &ProfileLoader::requestRescan);
 
     return handles;
 }
@@ -134,12 +116,28 @@ void runInitialCurveLoad(PhosphorAnimation::CurveLoader& curveLoader, const Anim
     curveLoader.loadFromDirectories(dirs.curveDirs, LiveReload::On);
 }
 
-void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
+void installMotionProfileTree(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                              const PhosphorAnimation::CurveRegistry& curves, const QVariantMap& treeJson,
+                              const QString& ownerTag)
 {
     using namespace PhosphorAnimation;
 
-    profileLoader.loadLibraryBuiltins();
-    profileLoader.loadFromDirectories(dirs.profileDirs, LiveReload::On);
+    const ProfileTree tree = ProfileTree::fromJson(QJsonObject::fromVariantMap(treeJson), curves);
+
+    QHash<QString, Profile> profiles;
+    const QStringList paths = tree.overriddenPaths();
+    profiles.reserve(paths.size());
+    for (const QString& path : paths) {
+        profiles.insert(path, tree.directOverride(path));
+    }
+
+    // reloadFromOwner, not a loop of registerProfile: it REPLACES this owner's
+    // whole partition, so a path the user just cleared disappears from the
+    // registry instead of lingering at its last value. Entries owned by other
+    // tags (the family seeds, the settings-driven global) are untouched.
+    // Called with an empty map on a config that carries no overrides, which is
+    // exactly the clear-everything case and must not be short-circuited.
+    registry.reloadFromOwner(ownerTag, profiles);
 }
 
 void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,
@@ -281,10 +279,8 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
 AnimationBootstrap::AnimationBootstrap()
     : m_curveRegistry(std::make_unique<PhosphorAnimation::CurveRegistry>())
 {
-    auto handles =
-        constructAnimationLoaders(*m_curveRegistry, m_profileRegistry, kSecondaryProfilesOwnerTag, /*parent=*/nullptr);
+    auto handles = constructAnimationLoaders(*m_curveRegistry, /*parent=*/nullptr);
     m_curveLoader = std::move(handles.curveLoader);
-    m_profileLoader = std::move(handles.profileLoader);
 
     // Configure the registry's two-layer resolveWithInheritance so
     // seed entries form the lowest-precedence layer — a user edit at
@@ -299,7 +295,15 @@ AnimationBootstrap::AnimationBootstrap()
     // when the user authored a JSON at the same path), then profiles.
     runInitialCurveLoad(*m_curveLoader, handles.dirs);
     seedShellAnimationFamilies(m_profileRegistry, *m_curveRegistry);
-    runInitialProfileLoad(*m_profileLoader, handles.dirs);
+    // The per-event timing tree is NOT installed here: it is config, and the
+    // composition root has no Settings instance yet at bootstrap-construction
+    // time. The root calls applyMotionProfileTree once it does, and again on
+    // every change.
+}
+
+void AnimationBootstrap::applyMotionProfileTree(const QVariantMap& treeJson)
+{
+    installMotionProfileTree(m_profileRegistry, *m_curveRegistry, treeJson, QString(kSecondaryProfilesOwnerTag));
 }
 
 AnimationBootstrap::~AnimationBootstrap() = default;

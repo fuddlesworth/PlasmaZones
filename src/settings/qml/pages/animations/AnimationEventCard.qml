@@ -12,13 +12,11 @@ import org.kde.kirigami as Kirigami
  * taxonomy (e.g. `editor.snapIn`, `osd.show`). Overrides are PER FIELD:
  * editing the duration writes only the duration field and editing the
  * curve writes only the curve field into this event's Profile JSON file
- * under `~/.local/share/plasmazones/profiles/`, so the untouched field
- * keeps following the parent chain and the Global defaults. Flipping the
- * Override toggle ON just opens the timing editor (nothing is written
- * until a control is actually edited); flipping it OFF deletes the
- * override file. The daemon's `ProfileLoader` watches that dir and live-reloads
- * the registry, and the settings app runs one of its own over the same dir, so
- * an edit made outside this page reaches every card as a tree-wide
+ * in `Animations/MotionProfileTree`, so the untouched field keeps following
+ * the parent chain and the Global defaults. Flipping the Override toggle ON
+ * just opens the timing editor (nothing is written until a control is actually
+ * edited); flipping it OFF removes the override. A reload of the whole config
+ * (Discard, a settings profile) reaches every card as a tree-wide
  * `overrideChanged("")` broadcast.
  *
  * The shader axis follows the same per-field principle through a different
@@ -402,6 +400,18 @@ Item {
         return i18nc("curve, then duration in milliseconds", "%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
     }
 
+    /// The isolation root governing this event's SHADER resolution, or "" when
+    /// the pack inherits normally.
+    ///
+    /// The parent chain below is the TIMING story and is always true: ProfileTree
+    /// isolates nothing. The shader resolver does isolate — it cuts the chain at
+    /// this root and substitutes an empty baseline — so on a `shell.*` event the
+    /// two axes genuinely disagree about what is inherited, and a card that shows
+    /// only the chain states something false about the pack. Asked of C++ rather
+    /// than derived from a path prefix here, which is what ShaderProfileTree.h
+    /// asks callers to do so a second copy cannot drift from the resolver.
+    readonly property string _shaderIsolationRoot: settingsController.animationsPage.shaderIsolationRoot(root.eventPath)
+
     function parentChainText() {
         var chain = settingsController.animationsPage.parentChain(root.eventPath);
         // Drop chain[0] (self) — show only ancestors as "window ← global"
@@ -634,10 +644,9 @@ Item {
     // field automatically.
     // Two emitters pass an empty path, and both mean "reload everything":
     // `shaderProfileChanged` on a full-tree reload, and `overrideChanged` from
-    // the controller's `forgetCachedOverrideFiles`, which fires when somebody
-    // OUTSIDE the settings app writes to the profiles directory. The controller
-    // suppresses that broadcast for its own writes, which carry precise
-    // per-path signals instead.
+    // the controller's `revertPending`, which cannot say which paths a
+    // whole-config reload moved. Ordinary edits carry precise per-path signals
+    // instead.
     function _pathAffectsThisCard(path) {
         if (path === "")
             return true;
@@ -886,6 +895,7 @@ Item {
                 divergentPathCount: root._divergentPathCount
                 writePathCount: root._writePaths.length
                 parentChain: root.parentChainText()
+                shaderIsolationRoot: root._shaderIsolationRoot
                 inheritSummary: root.inheritSummaryText()
                 // The return is deliberately not read. Both branches are
                 // self-correcting: the writer's `finally` runs

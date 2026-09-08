@@ -26,6 +26,7 @@
 #include <QStringList>
 #include <QTest>
 #include <QVariant>
+#include <QJsonObject>
 #include <QVariantList>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -35,6 +36,52 @@
 #include "helpers/IsolatedConfigGuard.h"
 
 namespace PlasmaZones::TestHelpers {
+
+/// Write a RAW per-event timing override straight into
+/// `Animations/MotionProfileTree`, bypassing the controller.
+///
+/// For fixtures that need a malformed or out-of-domain value in the store —
+/// the shapes `setOverride` would normalise away — so the READ side's
+/// sanitising can be exercised. This is what hand-writing a profile JSON file
+/// used to do before those overrides became config.
+inline void setRawMotionOverride(Settings& settings, const QString& path, const QJsonObject& profile)
+{
+    QVariantMap tree = settings.motionProfileTree();
+    QVariantList overrides = tree.value(QStringLiteral("overrides")).toList();
+    QVariantMap entry;
+    entry.insert(QStringLiteral("path"), path);
+    entry.insert(QStringLiteral("profile"), profile.toVariantMap());
+    bool replaced = false;
+    for (int i = 0; i < overrides.size(); ++i) {
+        if (overrides.at(i).toMap().value(QStringLiteral("path")).toString() == path) {
+            overrides[i] = entry;
+            replaced = true;
+            break;
+        }
+    }
+    if (!replaced) {
+        overrides.append(entry);
+    }
+    tree.insert(QStringLiteral("overrides"), overrides);
+    settings.setMotionProfileTree(tree);
+}
+
+/// Read a per-event timing override back RAW, exactly as stored.
+///
+/// The controller's `rawProfile` sanitises on read, so it drops a bad key
+/// whether or not the writer did — a bound asserted through it would pass with
+/// the writer's allowlist deleted. This reads the store.
+inline QJsonObject rawMotionOverride(const Settings& settings, const QString& path)
+{
+    const QVariantList overrides = settings.motionProfileTree().value(QStringLiteral("overrides")).toList();
+    for (const QVariant& entry : overrides) {
+        const QVariantMap map = entry.toMap();
+        if (map.value(QStringLiteral("path")).toString() == path) {
+            return QJsonObject::fromVariantMap(map.value(QStringLiteral("profile")).toMap());
+        }
+    }
+    return {};
+}
 
 /// Controller over an isolated config with an EMPTY shader registry.
 ///
@@ -50,6 +97,21 @@ struct ControllerFixture
     AnimationsPageController c{&registry, &settings};
 };
 
+/// Controller over an isolated config with NO shader registry.
+///
+/// For the TIMING side of the page, which does not touch the pack registry at
+/// all. It still needs a Settings: since schema v8 every per-event timing
+/// override is a config key (`Animations/MotionProfileTree`), so a controller
+/// without one can read nothing and write nothing — the same as the decoration
+/// page controller, which has always needed its settings object.
+struct TimingControllerFixture
+{
+    IsolatedConfigGuard guard;
+    Settings settings;
+    AnimationsPageController c{nullptr, &settings};
+};
+
+#ifdef P_SOURCE_DIR
 /// The same, with the bundled pack tree scanned in.
 ///
 /// Skip separately, via dataAvailable(), rather than from inside this
@@ -125,12 +187,17 @@ inline QStringList pickerIdsFor(const AnimationsPageController& c, const QString
     return ids;
 }
 
+#endif // P_SOURCE_DIR
+
 } // namespace PlasmaZones::TestHelpers
 
 /// Guards a slot that needs the bundled packs. A macro because QSKIP has to
-/// expand in the slot's own body to return from it.
+/// expand in the slot's own body to return from it. Defined only where
+/// `P_SOURCE_DIR` is, since the fixture it names is.
+#ifdef P_SOURCE_DIR
 #define PZ_SKIP_WITHOUT_BUNDLED_PACKS()                                                                                \
     do {                                                                                                               \
         if (!PlasmaZones::TestHelpers::PopulatedControllerFixture::dataAvailable())                                    \
             QSKIP("data/animations not found — running outside source tree");                                          \
     } while (false)
+#endif // P_SOURCE_DIR

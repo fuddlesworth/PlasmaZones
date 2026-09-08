@@ -36,7 +36,6 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
@@ -512,10 +511,7 @@ void Daemon::stop()
     // window where stale path-change signals could fire into a
     // half-destroyed object — visible in tests that re-construct the
     // daemon, and theoretically observable in production on a
-    // configure-reload cycle. ProfileLoader's destructor issues its
-    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // per-daemon `m_profileRegistry` value member sheds those entries here.
-    m_profileLoader.reset();
+    // configure-reload cycle.
     m_curveLoader.reset();
 
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
@@ -1020,14 +1016,11 @@ void Daemon::stop()
     // `PhosphorMotionAnimation { profile: … }` resolves against nothing.
     // Leaving them in place is what makes the cycle come back whole.
     //
-    // The one partition stop() still sheds is the loader-owned user-JSON
-    // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
-    // effect of the loader teardown ABOVE (the loader resets are hoisted above
-    // the m_running gate): `m_profileLoader` / `m_curveLoader`
-    // are reset so their destructors run NOW (issuing their own
-    // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
-    // than in the `~Daemon` body, where they would fire path-change signals
-    // into a half-destroyed object. The user-JSON entries are optional
+    // `m_curveLoader` is reset ABOVE the m_running gate so its destructor runs
+    // NOW (issuing its own `clearOwner(ownerTag)` and tearing down the
+    // QFileSystemWatcher) rather than in the `~Daemon` body, where it would
+    // fire path-change signals into a half-destroyed object. Its entries are
+    // optional
     // overrides on top of the seeds, so losing them across a cycle only drops
     // the user's authored tweaks, not the shell's ability to resolve — and the
     // seeds that remain keep inheritance working. The raw-JSON snapshot is

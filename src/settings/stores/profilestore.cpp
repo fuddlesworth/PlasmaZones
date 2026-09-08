@@ -219,7 +219,11 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
             setGroupAtSegments(nested, segments, it.value().toObject());
         }
         nested[ConfigKeys::versionKey()] = fileVersion;
-        ConfigMigration::runMigrationChainInMemory(nested);
+        // ExternalImports::Disabled: this root is a profile's sparse DELTA,
+        // not the live config. A step that reads the filesystem (v7→v8 imports
+        // the per-event timing override files) would otherwise stamp the
+        // migrating machine's own state into every profile it touches.
+        ConfigMigration::runMigrationChainInMemory(nested, ConfigMigration::ExternalImports::Disabled);
         // The chain advances to ConfigSchemaVersion; a store configured for a
         // DIFFERENT target (tests inject formatVersion) cannot use the result.
         if (nested.value(ConfigKeys::versionKey()).toInt() != m_config.formatVersion) {

@@ -248,14 +248,83 @@ inline QString humanizeSegment(const QString& segment)
     return out;
 }
 
-// ProfileLoader's envelope helper reads the top-level `name` field to
-// assign the registry path (and strips it from the returned root). We
-// add it on write so the file is recognised. JSON keys are
-// QLatin1String per the project's Qt6 string-literal rule. `inline`
+// The per-event override FILES that predate schema v8 carried a top-level
+// `name` field naming their path. An entry in the timing tree is named by its
+// own key, so the field is stripped on write rather than added — this constant
+// is what strips it. JSON keys are QLatin1String per the project's Qt6
+// string-literal rule. `inline`
 // (external linkage, one definition) so the sibling TUs that consume
 // these helpers (animationspagecontroller{,_overrides,_shaders}.cpp)
 // all share one definition without relying on unity-build TU merging.
 inline constexpr QLatin1String JsonNameKey{"name"};
+
+// ── The serialized `PhosphorAnimation::ProfileTree` shape ────────────────────
+// Handled as a raw map rather than through the class. Parsing one needs a
+// CurveRegistry, and a Profile stores its curve RESOLVED — so a parse against
+// a registry missing the user's curve packs, followed by a re-serialize, drops
+// the `curve` key and silently retimes the event. Reading or rewriting one
+// path's fields never needs a curve at all, so this layer does not parse.
+inline constexpr QLatin1String TreeOverridesKey{"overrides"};
+inline constexpr QLatin1String TreePathKey{"path"};
+inline constexpr QLatin1String TreeProfileKey{"profile"};
+
+/// The stored profile object for @p path, or an empty object when @p tree
+/// carries no override there.
+inline QJsonObject treeProfileForPath(const QVariantMap& tree, const QString& path)
+{
+    const QVariantList overrides = tree.value(TreeOverridesKey).toList();
+    for (const QVariant& entry : overrides) {
+        const QVariantMap map = entry.toMap();
+        if (map.value(TreePathKey).toString() == path) {
+            return QJsonObject::fromVariantMap(map.value(TreeProfileKey).toMap());
+        }
+    }
+    return {};
+}
+
+inline bool treeHasOverrideForPath(const QVariantMap& tree, const QString& path)
+{
+    const QVariantList overrides = tree.value(TreeOverridesKey).toList();
+    for (const QVariant& entry : overrides) {
+        if (entry.toMap().value(TreePathKey).toString() == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @p tree with @p path's override replaced by @p profile, or removed when
+/// @p profile is empty. A replaced entry keeps its position rather than moving
+/// to the end, so rewriting one field does not reshuffle the stored key.
+inline QVariantMap treeWithOverrideForPath(const QVariantMap& tree, const QString& path, const QJsonObject& profile)
+{
+    QVariantMap out = tree;
+    QVariantList overrides = out.value(TreeOverridesKey).toList();
+    for (int i = 0; i < overrides.size(); ++i) {
+        if (overrides.at(i).toMap().value(TreePathKey).toString() != path) {
+            continue;
+        }
+        if (profile.isEmpty()) {
+            overrides.removeAt(i);
+        } else {
+            QVariantMap entry;
+            entry.insert(TreePathKey, path);
+            entry.insert(TreeProfileKey, profile.toVariantMap());
+            overrides[i] = entry;
+        }
+        out.insert(TreeOverridesKey, overrides);
+        return out;
+    }
+    if (profile.isEmpty()) {
+        return out; // nothing to remove
+    }
+    QVariantMap entry;
+    entry.insert(TreePathKey, path);
+    entry.insert(TreeProfileKey, profile.toVariantMap());
+    overrides.append(entry);
+    out.insert(TreeOverridesKey, overrides);
+    return out;
+}
 
 /// Convert a `Profile` value to its `toJson()` shape as a QVariantMap.
 /// Sparse — only engaged fields appear, matching the wire format.

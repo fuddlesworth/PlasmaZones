@@ -49,17 +49,26 @@ namespace PlasmaZones {
 // group/key declarations belong to the Settings layer (future work).
 
 namespace {
-PhosphorConfig::Schema makeMigrationSchema()
+PhosphorConfig::Schema
+makeMigrationSchema(ConfigMigration::ExternalImports imports = ConfigMigration::ExternalImports::Enabled)
 {
+    const bool importFiles = imports == ConfigMigration::ExternalImports::Enabled;
     PhosphorConfig::Schema s;
     s.version = ConfigSchemaVersion;
     s.versionKey = ConfigKeys::versionKey();
     // clang-format off — one entry per line keeps the version-ordered
     // registry greppable and every future bump a one-line diff.
     s.migrations = {
-        {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
-        {5, &ConfigMigration::migrateV5ToV6}, {6, &ConfigMigration::migrateV6ToV7},
+        {1, &ConfigMigration::migrateV1ToV2},
+        {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4},
+        {4, &ConfigMigration::migrateV4ToV5},
+        {5, &ConfigMigration::migrateV5ToV6},
+        {6, &ConfigMigration::migrateV6ToV7},
+        {7,
+         [importFiles](QJsonObject& root) {
+             ConfigMigration::migrateV7ToV8(root, importFiles);
+         }},
     };
     // clang-format on
     return s;
@@ -68,9 +77,9 @@ PhosphorConfig::Schema makeMigrationSchema()
 
 // ── Migration chain runner (delegates to PhosphorConfig::MigrationRunner) ──
 
-void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
+void ConfigMigration::runMigrationChainInMemory(QJsonObject& root, ExternalImports imports)
 {
-    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    const PhosphorConfig::Schema schema = makeMigrationSchema(imports);
     PhosphorConfig::MigrationRunner(schema).runInMemory(root);
 }
 

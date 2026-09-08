@@ -35,6 +35,7 @@
 #include <QVariantMap>
 
 #include "settings/pages/animationspagecontroller.h"
+#include "helpers/AnimationsControllerFixture.h"
 
 using namespace PlasmaZones;
 
@@ -57,7 +58,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
@@ -75,7 +77,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Preset file
@@ -104,7 +107,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Plant an orphan override file directly: the on-disk shape
@@ -137,7 +141,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
@@ -152,7 +157,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.addUserPreset(QString(), {{QStringLiteral("duration"), 100}}));
@@ -164,7 +170,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(
@@ -181,7 +188,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
@@ -198,28 +206,26 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Write an override file. Its on-disk `name` field is "editor.snapIn"
-        // (per setOverride's stamping rule).
+        // A per-event override, whose path reads like a plausible preset name.
+        // These live in config now, not beside the presets, but the library's
+        // remove-by-name walk is still the thing under test: it must find no
+        // preset called "editor.snapIn" and refuse rather than deleting
+        // whatever file happens to answer to that name.
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
-        const QString overrideFilePath = tmp.path() + QStringLiteral("/editor.snapIn.json");
-        QVERIFY(QFileInfo::exists(overrideFilePath));
-
-        // The override file's own `name` field is "editor.snapIn", so a naive
-        // remove-by-name directory walk would match it and delete it. The
-        // library must refuse: preset CRUD does not own override files.
+        QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
         QVERIFY(!c.removeUserPreset(QStringLiteral("editor.snapIn")));
         QCOMPARE(spy.count(), 0);
 
-        // The override file MUST still exist — this is the load-bearing
-        // assertion: removeUserPreset cannot collateral-damage overrides.
-        QVERIFY2(
-            QFileInfo::exists(overrideFilePath),
-            "override file was deleted by removeUserPreset(\"editor.snapIn\") — preset CRUD MUST NOT touch override "
-            "slots");
+        // The override MUST survive — this is the load-bearing assertion:
+        // removeUserPreset cannot collateral-damage overrides.
+        QVERIFY2(c.hasOverride(QStringLiteral("editor.snapIn")),
+                 "the override was cleared by removeUserPreset(\"editor.snapIn\") — preset CRUD MUST NOT touch "
+                 "override slots");
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
     }
 
@@ -233,7 +239,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Write a known-good preset so the iteration has at least one
@@ -264,7 +271,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         QVERIFY(!c.hasPendingChanges());
 
@@ -296,40 +304,24 @@ private Q_SLOTS:
         QVERIFY(!c.hasPendingChanges());
     }
 
-    /// Create a preset and delete it in the same session and disk is back where it
-    /// started, so the staged "this file did not exist" snapshot is a phantom.
-    /// Keeping it left the page dirty forever with nothing for Discard to restore.
-    void createThenDeleteAPresetLeavesThePageClean()
+    /// Preset CRUD is IMMEDIATE, matching the decoration page's set files.
+    /// Creating or deleting one is not a staged edit and Discard does not undo
+    /// it — the same footer button used to mean two different things on the two
+    /// pages, silently reverting an animation preset a user had just saved.
+    void presetCrudIsImmediateAndDoesNotDirtyThePage()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         QVERIFY(!c.hasPendingChanges());
 
         QVERIFY(c.addUserPreset(QStringLiteral("Temp"), {{QStringLiteral("duration"), 200}}));
-        QVERIFY2(c.hasPendingChanges(), "a new preset is an unsaved change");
+        QVERIFY2(!c.hasPendingChanges(), "saving a preset is not a staged edit");
 
         QVERIFY(c.removeUserPreset(QStringLiteral("Temp")));
-        QVERIFY2(!c.hasPendingChanges(), "deleting it again puts disk back as it was, so nothing may remain staged");
-    }
-
-    /// The mirror: deleting a preset that existed BEFORE this session is a real
-    /// change, and its snapshot is the only copy of the file. It must survive.
-    void deletingAPreexistingPresetKeepsItsSnapshot()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-
-        QVERIFY(c.addUserPreset(QStringLiteral("Keeper"), {{QStringLiteral("duration"), 200}}));
-        c.commitPending(); // the preset is now part of the committed baseline
         QVERIFY(!c.hasPendingChanges());
-
-        QVERIFY(c.removeUserPreset(QStringLiteral("Keeper")));
-        QVERIFY2(c.hasPendingChanges(),
-                 "deleting a pre-existing preset IS an unsaved change, and Discard must be able to restore it");
     }
 };
 

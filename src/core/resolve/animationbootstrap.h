@@ -9,6 +9,7 @@
 
 #include <QLatin1StringView>
 #include <QStringList>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -19,7 +20,6 @@ QT_END_NAMESPACE
 namespace PhosphorAnimation {
 class CurveLoader;
 class CurveRegistry;
-class ProfileLoader;
 } // namespace PhosphorAnimation
 
 namespace PlasmaZones {
@@ -41,7 +41,14 @@ extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwne
 /// Returned alongside the loader pair from
 /// `constructAnimationLoaders` so callers that wire additional signals
 /// before the initial scan can pass the same lists into
-/// `runInitialCurveLoad` / `runInitialProfileLoad`.
+/// `runInitialCurveLoad`.
+///
+/// `profileDirs` is retained for the ONE remaining consumer of the profiles
+/// directory: the user's saved-preset library, which the animations page reads
+/// and writes by name. Per-EVENT timing overrides have not lived there since
+/// schema v8 — they are config, under `Animations/MotionProfileTree`, so that
+/// one animation event is one unit in one store the way a decorated surface
+/// always has been.
 struct AnimationLoaderDirs
 {
     QStringList curveDirs;
@@ -54,50 +61,59 @@ struct AnimationLoaderDirs
 struct AnimationLoaderHandles
 {
     std::unique_ptr<PhosphorAnimation::CurveLoader> curveLoader;
-    std::unique_ptr<PhosphorAnimation::ProfileLoader> profileLoader;
     AnimationLoaderDirs dirs;
 };
 
 /// Discover XDG `plasmazones/{curves,profiles}` directories, materialise
-/// the user-writable dirs, and construct CurveLoader + ProfileLoader
-/// bound to the supplied registries. The curveLoader's `curvesChanged`
-/// is wired into the profileLoader's `requestRescan` so a curve JSON
-/// edit triggers profile re-parsing (without this, profiles whose
-/// `curve:` reference was unresolved at first parse stay unresolved
-/// until the profile file itself is touched).
+/// the user-writable dirs, and construct the CurveLoader bound to
+/// @p curveRegistry.
 ///
 /// Does NOT call `loadLibraryBuiltins` / `loadFromDirectories` — callers
 /// run those AFTER they have wired any consumer-side signals so the
-/// initial scan's emits are observed by every listener. Drive them with
+/// initial scan's emits are observed. Drive them with
 /// `runInitialCurveLoad`, then `seedShellAnimationFamilies`, then
-/// `runInitialProfileLoad`.
+/// `installMotionProfileTree` with the config-backed timing tree.
 ///
-/// The returned `unique_ptr`s are caller-owned. `ownerTag` partitions
-/// the registry so a `clearOwner(tag)` teardown / rescan only touches
-/// entries this loader registered. `parent` is forwarded to the
-/// loaders' `QObject` parent (use `nullptr` when the caller stores the
-/// loaders via `unique_ptr` and wants no Qt parent ownership).
-PLASMAZONES_EXPORT AnimationLoaderHandles constructAnimationLoaders(
-    PhosphorAnimation::CurveRegistry& curveRegistry, PhosphorAnimation::PhosphorProfileRegistry& profileRegistry,
-    QLatin1StringView ownerTag, QObject* parent = nullptr);
+/// The returned `unique_ptr` is caller-owned. `parent` is forwarded to the
+/// loader's `QObject` parent (use `nullptr` when the caller stores it via
+/// `unique_ptr` and wants no Qt parent ownership).
+PLASMAZONES_EXPORT AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistry& curveRegistry,
+                                                                    QObject* parent = nullptr);
 
-/// Curve half of the initial load. Always run this BEFORE
-/// `runInitialProfileLoad` so a profile JSON referencing a user-authored
-/// curve resolves on first parse rather than waiting for the
-/// curveLoader→profileLoader rescan wire to fire on the second pass.
-/// Split from the profile half because every composition root has to
-/// interleave `seedShellAnimationFamilies` between the two — the seeds
-/// resolve named curves, and the profile loader's `reloadFromOwner` has
-/// to be able to overwrite a seed the user authored a JSON for.
-/// Internally calls `loadLibraryBuiltins` then `loadFromDirectories`
-/// with LiveReload::On.
+/// Curve half of the initial load. Always run this FIRST, before
+/// `seedShellAnimationFamilies` and `installMotionProfileTree`, so both of
+/// those resolve a named curve on their first parse instead of storing a null
+/// curve and falling back to the library default. Internally calls
+/// `loadLibraryBuiltins` then `loadFromDirectories` with LiveReload::On.
 PLASMAZONES_EXPORT void runInitialCurveLoad(PhosphorAnimation::CurveLoader& curveLoader,
                                             const AnimationLoaderDirs& dirs);
 
-/// Profile half of the initial load — see `runInitialCurveLoad` for
-/// the rationale on splitting.
-PLASMAZONES_EXPORT void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader,
-                                              const AnimationLoaderDirs& dirs);
+/// Install the per-event TIMING overrides carried by @p treeJson into
+/// @p registry, under @p ownerTag, replacing whatever that tag held before.
+///
+/// @p treeJson is `ISettings::motionProfileTree()` — the serialized
+/// `PhosphorAnimation::ProfileTree` stored at `Animations/MotionProfileTree`.
+/// This is the timing counterpart of the decoration tree, and it replaced the
+/// loose `plasmazones/profiles/<event.path>.json` files in schema v8: an
+/// animation event's pack and its timing now live in one store, so a settings
+/// profile captures both and a motion set writes both the way a decoration set
+/// always wrote a whole surface.
+///
+/// The tree's BASELINE is deliberately ignored. The global profile is its own
+/// setting (`Settings::animationProfile`), which each composition root already
+/// registers at `ProfilePaths::Global`, and importing a second copy here would
+/// double-register the same level under a different owner. Nothing writes a
+/// baseline into this key.
+///
+/// MUST run AFTER `runInitialCurveLoad` (so a profile naming a user-authored
+/// curve resolves on first parse) and AFTER `seedShellAnimationFamilies` (so a
+/// user override at a seeded path wins). Re-run it whenever the setting
+/// changes, and whenever the curve registry reloads — a Profile holds its
+/// resolved curve, so a curve edit needs the tree re-parsed against the fresh
+/// registry.
+PLASMAZONES_EXPORT void installMotionProfileTree(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                                                 const PhosphorAnimation::CurveRegistry& curves,
+                                                 const QVariantMap& treeJson, const QString& ownerTag);
 
 /// Register the shell's family-level Profile defaults (the parent
 /// paths every QML profile binding eventually walks up to) so an
@@ -174,25 +190,18 @@ public:
     {
         return m_curveRegistry.get();
     }
-    /// The profile loader feeding `profileRegistry()`. Borrowed by a
-    /// composition root that also WRITES profile files, so it can force
-    /// the loader's debounced watch to catch up before reading the
-    /// registry back (`ProfileLoader::rescanNow`). Handed out whole,
-    /// matching the two accessors above, rather than as a narrower
-    /// `refreshProfiles()` forward: the loader is a QObject, so a caller
-    /// wiring a long-lived callable can hold it in a `QPointer` and get
-    /// a lifetime guarantee that a forwarding method on this non-QObject
-    /// class could not offer.
-    PhosphorAnimation::ProfileLoader* profileLoader()
-    {
-        return m_profileLoader.get();
-    }
+    /// Install the config-backed per-event timing tree
+    /// (`ISettings::motionProfileTree()`) into this bootstrap's registry.
+    ///
+    /// The ctor cannot do this itself: it runs before the composition root has
+    /// a Settings instance, and the tree changes at runtime. Call it once the
+    /// settings object exists, and again on every `motionProfileTreeChanged`.
+    void applyMotionProfileTree(const QVariantMap& treeJson);
 
 private:
     std::unique_ptr<PhosphorAnimation::CurveRegistry> m_curveRegistry;
     PhosphorAnimation::PhosphorProfileRegistry m_profileRegistry;
     std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
-    std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
 };
 
 } // namespace PlasmaZones

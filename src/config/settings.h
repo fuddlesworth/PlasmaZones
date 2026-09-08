@@ -561,6 +561,10 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
+    // Per-event animation timing tree — same meta-object dirty-tracking
+    // rationale as shaderProfileTreeJson above.
+    Q_PROPERTY(QString motionProfileTreeJson READ motionProfileTreeJson WRITE setMotionProfileTreeJson NOTIFY
+                   motionProfileTreeChanged)
     // JSON string facade for the per-surface decoration tree — same
     // meta-object dirty-tracking rationale as shaderProfileTreeJson above.
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
@@ -1737,6 +1741,17 @@ public:
     /// loop in SettingsController catches it.
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
+
+    // Per-event animation TIMING tree, persisted as one nested JSON entry
+    // under Animations/MotionProfileTree. The timing sibling of
+    // shaderProfileTree above; carried as a raw map because parsing a
+    // PhosphorAnimation::ProfileTree needs a CurveRegistry the config layer
+    // does not own. The JSON-string facade backs the Q_PROPERTY.
+    QVariantMap motionProfileTree() const override;
+    void setMotionProfileTree(const QVariantMap& tree) override;
+    QVariantMap committedMotionProfileTree() const override;
+    QString motionProfileTreeJson() const override;
+    void setMotionProfileTreeJson(const QString& json) override;
 
     // Per-surface decoration tree (DecorationProfile: shader-pack chain + its
     // per-pack parameters), persisted under the Decorations group. Typed accessors

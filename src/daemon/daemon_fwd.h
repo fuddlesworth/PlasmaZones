@@ -20,7 +20,6 @@ class DBusScreenAdaptor;
 
 namespace PhosphorAnimation {
 class CurveLoader;
-class ProfileLoader;
 }
 
 namespace PhosphorAnimationShaders {

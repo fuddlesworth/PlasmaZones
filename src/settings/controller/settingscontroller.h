@@ -1004,13 +1004,7 @@ private:
     /// same thing done to the in-memory session. The whole body runs under
     /// m_loading, and the caller owns the trailing setNeedsSave(false).
     ///
-    /// @param treatAsyncRevertAsClean whether an animation revert refused because
-    ///        an async discard already owns the snapshot map counts as clean. True
-    ///        on Discard, where that worker IS the restore. False on import, where
-    ///        the snapshots hold pre-import content for files just rewritten.
-    /// @return whether the animation page's snapshots came back clean. False means
-    ///         the adopt only partly landed and needsSave must not be cleared.
-    bool adoptOnDiskState(bool treatAsyncRevertAsClean);
+    void adoptOnDiskState();
 
     /// Shared tail of the two KZones import entry points: stash the layout to
     /// auto-select, schedule the layout refresh, report count and message to QML,

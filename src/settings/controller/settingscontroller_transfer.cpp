@@ -539,36 +539,14 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // onExternalSettingsChanged() would have done, so drop that flag.
         m_pendingExternalReload = false;
         // Adopt the imported state the way Discard adopts a reverted one.
-        // asyncRevertInFlight does NOT count as clean here: on Discard that
-        // worker IS the restore, but here it holds snapshots of pre-import
-        // content for files the import just rewrote.
         //
         // One asymmetry worth knowing: the rules revert inside is ASYNC, so the
         // success toast is raised before it resolves. A failed re-fetch still
         // surfaces, through the permanent revertFinished listener in
         // settingscontroller.cpp, which re-badges the Rules page rather than
         // reporting through this return value.
-        const bool adopted = adoptOnDiskState(/*treatAsyncRevertAsClean=*/false);
-        if (!adopted) {
-            qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
-                                   "in flight, or a restore failed)";
-            // The settings on disk are the imported ones, but the animation
-            // page still holds pre-import snapshots. That is a partial result
-            // the user has to know about: without this the import reports plain
-            // success while the page shows something else.
-            Q_EMIT settingsTransferFailed(
-                PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
-                                 "Reopen the settings window to see the imported values."));
-            // Report not-fully-landed. The bool's only job is gating the General
-            // page's success toast (see the settingsTransferFailed doc), and the
-            // toast surface replaces whatever is in flight. Returning true here
-            // would let the caller overwrite the reason just emitted, inside the
-            // same JS statement, so the user would only ever read "Settings
-            // imported" on the one path that exists to say otherwise.
-            ok = false;
-        } else {
-            setNeedsSave(false);
-        }
+        adoptOnDiskState();
+        setNeedsSave(false);
     }
     return ok;
 }

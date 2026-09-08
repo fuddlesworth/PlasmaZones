@@ -754,52 +754,6 @@ private Q_SLOTS:
         QCOMPARE(spy2.count(), 0);
     }
 
-    /// A clear that runs while the discard worker owns the pending state must
-    /// report the refusal as -1, distinct from the 0 a genuine "no descendants"
-    /// no-op returns, so a caller cannot mistake "refused, retry later" for
-    /// "nothing to clear". Same convention as clearAllOverrides.
-    void clearShaderOverrideDescendants_refusesWhileAsyncDiscardIsInFlight()
-    {
-        ControllerFixture fx;
-        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
-
-        QVERIFY(c.setShaderOverride(PP::Popup, QStringLiteral("dissolve"), {}));
-        QVERIFY(c.setShaderOverride(PP::PopupLayoutPickerShow, QStringLiteral("pixelate"), {}));
-        // A FILE-backed pending change too: a tree-only discard completes
-        // synchronously (no worker, no in-flight window), so the refusal
-        // this slot pins requires a snapshot for the worker to restore.
-        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
-        c.asyncRevertPending(); // sets the in-flight flag synchronously
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
-        QCOMPARE(c.clearShaderOverrideDescendants(PP::Popup), -1);
-        QCOMPARE(toastSpy.count(), 1);
-        // Not the "Cannot reset" wording: this entry point's only caller is the
-        // event card's "Clear shadowing children" button, which the user did
-        // not experience as a reset. `clearAllOverrides`, which IS reset-only,
-        // keeps that wording (see test_animations_motion_sets.cpp).
-        QCOMPARE(toastSpy.first().first().toString(),
-                 PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-
-        // QTRY, not `done.wait()`: `asyncRevertPending` emits `discardResult`
-        // SYNCHRONOUSLY on two early-return branches, and `QSignalSpy::wait()`
-        // ignores an emission already recorded before it was called — so on
-        // either branch `wait()` would block the full timeout and then fail for
-        // the wrong reason. Every sibling slot in this file uses QTRY for this.
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
-    }
-
-    /// The leaf-isolated interactive-drag path (window.movement.move) is a
-    /// prefix-descendant of window.movement but resolves in ISOLATION —
-    /// ShaderProfileTree::resolve takes no ancestor overlay there — so its
-    /// override can never shadow the "All Windows" parent. The shadowing-
-    /// children count must skip it, and the parent card's "Clear shadowing
-    /// children" action must NOT wipe the drag shader the user configured
-    /// on the separate Window Dragging page.
     void shaderOverrideDescendants_skipLeafIsolatedMovePath()
     {
         ControllerFixture fx;
@@ -835,6 +789,38 @@ private Q_SLOTS:
         // Same effectId + same (empty) parameters — must early-return.
         QVERIFY(c.setShaderOverride(PP::OsdShow, QStringLiteral("pixelate"), {}));
         QCOMPARE(pendingSpy.count(), 0);
+    }
+
+    /// `shaderIsolationRoot` must answer from the RESOLVER's predicate, not
+    /// from a path prefix, and must disagree with `parentChain` exactly where
+    /// the resolver does.
+    ///
+    /// The card renders `parentChain` as its inheritance sentence. That chain
+    /// is the timing story and is always complete, because ProfileTree isolates
+    /// nothing. The shader resolver cuts the chain at an isolation root, so on
+    /// a shell path the sentence was stating something false about the pack.
+    void shaderIsolationRoot_disagreesWithParentChainOnAnIsolatedSubtree()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        // An ordinary event inherits normally: no isolation, chain walks up.
+        QVERIFY(c.shaderIsolationRoot(PP::OsdShow).isEmpty());
+        QVERIFY(c.parentChain(PP::OsdShow).size() > 1);
+
+        // A shell event is isolated for the SHADER axis, while its parent chain
+        // still walks all the way to the root for timing. That divergence is
+        // the whole reason the accessor exists.
+        const QString shellLeaf = QStringLiteral("shell.appletPopup.show");
+        const QString root = c.shaderIsolationRoot(shellLeaf);
+        QCOMPARE(root, QStringLiteral("shell"));
+        const QStringList chain = c.parentChain(shellLeaf);
+        QVERIFY2(chain.contains(QStringLiteral("global")),
+                 "the timing chain should still reach global; only the shader axis is cut");
+
+        // And it agrees with the library predicate it wraps, rather than being
+        // a second derivation that can drift from the resolver.
+        QCOMPARE(root, PhosphorAnimationShaders::shaderPathIsolationRoot(shellLeaf));
     }
 };
 

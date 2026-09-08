@@ -609,8 +609,7 @@ void SettingsController::discardPage(const QString& page)
                 m_settings.discardKeys(animationGeneralConfigKeys());
             } else if (scope.kind == AnimationPageScope::EventSubtree) {
                 if (m_animationsPage != nullptr
-                    && !m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope))
-                    && !m_animationsPage->asyncRevertInFlight()) {
+                    && !m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope))) {
                     failed = true;
                 }
                 // Shader tree: restore only this scope's paths to their baseline value
@@ -629,8 +628,7 @@ void SettingsController::discardPage(const QString& page)
                     m_settings.discardKeys(animationGeneralConfigKeys());
             } else {
                 // WholeTree library leaf.
-                if (m_animationsPage != nullptr && !m_animationsPage->revertPending()
-                    && !m_animationsPage->asyncRevertInFlight()) {
+                if (m_animationsPage != nullptr && !m_animationsPage->revertPending()) {
                     failed = true;
                 }
                 m_settings.discardKeys(animationConfigKeys());

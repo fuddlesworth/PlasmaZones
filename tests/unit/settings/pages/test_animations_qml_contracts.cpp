@@ -42,6 +42,7 @@
 #include "settings/pages/animationpagescope.h"
 #include "settings/pages/animationpreviewcontroller.h"
 #include "settings/pages/animationspagecontroller.h"
+#include "helpers/AnimationsControllerFixture.h"
 
 using namespace PlasmaZones;
 
@@ -154,7 +155,8 @@ private Q_SLOTS:
                                     .arg(alias)));
         }
 
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const QMetaObject* meta = c.metaObject();
         QStringList unreachable;
         for (const QString& name : used) {
@@ -621,7 +623,8 @@ private Q_SLOTS:
         }
         QVERIFY2(!used.isEmpty(), "scraped no bridge.* names — the browser tree or receiver name moved");
 
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const QMetaObject* meta = c.metaObject();
         QStringList unreachable;
         for (const QString& name : used) {

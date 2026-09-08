@@ -13,7 +13,7 @@ import org.kde.kirigami as Kirigami
  * without its own override falls back through its category up to here.
  * Edits route through `appSettings.animation*` (the existing config-driven
  * `Global` profile in `kSettingsDrivenProfilePaths`), not through the
- * per-event ProfileLoader pipeline — so this page intentionally bypasses
+ * per-event override tree, so this page intentionally bypasses
  * `AnimationsPageController.setOverride` and writes through the same
  * `Settings::animationProfile` Q_PROPERTYs the legacy General > Animations
  * card has always used.

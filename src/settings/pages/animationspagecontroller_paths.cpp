@@ -13,6 +13,7 @@
 #include "phosphor_i18n.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QLatin1Char>
 #include <QLatin1String>
@@ -253,6 +254,11 @@ QString AnimationsPageController::eventLabel(const QString& path) const
     const int dot = path.lastIndexOf(QLatin1Char('.'));
     const QString segment = dot < 0 ? path : path.mid(dot + 1);
     return segmentLabel(segment);
+}
+
+QString AnimationsPageController::shaderIsolationRoot(const QString& path) const
+{
+    return PhosphorAnimationShaders::shaderPathIsolationRoot(path);
 }
 
 QStringList AnimationsPageController::parentChain(const QString& path) const

@@ -50,7 +50,9 @@
 #include <QUrl>
 
 #include "phosphor_i18n.h"
+#include <PhosphorAnimation/ProfilePaths.h>
 #include "settings/pages/animationspagecontroller.h"
+#include "helpers/AnimationsControllerFixture.h"
 #include "settings/stores/shadersetstore.h"
 #include "helpers/SetRowHelpers.h"
 
@@ -62,14 +64,17 @@ class TestAnimationsMotionSets : public QObject
 
 private Q_SLOTS:
 
-    /// Every test here overrides the profiles dir to a QTemporaryDir, and the
-    /// motion-sets dir hangs off that override, so nothing in this file reaches
-    /// the real data location today. The redirect is a net for a future test
-    /// that forgets setUserProfilesDirOverride: without it, that test would
-    /// write into the user's real ~/.local/share.
+    /// Deliberately no `QStandardPaths::setTestModeEnabled(true)` here.
+    ///
+    /// Test mode pins the config and data locations to ONE fixed path for the
+    /// whole process, which overrides the per-slot `IsolatedConfigGuard` the
+    /// fixture carries. That was harmless while per-event overrides were files
+    /// in each slot's own tmpdir. Since schema v8 they are config keys, so a
+    /// shared config location leaks one slot's overrides into the next — which
+    /// is exactly what it did, silently, before this note replaced it. The
+    /// guard is the isolation.
     void initTestCase()
     {
-        QStandardPaths::setTestModeEnabled(true);
     }
 
     // ─── Motion sets ──────────────────────────────────────────────────────
@@ -78,7 +83,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Mix of path overrides and a user preset
@@ -96,15 +102,23 @@ private Q_SLOTS:
         QCOMPARE(sets.size(), 1);
         const QVariantMap set = sets.first().toMap();
         QCOMPARE(set.value(QStringLiteral("name")).toString(), QStringLiteral("My Set"));
-        // Should capture the 2 path overrides, NOT the preset
-        QCOMPARE(set.value(QStringLiteral("coverageCount")).toInt(), 2);
+        // A set is SELF-CONTAINED, so its coverage is the two user overrides
+        // PLUS every path carrying a built-in pack default — the same way a
+        // decoration set captures its seeded surfaces. What must never appear
+        // is the user PRESET, which is a named library entry and not an event.
+        const QStringList coverage = set.value(QStringLiteral("coverage")).toStringList();
+        QVERIFY(coverage.contains(QStringLiteral("editor")));
+        QVERIFY(coverage.contains(QStringLiteral("osd")));
+        QVERIFY2(!coverage.contains(QStringLiteral("My Preset")), "a user preset was captured as an event override");
+        QVERIFY(set.value(QStringLiteral("coverageCount")).toInt() >= 2);
     }
 
     void applySet_writesPerPathFiles()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Build set, then clear overrides, then apply
@@ -122,7 +136,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Save a set with one path
@@ -143,7 +158,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 222}}));
@@ -165,7 +181,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Make the motion-sets directory and write a hand-crafted file
@@ -216,7 +233,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         QVERIFY(!c.hasPendingChanges());
     }
@@ -225,7 +243,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
@@ -234,85 +253,101 @@ private Q_SLOTS:
         QVERIFY(c.hasPendingChanges());
     }
 
-    void revertPending_restoresPreEditFile()
+    /// Discard puts a per-event override back to its committed value.
+    ///
+    /// The page does not do the reverting: every value it writes is a config
+    /// key, so `Settings::load()` is the revert and `revertPending()` only
+    /// re-announces it so an open page rebinds. That pairing is the caller
+    /// contract `SettingsController::load()` implements, and this pins it.
+    void discardRestoresTheCommittedOverride()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Establish a pre-edit baseline: write 100 ms.
+        // Establish a committed baseline: 100 ms.
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 100}}));
-        c.commitPending();
+        fx.settings.save();
+        c.refreshDirtyState();
         QVERIFY(!c.hasPendingChanges());
 
-        // Edit to 250 ms → should snapshot the 100ms file.
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+        QVERIFY(c.hasPendingChanges());
 
-        // Revert → file content restored to 100 ms.
         c.revertPending();
+        fx.settings.load();
+        c.refreshDirtyState();
         QVERIFY(!c.hasPendingChanges());
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 100);
     }
 
-    void revertPending_deletesFilesThatDidntExistBefore()
+    /// The mirror: an override created this session is gone after Discard,
+    /// rather than surviving as an entry the committed config never had.
+    void discardRemovesAnOverrideCreatedThisSession()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Fresh override on a path with no prior file.
         QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 200}}));
         QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
 
         c.revertPending();
+        fx.settings.load();
         QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
     }
 
-    void revertPending_emitsOverrideChangedPerPath()
+    /// Discard re-announces with the tree-wide reload broadcast (an EMPTY
+    /// path), which the cards already understand. Per-path signals are not
+    /// available here: `Settings::load()` replaces every key at once, so the
+    /// page cannot say which of them moved.
+    void revertPendingBroadcastsAReload()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
         QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 300}}));
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
-        c.revertPending();
+        QVERIFY(c.revertPending());
 
-        // Two paths reverted → two emissions (one per file). Order is
-        // hash-iteration so we check membership rather than position.
-        QCOMPARE(spy.count(), 2);
-        QStringList emitted;
-        for (const auto& args : spy)
-            emitted << args.at(0).toString();
-        QVERIFY(emitted.contains(QStringLiteral("editor.snapIn")));
-        QVERIFY(emitted.contains(QStringLiteral("osd.show")));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), QString());
     }
 
-    void commitPending_clearsSnapshotWithoutEmittingDataChanged()
+    /// Apply leaves the page clean without moving any row.
+    ///
+    /// `commitPending` announces the dirty flip; the values themselves were
+    /// already written, and the baseline catches up in `Settings::save()`. No
+    /// per-path `overrideChanged` may fire — the user just saved, nothing
+    /// visually moved.
+    void commitPendingAnnouncesTheFlipWithoutTouchingRows()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
         QVERIFY(c.hasPendingChanges());
 
-        // commitPending clears the snapshot and only emits
-        // pendingChangesChanged (once). It must NOT re-fire the
-        // per-path overrideChanged or the data signals — the user just
-        // saved, no rows visually moved.
         QSignalSpy pendingSpy(&c, &AnimationsPageController::pendingChangesChanged);
         QSignalSpy overrideSpy(&c, &AnimationsPageController::overrideChanged);
+        fx.settings.save();
         c.commitPending();
+        c.refreshDirtyState();
         QVERIFY(!c.hasPendingChanges());
-        QCOMPARE(pendingSpy.count(), 1);
+        QVERIFY(pendingSpy.count() >= 1);
         QCOMPARE(overrideSpy.count(), 0);
     }
 
@@ -327,7 +362,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
         QVERIFY(sets);
@@ -337,12 +373,26 @@ private Q_SLOTS:
 
         const QVariantMap saved = rowFor(sets, QStringLiteral("Snappy"));
         QVERIFY(!saved.isEmpty());
-        QCOMPARE(saved.value(QStringLiteral("coverageCount")).toInt(), 1);
-        QCOMPARE(saved.value(QStringLiteral("coverage")).toStringList(), (QStringList{QStringLiteral("editor")}));
+        // Self-contained, so the count also carries the built-in pack
+        // defaults; the user's own override is what this slot tracks.
+        QVERIFY(saved.value(QStringLiteral("coverage")).toStringList().contains(QStringLiteral("editor")));
         QVERIFY2(saved.value(QStringLiteral("active")).toBool(), "a just-saved motion set must read as active");
 
-        // An override the set does NOT cover must not clear the badge.
-        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 111}}));
+        // An override the set does NOT cover must not clear the badge. Picked
+        // from the saved row rather than hardcoded: a self-contained set covers
+        // every path with a built-in pack default, so most leaves are inside
+        // its coverage and a fixed choice here would silently stop testing
+        // anything the day one more default is shipped.
+        const QStringList covered = saved.value(QStringLiteral("coverage")).toStringList();
+        QString outside;
+        for (const QString& candidate : PhosphorAnimation::ProfilePaths::allBuiltInPaths()) {
+            if (!covered.contains(candidate.section(QLatin1Char('.'), 0, 0))) {
+                outside = candidate;
+                break;
+            }
+        }
+        QVERIFY2(!outside.isEmpty(), "every built-in path is inside the set's coverage; pick a different fixture");
+        QVERIFY(c.setOverride(outside, {{QStringLiteral("duration"), 111}}));
         QVERIFY2(rowFor(sets, QStringLiteral("Snappy")).value(QStringLiteral("active")).toBool(),
                  "an override outside the set's coverage must not clear its active flag");
 
@@ -363,7 +413,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
 
@@ -393,7 +444,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
 
@@ -430,7 +482,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
 
@@ -466,7 +519,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
 
@@ -494,133 +548,32 @@ private Q_SLOTS:
         QVERIFY(sets->availableSets().isEmpty());
     }
 
-    /// Motion is the only domain that stages set files, so it is the only one
-    /// that can prove the store's data-loss guard: when the pre-edit content of
-    /// an existing set cannot be captured, the write is REFUSED rather than
-    /// destroying content Discard could not restore.
-    void motionSets_refusesWriteWhenSnapshotFails()
+    /// Set-file CRUD is IMMEDIATE, matching the decoration page.
+    ///
+    /// Saving or removing a set is not a staged edit and Discard does not undo
+    /// it. The same footer button used to mean two different things on the two
+    /// pages: on Decoration it never touched your sets, on Animations it
+    /// silently reverted them.
+    void motionSetCrudIsImmediate()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Precious"), QStringLiteral("keep me")));
-
-        // Commit so the set file is no longer already snapshotted, then remove
-        // it and put a DIRECTORY in its place. QFile::exists() is still true but
-        // open(ReadOnly) fails, so snapshotFileIfFirst reports the capture
-        // failure — and unlike chmod 000, this provokes it for root too, so the
-        // guard is actually exercised in the project's Docker flow.
-        c.commitPending();
-        const QString setPath = tmp.path() + QStringLiteral("/motionsets/precious.json");
-        QVERIFY(QFileInfo::exists(setPath));
-        QVERIFY(QFile::remove(setPath));
-        QVERIFY(QDir().mkpath(setPath));
-        QVERIFY(QFileInfo(setPath).isDir());
-
-        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
-        // A directory is not a regular file, so the snapshot refuses at that
-        // gate. The ignoreMessage pair pins the branch: an unmatched expectation
-        // fails the test, so neither the missing-file path nor an
-        // already-snapshotted early return can satisfy this.
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("snapshotFileIfFirst: refusing to snapshot")));
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to write")));
-        QVERIFY2(!sets->removeSet(QStringLiteral("Precious")),
-                 "a delete must be refused when the pre-edit content cannot be captured");
-        // Assert WHICH refusal fired. A missing-file refusal would also return
-        // false and toast once, so the count alone cannot tell the two apart —
-        // and the point of this test is the snapshot guard specifically.
-        QCOMPARE(toastSpy.count(), 1);
-        QCOMPARE(toastSpy.first().first().toString(),
-                 PhosphorI18n::tr("Could not back up the existing set, so it was left untouched."));
-
-        // Nothing was destroyed: the path is untouched.
-        QVERIFY(QFileInfo(setPath).isDir());
-    }
-
-    /// Motion set writes are staged, so Discard must put the world back: a set
-    /// saved this session disappears again, and a set removed this session
-    /// comes back.
-    void motionSets_discardRestoresSetFiles()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-        ShaderSetStore* sets = c.setsBridge();
-
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        fx.settings.save();
+        c.refreshDirtyState();
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Keeper"), QString()));
-        c.commitPending(); // "Keeper" is now saved state, not pending
-        QVERIFY(!c.hasPendingChanges());
-
-        // Save a second set and remove the first, both this session.
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Fresh"), QString()));
-        QVERIFY(sets->removeSet(QStringLiteral("Keeper")));
-        QVERIFY2(c.hasPendingChanges(), "set writes must mark the page dirty");
-        QVERIFY(rowFor(sets, QStringLiteral("Keeper")).isEmpty());
-        QVERIFY(!rowFor(sets, QStringLiteral("Fresh")).isEmpty());
+        QVERIFY2(!c.hasPendingChanges(), "saving a set is not a staged edit");
 
         c.revertPending();
-
-        QVERIFY2(!rowFor(sets, QStringLiteral("Keeper")).isEmpty(), "Discard must restore a set removed this session");
-        QVERIFY2(rowFor(sets, QStringLiteral("Fresh")).isEmpty(), "Discard must drop a set saved this session");
-        QVERIFY(!c.hasPendingChanges());
+        fx.settings.load();
+        QVERIFY2(!rowFor(sets, QStringLiteral("Keeper")).isEmpty(), "Discard removed a set it does not own");
     }
 
-    /// The in-flight-discard guard is what stops a set write from landing
-    /// mid-revert and being clobbered by the async restore walk. It moved out
-    /// of the controller and into the store as an injected mutationGuard when
-    /// QML started calling the store directly, so pin it: every mutator must
-    /// refuse while a discard is in flight, and each must say why.
-    void motionSets_mutationGuardRefusesWritesDuringDiscard()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-        ShaderSetStore* sets = c.setsBridge();
-
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Before"), QString()));
-
-        // A file on hand for the importSet refusal below.
-        QTemporaryDir exportDir;
-        QVERIFY(exportDir.isValid());
-        const QString exported = exportDir.filePath(QStringLiteral("before.json"));
-        QVERIFY(sets->exportSet(QStringLiteral("Before"), exported));
-
-        // Kick off the async discard and immediately try to write, without
-        // spinning the event loop — the worker is in flight.
-        c.asyncRevertPending();
-
-        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
-        QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("During"), QString()),
-                 "a save must be refused while a discard is in flight");
-        QVERIFY2(!sets->applySet(QStringLiteral("Before")), "an apply must be refused mid-discard");
-        QVERIFY2(!sets->removeSet(QStringLiteral("Before")), "a remove must be refused mid-discard");
-        QVERIFY2(!sets->updateSet(QStringLiteral("Before"), QStringLiteral("Renamed"), QString()),
-                 "an update must be refused mid-discard");
-        QVERIFY2(!sets->importSet(exported), "an import must be refused mid-discard");
-        QCOMPARE(toastSpy.count(), 5); // each refusal carries its reason
-        // Pin the REASON, not just the count. The worker is rewriting "Before"
-        // while these run, so a read or missing-file refusal would produce the
-        // same false-plus-one-toast shape. Only the guard says this.
-        for (const QList<QVariant>& args : toastSpy)
-            QCOMPARE(args.first().toString(), PhosphorI18n::tr("Cannot modify sets while a discard is in progress."));
-
-        // Let the worker finish before reading the dir back — it is rewriting
-        // the same tree underneath us.
-        QSignalSpy done(&c, &PhosphorControl::StagingDomain::discardResult);
-        QVERIFY(done.wait(5000));
-
-        // The refused save never reached disk.
-        QVERIFY(rowFor(sets, QStringLiteral("During")).isEmpty());
-    }
     /// Motion has no baseline, so a baseline-carrying file is a decoration set
     /// (or a hand edit). Accepting it would half-apply the set: apply drops the
     /// baseline while the store still counts it, so the Active badge could never
@@ -629,7 +582,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         ShaderSetStore* sets = c.setsBridge();
 
@@ -668,121 +622,33 @@ private Q_SLOTS:
         QVERIFY2(!sets->importSet(emptyBaseline), "an empty baseline object is refused the same way");
     }
 
-    /// The snapshot is the ONLY copy of a file's pre-edit content, so the
-    /// phantom-dirty rollback must drop it ONLY while disk still matches it. An
-    /// edit that landed keeps its way back; an edit undone by hand does not.
-    void snapshotRollback_dropsPhantomButKeepsALandedEdit()
+    /// Dirtiness is live-versus-committed, so editing back to the committed
+    /// value leaves the page clean — no sticky flag survives the round trip.
+    ///
+    /// The staged-snapshot model could get this wrong in both directions: it
+    /// could drop the only copy of the pre-edit content, or leave the page
+    /// dirty forever with nothing left to discard.
+    void editingBackToTheCommittedValueLeavesThePageClean()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
         const QString path = QStringLiteral("editor.snapIn");
 
-        // Establish a committed baseline on disk, then start clean.
         QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 100}}));
-        c.commitPending();
+        fx.settings.save();
+        c.refreshDirtyState();
         QVERIFY(!c.hasPendingChanges());
 
-        // An edit that LANDS: the snapshot (duration 100) is the only copy of the
-        // pre-edit content and must survive a further edit.
         QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 200}}));
         QVERIFY(c.hasPendingChanges());
         QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 300}}));
-        QVERIFY2(c.hasPendingChanges(), "disk no longer matches the snapshot, so it must NOT be dropped");
-
-        // Undo by hand, back to the exact pre-edit content: the snapshot is now a
-        // phantom, and keeping it would leave the page dirty with nothing to
-        // discard.
-        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 100}}));
-        QVERIFY2(!c.hasPendingChanges(), "an undo back to the pre-edit content must clear the staged snapshot");
-    }
-
-    /// revertPending() refuses while an async discard owns the snapshot map, and
-    /// it has to SAY so: a caller that goes on to declare the state clean would
-    /// otherwise strand the snapshots the worker is still restoring.
-    void revertPending_refusesAndReportsWhileAsyncDiscardIsInFlight()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
         QVERIFY(c.hasPendingChanges());
 
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        c.asyncRevertPending(); // sets the in-flight flag synchronously
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("revertPending: blocked while an async discard")));
-        QVERIFY2(!c.revertPending(), "a synchronous revert must refuse, and report the refusal, mid-discard");
-
-        QVERIFY(done.wait(5000));
-        QVERIFY(!c.hasPendingChanges());
-    }
-    /// A reset that runs while the discard worker owns the snapshot map would have
-    /// every clearOverride refuse individually, and the caller would read the
-    /// resulting 0 as "there was nothing to clear" rather than "nothing was
-    /// cleared". It reports -1 instead, and the override files stay put.
-    void clearAllOverrides_refusesWhileAsyncDiscardIsInFlight()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
-        c.asyncRevertPending(); // sets the in-flight flag synchronously
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("clearAllOverrides: refusing while an async discard")));
-        QCOMPARE(c.clearAllOverrides(), -1);
-        QCOMPARE(toastSpy.count(), 1);
-        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Cannot reset while a discard is in progress."));
-
-        QVERIFY(done.wait(5000));
-    }
-    /// A reset that removes SOME override files but not all is incomplete,
-    /// not a success with a smaller count: a positive return would let the
-    /// settings controller finish its reset path and declare the page clean
-    /// while an override survives on disk (resetPage guards on < 0).
-    void clearAllOverrides_reportsPartialFailureAsRefusal()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
-        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 300}}));
-        // Commit so the surviving file is no longer already snapshotted; the
-        // clear must then capture it fresh, which is the gate provoked below.
-        c.commitPending();
-
-        // Replace one override file with a DIRECTORY: hasOverride still
-        // reports it (QFileInfo::exists is true for a directory) but the
-        // pre-delete snapshot refuses a non-regular file, so clearOverride
-        // fails for this path while the sibling clears. Unlike chmod, this
-        // provokes the failure for root too (the Docker build runs as root).
-        const QString stuck = tmp.path() + QStringLiteral("/osd.show.json");
-        QVERIFY(QFileInfo::exists(stuck));
-        QVERIFY(QFile::remove(stuck));
-        QVERIFY(QDir().mkpath(stuck));
-        QVERIFY(QFileInfo(stuck).isDir());
-
-        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("snapshotFileIfFirst: refusing to snapshot")));
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to delete")));
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("override files could not be removed")));
-        QCOMPARE(c.clearAllOverrides(), -1);
-        QCOMPARE(toastSpy.count(), 1);
-        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Some animation overrides could not be reset."));
-        // Partial, not refused outright: the healthy sibling WAS cleared.
-        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
-        QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
+        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 100}}));
+        QVERIFY2(!c.hasPendingChanges(), "editing back to the committed value must leave the page clean");
     }
 };
 

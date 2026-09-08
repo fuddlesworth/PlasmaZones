@@ -11,6 +11,9 @@
 #include "core/platform/logging.h"
 #include "settings/utils/animationfileutils.h"
 
+#include "core/types/animationshadersupportedpaths.h"
+
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QDir>
@@ -23,6 +26,8 @@
 #include <QList>
 #include <QLoggingCategory>
 #include <QSet>
+
+#include <utility>
 #include <QStringList>
 
 namespace PlasmaZones::motionset {
@@ -31,13 +36,45 @@ namespace {
 
 /// Current on-disk motion-set format. The store stamps it on save and refuses
 /// a NEWER file on apply / import.
-constexpr int kSetFormatVersion = 1;
+///
+/// 2 adds the `shader` half of each entry (see makeConfig's header). Reading a
+/// format-1 set still works — it simply carries no shader key — but the bump
+/// is what stops an OLDER build from opening a format-2 set, dropping the
+/// shader half on parse and applying a silently halved look.
+constexpr int kSetFormatVersion = 2;
 
 constexpr QLatin1String kNameKey{"name"};
 constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
 constexpr QLatin1String kBaselineKey{"baseline"};
+/// The nested shader half of one entry's profile, and its two fields. Named
+/// apart from the timing fields so the two halves can never collide as the
+/// Profile schema grows.
+constexpr QLatin1String kShaderKey{"shader"};
+constexpr QLatin1String kEffectIdKey{"effectId"};
+constexpr QLatin1String kParametersKey{"parameters"};
+
+/// The timing fields `Profile` actually round-trips. A timing half whose keys
+/// are all unrecognised is a wrong-shaped or hand-edited entry: it is a
+/// non-empty object that changes nothing, and staging it writes a file the
+/// loader then ignores. Decoration refuses that class by parsing its payload
+/// into a typed profile and judging the RESULT (decorationpagecontroller_sets.cpp);
+/// `Profile::fromJson` needs a CurveRegistry this domain has no handle on, so
+/// the same guarantee is had here by requiring a recognised field rather than
+/// by duplicating the type rules.
+const QSet<QString>& knownTimingFields()
+{
+    static const QSet<QString> fields = {
+        QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve),
+        QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration),
+        QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance),
+        QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode),
+        QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval),
+        QLatin1String(PhosphorAnimation::Profile::JsonFieldPresetName),
+    };
+    return fields;
+}
 
 /// Ceiling on one profile file read during the snapshot walk, which runs on the
 /// GUI thread on every setsChanged. The profiles dir is hand-editable, so it is
@@ -48,7 +85,21 @@ constexpr qint64 kMaxProfileFileBytes = animfileutil::kMaxJsonFileBytes;
 struct StagedEntry
 {
     QString path;
-    QVariantMap profile;
+    /// The timing half, already stripped of the nested shader key, so it is
+    /// exactly what the per-event override file should contain. Empty when the
+    /// entry carries a shader assignment only.
+    QVariantMap timing;
+    /// True when the entry carried a `shader` object at all. Absent is not the
+    /// same as empty: absent means "do not touch this event's pack", which is
+    /// what every format-1 entry means, while present carries one of the three
+    /// states the shader tree models (see below).
+    bool hasShader = false;
+    /// The shader half verbatim, in the same map shape
+    /// `AnimationsPageController::rawShaderProfile()` returns. Passed straight
+    /// through rather than pre-split, because which of the three states it
+    /// represents decides WHICH controller API applies it, and that dispatch
+    /// belongs next to those APIs rather than here.
+    QVariantMap shader;
 };
 
 /// The event-path taxonomy is fixed for the process, so build it once. Shared by
@@ -104,83 +155,200 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
             qCWarning(lcConfig) << "motionset: missing profile object for path" << path;
             return false;
         }
-        staged->push_back({path, entry.value(kProfileKey).toObject().toVariantMap()});
+        QJsonObject profile = entry.value(kProfileKey).toObject();
+
+        // Split the entry's two halves. `shader` is optional: a format-1 set
+        // has none and means "leave this event's pack alone", which is why its
+        // absence is not an error and is not the same as an empty one.
+        StagedEntry out;
+        out.path = path;
+        if (profile.contains(kShaderKey)) {
+            const QJsonValue shaderVal = profile.take(kShaderKey);
+            if (!shaderVal.isObject()) {
+                qCWarning(lcConfig) << "motionset: shader half is not an object for path" << path;
+                return false;
+            }
+            const QJsonObject shader = shaderVal.toObject();
+            // The shader tree is a THREE-state model and a set has to round-trip
+            // all of it, so both fields are optional and only their types are
+            // pinned here:
+            //   effectId "pack"  — this event runs that pack
+            //   effectId ""      — engaged-empty: explicitly NO pack, which also
+            //                      blocks inheritance from an ancestor. Distinct
+            //                      from having no override at all.
+            //   no effectId, but parameters — the event inherits its pack from an
+            //                      ancestor and overrides only the parameter map.
+            // An object carrying neither is a no-op override the tree itself
+            // refuses to store, so it is malformed here too.
+            if (shader.contains(kEffectIdKey) && !shader.value(kEffectIdKey).isString()) {
+                qCWarning(lcConfig) << "motionset: shader effectId is not a string for path" << path;
+                return false;
+            }
+            if (shader.contains(kParametersKey) && !shader.value(kParametersKey).isObject()) {
+                qCWarning(lcConfig) << "motionset: shader parameters are not an object for path" << path;
+                return false;
+            }
+            if (!shader.contains(kEffectIdKey) && !shader.contains(kParametersKey)) {
+                qCWarning(lcConfig) << "motionset: shader half carries neither effectId nor parameters for path"
+                                    << path;
+                return false;
+            }
+            // The shader half has its OWN taxonomy, narrower than the motion
+            // one: allBuiltInPaths() covers widget.*, cursor.*, panel.* and
+            // editor.*, none of which has a shader leg. setShaderOverride
+            // refuses those paths, so accepting one here passed validation and
+            // then failed mid-commit, after earlier entries had already written
+            // their timing files. Gate it at validate time instead, which is
+            // what keeps the whole-set promise the header makes.
+            if (!eventPathSupportsShaderLeg(path)) {
+                qCWarning(lcConfig) << "motionset: path carries a shader half but supports no shader leg" << path;
+                return false;
+            }
+            out.hasShader = true;
+            out.shader = shader.toVariantMap();
+        }
+        // Whatever is left is the timing half, in exactly the shape the
+        // per-event override file takes.
+        out.timing = profile.toVariantMap();
+        if (!out.timing.isEmpty()) {
+            // Judge what the timing half actually SAYS, not merely that it is
+            // non-empty — decoration's rule, adapted (see knownTimingFields).
+            bool anyRecognised = false;
+            for (auto it = out.timing.cbegin(); it != out.timing.cend(); ++it) {
+                if (knownTimingFields().contains(it.key())) {
+                    anyRecognised = true;
+                    break;
+                }
+            }
+            if (!anyRecognised) {
+                qCWarning(lcConfig) << "motionset: timing half carries no recognised field for path" << path
+                                    << "— keys:" << out.timing.keys();
+                return false;
+            }
+        }
+        if (out.timing.isEmpty() && !out.hasShader) {
+            qCWarning(lcConfig) << "motionset: entry carries neither timing nor shader for path" << path;
+            return false;
+        }
+        staged->push_back(std::move(out));
     }
     return !staged->isEmpty();
 }
 
 } // namespace
 
-ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::function<QString()> setsDir,
+ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
                                   std::function<bool(const QString&, const QVariantMap&)> writeOverride,
-                                  std::function<bool(const QString&)> fileSnapshot,
-                                  std::function<void(const QString&)> snapshotRollback,
-                                  std::function<QString()> mutationGuard)
+                                  std::function<QVariantMap()> readShaders,
+                                  std::function<bool(const QString&, const QVariantMap&)> writeShader)
 {
     // The domain cannot function without these: a missing callable is a wiring
     // bug, not a runtime condition. Assert in debug; the lambdas below still
     // check, so a release build degrades to "nothing to snapshot / refuse the
     // write" instead of throwing std::bad_function_call.
-    Q_ASSERT(profilesDir);
+    Q_ASSERT(readTimings);
     Q_ASSERT(writeOverride);
+    Q_ASSERT(readShaders);
+    Q_ASSERT(writeShader);
 
     ShaderSetStore::Config config;
     // Named rather than left to the default, so a future format bump is a
     // one-line change here instead of an easy-to-miss omission.
     config.formatVersion = kSetFormatVersion;
     config.setsDir = std::move(setsDir);
-    config.fileSnapshot = std::move(fileSnapshot);
-    config.snapshotRollback = std::move(snapshotRollback);
-    config.mutationGuard = std::move(mutationGuard);
 
-    // ── Snapshot: walk the profiles dir and keep the files whose `name`
-    //    matches a known event path. Non-path names (user presets) are
-    //    skipped so a set stays portable and self-contained. QDir::Name
-    //    ordering keeps the on-disk output stable across saves, which makes a set
-    //    file diffable. Active-detection does NOT depend on it: the store indexes
-    //    live overrides by path into a hash.
-    config.snapshot = [profilesDir = std::move(profilesDir)]() -> QJsonObject {
+    // ── Snapshot: read both halves of every event out of config. The timing
+    //    half comes from `Animations/MotionProfileTree`, the pack half from
+    //    `Animations/ShaderProfileTree`. Insertion order is preserved, which
+    //    keeps the on-disk set stable across saves and so diffable.
+    //    Active-detection does NOT depend on it: the store indexes live
+    //    overrides by path into a hash.
+    config.snapshot = [readTimings = std::move(readTimings), readShaders]() -> QJsonObject {
         using namespace PhosphorAnimation;
 
-        if (!profilesDir) {
+        if (!readTimings) {
             return QJsonObject{};
         }
+        // The shader half, read ONCE for the whole snapshot. Consumed by the
+        // timing walk below and then swept for any path that has a pack but no
+        // timing override, which would otherwise be missing from the set.
+        QVariantMap shaders = readShaders ? readShaders() : QVariantMap{};
         QJsonArray overrides;
-        QDir dir(profilesDir());
-        if (!dir.exists()) {
-            return QJsonObject{};
-        }
-        const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-        for (const QFileInfo& info : files) {
-            // The profiles dir is hand-editable and this walk runs on the GUI
-            // thread on every setsChanged, so cap it like every other read of a
-            // user-writable path.
-            if (!info.isFile() || info.size() > kMaxProfileFileBytes) {
-                qCWarning(lcConfig) << "motionset snapshot: skipping" << info.absoluteFilePath()
-                                    << "— not a regular file, or over the" << kMaxProfileFileBytes << "byte cap";
-                continue;
-            }
-            QFile f(info.absoluteFilePath());
-            if (!f.open(QIODevice::ReadOnly)) {
-                qCWarning(lcConfig) << "motionset snapshot: cannot open" << info.absoluteFilePath();
-                continue;
-            }
-            QJsonParseError err{};
-            const auto doc = QJsonDocument::fromJson(f.readAll(), &err);
-            if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-                qCWarning(lcConfig) << "motionset snapshot: failed to parse" << info.absoluteFilePath() << ":"
-                                    << err.errorString();
-                continue;
-            }
-            const QJsonObject obj = doc.object();
-            const QString entryName = obj.value(kNameKey).toString();
+
+        const QVariantMap tree = readTimings();
+        const QVariantList stored = tree.value(kOverridesKey).toList();
+        for (const QVariant& value : stored) {
+            const QVariantMap entryMap = value.toMap();
+            const QString entryName = entryMap.value(kPathKey).toString();
             if (!knownEventPaths().contains(entryName)) {
                 continue;
             }
-            QJsonObject profile = obj;
-            profile.remove(kNameKey);
+            QJsonObject profile = QJsonObject::fromVariantMap(entryMap.value(kProfileKey).toMap());
+            // Fold in this event's pack assignment, and take it out of the map
+            // so the sweep below only sees paths this walk never reached.
+            const auto shaderIt = shaders.find(entryName);
+            if (shaderIt != shaders.end()) {
+                profile.insert(kShaderKey, QJsonObject::fromVariantMap(shaderIt.value().toMap()));
+                shaders.erase(shaderIt);
+            }
             QJsonObject entry;
             entry.insert(kPathKey, entryName);
+            entry.insert(kProfileKey, profile);
+            overrides.append(entry);
+        }
+
+        // Paths carrying a pack but NO timing override. Without this sweep an event
+        // whose only override is its shader would be dropped from the set, and
+        // the set would then read as "clean" against a live state that is not.
+        QSet<QString> emitted;
+        for (const QJsonValue& v : std::as_const(overrides)) {
+            emitted.insert(v.toObject().value(kPathKey).toString());
+        }
+        for (auto it = shaders.cbegin(); it != shaders.cend(); ++it) {
+            if (!knownEventPaths().contains(it.key())) {
+                continue;
+            }
+            QJsonObject profile;
+            profile.insert(kShaderKey, QJsonObject::fromVariantMap(it.value().toMap()));
+            QJsonObject entry;
+            entry.insert(kPathKey, it.key());
+            entry.insert(kProfileKey, profile);
+            overrides.append(entry);
+            emitted.insert(it.key());
+        }
+
+        // ── Built-in per-path defaults, so a set is SELF-CONTAINED. ──
+        //
+        // This is the analogue of decoration reading its seed-merged tree: a
+        // decoration set captures every surface that has a look, whether the
+        // user chose it or the build shipped it, which is what lets the set
+        // reproduce that look on the recipient. Motion has per-path defaults of
+        // exactly the same kind — window-morph on the geometry legs, a fade on
+        // the OSD and popup legs — supplied at resolve time rather than stored.
+        //
+        // Capturing only stored overrides meant a user on defaults saved a set
+        // that was nearly empty (or was told there was nothing to capture on a
+        // setup that visibly animates), and applying it left a recipient's own
+        // customisation of those legs standing, so the set did not reproduce
+        // the sender's look at all.
+        //
+        // A path that already emitted above is skipped, so a deliberate
+        // "no pack here" (the engaged-empty sentinel) is never overwritten by
+        // the default it was chosen to suppress.
+        for (const QString& path : shaderSupportedEventPaths()) {
+            if (emitted.contains(path)) {
+                continue;
+            }
+            const QString defaultId = PhosphorAnimation::ProfilePaths::defaultShaderEffectIdForPath(path);
+            if (defaultId.isEmpty()) {
+                continue;
+            }
+            QJsonObject shader;
+            shader.insert(kEffectIdKey, defaultId);
+            QJsonObject profile;
+            profile.insert(kShaderKey, shader);
+            QJsonObject entry;
+            entry.insert(kPathKey, path);
             entry.insert(kProfileKey, profile);
             overrides.append(entry);
         }
@@ -195,13 +363,13 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
         return stageEntries(root, &staged);
     };
 
-    // ── Apply: validate everything up-front, then write each entry. The
-    //    controller's setOverride callback snapshots the prior content
-    //    before each write, so a mid-batch failure still leaves pre-edit
-    //    content captured for every peer that already succeeded — Discard
-    //    restores them atomically via the controller's revertPending walk.
-    config.apply = [writeOverride = std::move(writeOverride)](const QJsonObject& root) -> bool {
-        if (!writeOverride) {
+    // ── Apply: validate everything up-front, then write each entry. Both
+    //    halves are config keys, so a mid-batch failure leaves the settings
+    //    baseline untouched and Discard reverts the whole page in one
+    //    `Settings::load()` — the same guarantee decoration has.
+    config.apply = [writeOverride = std::move(writeOverride),
+                    writeShader = std::move(writeShader)](const QJsonObject& root) -> bool {
+        if (!writeOverride || !writeShader) {
             return false;
         }
         QList<StagedEntry> staged;
@@ -210,8 +378,22 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
         }
         QStringList committedPaths;
         for (const StagedEntry& e : staged) {
-            if (!writeOverride(e.path, e.profile)) {
-                qCWarning(lcConfig) << "motionset apply: write failed for path" << e.path;
+            // Timing first, and only when the entry actually carries one: an
+            // entry that is shader-only must not write an empty override file
+            // over timing the set never mentioned. Merge semantics apply
+            // WITHIN an entry as well as across paths.
+            if (!e.timing.isEmpty() && !writeOverride(e.path, e.timing)) {
+                qCWarning(lcConfig) << "motionset apply: timing write failed for path" << e.path;
+                if (!committedPaths.isEmpty()) {
+                    qCWarning(lcConfig) << "motionset apply: partial apply committed" << committedPaths.size()
+                                        << "paths before failure:" << committedPaths;
+                }
+                return false;
+            }
+            // Which of the three states this is decides which controller API
+            // applies it; the closure owns that dispatch.
+            if (e.hasShader && !writeShader(e.path, e.shader)) {
+                qCWarning(lcConfig) << "motionset apply: shader write failed for path" << e.path;
                 if (!committedPaths.isEmpty()) {
                     qCWarning(lcConfig) << "motionset apply: partial apply committed" << committedPaths.size()
                                         << "paths before failure:" << committedPaths;

@@ -188,6 +188,12 @@ public:
     // JSON-string facade routes through it for the Q_PROPERTY meta-object
     // dirty-tracking loop. Lives on the interface so page controllers and the
     // settings adaptor depend on ISettings, not the concrete Settings.
+    /// JSON-string facade over IAnimationSettings::motionProfileTree, for the
+    /// Q_PROPERTY meta-object dirty-tracking loop. Same role
+    /// `shaderProfileTreeJson` plays for the pack half.
+    virtual QString motionProfileTreeJson() const = 0;
+    virtual void setMotionProfileTreeJson(const QString& json) = 0;
+
     virtual PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const = 0;
     virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
     virtual QString decorationProfileTreeJson() const = 0;
@@ -1019,6 +1025,7 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
+    void motionProfileTreeChanged();
 
     // Surface decoration settings
     void decorationProfileTreeChanged();

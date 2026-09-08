@@ -651,9 +651,12 @@ private Q_SLOTS:
     /// updating the pin.
     void profileFormatTracksConfigSchemaVersion()
     {
-        // v7 qualifies: migrateV6ToV7 rewrites only the Animations group's
-        // ShaderProfileTree blob in place (see olderProfileFileV6RenamesPlacementNodes).
-        QCOMPARE(ConfigSchemaVersion, 7);
+        // v8 qualifies, but only because the step is told not to: migrateV7ToV8
+        // imports the per-event timing override FILES into config, which on a
+        // profile delta would write the migrating machine's own timings into
+        // every profile. readProfileFile runs the chain with
+        // ExternalImports::Disabled, leaving v8 a pure version stamp there.
+        QCOMPARE(ConfigSchemaVersion, 8);
     }
 
     /// A profile file stamped v5 whose delta carries the old zone-colour

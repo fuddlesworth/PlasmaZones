@@ -90,7 +90,11 @@ namespace PlasmaZones {
 /// v7: the window-movement placement animation nodes `snapIn` / `snapOut` are
 ///     renamed `placeIn` / `placeOut`, and `window.movement.maximize` is
 ///     retired into them (see migrateV6ToV7).
-inline constexpr int ConfigSchemaVersion = 7;
+/// v8: per-event animation TIMING overrides move out of the loose
+///     `<data>/plasmazones/profiles/<event.path>.json` files and into
+///     `Animations/MotionProfileTree`, beside the pack assignment already in
+///     `Animations/ShaderProfileTree` (see migrateV7ToV8).
+inline constexpr int ConfigSchemaVersion = 8;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -144,7 +148,18 @@ public:
     /// config delta translated into the nested shape — so a step must be
     /// correct for a sparse input too (write retired values' replacements
     /// explicitly; removal there means "inherit", not "default").
-    static void runMigrationChainInMemory(QJsonObject& root);
+    /// External state a migration step may read.
+    ///
+    /// `Disabled` is for a root that is NOT the live config — a settings
+    /// profile's sparse delta — where a step that imports from the filesystem
+    /// would write the migrating machine's own state into a document that never
+    /// carried it. Steps that are pure JSON→JSON transforms ignore this.
+    enum class ExternalImports {
+        Enabled,
+        Disabled
+    };
+
+    static void runMigrationChainInMemory(QJsonObject& root, ExternalImports imports = ExternalImports::Enabled);
 
     // Schema migration functions (one per version bump).
     // Public so the `PhosphorConfig::MigrationStep` registry built in
@@ -285,6 +300,30 @@ public:
     /// renameRetiredAnimationEventPaths, since rules.json is outside this
     /// chain. Stamps `_version = 7`.
     static void migrateV6ToV7(QJsonObject& root);
+
+    /// v7 → v8: fold the per-event motion override FILES into config.
+    ///
+    /// Per-event timing (curve, duration, ...) was the last part of an
+    /// animation's look kept in loose files under the data dir, while the pack
+    /// that plays it, and the whole decoration domain, were already config. So
+    /// a settings profile captured an event's PACK and not its TIMING, a motion
+    /// set had to snapshot two different stores, and the animations page
+    /// carried a private file-staging apparatus that the decoration page,
+    /// backed by one config tree, does not need at all.
+    ///
+    /// This reads `<data>/plasmazones/profiles/<event.path>.json` and writes the
+    /// equivalent ProfileTree into Animations/MotionProfileTree. Files whose
+    /// `name` is not a built-in event path are USER PRESETS and are left alone;
+    /// the override files themselves are also left in place, so a downgrade
+    /// still finds them.
+    ///
+    /// @param importOverrideFiles whether to read the profiles directory at
+    ///        all. FALSE for the settings-PROFILE delta path: a saved profile
+    ///        stores only the keys it changes, and importing the migrating
+    ///        machine's own override files into one would silently write this
+    ///        user's timings into every profile they load. That path only needs
+    ///        the version stamp, which is applied either way.
+    static void migrateV7ToV8(QJsonObject& root, bool importOverrideFiles = true);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

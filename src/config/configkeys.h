@@ -630,6 +630,13 @@ public:
     // selection layered alongside the motion Profile (separate tree,
     // same dot-path namespace — see design doc decision AA).
     P_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
+    /// Per-event motion overrides (curve, duration, stagger, ...), the timing
+    /// twin of ShaderProfileTree above and the config home the per-event
+    /// override FILES under the data dir migrate into. Config-backed for the
+    /// same reason the decoration tree is: a settings profile, a set snapshot
+    /// and the normal Save/Discard staging all reach config and none of them
+    /// reach loose files.
+    P_CONFIG_KEY(motionProfileTreeKey, "MotionProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global

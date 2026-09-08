@@ -622,6 +622,34 @@ public:
     virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
     virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
 
+    /// Per-event animation TIMING overrides, as the serialized
+    /// `PhosphorAnimation::ProfileTree` shape
+    /// (`{baseline, overrides: [{path, profile}]}`).
+    ///
+    /// Carried as a raw map rather than a parsed `ProfileTree` because parsing
+    /// one needs a `CurveRegistry`, which the settings layer has no business
+    /// owning. Each consumer parses with the registry it already has: the KWin
+    /// effect with its own, the daemon with the animator's. Callers that only
+    /// read or rewrite one path's fields (the animations page, the motion-set
+    /// domain) work on the map directly and never need a curve at all.
+    ///
+    /// This is the timing sibling of `shaderProfileTree()`, and together the
+    /// two hold everything one animation event owns. Before schema v8 the
+    /// timing half lived in loose per-event files under the user's data
+    /// directory, which is what made a settings profile capture an event's
+    /// pack but not its timing, and made the motion-set domain carry a whole
+    /// file-staging layer the decoration domain never needed.
+    virtual QVariantMap motionProfileTree() const = 0;
+    virtual void setMotionProfileTree(const QVariantMap& tree) = 0;
+
+    /// The committed-baseline motion tree, for the same dirty-check role
+    /// `committedShaderProfileTree()` plays. The default returns the live tree,
+    /// so a stub with no baseline notion reports "never diverged".
+    virtual QVariantMap committedMotionProfileTree() const
+    {
+        return motionProfileTree();
+    }
+
     /// The committed-baseline shader tree — the last-persisted value the
     /// per-surface animation dirty check and per-page Discard compare the live
     /// tree against. The default returns the live tree, so a stub with no

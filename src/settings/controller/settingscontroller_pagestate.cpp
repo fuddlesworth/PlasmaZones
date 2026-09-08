@@ -501,7 +501,7 @@ bool SettingsController::isPageDirty(const QString& page) const
         }
         if (scope.kind == AnimationPageScope::EventSubtree) {
             if (m_animationsPage != nullptr
-                && m_animationsPage->hasScopedPendingFiles(animationScopedBuiltInPaths(scope)))
+                && m_animationsPage->hasScopedPendingOverrides(animationScopedBuiltInPaths(scope)))
                 return true;
             // A page hosting the global timing / filter cards is also dirty
             // when those keys diverge (the condensed simple page).

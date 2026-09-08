@@ -311,7 +311,7 @@ private:
      *
      * Live updates route through the coalescing 0 ms trampoline
      * `requestAnimationProfilePublish`: `Settings::animationProfileChanged`,
-     * `ProfileLoader::profilesChanged`, and `CurveLoader::curvesChanged` all arm
+     * `Settings::motionProfileTreeChanged`, and `CurveLoader::curvesChanged` all arm
      * it, and the publish re-registers only when the registry observes a
      * value-or-owner change.
      */
@@ -989,7 +989,7 @@ private:
     /// Per-daemon curve registry, replacing the `CurveRegistry::instance()`
     /// singleton so each composition root owns its own.
     /// DECLARATION ORDER INVARIANT: must precede `m_settings`,
-    /// `m_curveLoader` and `m_profileLoader`, all of which borrow it, so
+    /// `m_curveLoader`, all of which borrow it, so
     /// reverse-order destruction tears every consumer down first and no
     /// Settings / loader teardown path can UAF. Also cleared from
     /// `PhosphorCurve::s_registry` in `~Daemon`, so the QML static helper
@@ -999,11 +999,10 @@ private:
     /// Per-daemon profile registry, replacing the
     /// `PhosphorProfileRegistry::instance()` singleton. Published via
     /// `setDefaultRegistry` so QML callsites resolve through the same
-    /// instance the daemon populates from Settings + ProfileLoader.
+    /// instance the daemon populates from Settings.
     /// DECLARATION ORDER INVARIANT: must precede `m_overlayService` (which
-    /// references it from its SurfaceAnimator) and `m_profileLoader`, so
-    /// reverse-order destruction tears the consumers down first and no
-    /// service / loader teardown path can UAF. `stop()` calls
+    /// references it from its SurfaceAnimator), so reverse-order destruction
+    /// tears the consumers down first and no service teardown path can UAF. `stop()` calls
     /// `setDefaultRegistry(nullptr)` to clear the QML static handle.
     PhosphorAnimation::PhosphorProfileRegistry m_profileRegistry;
     /// Per-daemon QtQuickClock manager — replaces the prior process-
@@ -1261,7 +1260,6 @@ private:
     /// the daemon for process lifetime; QFileSystemWatcher survives
     /// as long as the loader.
     std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
-    std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
 
     /// Coalescing trampoline for the publish path — see
     /// `requestAnimationProfilePublish`. Single-shot, and a VALUE member (no

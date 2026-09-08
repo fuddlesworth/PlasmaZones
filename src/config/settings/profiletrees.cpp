@@ -95,6 +95,78 @@ void Settings::setShaderProfileTreeJson(const QString& json)
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
+// ── Motion (timing) tree (PhosphorConfig::Store-backed) ─────────────────────
+// The timing sibling of the shader tree above, persisted under
+// Animations/MotionProfileTree in `PhosphorAnimation::ProfileTree`'s own
+// serialized shape. Before schema v8 this lived in loose per-event JSON files
+// under `<data>/plasmazones/profiles`, which split one animation event across
+// two stores: its pack in config, its timing on disk. That split is what made
+// a settings profile capture the pack and lose the timing, and what forced the
+// motion-set domain to carry a file-staging layer the decoration domain, whose
+// single tree holds everything, never needed.
+//
+// Carried as a raw QVariantMap, not a parsed tree. Parsing a ProfileTree needs
+// a CurveRegistry, and the config layer owning one would drag curve loading
+// into every process that reads a setting. Consumers that animate parse with
+// the registry they already have; consumers that only read or rewrite a path's
+// fields work on the map.
+//
+// No seed layer here, unlike the decoration tree. The animation timing seeds
+// live in PhosphorProfileRegistry at its low-precedence owner tag, where they
+// have always lived, and the schema default for this key is the empty tree.
+
+QVariantMap Settings::motionProfileTree() const
+{
+    return m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey());
+}
+
+QVariantMap Settings::committedMotionProfileTree() const
+{
+    // The baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline lookup so a per-page Discard and the dirty check agree.
+    return m_baseline.value(ConfigDefaults::animationsGroup()).value(ConfigDefaults::motionProfileTreeKey()).toMap();
+}
+
+void Settings::setMotionProfileTree(const QVariantMap& tree)
+{
+    refreshCleanBackendFromDisk();
+    // Stored VERBATIM, with no round trip through ProfileTree. That round trip
+    // looks like harmless canonicalisation and is not: Profile stores its curve
+    // as a resolved object, so re-serializing one parsed against a registry
+    // that has not loaded the user's curve packs drops the `curve` key
+    // outright, silently retiming every event that names a curve by name. The
+    // config layer has no curve registry and must not grow one, so it does not
+    // parse. Callers assemble the tree from what they read here, and the write
+    // side of the animations page is the only thing that builds one.
+    if (tree == motionProfileTree())
+        return;
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey(), tree);
+    Q_EMIT motionProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::motionProfileTreeJson() const
+{
+    return QString::fromUtf8(
+        QJsonDocument(QJsonObject::fromVariantMap(motionProfileTree())).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setMotionProfileTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        // Empty string = drop every per-event timing override, the same
+        // "reset to canonical default" the shader facade gives.
+        setMotionProfileTree({});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setMotionProfileTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setMotionProfileTree(doc.object().toVariantMap());
+}
+
 // ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────
 // Persisted as one nested JSON entry under Decorations/DecorationProfileTree,
 // mirroring how the animation shaderProfileTree persists under

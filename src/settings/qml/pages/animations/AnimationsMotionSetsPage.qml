@@ -8,9 +8,15 @@ import QtQuick
  *
  * A motion set is a snapshot of every per-event override active at a given
  * moment, persisted as one JSON file under
- * `~/.local/share/plasmazones/motionsets/<slug>.json`. Applying a set merges
- * its overrides into the user's profiles dir; paths it does not cover are
- * preserved.
+ * `~/.local/share/plasmazones/motionsets/<slug>.json`. Applying a set merges:
+ * events it covers are replaced, events it does not cover are preserved.
+ *
+ * An override means BOTH halves of what the event card holds — the timing
+ * (curve, duration) from the profiles dir, and the animation pack assigned to
+ * that event from the shader profile tree. Carrying only the timing would
+ * capture half of what the user sets in one place, and would leave this page
+ * doing strictly less than its Decoration Sets counterpart, whose single tree
+ * holds pack ids and parameters together.
  *
  * Saving captures only path-named override files. User presets in the same
  * directory are intentionally excluded so a set stays portable and
@@ -24,8 +30,8 @@ ShaderSetsPage {
     importAnchor: "importMotionSets"
     savedAnchor: "savedMotionSets"
 
-    infoBannerText: i18n("Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides. Paths it doesn't cover are left unchanged.")
-    saveDescription: i18n("Capture every per-event override file as a named motion set.")
+    infoBannerText: i18n("Motion sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn't cover are left unchanged.")
+    saveDescription: i18n("Capture every per-event animation pack and its timing as a named motion set.")
     importDescription: i18n("Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
     emptyStateText: i18n("No motion sets saved yet.")
     nameFieldAccessibleName: i18n("Motion set name")

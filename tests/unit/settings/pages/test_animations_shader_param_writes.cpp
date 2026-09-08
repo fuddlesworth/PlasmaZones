@@ -307,26 +307,6 @@ private Q_SLOTS:
         QCOMPARE(dirtied.count(), 1);
     }
 
-    /// The refusal parity every sibling group writer has: refused as a whole,
-    /// -1 rather than 0, exactly one toast, and nothing written.
-    void setShaderParametersOnPaths_refusesWhileAsyncDiscardIsInFlight()
-    {
-        ControllerFixture fx;
-        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
-        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
-        c.asyncRevertPending();
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral("setShaderParametersOnPaths: refusing while an async discard")));
-        QCOMPARE(c.setShaderParametersOnPaths({PP::WindowOpen}, QVariantMap{{QStringLiteral("strength"), 0.7}}), -1);
-        QCOMPARE(toasts.count(), 1);
-        QVERIFY(c.rawShaderProfile(PP::WindowOpen).isEmpty());
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
-    }
-
     // ── the group readers ────────────────────────────────────────────
 
     /// The group accessor must agree with the per-path one it replaced. It
@@ -729,66 +709,6 @@ private Q_SLOTS:
         QVERIFY(c.rawShaderProfile(PP::PopupLayoutPickerShow).isEmpty());
     }
 
-    /// The wrapper refuses as a WHOLE while an async discard owns the tree:
-    /// -1 rather than a partial count, and exactly one toast however many paths
-    /// were listed.
-    ///
-    /// Two paths here for the shape of the call, not because the second proves
-    /// anything the first does not. The gate is at the TOP of the wrapper,
-    /// before the per-path loop runs at all, so a one-path list produces the
-    /// same -1 and the same single toast. The per-path "stops at the first
-    /// refusal" arm inside the loop is unreachable from here for the same
-    /// reason, and unreachable from anywhere else too: the only way the
-    /// singular clear returns negative is that same flag, which this gate has
-    /// already caught.
-    void clearShaderOverrideDescendantsOnPaths_reportsARefusalRatherThanASmallerCount()
-    {
-        ControllerFixture fx;
-        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
-
-        QVERIFY(c.setShaderOverride(PP::PopupLayoutPickerShow, QStringLiteral("pixelate"), {}));
-        QVERIFY(c.setShaderOverride(PP::PopupZoneSelectorShow, QStringLiteral("pixelate"), {}));
-        // A FILE-backed pending change too: a tree-only discard completes
-        // synchronously (no worker, no in-flight window), so the refusal
-        // this slot pins requires a snapshot for the worker to restore.
-        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        // TWO paths, and that is the point. With one path, `cleared += -1` and
-        // an early `return -1` are indistinguishable — both yield -1 — so a
-        // single-path fixture cannot pin either the "never summed in" rule or
-        // the "stops at the first refusal" one. The gate is global, so both
-        // paths refuse: summing would give -2.
-        const QStringList group{PP::PopupLayoutPicker, PP::PopupZoneSelector};
-
-        // An async discard owning the tree is what the -1 sentinel reports.
-        // The gate is cleared only in the watcher's `finished` handler, and no
-        // event loop spins between here and the call below, so it is still up.
-        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        c.asyncRevertPending();
-
-        // The refusal is reported by the method's own top-level async gate,
-        // which short-circuits before any per-path work — so this is the
-        // *OnPaths wrapper's message, not the per-path singular's.
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral(
-                                 "clearShaderOverrideDescendantsOnPaths: refusing while an async discard")));
-        // Spy attached before the refused call, for the same reason as its
-        // timing-side twin in test_animations_group_writes: a refusal must
-        // mutate nothing, and the tree's contents here would race the discard
-        // worker's restore. The worker cannot emit without an event-loop spin,
-        // and none happens between the call and these assertions.
-        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
-
-        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(group), -1);
-        // One toast for the whole call, not one per path. Note this is the
-        // TOP-LEVEL gate refusing before the loop runs, not the loop stopping
-        // at a first refusal — see the slot comment.
-        QCOMPARE(toasts.count(), 1);
-        QCOMPARE(dirtied.count(), 0);
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
-    }
-
     /// The GROUP write path — the only one QML uses — applies the SAME
     /// effect-id boundary check as the per-path setter. Before this slot,
     /// deleting the acceptableShaderEffectId gate in setShaderOverrideOnPaths
@@ -810,88 +730,6 @@ private Q_SLOTS:
 
         QVERIFY(registry.hasEffect(QStringLiteral("pixelate")));
         QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), {}), 2);
-    }
-
-    /// The refusal gate wins over the id check when BOTH would reject.
-    ///
-    /// Pins an ORDERING, which is the shape of defect that survives a refactor
-    /// unnoticed: extracting the shared body once moved the id check ahead of
-    /// the gates, and the only visible symptom was that a user editing during a
-    /// discard got silence instead of the toast explaining why. Both orders
-    /// return -1, so nothing but the toast count and the log line distinguishes
-    /// them.
-    ///
-    /// The other half of that contract, "a null ISettings returns 0 rather than
-    /// -1 even with an invalid id", is deliberately not asserted here: every
-    /// fixture in this tree builds the controller with a real Settings, and
-    /// adding a null-settings one to pin a single ordering is more scaffolding
-    /// than the claim is worth. The gate order in applyShaderGroupWrite is what
-    /// carries it.
-    void setShaderOverrideOnPaths_refusalGateOutranksTheIdCheck()
-    {
-        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
-
-        PopulatedControllerFixture fx;
-        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
-        QVERIFY2(!registry.effectIds().isEmpty(), "precondition: registry populated so the id gate is armed");
-        QVERIFY2(!registry.hasEffect(QStringLiteral("no-such-effect")),
-                 "precondition: the id below must really be unknown");
-        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
-        c.asyncRevertPending();
-
-        // The DISCARD warning, not the unknown-id one: reaching the id check
-        // first would log "unknown effectId" and never toast.
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral("setShaderOverrideOnPaths: refusing while an async discard")));
-        QCOMPARE(c.setShaderOverrideOnPaths({PP::WindowOpen}, QStringLiteral("no-such-effect"), {}), -1);
-        QVERIFY2(toasts.count() == 1, "an invalid id during a discard must still explain the discard");
-
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
-    }
-
-    /// Async-refusal parity for the group setter, matching the family's
-    /// per-path and descendants twins: -1, one toast, no tree write.
-    void setShaderOverrideOnPaths_refusesWhileAsyncDiscardIsInFlight()
-    {
-        ControllerFixture fx;
-        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
-        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
-        c.asyncRevertPending();
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral("setShaderOverrideOnPaths: refusing while an async discard")));
-        QCOMPARE(c.setShaderOverrideOnPaths({PP::PopupLayoutPickerShow}, QStringLiteral("dissolve"), {}), -1);
-        QCOMPARE(toasts.count(), 1);
-        QVERIFY(c.rawShaderProfile(PP::PopupLayoutPickerShow).isEmpty());
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
-    }
-
-    /// And the group clearer's refusal.
-    void clearShaderOverrideOnPaths_refusesWhileAsyncDiscardIsInFlight()
-    {
-        ControllerFixture fx;
-        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
-        QVERIFY(c.setShaderOverride(PP::PopupLayoutPickerShow, QStringLiteral("pixelate"), {}));
-        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
-        c.asyncRevertPending();
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral("clearShaderOverrideOnPaths: refusing while an async discard")));
-        QCOMPARE(c.clearShaderOverrideOnPaths({PP::PopupLayoutPickerShow}), -1);
-        QCOMPARE(toasts.count(), 1);
-        QVERIFY2(!c.rawShaderProfile(PP::PopupLayoutPickerShow).isEmpty(),
-                 "refused clear must leave the stored override in place");
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 
     /// The non-empty parameters branch of the group setter, plus its

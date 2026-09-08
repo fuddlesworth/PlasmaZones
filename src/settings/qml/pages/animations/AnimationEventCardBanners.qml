@@ -43,6 +43,10 @@ ColumnLayout {
     required property int writePathCount
     /// "window ← global" ancestor breadcrumb; empty at the taxonomy root.
     required property string parentChain
+    /// Non-empty when the SHADER axis is isolated at that root (see the card).
+    /// The timing axis never is, which is why this narrows the inheritance
+    /// sentence rather than replacing it.
+    required property string shaderIsolationRoot
     /// Resolved curve + duration summary for the "Current:" line.
     required property string inheritSummary
 
@@ -73,10 +77,21 @@ ColumnLayout {
             if (root.isParentNode)
                 return i18n("Settings here apply to all child events unless individually overridden.");
 
-            if (root.parentChain.length > 0)
+            if (root.parentChain.length > 0) {
+                // On an isolated subtree the two axes disagree: timing still
+                // inherits the whole chain, the pack does not inherit above the
+                // isolation root at all. Saying only "Inheriting from: …" is a
+                // false claim about the pack, which is the same reason the
+                // decoration card suppresses its breadcrumb outright — but
+                // decoration has one axis and can drop the sentence, while here
+                // half of it is true and has to be kept.
+                if (root.shaderIsolationRoot.length > 0) {
+                    return i18nc("%1 is an inheritance chain, %2 an event-path root", "Timing inherits from: %1. The animation is not inherited from outside %2.", root.parentChain, root.shaderIsolationRoot);
+                }
                 return i18n("Inheriting from: %1", root.parentChain);
+            }
 
-            return i18n("Using library defaults");
+            return i18n("Using global defaults");
         }
     }
 
