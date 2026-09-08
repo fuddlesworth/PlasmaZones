@@ -24,10 +24,11 @@ class CurveRegistry;
 
 namespace PlasmaZones {
 
-/// Owner-tag partition used by `seedShellAnimationFamilies`. Exposed
-/// so daemon teardown / reconfigure paths can `clearOwner(tag)` to
-/// wipe just the family-seed partition without touching settings-driven
-/// or user-JSON entries.
+/// Owner-tag partition used by `seedShellAnimationFamilies`. Exposed so a
+/// caller can `clearOwner(tag)` to wipe just the family-seed partition
+/// without touching settings-driven or user-JSON entries. The composition
+/// roots use it that way when they re-seed; nothing calls it on teardown,
+/// because the registry goes away with the process.
 extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwnerTag;
 
 /// XDG-discovered curve directories — `plasmazones/curves` resolved against

@@ -4,8 +4,8 @@
 #pragma once
 
 // Inline helpers shared across the daemon TU files in this directory
-// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, lifecycle.cpp, the
-// init_*.cpp trio, autotile_init.cpp).  Defined inline to avoid ODR
+// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, cheatsheet.cpp,
+// lifecycle.cpp, the init_*.cpp trio, autotile_init.cpp).  Defined inline to avoid ODR
 // issues in both unity and normal builds.
 
 #include <QScreen>

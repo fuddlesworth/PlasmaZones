@@ -594,8 +594,8 @@ install(FILES data/whatsnew.json
 # (e.g. `"curve": "widget-out"`) so a single edit to a curve file
 # retunes every profile that uses it, and users can drop their own
 # JSON under ~/.local/share/plasmazones/curves/ to override a shipped
-# curve system-wide. The daemon's CurveLoader scans this path before
-# ProfileLoader runs.
+# curve system-wide. The daemon's CurveLoader scans this path first, so
+# every later consumer resolves curve names against the merged set.
 install(DIRECTORY data/curves/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/curves
     FILES_MATCHING PATTERN "*.json"

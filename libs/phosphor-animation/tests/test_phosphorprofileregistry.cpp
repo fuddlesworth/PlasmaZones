@@ -346,6 +346,101 @@ private Q_SLOTS:
         QVERIFY(!m_registry.hasProfile(QStringLiteral("window")));
     }
 
+    /// A seed-tagged write over an EXISTING untagged entry at the same path
+    /// leaves that untagged entry standing, so the seed does not take effect.
+    ///
+    /// This is the mechanism behind the cleared-global-profile bug, from the
+    /// other direction: the seed branch only ever touches `m_seedProfiles`, so
+    /// it cannot evict an override, and pass 2 of the resolve walk keeps
+    /// winning. Callers that mean to MOVE an entry into the seed layer have to
+    /// unregister their own copy first, which is exactly what the composition
+    /// roots now do. Pinning the raw behaviour here keeps a future
+    /// "just make registerProfile evict" fix from landing silently: doing that
+    /// would destroy a user override every time a seed is refreshed.
+    void testSeedWriteDoesNotEvictAnExistingOverrideAtTheSamePath()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile existing;
+        existing.duration = 900.0;
+        m_registry.registerProfile(QStringLiteral("window"), existing);
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 900.0);
+
+        // The caller-side eviction the composition roots perform is what makes
+        // the seed visible, and it must not take the seed down with it.
+        m_registry.unregisterProfile(QStringLiteral("window"));
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 200.0);
+    }
+
+    /// Changing the low-precedence tag from one NON-EMPTY value to another
+    /// demotes the old seeds back to the upper store under their old tag, and
+    /// promotes entries already owned by the new tag into the seed layer.
+    ///
+    /// Only the empty-to-set direction had coverage, which is the half every
+    /// composition root exercises at startup. The demote half runs when a tag
+    /// is re-pointed, and it carries the collision case: a seed whose path is
+    /// already held in the upper store cannot move there, so it is dropped —
+    /// and it still has to announce the path, because per-field overlay means
+    /// what the path resolves to changes even though the winning entry does
+    /// not. An unannounced drop leaves consumers rendering a stale field.
+    void testTagRepointDemotesOldSeedsAndAnnouncesTheDroppedCollision()
+    {
+        const QString oldTag = QStringLiteral("seeds-a");
+        const QString newTag = QStringLiteral("seeds-b");
+        m_registry.setLowPrecedenceOwnerTag(oldTag);
+
+        Profile lonely;
+        lonely.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), lonely, oldTag);
+
+        Profile collidingSeed;
+        collidingSeed.duration = 300.0;
+        m_registry.registerProfile(QStringLiteral("widget"), collidingSeed, oldTag);
+        Profile override;
+        override.minDistance = 7;
+        m_registry.registerProfile(QStringLiteral("widget"), override);
+
+        // Owned by the incoming tag while it is still an ordinary owner.
+        Profile future;
+        future.duration = 400.0;
+        m_registry.registerProfile(QStringLiteral("dialog"), future, newTag);
+        QVERIFY(m_registry.snapshot().contains(QStringLiteral("dialog")));
+
+        QSignalSpy changed(&m_registry, &PhosphorProfileRegistry::profileChanged);
+        m_registry.setLowPrecedenceOwnerTag(newTag);
+        QTRY_VERIFY(changed.count() >= 3);
+
+        QStringList announced;
+        for (const QList<QVariant>& call : changed) {
+            announced.append(call.at(0).toString());
+        }
+        QVERIFY2(announced.contains(QStringLiteral("widget")),
+                 "the dropped seed's path was not announced; a consumer holding a field that only the "
+                 "seed carried keeps rendering it after the value is gone");
+        QVERIFY(announced.contains(QStringLiteral("window")));
+        QVERIFY(announced.contains(QStringLiteral("dialog")));
+
+        // Demoted: back in the upper store under the tag it was written with.
+        QCOMPARE(m_registry.ownerOf(QStringLiteral("window")), oldTag);
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 200.0);
+
+        // Dropped, not merged: the surviving override is the only entry left,
+        // so the seed's duration is gone rather than showing through.
+        QCOMPARE(m_registry.ownerOf(QStringLiteral("widget")), QString());
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 0.0);
+
+        // Promoted: now a seed, so it is stripped at the D-Bus boundary.
+        QVERIFY(!m_registry.snapshotExcludingLowPrecedence().contains(QStringLiteral("dialog")));
+        QCOMPARE(m_registry.resolve(QStringLiteral("dialog"))->duration.value_or(0.0), 400.0);
+    }
+
     /// `ownerReloaded(tag)` fires exactly once per partitioned-reload
     /// batch, AFTER every per-path `profileChanged` signal. Consumers
     /// that want to coalesce UI updates across a rescan use this as

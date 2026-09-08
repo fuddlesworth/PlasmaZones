@@ -28,7 +28,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
+
+#include <memory>
 
 #include "config/configkeys.h"
 #include "config/configmigration.h"
@@ -125,22 +128,26 @@ class TestMigrationV7ToV8 : public QObject
 
 private Q_SLOTS:
 
-    void initTestCase()
-    {
-        QStandardPaths::setTestModeEnabled(true);
-    }
-
+    /// Each slot gets its own XDG_DATA_HOME rather than the shared qttest tree.
+    ///
+    /// `QStandardPaths::setTestModeEnabled(true)` pins the data location to ONE
+    /// fixed path for the whole process, so two of these executables running
+    /// concurrently under `ctest -j` write override fixtures into the same
+    /// directory and read each other's. The sibling animations suites removed
+    /// it for exactly that reason. A per-slot temporary root keeps the
+    /// isolation without depending on how the runner schedules tests.
     void init()
     {
-        // Each slot owns the directory outright: these tests write into the
-        // qttest data location, and a file left by a previous slot would leak
-        // into the next one's tree.
-        QDir(profilesDir()).removeRecursively();
+        m_dataHome = std::make_unique<QTemporaryDir>();
+        QVERIFY(m_dataHome->isValid());
+        qputenv("XDG_DATA_HOME", QFile::encodeName(m_dataHome->path()));
+        QVERIFY(QDir().mkpath(profilesDir()));
     }
 
-    void cleanupTestCase()
+    void cleanup()
     {
-        QDir(profilesDir()).removeRecursively();
+        qunsetenv("XDG_DATA_HOME");
+        m_dataHome.reset();
     }
 
     void overrideFilesFoldIntoTheConfigTree()
@@ -447,6 +454,9 @@ private Q_SLOTS:
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 9);
         QVERIFY(!root.contains(ConfigKeys::animationsGroup()));
     }
+
+private:
+    std::unique_ptr<QTemporaryDir> m_dataHome;
 };
 
 QTEST_MAIN(TestMigrationV7ToV8)

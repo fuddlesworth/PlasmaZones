@@ -410,9 +410,9 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     if (!m_config.snapshot) {
         return false;
     }
-    // Overwriting destroys the stored payload, and on a domain with no
-    // fileSnapshot hook nothing could restore it. Allowed, but only with
-    // explicit consent — QML confirms first and then passes overwrite=true.
+    // Overwriting destroys the stored payload, and nothing stages set files,
+    // so no Discard can bring it back. Allowed, but only with explicit
+    // consent: QML confirms first and then passes overwrite=true.
     if (!overwrite && QFile::exists(filePath)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("A set named “%1” already exists.").arg(existingSetName(name)));
         return false;

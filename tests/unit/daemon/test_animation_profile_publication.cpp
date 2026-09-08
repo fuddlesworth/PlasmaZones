@@ -40,8 +40,6 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QFile>
-#include <QTextStream>
 #include <QTimer>
 
 #include <PhosphorAnimation/CurveLoader.h>
@@ -85,14 +83,6 @@ QVariantMap motionTreeWith(const QString& path, const QVariantMap& profile)
     return QVariantMap{
         {QStringLiteral("overrides"),
          QVariantList{QVariantMap{{QStringLiteral("path"), path}, {QStringLiteral("profile"), profile}}}}};
-}
-
-void writeFile(const QString& path, const QString& contents)
-{
-    QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    QTextStream s(&f);
-    s << contents;
 }
 
 } // namespace

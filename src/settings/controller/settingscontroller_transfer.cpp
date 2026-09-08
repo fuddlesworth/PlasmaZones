@@ -540,11 +540,10 @@ bool SettingsController::importAllSettings(const QString& filePath)
             Q_EMIT settingsTransferFailed(
                 PhosphorI18n::tr("Your settings were imported, but the window rules could not be reloaded. Restart "
                                  "PlasmaZones before you change any rules, or the imported ones will be lost."));
-            // Report not-fully-landed for the same reason the animation-snapshot
-            // branch below does: the bool's only job is gating the General
-            // page's success toast, and that toast replaces whatever is in
-            // flight, so returning true here would overwrite the warning just
-            // emitted with "Settings imported".
+            // Report not-fully-landed: the bool's only job is gating the
+            // General page's success toast, and that toast replaces whatever is
+            // in flight, so returning true here would overwrite the warning
+            // just emitted with "Settings imported".
             ok = false;
         }
         // Adopting the on-disk state is exactly what a reload deferred by

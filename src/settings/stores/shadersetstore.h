@@ -15,8 +15,8 @@
 namespace PlasmaZones {
 
 /// Persistence + CRUD for shader-set JSON files, shared by the two set
-/// domains (motion sets over per-event override files, decoration sets over
-/// the surface profile tree). One instance per domain, hosted as a child
+/// domains (motion sets over the animation motion profile tree, decoration
+/// sets over the surface profile tree). One instance per domain, hosted as a child
 /// QObject of that domain's page controller and handed to QML as the
 /// `bridge` of ShaderSetsPage.
 ///
@@ -24,12 +24,12 @@ namespace PlasmaZones {
 /// atomic writes, listing, apply / save / remove / update / export / import,
 /// and the coverage + "active" summaries. It treats a set's payload as
 /// opaque JSON and delegates the domain-specific steps to the injected
-/// callables in Config below (snapshot / validate / apply, plus the optional
-/// file-snapshot and mutation-guard hooks).
+/// callables in Config below (snapshot / validate / apply, and the optional
+/// entry-satisfied predicate).
 ///
 /// Both domains happen to serialise the SAME envelope:
 /// ```
-/// { "name": …, "description": …, "version": 1,
+/// { "name": …, "description": …, "version": <domain formatVersion>,
 ///   "overrides": [ { "path": …, "profile": { … } }, … ] }
 /// (a "baseline" key, even an empty one, is REFUSED by both domain validators)
 /// ```
@@ -112,10 +112,11 @@ public:
     /// Saved sets, one row per file:
     /// `{ name, description, slug, coverage: [section…], coverageCount,
     ///    active, modified }`
-    /// `active` is true when every entry the set carries is already live
-    /// with an equal profile (containment, not equality — apply merges, so
-    /// unrelated live overrides must not clear the badge). `modified` is the
-    /// set file's mtime.
+    /// `active` is true when every entry the set carries is already satisfied
+    /// live (containment, not equality — apply merges, so unrelated live
+    /// overrides must not clear the badge). What "satisfied" means for one
+    /// entry is the domain's, via Config::entrySatisfied; the default is
+    /// exact equality. `modified` is the set file's mtime.
     Q_INVOKABLE QVariantList availableSets() const;
 
     Q_INVOKABLE bool applySet(const QString& name);

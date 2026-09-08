@@ -189,8 +189,8 @@ inline const QSet<QString>& supportedShaderPathSet()
 }
 
 /// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged).
-/// The only callers today are the two in
-/// `animationspagecontroller_shaders.cpp`.
+/// Called from `animationspagecontroller_shaders.cpp` and from the motion-set
+/// domain's staging gate.
 inline bool eventPathSupportsShaderLeg(const QString& path)
 {
     return supportedShaderPathSet().contains(path);

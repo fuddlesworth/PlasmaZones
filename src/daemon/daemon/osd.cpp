@@ -30,9 +30,6 @@
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "config/settings.h"
-#include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusPendingCall>
 #include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>

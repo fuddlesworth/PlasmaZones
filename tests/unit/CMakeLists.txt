@@ -1719,7 +1719,6 @@ target_link_libraries(test_animations_motion_sets
 target_compile_definitions(test_animations_motion_sets PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 
-
 # Companion test executable: the user-preset library (AnimationPresetLibrary).
 # Split from test_animations_motion_sets because presets and sets are separate
 # sub-services of the controller.
