@@ -2338,6 +2338,29 @@ private:
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
 
+    /// The animation Profile blob's state, for change detection across a
+    /// load / discard / reset.
+    ///
+    /// `animationProfileChanged` is a bare signal with no backing Q_PROPERTY,
+    /// so the meta-object loop above never re-emits it — only the setters do,
+    /// and those three paths bypass them. That matters beyond a stale reader:
+    /// the daemon and the settings app both choose which registry LAYER the
+    /// global profile occupies from `hasExplicitAnimationProfile()`, so a
+    /// missed emission leaves the layer wrong until the process restarts.
+    ///
+    /// Carries the explicit-ness as well as the value because explicit-ness is
+    /// a STORAGE fact, not a value: sparse persistence deletes a default-equal
+    /// key, so resetting the blob while it already held the shipped defaults
+    /// changes no value at all and still flips the layer.
+    struct AnimationProfileState
+    {
+        QVariant stored;
+        bool explicitlySet = false;
+        bool operator==(const AnimationProfileState&) const = default;
+    };
+    AnimationProfileState animationProfileState() const;
+    void emitAnimationProfileChangeIfMoved(const AnimationProfileState& before);
+
     // Refresh the committed baseline — the last-persisted value of every
     // schema-declared key. Called at the end of load() and save() (the only
     // points where the in-memory store equals disk); discardKeys() reverts to
