@@ -103,9 +103,9 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
 // path — the last through `supportsShaderLeg`, whose supported set is built
 // from ProfilePaths constants and so cannot contain one, rather than
 // through an isValidEventPath call — while setOverrideMergedOnPaths
-// forwards it to writeOverrideFileOnly,
-// which rejects it, so that path is absent from the returned count and the
-// call toasts — a caller bug surfaces instead of being silently dropped.
+// checks isValidEventPath itself before staging the edit, so that path is
+// absent from the returned count and the call toasts — a caller bug surfaces
+// instead of being silently dropped.
 // allPathsHoldShaderEffect is the one that neither skips nor counts: it
 // RETURNS FALSE on an invalid path, because "every path holds this id"
 // cannot be true of a path that cannot hold anything. Either way the WORK is
@@ -160,13 +160,13 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     const bool curveEdited = curveIsString && !curveFromCommit.isNull();
     const QString editedCurve = curveEdited ? curveFromCommit.toString() : QString();
 
-    // Only the fields a Profile actually has. `writeOverrideFileOnly` persists
-    // `profileJson` RAW — it strips and re-stamps `name` and nothing else — so
-    // a stray key here lands in the user's profile file and stays there until
-    // some later write happens to rewrite the object. Inert (rawProfile drops
-    // it on read) but it accumulates on disk, and both sibling writers guard
-    // their input for exactly this reason: clearFieldOnPaths allowlists its
-    // field, setShaderOverrideOnPaths validates its effect id.
+    // Only the fields a Profile actually has. `writeOverrideOnly` persists
+    // `profileJson` RAW — it strips `name` and nothing else — so a stray key
+    // here lands in the user's timing tree and stays there until some later
+    // write happens to rewrite the entry. Inert (rawProfile drops it on read)
+    // but it accumulates in config, and both sibling writers guard their input
+    // for exactly this reason: clearFieldOnPaths allowlists its field,
+    // setShaderOverrideOnPaths validates its effect id.
     static const QSet<QString> knownFields{
         QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve),
         QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration),
@@ -317,15 +317,17 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     // it could recover from.
     //
     // Toasted ONCE per run of failures, not once per call. This is reached from
-    // the duration slider's per-move commit, and every reason a write fails
-    // after the async gate is persistent (an unwritable directory, a failed
-    // snapshot, a QSaveFile that will not commit), so the next tick fails the
-    // same way. Emitting per tick would restart the toast's fade before it
-    // finished, leaving a flickering pill that never reads, and would push the
-    // same sentence into the screen reader's queue at pointer rate. Deliberately
-    // NOT solved by having the caller stop writing: a disk failure can be fixed
-    // while the page is open, and a control the user cannot retry is worse than
-    // a repeated message. The latch clears on the first write that fully lands.
+    // the duration slider's per-move commit, and since schema v8 both remaining
+    // causes are persistent: an invalid path in the caller's list, or no
+    // settings object to write through. Both are wiring bugs rather than
+    // anything the user can act on, so the next tick fails the same way.
+    // Emitting per tick would restart the toast's fade before it finished,
+    // leaving a flickering pill that never reads, and would push the same
+    // sentence into the screen reader's queue at pointer rate. The latch stays
+    // rather than being removed with the disk failures it was written for: a
+    // caller bug that silently drops every edit is exactly the case worth
+    // surfacing, and the latch is what keeps surfacing it from being worse than
+    // the bug. It clears on the first write that fully lands.
     if (!allWritten) {
         if (!m_mergedWriteFailureToasted) {
             m_mergedWriteFailureToasted = true;

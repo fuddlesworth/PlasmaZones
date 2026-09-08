@@ -604,8 +604,8 @@ Item {
     // never edited. That was exactly the old commitOverride's bug in advanced
     // mode (a Duration drag pinned the curve and vice versa); simple mode had
     // already carved the curve out, and the per-axis split extends the same
-    // rule to both fields in both modes. The controller stamps the `name`
-    // field automatically.
+    // rule to both fields in both modes. The controller strips any `name`
+    // field on the way in.
     // Two emitters pass an empty path, and both mean "reload everything":
     // `shaderProfileChanged` on a full-tree reload, and `overrideChanged` from
     // the controller's `revertPending`, which cannot say which paths a
@@ -712,24 +712,6 @@ Item {
             root._shaderRegistryRev++;
         }
 
-        // The refusal latch's guaranteed release, and it has to be THIS signal.
-        //
-        // The latch is what stops a drag re-issuing a write the controller is
-        // refusing, and only a refresh the card did not drive itself clears it.
-        // The discard that causes those refusals does NOT end with a
-        // path-agnostic broadcast: its terminal handler emits `overrideChanged`
-        // only for the profile files the worker actually restored, so a card
-        // none of those paths reaches never refreshes, and the latch would stay
-        // set for the rest of the session. Nothing reconstructs the card to
-        // recover, because the list's Loaders latch built and never unload.
-        //
-        // `pendingChangesChanged` is emitted unconditionally by that same
-        // handler, so it is the one signal every card is guaranteed to see when
-        // the discard settles. It also fires on ordinary writes, which is
-        // harmless: a card still mid-drag re-arms the latch on its very next
-        // refused tick, so this costs at most one extra toast per discard and
-        // keeps the anti-repeat property that matters.
-
         target: settingsController.animationsPage
     }
 
@@ -803,19 +785,19 @@ Item {
                 // writes a shader. Blocking an inherited shader is the picker's job and
                 // the picker is reachable independently of this toggle.
                 //
-                // Shader first, then timing: if the timing clear fails
-                // mid-flight (a QFile error inside clearOverride's on-disk
-                // write), the shader side is already committed, so a partial
-                // failure still moves toward the user's intent instead of
-                // recording neither half.
+                // Shader first, then timing: if the timing clear does not land,
+                // the shader side is already committed, so a partial failure
+                // still moves toward the user's intent instead of recording
+                // neither half. Both halves are config keys, so "committed"
+                // here means staged for Save, and one Discard reverts either.
                 if (root._anyWritePathSupportsShaderLeg())
                     root._clearShaderOverrideOnAll();
 
-                // Gated: the controller refuses (and toasts) during an async
-                // discard, and on a partial failure — closing the editor anyway
-                // left the toggle visibly off beside a message saying it could
-                // not be changed. refreshFromTree has already run inside the
-                // call, so the toggle re-derives from the tree either way.
+                // Gated on the clear having actually removed something: a clear
+                // that found nothing to clear must not flip the latch, or the
+                // editor closes on a card whose state never changed.
+                // refreshFromTree has already run inside the call, so the
+                // toggle re-derives from the tree either way.
                 if (root._clearOverrideOnAll())
                     root._editingTiming = false;
             }
@@ -909,9 +891,9 @@ Item {
                 // via `overrideEnabled` and the latch is false. Reverting the
                 // last remaining field then drops overrideEnabled and collapses
                 // the editor under the cursor of the user who just clicked
-                // inside it. Gated on the return, which is false ONLY when the
-                // controller refused the call outright and attempted nothing (an
-                // async discard owns the tree, and it toasts). A PARTIAL failure
+                // inside it. Gated on the return, which is a CHANGED COUNT: 0
+                // means the field was already inherited everywhere and nothing
+                // needed doing, so the editor stays as it was. A PARTIAL result
                 // reports the count that did land and so still latches the editor
                 // open, because the primary path really was cleared and
                 // collapsing the card under the user is the regression this whole

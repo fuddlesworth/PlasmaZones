@@ -247,7 +247,8 @@ public:
     /// Write @p profileJson as the user override at @p path. The map
     /// follows `Profile::toJson()` shape (curve / duration / minDistance /
     /// sequenceMode / staggerInterval / presetName); a top-level `name`
-    /// field is added automatically. Emits `overrideChanged(path)` on
+    /// field is STRIPPED — the tree keys entries by path, so a name carried
+    /// over from a preset would be dead weight. Emits `overrideChanged(path)` on
     /// success. Rejects any @p path that isn't a built-in event path —
     /// path traversal (`../etc/passwd`) and arbitrary names cannot reach
     /// the disk.
@@ -264,16 +265,17 @@ public:
 
     /// Clear every per-event timing override (each built-in event path falls back
     /// to its built-in default). Backs the settings app's per-page "Reset to
-    /// defaults" for the animation pages: each cleared file is snapshotted like
-    /// a normal edit, so the change stages and a subsequent Discard restores it.
+    /// defaults" for the animation pages: the clear is one write to
+    /// `Animations/MotionProfileTree`, staged like any other edit, so a
+    /// subsequent Discard restores it from the committed baseline.
     /// The shader tree, animation Profile blob, and window filtering are separate
     /// Settings keys the caller resets alongside this.
-    /// @return the number of override files actually removed, or -1 when the
-    /// reset did not complete. Since schema v8 the only cause is a missing
-    /// settings object, i.e. a wiring bug: the async-discard refusal and the
-    /// partial-file-removal case both went with the per-event files. Formerly some
-    /// files could not be removed (a partial reset). The page toasts the reason
-    /// in both cases. A caller must not treat -1 as "nothing to clear".
+    /// @return the number of entries actually removed, or -1 when the reset did
+    /// not run at all. Since schema v8 the only cause of -1 is a missing settings
+    /// object, i.e. a wiring bug: the async-discard refusal and the
+    /// partial-removal case both went with the per-event files, and a partial
+    /// result is no longer possible because the whole clear is a single tree
+    /// write. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
 
     /// Scoped sibling of clearAllOverrides, called from the per-page kebab AND
@@ -281,8 +283,8 @@ public:
     /// whole write-path group in one batch). Q_INVOKABLE for that second
     /// caller: clear only the
     /// overrides at @p eventPaths (one settings page's own event-path
-    /// subtree), leaving every other page's overrides untouched. Same snapshot /
-    /// return-code contract as clearAllOverrides (-1 = refused or partial). @p
+    /// subtree), leaving every other page's overrides untouched. Same
+    /// return-code contract as clearAllOverrides (-1 = did not run). @p
     /// eventPaths must be built-in event paths; non-built-in entries are skipped.
     Q_INVOKABLE int clearOverridesUnder(const QStringList& eventPaths);
 
@@ -343,16 +345,11 @@ public:
     /// the curve and it travels to every path. Never decide a curve on the
     /// user's behalf by passing the resolved one here.
     ///
-    /// @return the number of paths written, or -1 if the call was refused
-    /// because there is no settings object to write through. Matches the
-    /// sentinel every other group writer here uses, and the distinction is
-    /// load-bearing rather than cosmetic: this used to return a plain bool that
-    /// went false for a refusal, for a caller-bug path AND for a genuine disk
-    /// failure alike. A caller that stops re-issuing a write on a refusal —
-    /// which the card does, to keep a drag from toasting per pointer move —
-    /// then also stopped on a disk failure it could have recovered from. A
-    /// partial failure now TOASTS and reports the count that did land, exactly
-    /// as clearFieldOnPaths does. -1 means only "nothing was attempted".
+    /// @return the number of paths written. Never negative: with no settings
+    /// object the batch write fails and this reports 0. A partial failure
+    /// TOASTS and reports the count that did land, exactly as clearFieldOnPaths
+    /// does. A caller must not branch on -1 — the refusal that once produced it
+    /// went with the per-event files.
     ///
     /// A path whose merged object already matches disk comes back Unchanged and
     /// is NOT counted, so a call where every path was already in the desired
@@ -369,18 +366,15 @@ public:
     /// Remove ONE field (`"curve"` or `"duration"`) from the stored override at
     /// every path in @p rawPaths, returning that field to inheritance while the
     /// other timing field and the motion-set fields stay put. A path whose
-    /// override becomes empty has its file DELETED rather than left as an empty
+    /// override becomes empty has its ENTRY removed rather than left as an empty
     /// object: the two resolve identically, but the card's toggle and the
-    /// pending-changes walk both key on file existence.
+    /// pending-changes walk both key on the entry being present.
     /// @return the number of paths actually changed, or -1 on refusal. Paths
     /// that did not carry the field are skipped, so 0 means the field was
     /// already inherited everywhere and nothing needed doing. -1 is reserved
-    /// for "nothing was attempted": @p field is not one this owns, or an
-    /// there is no settings object to write through. A PARTIAL write
-    /// failure toasts and returns the count that DID change — returning -1
-    /// there collapsed the editor under the cursor of the user who had just
-    /// clicked inside it. A caller must not read -1 as "there was nothing to
-    /// clear".
+    /// for "nothing was attempted", which since schema v8 has exactly one
+    /// cause: @p field is not one this owns, i.e. a caller bug. A caller must
+    /// not read -1 as "there was nothing to clear".
     Q_INVOKABLE int clearFieldOnPaths(const QStringList& rawPaths, const QString& field);
 
     /// True when ANY path in @p rawPaths takes a shader leg. A group mutation must
@@ -410,11 +404,11 @@ public:
     /// The whole group is applied to ONE tree read and written back ONCE, so a
     /// card cannot observe a half-written group, and a drag over a shader
     /// parameter costs one settings write per tick rather than one per path.
-    /// @return the number of paths written, or -1 from either of TWO refusals:
-    /// no settings object to write through, or an @p effectId that
-    /// `acceptableShaderEffectId` rejects (over-length, NUL-bearing, carrying a
-    /// separator, or naming no installed pack), which does NOT — that is a
-    /// caller bug rather than something the user did, so it only warns.
+    /// @return the number of paths written, or -1 for exactly ONE refusal: an
+    /// @p effectId that `acceptableShaderEffectId` rejects (over-length,
+    /// NUL-bearing, carrying a separator, or naming no installed pack). That is
+    /// a caller bug rather than something the user did, so it only warns and
+    /// does not toast. With no settings object this reports 0, not -1.
     /// @p parameters is BOUNDED rather than validated against the pack's
     /// schema: an over-long key or string value is dropped, and the map is
     /// capped in size. Which parameter ids a pack declares is not checked here,
@@ -496,8 +490,9 @@ public:
     /// twin does: such an entry can exist (an import, or a path that lost leg
     /// support after it was written), clearing is idempotent, and refusing
     /// would strand it with nothing able to remove it.
-    /// @return the number of paths whose override was removed, or -1 if the
-    /// call was refused because there is no settings object (it toasts).
+    /// @return the number of paths whose override was removed. Never negative:
+    /// with no settings object this reports 0, and there is no refusal path
+    /// left that would toast. A caller must not branch on -1.
     Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& rawPaths);
 
     // Orphaned parameter overrides: a descendant storing params but no pack of
@@ -511,12 +506,9 @@ public:
     Q_INVOKABLE int clearStaleParamDescendantsOnPaths(const QStringList& rawPaths);
 
     /// Clear the shader overrides BELOW every path in @p rawPaths.
-    /// @return the total number cleared, or -1 if any path refused (the
-    /// no-settings sentinel). Stops at the first refusal: the
-    /// in-flight gate cannot change between iterations, and the controller
-    /// toasts per refused call. A -1 is never summed in, which would make a
-    /// refusal indistinguishable from a smaller successful clear, and the
-    /// caller gates its own feedback on telling the two apart.
+    /// @return the total number cleared. Never negative: with no settings
+    /// object each pass reports 0, and no refusal path remains that would
+    /// toast. A caller must not branch on -1.
     Q_INVOKABLE int clearShaderOverrideDescendantsOnPaths(const QStringList& rawPaths);
 
     /// How many paths in a card's write group have stored state differing from
@@ -542,18 +534,20 @@ public:
     Q_INVOKABLE int divergentPathCount(const QString& primaryPath, const QStringList& rawMirrorPaths,
                                        bool compareCurve) const;
 
-    /// Scoped sibling of revertPending: restore ONLY the snapshotted override
-    /// files at @p eventPaths from their pre-edit content, leaving every other
-    /// page's staged file edits (and any preset / motion-set snapshots) pending.
+    /// Scoped sibling of revertPending: restore ONLY the timing entries at @p
+    /// eventPaths from `committedMotionProfileTree()`, leaving every other
+    /// page's staged edits pending. Set and preset FILES are not staged at all
+    /// since schema v8, so nothing here restores one.
     /// Refuses (returns false) only with no settings object to read a baseline from. The
     /// caller reverts the shader tree for the same paths separately (the tree is
     /// Settings-owned; see the revertPending() caller contract). @return true
-    /// when every in-scope snapshot restored (or there were none).
+    /// once the restore ran, whether or not any path was in scope.
     bool revertPendingUnder(const QStringList& eventPaths);
 
-    /// True iff any of @p eventPaths carries a staged (snapshotted) override-file
-    /// edit — the file half of a per-page dirty check. The shader-tree half is a
-    /// value comparison the caller runs against committedShaderProfileTree().
+    /// True iff any of @p eventPaths differs from its committed timing entry —
+    /// the timing half of a per-page dirty check, a value comparison against
+    /// committedMotionProfileTree(). The shader-tree half is the same shape of
+    /// comparison the caller runs against committedShaderProfileTree().
     bool hasScopedPendingOverrides(const QStringList& eventPaths) const;
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
@@ -578,11 +572,13 @@ public:
     // ── Motion sets ──────────────────────────────────────────────────
 
     /// The motion-set store — the `bridge` ShaderSetsPage binds to.
-    /// Motion sets snapshot the per-event override FILES under
-    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. Applying
-    /// merges: overrides at paths NOT in the set are preserved. Writes ride
-    /// this controller's `setOverride`, so each one snapshots pre-edit
-    /// content and Discard restores it. The domain closures live in
+    /// A motion set is a file under
+    /// `~/.local/share/plasmazones/motionsets/<slug>.json` carrying both halves
+    /// of each event it covers: the timing entry and the pack assignment.
+    /// Applying merges, so paths NOT in the set keep what they had. Set files
+    /// themselves are immediate CRUD, matching decoration; what a set APPLIES
+    /// rides this controller's `setOverride` into config, so it stages like any
+    /// other edit and Discard reverts it. The domain closures live in
     /// motionsetdomain.cpp.
     ShaderSetStore* setsBridge() const
     {
@@ -799,19 +795,19 @@ Q_SIGNALS:
 public:
     // ── Save / Discard integration (Phase 8) ─────────────────────────
     //
-    // Animation edits write to disk immediately for live preview, but we
-    // still want the standard "Discard" button to revert this session's
-    // changes. The controller keeps a per-file snapshot of pre-edit
-    // content (or "did not exist" sentinel); commit clears it, revert
-    // restores files from it. Kept in its own block as the dedicated
-    // SettingsController integration surface.
+    // Animation edits land in config immediately for live preview, and the
+    // standard "Discard" button still reverts this session's changes. Dirty
+    // state is VALUE-based: the live timing and shader trees compared against
+    // their committed baselines, with no snapshot map to keep in step. Kept in
+    // its own block as the dedicated SettingsController integration surface.
 
     /// True iff there are unsaved changes the user could still discard.
     bool hasPendingChanges() const;
 
-    /// Forget the snapshot — every change so far is now "saved." Called from
-    /// apply(); SettingsController::save() deliberately does NOT call it (that
-    /// would double-dispatch, see settingscontroller_lifecycle.cpp).
+    /// Advance the committed baseline — every change so far is now "saved."
+    /// Called from apply(); SettingsController::save() deliberately does NOT
+    /// call it (that would double-dispatch, see
+    /// settingscontroller_lifecycle.cpp).
     void commitPending();
 
     /// Re-evaluate the value-based dirty state after an external commit point the

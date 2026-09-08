@@ -248,12 +248,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // lambda no longer distinguishes own-writes from reloads or touches any
         // flag — it just refreshes the cards and re-evaluates the dirty state.
         //
-        // The async guard stays: SettingsController::discard() pairs our async
-        // discard() with a follow-up Settings::load() that fires this NOTIFY
-        // while the worker is still running. The worker's finished handler owns
-        // the terminal pendingChangesChanged + discardResult sequence, so the
-        // lambda must not fire pendingChangesChanged in that window or it would
-        // race the terminal emit and break the chrome's wait-counter.
+        // There is no guard here, and none is owed: the async discard worker
+        // this once had to step around went with the per-file staging, so
+        // Discard is now a synchronous Settings::load() and every NOTIFY it
+        // fires is one this lambda should act on.
         connect(
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
