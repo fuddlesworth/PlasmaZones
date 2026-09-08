@@ -282,13 +282,6 @@ public:
     void setFloating(const QString& windowId, bool floating);
 
     /**
-     * @brief Toggle a window's floating state
-     * @param windowId Window to toggle
-     * @return Current floating state after toggle (unchanged if window not tracked)
-     */
-    bool toggleFloating(const QString& windowId);
-
-    /**
      * @brief Get list of floating windows
      */
     QStringList floatingWindows() const override;

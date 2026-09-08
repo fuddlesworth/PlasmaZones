@@ -246,27 +246,29 @@ private Q_SLOTS:
         QVERIFY(!state.isFloating(QStringLiteral("nonexistent")));
     }
 
-    void testFloating_toggle()
+    void testFloating_flipRoundTrips()
     {
+        // The engine spells a toggle as setFloating(!isFloating). Both legs
+        // must land: the unfloat leg is the one discussion #1076 lost when
+        // the caller branched on a bool that meant "floating after the flip".
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
-        bool result = state.toggleFloating(QStringLiteral("win1"));
-        QVERIFY(result);
+        state.setFloating(QStringLiteral("win1"), !state.isFloating(QStringLiteral("win1")));
         QVERIFY(state.isFloating(QStringLiteral("win1")));
 
-        result = state.toggleFloating(QStringLiteral("win1"));
-        QVERIFY(!result);
+        state.setFloating(QStringLiteral("win1"), !state.isFloating(QStringLiteral("win1")));
         QVERIFY(!state.isFloating(QStringLiteral("win1")));
     }
 
-    void testFloating_toggleUntracked()
+    void testFloating_membershipIsTheUntrackedGuard()
     {
+        // containsWindow is what a caller checks before flipping; the float
+        // state itself carries no "did it work" return to misread.
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-
-        // Toggle on untracked should return false and do nothing
-        bool result = state.toggleFloating(QStringLiteral("nonexistent"));
-        QVERIFY(!result);
+        QVERIFY(!state.containsWindow(QStringLiteral("nonexistent")));
+        state.setFloating(QStringLiteral("nonexistent"), true);
+        QVERIFY(!state.isFloating(QStringLiteral("nonexistent")));
     }
 
     void testFloating_tiledWindowCount()

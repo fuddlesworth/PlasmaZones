@@ -677,6 +677,49 @@ private Q_SLOTS:
         QVERIFY(engine.lastManagedRect(tiled.at(1)).isValid());
     }
 
+    // =========================================================================
+    // Discussion #1076: Meta+F floated a window and never unfloated it. The
+    // engine spelled the flip as a state call whose bool meant "floating
+    // after the toggle", and performToggleFloat branched on it — so the
+    // unfloat leg returned false, bailed BEFORE the retile and the signal,
+    // and left the window floating while the state said tiled. Both legs of
+    // the toggle must reach the state AND the signal.
+    // =========================================================================
+
+    void testToggleFloat_unfloatLegRetilesAndAnnounces()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
+        engine.retile(screenName);
+
+        const QString target = state->tiledWindows().at(0);
+        QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
+
+        engine.toggleWindowFloat(target, screenName);
+        QVERIFY(state->isFloating(target));
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.last().at(0).toString(), target);
+        QCOMPARE(floatSpy.last().at(1).toBool(), true);
+
+        // The leg that was swallowed.
+        engine.toggleWindowFloat(target, screenName);
+        QVERIFY(!state->isFloating(target));
+        QVERIFY(state->tiledWindows().contains(target));
+        QCOMPARE(floatSpy.count(), 2);
+        QCOMPARE(floatSpy.last().at(0).toString(), target);
+        QCOMPARE(floatSpy.last().at(1).toBool(), false);
+        QCOMPARE(floatSpy.last().at(2).toString(), screenName);
+    }
+
     void testLastManagedRect_prunedWithStaleWindows()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
