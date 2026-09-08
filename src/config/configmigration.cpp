@@ -49,8 +49,7 @@ namespace PlasmaZones {
 // group/key declarations belong to the Settings layer (future work).
 
 namespace {
-PhosphorConfig::Schema
-makeMigrationSchema(ConfigMigration::ExternalImports imports = ConfigMigration::ExternalImports::Enabled)
+PhosphorConfig::Schema makeMigrationSchema(ConfigMigration::ExternalImports imports)
 {
     const bool importFiles = imports == ConfigMigration::ExternalImports::Enabled;
     PhosphorConfig::Schema s;
@@ -393,7 +392,9 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         if (!prevalidateLegacyAssignmentsFile(legacyAssignmentsFilePath())) {
                             return false;
                         }
-                        if (!runMigrationChain(jsonPath)) {
+                        // The live config on this machine, which is the one
+                        // document whose loose files are its own.
+                        if (!runMigrationChain(jsonPath, ExternalImports::Enabled)) {
                             return false;
                         }
                         // The v3→v4 chain step stamps _version and stashes
@@ -470,7 +471,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
 
-    if (!migrateIniToJson(iniPath, jsonPath)) {
+    if (!migrateIniToJson(iniPath, jsonPath, ExternalImports::Enabled)) {
         qWarning("ConfigMigration: migration failed — old config preserved at %s", qPrintable(iniPath));
         return false;
     }

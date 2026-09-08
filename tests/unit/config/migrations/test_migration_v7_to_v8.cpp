@@ -158,7 +158,7 @@ private Q_SLOTS:
                                              {QStringLiteral("curve"), QStringLiteral("ink-settle")}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         // The runner aborts the chain when a step returns without bumping the
         // version, so every exit path has to stamp — including the early ones
@@ -190,7 +190,7 @@ private Q_SLOTS:
             QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 220}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         QVERIFY(!entryFor(root, QStringLiteral("osd.show")).isEmpty());
         QVERIFY2(entryFor(root, QStringLiteral("My Preset")).isEmpty(),
@@ -217,7 +217,7 @@ private Q_SLOTS:
         QJsonObject root;
         root.insert(ConfigKeys::animationsGroup(), QJsonObject{{ConfigKeys::motionProfileTreeKey(), existing}});
 
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 8);
         QVERIFY2(entryFor(root, QStringLiteral("osd.show")).isEmpty(),
@@ -228,7 +228,7 @@ private Q_SLOTS:
     {
         QDir(profilesDir()).removeRecursively();
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root); // must not crash
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true); // must not crash
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 8);
         QVERIFY(!root.value(ConfigKeys::animationsGroup()).toObject().contains(ConfigKeys::motionProfileTreeKey()));
     }
@@ -241,7 +241,7 @@ private Q_SLOTS:
                                  QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.hide")}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         // Asserted as the ABSENCE OF AN ENTRY, not through entryFor: that
         // helper answers with the entry's `profile` object, so an entry that
@@ -269,7 +269,7 @@ private Q_SLOTS:
                                              {QStringLiteral("presetName"), overlong}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         const QJsonObject stored = entryFor(root, QStringLiteral("osd.show"));
         QCOMPARE(stored.value(QStringLiteral("duration")).toInt(), 250);
@@ -319,7 +319,7 @@ private Q_SLOTS:
             QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.hide")}, {QStringLiteral("duration"), 190}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         QVERIFY2(!hasEntryFor(root, QStringLiteral("osd.show")), "an unparseable file must not produce an entry");
         QCOMPARE(entryFor(root, QStringLiteral("osd.hide")).value(QStringLiteral("duration")).toInt(), 190);
@@ -338,7 +338,7 @@ private Q_SLOTS:
             QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.pop")}, {QStringLiteral("duration"), 240}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         QVERIFY2(!hasEntryFor(root, QStringLiteral("osd.show")), "a file over the cap must not produce an entry");
         QCOMPARE(entryFor(root, QStringLiteral("osd.pop")).value(QStringLiteral("duration")).toInt(), 240);
@@ -355,7 +355,7 @@ private Q_SLOTS:
             QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 900}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         QVERIFY2(!hasEntryFor(root, QStringLiteral("osd.show")),
                  "a file whose name disagrees with its stem was inert and must stay inert");
@@ -375,7 +375,7 @@ private Q_SLOTS:
                                              {QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1")}}));
 
         QJsonObject root;
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         const QJsonObject treeJson =
             root.value(ConfigKeys::animationsGroup()).toObject().value(ConfigKeys::motionProfileTreeKey()).toObject();
@@ -449,7 +449,7 @@ private Q_SLOTS:
         QJsonObject root;
         root.insert(QStringLiteral("_version"), 9);
 
-        ConfigMigration::migrateV7ToV8(root);
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/true);
 
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 9);
         QVERIFY(!root.contains(ConfigKeys::animationsGroup()));

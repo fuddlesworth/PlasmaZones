@@ -140,8 +140,11 @@ public:
     /// migrating machine's own state into a document that never carried it.
     /// Steps that are pure JSON→JSON transforms ignore this.
     ///
-    /// Declared ahead of the runners below because they default an argument to
-    /// it.
+    /// Declared ahead of the runners below because they take it as a
+    /// parameter. Deliberately NOT defaulted anywhere: importing this
+    /// machine's loose files into a document is only correct when the document
+    /// IS this machine's config, and a default made that the silent behaviour
+    /// of any new call site. Every caller states which it has.
     enum class ExternalImports {
         Enabled,
         Disabled
@@ -154,8 +157,7 @@ public:
     /// Pass `Disabled` when @p iniPath is a foreign blob rather than this
     /// machine's own former config: the chain this runs ends at the current
     /// schema version, so it executes every import-bearing step.
-    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath,
-                                 ExternalImports imports = ExternalImports::Enabled);
+    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath, ExternalImports imports);
 
     /// Run the schema migration chain on a JSON config file.
     /// Reads the file, applies all steps from current _version to
@@ -171,7 +173,7 @@ public:
     /// exists on the same exits for the same reason.
     static bool finalizeV8MotionImport(const QString& jsonPath);
 
-    static bool runMigrationChain(const QString& jsonPath, ExternalImports imports = ExternalImports::Enabled);
+    static bool runMigrationChain(const QString& jsonPath, ExternalImports imports);
 
     /// Run the migration chain in-memory. Two callers: ensureJsonConfig's
     /// INI→JSON + upgrade single pass (a full nested config root), and
@@ -179,7 +181,7 @@ public:
     /// config delta translated into the nested shape — so a step must be
     /// correct for a sparse input too (write retired values' replacements
     /// explicitly; removal there means "inherit", not "default").
-    static void runMigrationChainInMemory(QJsonObject& root, ExternalImports imports = ExternalImports::Enabled);
+    static void runMigrationChainInMemory(QJsonObject& root, ExternalImports imports);
 
     // Schema migration functions (one per version bump).
     // Public so the `PhosphorConfig::MigrationStep` registry built in
@@ -343,7 +345,7 @@ public:
     ///        machine's own override files into one would silently write this
     ///        user's timings into every profile they load. That path only needs
     ///        the version stamp, which is applied either way.
-    static void migrateV7ToV8(QJsonObject& root, bool importOverrideFiles = true);
+    static void migrateV7ToV8(QJsonObject& root, bool importOverrideFiles);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup
