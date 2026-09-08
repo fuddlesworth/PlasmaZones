@@ -165,17 +165,17 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
     // stores as a SEPARATE layer. That is what lets a per-event override sit
     // on top of a seed without destroying it, and what makes clearing that
     // override reveal the seed again rather than dropping to library defaults.
-    // The global profile joins this same layer while the user has not set it
-    // for the same path (loader's "direct-owner-wins" check only
-    // protects empty-owner entries, not other tagged ones). Settings
-    // publishes via direct-owner registerProfile, which always wins
-    // because it overwrites unconditionally and direct-owner is
-    // protected from the loader on subsequent rescans.
+    // The global profile joins this same layer while the user has not set one,
+    // and moves out of it the moment they do — that move is what makes a
+    // "retime everything" control outrank the per-family character, and the
+    // callers that perform it must evict the entry from the layer they are
+    // moving it out of (see publishActiveAnimationProfile).
     //
-    // MUST be called AFTER curves are loaded (so `curves.tryCreate`
-    // can resolve curve names like "widget-out") and BEFORE the
-    // profile loader's initial scan (so a user JSON at a seeded path
-    // can overwrite the seed in the same setup pass).
+    // MUST be called AFTER curves are loaded (so `curves.tryCreate` can
+    // resolve names like "widget-out") and BEFORE `installMotionProfileTree`,
+    // so a per-event override lands in the upper layer above its seed rather
+    // than racing it. Re-run whenever the curve registry reloads: each seeded
+    // Profile holds the curve it resolved at parse time.
     struct FamilySeed
     {
         QLatin1StringView path;

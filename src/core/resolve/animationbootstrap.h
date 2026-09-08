@@ -30,8 +30,8 @@ namespace PlasmaZones {
 /// or user-JSON entries.
 extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwnerTag;
 
-/// XDG-discovered curve and profile directories — `plasmazones/curves`
-/// and `plasmazones/profiles` resolved against `XDG_DATA_DIRS` (lowest-
+/// XDG-discovered curve directories — `plasmazones/curves` resolved against
+/// `XDG_DATA_DIRS` (lowest-
 /// priority first), with the user-writable dir appended last, giving
 /// `sys-lowest, ..., sys-highest, user`. The scan reverse-iterates that and
 /// applies first-registration-wins, so the user dir claims its keys
@@ -53,18 +53,24 @@ struct AnimationLoaderDirs
     QStringList curveDirs;
 };
 
-/// Pair of caller-owned loaders — composition roots store these as
-/// members so the QFileSystemWatcher inside each survives for the
-/// process lifetime (or until explicit teardown).
+/// The caller-owned curve loader — composition roots store this as a member so
+/// the QFileSystemWatcher inside it survives for the process lifetime (or until
+/// explicit teardown). There is no profile loader: since schema v8 per-event
+/// timing is a config key, installed by `installMotionProfileTree`.
 struct AnimationLoaderHandles
 {
     std::unique_ptr<PhosphorAnimation::CurveLoader> curveLoader;
     AnimationLoaderDirs dirs;
 };
 
-/// Discover XDG `plasmazones/{curves,profiles}` directories, materialise
-/// the user-writable dirs, and construct the CurveLoader bound to
+/// Discover the XDG `plasmazones/curves` directories, materialise the
+/// user-writable ones, and construct the CurveLoader bound to
 /// @p curveRegistry.
+///
+/// The `plasmazones/profiles` directory is materialised too, but is NOT
+/// discovered or watched: it holds the user's saved-curve preset library, which
+/// the animations page creates on demand, and the pre-v8 override files the v8
+/// migration reads once.
 ///
 /// Does NOT call `loadLibraryBuiltins` / `loadFromDirectories` — callers
 /// run those AFTER they have wired any consumer-side signals so the
@@ -193,6 +199,20 @@ public:
     PhosphorAnimation::CurveRegistry* curveRegistry()
     {
         return m_curveRegistry.get();
+    }
+    /// The curve loader, so a composition root can react to its
+    /// `curvesChanged`.
+    ///
+    /// That signal is not optional bookkeeping: a `Profile` holds the curve it
+    /// RESOLVED at parse time, so everything parsed against this registry —
+    /// the family seeds and the timing tree both — is stale the moment a curve
+    /// file changes on disk. A root that loads curves with live reload on and
+    /// does not re-run `seedShellAnimationFamilies` and
+    /// `applyMotionProfileTree` here will preview the pre-edit curve for the
+    /// rest of its life.
+    PhosphorAnimation::CurveLoader* curveLoader()
+    {
+        return m_curveLoader.get();
     }
     /// Install the config-backed per-event timing tree
     /// (`ISettings::motionProfileTree()`) into this bootstrap's registry.

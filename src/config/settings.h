@@ -1725,6 +1725,20 @@ public:
     /// otherwise outrank the seeds unconditionally and make them dead.
     bool hasExplicitAnimationProfile() const;
 
+    /// Point this Settings at a CurveRegistry after construction.
+    ///
+    /// `animationProfile()` reparses the stored blob on every call and
+    /// resolves its curve through whatever registry this holds. A Settings
+    /// built by the standalone ctor has none, and falls back to a process
+    /// static that nothing ever loads from disk — so a global profile naming a
+    /// user-authored curve resolved to nothing there while the daemon played
+    /// the real curve. A composition root that owns a loaded registry should
+    /// hand it over here before the first read.
+    void setCurveRegistry(PhosphorAnimation::CurveRegistry* registry)
+    {
+        m_curveRegistry = registry;
+    }
+
     void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
