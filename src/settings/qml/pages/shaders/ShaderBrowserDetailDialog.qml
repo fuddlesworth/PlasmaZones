@@ -741,8 +741,19 @@ Kirigami.Dialog {
             // gets its own pane below, selected by _previewKind.
             Item {
                 visible: root._livePreview
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-                Layout.minimumWidth: Kirigami.Units.gridUnit * 20
+                // Wide enough that a pane-shaped preview holds the composition
+                // canvas at 1:1. The slot loses margins twice on the way in,
+                // once to the Loader below and once to the pane's own column,
+                // plus the frame border, so a slot merely as wide as the canvas
+                // leaves the frame inside NARROWER than it. The pane's fit then
+                // reduces by a percent or two, and that reduction switches on a
+                // layer whose render node stops repainting for the classes that
+                // animate by driving iTime alone — the preview renders one
+                // still frame and never moves. Both bounds carry it: shrinking
+                // the dialog must not reintroduce that.
+                readonly property real _minPreviewWidth: PreviewCanvas.size.width + Kirigami.Units.gridUnit * 2
+                Layout.preferredWidth: Math.max(Kirigami.Units.gridUnit * 24, _minPreviewWidth)
+                Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 20, _minPreviewWidth)
                 Layout.fillHeight: true
 
                 // Live decoration preview: the stand-in card run through the

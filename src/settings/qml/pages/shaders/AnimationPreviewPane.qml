@@ -139,6 +139,16 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Never smaller than the composition it frames, on either axis.
+            // The stage inside is a fixed canvas, and a frame narrower or
+            // shorter than it makes the fit below reduce — which switches on a
+            // layer, and a layered render node stops repainting for every class
+            // that animates by driving iTime alone. A frame that overhangs a
+            // cramped host is the far smaller problem than a preview that
+            // renders one still frame and never moves, so the floor wins over
+            // the host's wishes rather than the reverse.
+            Layout.minimumWidth: PreviewCanvas.size.width + 2
+            Layout.minimumHeight: PreviewCanvas.size.height + 2
             radius: Kirigami.Units.smallSpacing
             color: Kirigami.Theme.alternateBackgroundColor
             border.width: 1
