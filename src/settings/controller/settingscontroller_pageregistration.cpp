@@ -532,14 +532,16 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),
                QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("configure"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    // "Assignments", not "Shaders": Library → Shaders below is the pack
-    // browser, named the way the decoration tree names its own, and two
-    // entries reading "Shaders" in one drill-down would be a coin flip.
-    // The per-LAYOUT page, so it carries the layouts icon rather than the
-    // shader one — `preferences-desktop-display` belongs to the pack browser in
-    // all three trees, and reusing it here would put the same glyph on two
-    // entries of one drill-down.
-    regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Assignments"),
+    // "Layouts", not "Shaders": Library → Shaders below is the pack browser,
+    // named the way the decoration tree names its own, and two entries reading
+    // "Shaders" in one drill-down would be a coin flip. The name says what the
+    // page is keyed on, and the layouts icon follows from it —
+    // `preferences-desktop-display` belongs to the pack browser in all three
+    // trees, so reusing it here would put one glyph on two entries.
+    //
+    // The page id stays overlays-assignments: it is what the page DOES, the
+    // label is where it does it, and the id is not user-visible.
+    regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Layouts"),
                QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
 

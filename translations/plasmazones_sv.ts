@@ -2276,7 +2276,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="117"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="526"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="532"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="191"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="854"/>
         <source>Appearance</source>
@@ -10252,6 +10252,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="245"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="552"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="211"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="544"/>
         <source>Layouts</source>
         <translation>Layouter</translation>
     </message>
@@ -10289,7 +10290,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="466"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="513"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="542"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="553"/>
         <source>Shaders</source>
         <translation>Shaders</translation>
     </message>
@@ -10351,7 +10352,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="279"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="402"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="489"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="537"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="548"/>
         <source>Library</source>
         <translation>Bibliotek</translation>
     </message>
@@ -10373,7 +10374,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="414"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="522"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="528"/>
         <source>Overlays</source>
         <translation>Överlägg</translation>
     </message>
@@ -10404,12 +10405,7 @@
         <translation>Rörelseuppsättningar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="532"/>
-        <source>Assignments</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="540"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="550"/>
         <source>Overlay Sets</source>
         <translation type="unfinished"></translation>
     </message>
