@@ -18,6 +18,7 @@ OSDCard {
     // Unused here; present so OSDHost can set it generically.
     property real value: 0
 
+    edge: OSDCard.Top
     label: osd.active ? qsTr("Caps Lock on") : qsTr("Caps Lock off")
     showProgress: false
 

@@ -132,6 +132,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Last, and it must stay last: the existing-window sweep inside can reach
     // code that expects the daemon subscriptions above to be wired.
     initExistingWindowsAndInput();
+    // Independent of the sweep: the shell's touchpad gestures only fire once
+    // a daemon is up to relay them, and reportShellGesture is one-way.
+    initTouchpadGestures();
 }
 
 void PlasmaZonesEffect::clearDaemonCompositorState()

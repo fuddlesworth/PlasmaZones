@@ -225,6 +225,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         return;
     }
     qCDebug(lcDbusTiling) << "Emitting windowsTileRequested:" << requests.size() << "windows";
+    // Recorded at the emit site, not at parse time: a batch held behind the
+    // announce is not on the wire yet, and the replay must describe what a
+    // client could have SEEN.
+    recordTileBatch(requests);
     Q_EMIT windowsTileRequested(requests);
 }
 
@@ -238,6 +242,7 @@ void TilingAdaptor::flushTileBatchesHeldForAnnounce()
     for (const PhosphorProtocol::TileRequestList& requests : held) {
         qCDebug(lcDbusTiling) << "Emitting windowsTileRequested:" << requests.size()
                               << "windows (held behind the screens announce)";
+        recordTileBatch(requests);
         Q_EMIT windowsTileRequested(requests);
     }
 }
@@ -362,6 +367,12 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
                     engine->endArrivalBurst();
                 }
             }
+            // The placement map's per-screen state follows the managed set:
+            // LAST, after the held batches and the parked-open retry, so a
+            // screen that just gained its windows through either is re-read
+            // with them in place, and a screen that left the set drops its
+            // replay and announces the empty focus.
+            reconcileMapStateWithAnnounce(announced);
         },
         Qt::QueuedConnection);
 }

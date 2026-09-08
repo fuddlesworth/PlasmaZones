@@ -4,6 +4,7 @@
 #include "EditorController.h"
 #include "EditorLaunchController.h"
 #include "core/resolve/animationbootstrap.h"
+#include "config/settings.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -169,13 +170,31 @@ int main(int argc, char* argv[])
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML
     // `PhosphorMotionAnimation { profile: "..." }` lookups resolve. The
-    // shipped tree carries no bundled profile JSONs (timings are
-    // Settings-UI driven via the daemon's registry publisher); the
-    // bootstrap loader is still wired so user-authored JSONs at
-    // `~/.local/share/plasmazones/profiles/<path>.json` get picked up
-    // and so live-reload watches are armed for fresh installs. Must
-    // outlive the QML engine (Behavior bindings keep registry handles).
+    // shipped tree carries no bundled profile JSONs; the bootstrap loads
+    // curves and seeds the animation families, and the per-event timing
+    // overrides are applied from config just below. Must outlive the QML
+    // engine (Behavior bindings keep registry handles).
     PlasmaZones::AnimationBootstrap animationBootstrap;
+
+    // The editor has no settings UI of its own, but it does animate, and its
+    // per-event timing overrides live in the same config key the daemon and
+    // the settings app read (`Animations/MotionProfileTree`). Read them once
+    // at start-up through a standalone Settings; the editor is a short-lived
+    // modal process, so there is nothing to keep live.
+    //
+    // NOTE the standalone ctor is not a cheap read: it owns a freshly migrated
+    // config backend, so constructing it runs the whole migration chain and can
+    // WRITE config.json. That is acceptable here — the chain is idempotent and
+    // latches per process — but it is a side effect, not a lookup, and it is
+    // why this is constructed once rather than on demand.
+    // Declared after the bootstrap for the reason bindToSettings documents,
+    // even though this call passes keepLive=false and wires no connections:
+    // the ordering is what makes a later change to true safe.
+    PlasmaZones::Settings editorMotionSettings;
+    // The same wiring the settings app does, through the same helper. keepLive
+    // is false because this is a short-lived modal process: it reads once at
+    // start-up and has nothing to keep current.
+    animationBootstrap.bindToSettings(editorMotionSettings, /*keepLive=*/false);
 
     // Publish the bootstrap-owned registries + a fresh clock manager as
     // the QML-side defaults. Phase A3 of the architecture refactor

@@ -474,7 +474,9 @@ private Q_SLOTS:
         QVERIFY(!sets->applySet(QStringLiteral("foreign")));
         QCOMPARE(validateSpy.count(), 1);
         QCOMPARE(validateSpy.first().first().toString(),
-                 PhosphorI18n::tr("“%1” does not match this page.").arg(QStringLiteral("foreign")));
+                 PhosphorI18n::tr("“%1” could not be used here. It may be for another page, or it may need packs or "
+                                  "events this version does not have.")
+                     .arg(QStringLiteral("foreign")));
     }
 
     /// An import carrying no entries would land as a row that applySet then

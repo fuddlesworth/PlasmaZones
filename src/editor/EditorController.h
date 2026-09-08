@@ -27,6 +27,7 @@
 #include <QTimer>
 #include <QUuid>
 #include <QScreen>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QSize>
 #include "core/types/constants.h"

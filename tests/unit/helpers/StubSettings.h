@@ -12,6 +12,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QJsonObject>
 #include <QJsonDocument>
 #include <QSet>
 
@@ -1630,6 +1631,22 @@ public:
         Q_EMIT scrollingKeepFloatingAboveChanged();
         Q_EMIT settingsChanged();
     }
+    // Same-app tab grouping: the third ISettings defaulted pair in this
+    // family, overridden for the same reason as the two above so a
+    // StubSettings-backed adaptor round-trips the key instead of dropping
+    // the write into the interface's no-op body.
+    bool scrollingGroupSameAppAsTabs() const override
+    {
+        return m_scrollingGroupSameAppAsTabs;
+    }
+    void setScrollingGroupSameAppAsTabs(bool value) override
+    {
+        if (m_scrollingGroupSameAppAsTabs == value)
+            return;
+        m_scrollingGroupSameAppAsTabs = value;
+        Q_EMIT scrollingGroupSameAppAsTabsChanged();
+        Q_EMIT settingsChanged();
+    }
     // The scrolling tab-indicator family: all twelve pairs are DEFAULTED
     // virtuals on ISettings that answer frozen constants, which makes any
     // consumer predicate untestable through an unoverridden stub — the same
@@ -2092,6 +2109,28 @@ public:
         m_shaderProfileTree = value;
         Q_EMIT shaderProfileTreeChanged();
         Q_EMIT settingsChanged();
+    }
+    QVariantMap motionProfileTree() const override
+    {
+        return m_motionProfileTree;
+    }
+    void setMotionProfileTree(const QVariantMap& value) override
+    {
+        if (m_motionProfileTree == value) {
+            return;
+        }
+        m_motionProfileTree = value;
+        Q_EMIT motionProfileTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString motionProfileTreeJson() const override
+    {
+        return QString::fromUtf8(
+            QJsonDocument(QJsonObject::fromVariantMap(m_motionProfileTree)).toJson(QJsonDocument::Compact));
+    }
+    void setMotionProfileTreeJson(const QString& json) override
+    {
+        setMotionProfileTree(QJsonDocument::fromJson(json.toUtf8()).object().toVariantMap());
     }
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
     {
@@ -2982,6 +3021,7 @@ private:
     bool m_snappingKeepFloatingAbove = ConfigDefaults::snappingKeepFloatingAbove();
     bool m_autotileKeepFloatingAbove = ConfigDefaults::autotileKeepFloatingAbove();
     bool m_scrollingKeepFloatingAbove = ConfigDefaults::scrollingKeepFloatingAbove();
+    bool m_scrollingGroupSameAppAsTabs = ConfigDefaults::scrollingGroupSameAppAsTabs();
     bool m_scrollingTabIndicatorEnabled = ConfigDefaults::scrollingTabIndicatorEnabled();
     int m_scrollingTabIndicatorStyle = ConfigDefaults::scrollingTabIndicatorStyle();
     int m_scrollingTabIndicatorGapsBetweenTabs = ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs();
@@ -3029,6 +3069,7 @@ private:
     // Empty, matching ConfigDefaults::shaderProfileTree() — which is a QVariantMap and so
     // cannot seed the tree type directly. The default IS the empty tree either way.
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    QVariantMap m_motionProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
     OverlayShaderTree m_overlayShaderTree;

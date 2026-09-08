@@ -3,6 +3,7 @@
 
 #include "profilestore.h"
 
+#include "core/utils/utils.h"
 #include "config/configkeys.h"
 #include "config/configmigration.h"
 #include "config/configmigration_util.h"
@@ -219,7 +220,11 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
             setGroupAtSegments(nested, segments, it.value().toObject());
         }
         nested[ConfigKeys::versionKey()] = fileVersion;
-        ConfigMigration::runMigrationChainInMemory(nested);
+        // ExternalImports::Disabled: this root is a profile's sparse DELTA,
+        // not the live config. A step that reads the filesystem (v7→v8 imports
+        // the per-event timing override files) would otherwise stamp the
+        // migrating machine's own state into every profile it touches.
+        ConfigMigration::runMigrationChainInMemory(nested, ConfigMigration::ExternalImports::Disabled);
         // The chain advances to ConfigSchemaVersion; a store configured for a
         // DIFFERENT target (tests inject formatVersion) cannot use the result.
         if (nested.value(ConfigKeys::versionKey()).toInt() != m_config.formatVersion) {
@@ -338,9 +343,26 @@ QHash<QUuid, ProfileStore::Record> ProfileStore::loadAll() const
             continue;
         }
         Record rec;
-        if (readProfileFile(dir.absoluteFilePath(name), &rec)) {
-            result.insert(rec.id, rec);
+        if (!readProfileFile(dir.absoluteFilePath(name), &rec)) {
+            continue;
         }
+        // Identity comes from the file's `id`, but every write and delete
+        // resolves the path FROM that id, so the two have to agree or the
+        // record is unreachable: `removeProfile` would delete a path that does
+        // not exist and still report success, leaving the profile to reappear
+        // on the next load, and a rename would write a SECOND file claiming the
+        // same id. A hand-placed or hand-renamed file is exactly how that
+        // happens, and the profiles directory is one the user can open.
+        //
+        // The shader set store refuses the same class for the same reason (see
+        // its slug round-trip check in availableSets).
+        if (QFileInfo(name).completeBaseName() != rec.id.toString(QUuid::WithoutBraces)) {
+            qCWarning(lcConfig) << "ProfileStore: skipping" << name << "— its filename does not match its id"
+                                << rec.id.toString(QUuid::WithoutBraces)
+                                << ", so it could be listed but never saved or deleted";
+            continue;
+        }
+        result.insert(rec.id, rec);
     }
     m_recordCache = result;
     return result;
@@ -1201,8 +1223,11 @@ bool ProfileStore::activateProfile(const QString& id)
 
 bool ProfileStore::exportProfile(const QString& id, const QString& destLocalPath)
 {
-    if (destLocalPath.isEmpty()) {
-        // urlToLocalFile yields an empty string for a non-local save target.
+    // Every other user-path boundary in the settings app funnels through this
+    // before opening. urlToLocalFile yields an empty string for a non-local
+    // save target, and the sanitiser rejects a relative or traversing one.
+    const QString destPath = Utils::sanitizeIOPath(destLocalPath);
+    if (destPath.isEmpty()) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to that location."));
         return false;
     }
@@ -1224,10 +1249,10 @@ bool ProfileStore::exportProfile(const QString& id, const QString& destLocalPath
     }
     const QByteArray payload =
         QJsonDocument(recordToJson(all.value(uid), m_config.formatVersion)).toJson(QJsonDocument::Indented);
-    QSaveFile dest(destLocalPath);
+    QSaveFile dest(destPath);
     if (!(dest.open(QIODevice::WriteOnly | QIODevice::Truncate) && dest.write(payload) == payload.size()
           && dest.commit())) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destLocalPath));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destPath));
         return false;
     }
     return true;
@@ -1244,6 +1269,11 @@ QString ProfileStore::importProfile(const QString& sourcePathOrUrl)
     const QUrl url(sourcePathOrUrl);
     if (url.isLocalFile()) {
         sourcePath = url.toLocalFile();
+    }
+    sourcePath = Utils::sanitizeIOPath(sourcePath);
+    if (sourcePath.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("That file is not a readable profile."));
+        return QString();
     }
 
     Record rec;

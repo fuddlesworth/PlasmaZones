@@ -258,17 +258,20 @@ void AutotileEngine::toggleWindowFloatAs(const QString& rawWindowId, const QStri
 void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId,
                                         const QString& screenId)
 {
-    // Branch on the result, like every other mutation site in the engine.
-    // toggleFloating returns false for a window this state does not contain;
-    // the sole caller (toggleWindowFloatAs) validates membership first, so
-    // this is unreachable today — but ignoring it meant a future caller would
-    // emit "now tiled" for an unmanaged window and clear a legitimate snap
-    // float downstream.
-    if (!state->toggleFloating(windowId)) {
+    // Membership is the guard, and it is checked BEFORE the flip. The state
+    // used to carry a toggleFloating() whose bool meant "floating after the
+    // toggle" and only incidentally false for an untracked window; branching
+    // on it here read a legitimate unfloat (floating → tiled, false) as
+    // "untracked" and returned after the flip had landed but before the
+    // retile and the signal, so Meta+F floated and never unfloated
+    // (discussion #1076). That method is gone: the flip is now spelled out,
+    // and there is no return value left to misread.
+    if (!state->containsWindow(windowId)) {
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "performToggleFloat: state does not contain" << windowId << "on screen" << screenId;
         return;
     }
+    state->setFloating(windowId, !state->isFloating(windowId));
     m_overflow.clearOverflow(windowId); // User explicitly toggled, no longer overflow
 
     const bool isNowFloating = state->isFloating(windowId);

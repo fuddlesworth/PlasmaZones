@@ -132,7 +132,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
-    search->setPageKeywords(QStringLiteral("snapping-shaders"),
+    search->setPageKeywords(QStringLiteral("overlays-library"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
     // Tiling & scrolling
@@ -855,6 +855,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("New window placement"),
                {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column"),
                 PhosphorI18n::tr("open")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingGroupSameAppAsTabs"),
+               PhosphorI18n::tr("Group windows of the same application as tabs"),
+               {PhosphorI18n::tr("tabs"), PhosphorI18n::tr("tabbed"), PhosphorI18n::tr("group"),
+                PhosphorI18n::tr("application"), PhosphorI18n::tr("same app"), PhosphorI18n::tr("open")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingSmartGaps"),
                PhosphorI18n::tr("Smart gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),
@@ -1072,7 +1076,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
     // decoration sets. Every page that hosts a ShaderBrowserPage carries its
     // "userShaders" card, so each one registers the anchor.
-    addSection(search, QStringLiteral("snapping-shaders"), QStringLiteral("userShaders"),
+    addSection(search, QStringLiteral("overlays-library"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));

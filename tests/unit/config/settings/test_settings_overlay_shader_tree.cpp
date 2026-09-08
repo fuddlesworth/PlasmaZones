@@ -8,7 +8,7 @@
  *
  * Pinned behaviour:
  *   - setOverlayShaderTree round-trips through the JSON blob (the
- *     Snapping.OverlayShaders schema group must declare the key or
+ *     Overlays schema group must declare the key or
  *     PhosphorConfig::Store::write drops the blob silently)
  *   - a fresh Settings instance on the same config reads the value back
  *     (the daemon-reads-what-the-settings-app-wrote path)
@@ -16,12 +16,16 @@
  *   - the JSON facade parses and routes through the typed setter
  */
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 
 #include "config/configdefaults.h"
+#include "config/configmigration.h"
 #include "config/settings.h"
 #include "core/types/overlayshadertree.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -108,6 +112,79 @@ private Q_SLOTS:
         s.setOverlayShaderTree(tree);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(s.overlayShaderTree().resolve(kLayoutId).parameters.value(QStringLiteral("speed")).toDouble(), 2.0);
+    }
+
+    /// The schema validator, driven through the door the typed setter does not
+    /// cover: a config.json written by something other than Settings. A
+    /// settings profile being applied reaches the same key the same way
+    /// (Store::importFromJson writes each declared key's blob value straight
+    /// through, and write() runs the validator), and the file is hand-editable
+    /// besides.
+    ///
+    /// Every assertion here is on something OverlayShaderTree::fromJson would
+    /// otherwise keep. The typed round trip already drops unknown FIELDS, so
+    /// asserting on those would pass with the validator removed and pin
+    /// nothing — these three axes are what actually distinguishes the guard
+    /// from its absence.
+    void testOverlayShaderTree_rawConfigIsSanitizedOnRead()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString overLong = QString(2000, QLatin1Char('x'));
+        QJsonObject legit{
+            {QLatin1String(OverlayShaderProfile::JsonFieldShaderId), QStringLiteral("neon-city")},
+            {QLatin1String(OverlayShaderProfile::JsonFieldParameters), QJsonObject{{QStringLiteral("speed"), 2.0}}}};
+        QJsonObject overrides{
+            {kLayoutId, legit},
+            // Unresolvable key shape: the pre-v8 editor could stamp these, and
+            // they surface on the assignments page as nameless broken rows.
+            {QStringLiteral("autotile:bsp"), legit},
+        };
+        QJsonObject baseline{
+            {QLatin1String(OverlayShaderProfile::JsonFieldShaderId), overLong},
+            {QLatin1String(OverlayShaderProfile::JsonFieldParameters),
+             QJsonObject{{QStringLiteral("tex"), overLong},
+                         {QStringLiteral("nested"), QJsonObject{{QStringLiteral("a"), 1}}},
+                         {QStringLiteral("speed"), 0.5}}},
+        };
+        const QJsonObject tree{{QLatin1String(OverlayShaderTree::JsonFieldBaseline), baseline},
+                               {QLatin1String(OverlayShaderTree::JsonFieldOverrides), overrides}};
+
+        // Group names are dot-paths that JsonBackend stores as NESTED objects,
+        // so build the nesting rather than inserting the dotted name flat.
+        QJsonObject group{{ConfigDefaults::overlayShaderTreeKey(), tree}};
+        const QStringList segments = ConfigDefaults::overlaysGroup().split(QLatin1Char('.'));
+        for (auto it = segments.crbegin(); it != segments.crend(); ++it)
+            group = QJsonObject{{*it, group}};
+        QJsonObject root = group;
+        root.insert(ConfigKeys::versionKey(), ConfigSchemaVersion);
+        QFile f(ConfigDefaults::configFilePath());
+        QVERIFY(QDir().mkpath(QFileInfo(f).absolutePath()));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        const QByteArray bytes = QJsonDocument(root).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
+        f.close();
+
+        Settings s;
+        const OverlayShaderTree read = s.overlayShaderTree();
+
+        // The legitimate override is untouched — a guard that empties the key
+        // would satisfy every drop assertion below and be useless.
+        QVERIFY(read.hasOverride(kLayoutId));
+        QCOMPARE(read.directOverride(kLayoutId).shaderId, QStringLiteral("neon-city"));
+        QCOMPARE(read.directOverride(kLayoutId).parameters.value(QStringLiteral("speed")).toDouble(), 2.0);
+
+        QVERIFY2(!read.hasOverride(QStringLiteral("autotile:bsp")), "non-UUID override key survived");
+        QVERIFY2(read.baseline().shaderId.isEmpty(), "over-long shaderId survived");
+        QVERIFY2(!read.baseline().parameters.contains(QStringLiteral("tex")), "over-long parameter value survived");
+        QVERIFY2(!read.baseline().parameters.contains(QStringLiteral("nested")), "nested parameter survived");
+        // The sound parameter beside the dropped ones is kept.
+        QCOMPARE(read.baseline().parameters.value(QStringLiteral("speed")).toDouble(), 0.5);
+
+        // Idempotent: the validator's own output must survive a second pass,
+        // which is the contract KeyDef::validator states.
+        s.setOverlayShaderTree(read);
+        QCOMPARE(s.overlayShaderTree(), read);
     }
 };
 

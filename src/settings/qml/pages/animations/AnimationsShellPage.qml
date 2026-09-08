@@ -22,7 +22,7 @@ AnimationEventCardList {
     eventModel: [
         {
             "eventPath": "shell",
-            "eventLabel": i18n("All Shell Surfaces"),
+            "eventLabel": i18nc("@item the category root card that every shell surface inherits from", "All Shell Surfaces"),
             "isParentNode": true
         },
         {

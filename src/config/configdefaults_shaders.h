@@ -6,6 +6,7 @@
 #include "configdefaults_limits.h"
 
 #include <PhosphorCompositor/DecorationDefaults.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 namespace PlasmaZones {
 
@@ -289,10 +290,60 @@ public:
 
         ::PhosphorSurfaceShaders::DecorationProfileTree tree;
         const ::PhosphorSurfaceShaders::DecorationProfile card = cardDecoration();
-        tree.setOverride(QStringLiteral("osd"), card);
-        tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
-        tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
-        tree.setOverride(QStringLiteral("popup.cheatsheet"), card);
+        // Through the accessors, like the shell.* seeds below: these paths are
+        // also spelled out in DecorationSupportedPaths.h, and a seed written
+        // at a path the tree does not support decorates nothing and says so
+        // nowhere.
+        tree.setOverride(::PhosphorSurfaceShaders::decorationOsdPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupLayoutPickerPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupZoneSelectorPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupCheatsheetPath(), card);
+
+        // The Phosphor shell's chrome (docs/phosphor-shell-design/identity/A1
+        // §2.4): every surface is a decoration host like a window frame, and
+        // the same packs a focused window wears run on the chrome. The bar,
+        // the popouts, the toasts and the picker carry the flowing spectrum
+        // border at 1 px; the OSD band a cyan halo; the lock clock the motes.
+        // The shell.* subtree is baseline-isolated, so these are the only
+        // way a shell surface is decorated until the user edits it.
+        const auto phosphorBorder = [](int cornerRadius, double flowSpeed) {
+            ::PhosphorSurfaceShaders::DecorationProfile p;
+            p.chain = QStringList{QStringLiteral("border-phosphor")};
+            QVariantMap border;
+            border.insert(QStringLiteral("borderWidth"), 1);
+            border.insert(QStringLiteral("cornerRadius"), cornerRadius);
+            border.insert(QStringLiteral("flowSpeed"), flowSpeed);
+            border.insert(QStringLiteral("gleamStrength"), 0.5);
+            QVariantMap params;
+            params.insert(QStringLiteral("border-phosphor"), border);
+            p.parameters = params;
+            return p;
+        };
+        // Seeded in decorationShellPhosphorLeafPaths() order, which is the
+        // order the tree reports them in.
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorBarPath(), phosphorBorder(0, 0.03));
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPopoutPath(), phosphorBorder(10, 0.06));
+        {
+            ::PhosphorSurfaceShaders::DecorationProfile osd;
+            osd.chain = QStringList{QStringLiteral("glow")};
+            QVariantMap glow;
+            glow.insert(QStringLiteral("glowStrength"), 0.7);
+            glow.insert(QStringLiteral("glowSize"), 24);
+            glow.insert(QStringLiteral("cornerRadius"), 3);
+            glow.insert(QStringLiteral("glowColor"), QStringLiteral("#ff22d3ee"));
+            glow.insert(QStringLiteral("useThemeTint"), false);
+            QVariantMap params;
+            params.insert(QStringLiteral("glow"), glow);
+            osd.parameters = params;
+            tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorOsdPath(), osd);
+        }
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorNotificationPath(), phosphorBorder(8, 0.06));
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPickerPath(), phosphorBorder(0, 0.06));
+        {
+            ::PhosphorSurfaceShaders::DecorationProfile lock;
+            lock.chain = QStringList{QStringLiteral("phosphor-motes")};
+            tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorLockPath(), lock);
+        }
         return tree;
     }
 

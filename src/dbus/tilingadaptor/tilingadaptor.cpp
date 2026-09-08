@@ -24,6 +24,24 @@ TilingAdaptor::TilingAdaptor(PhosphorScreens::ScreenManager* screenManager, QObj
     // Engine-agnostic by construction: the adaptor holds no engine until the
     // composition root supplies the pipeline list via setLifecycleEngines and
     // wires each engine's outbound signals to the relay entry points.
+    //
+    // The two self-connections below are the exception to "makes no
+    // connections itself", and they connect to this adaptor's OWN signals
+    // rather than to an engine, which is what keeps the adaptor type-agnostic.
+    // Both feed the focusedWindowChanged change gate. tilingChanged is the
+    // composition root's relay of every engine's placementChanged, which the
+    // scroll engine emits on a focus change and both engines emit after a
+    // relayout that may have moved focus; focusWindowRequested is the direct
+    // forward of activateWindowRequested, the engine-driven focus that runs
+    // ahead of the compositor's answering focus report. Neither hook decides
+    // anything: refreshFocusedWindow re-reads the engine and emits on change.
+    connect(this, &TilingAdaptor::tilingChanged, this, &TilingAdaptor::refreshFocusedWindow);
+    connect(this, &TilingAdaptor::focusWindowRequested, this, [this](const QString& windowId) {
+        const QString screenId = trackedScreenForWindow(windowId);
+        if (!screenId.isEmpty()) {
+            refreshFocusedWindow(screenId);
+        }
+    });
     qCDebug(lcDbusTiling) << "TilingAdaptor initialized";
 }
 
@@ -35,6 +53,12 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     // entry points).
     m_lifecycleEngines = engines;
     m_lifecycleEngines.removeAll(nullptr);
+    // Keep the two lists disjoint whichever setter runs last (see
+    // setMembershipEngines): the reconcile walks both, and an engine in both
+    // would be asked twice and released through two different paths.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        m_membershipEngines.removeAll(engine);
+    }
     if (m_lifecycleEngines.isEmpty()) {
         // Real teardown goes through clearEngine(); this empty-list form
         // exists for symmetry and has no production caller (see the header).
@@ -47,6 +71,18 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
         // claims.
         m_unclaimedOpens.clear();
         m_pendingOpens.clear();
+    }
+}
+
+void TilingAdaptor::setMembershipEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines)
+{
+    m_membershipEngines = engines;
+    m_membershipEngines.removeAll(nullptr);
+    // Disjoint from the lifecycle list by contract, and enforced rather than
+    // assumed: the reconcile walks both, so an engine in both would be asked
+    // twice and released through two different paths.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        m_membershipEngines.removeAll(engine);
     }
 }
 
@@ -720,6 +756,10 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // The replay cache prunes the window on the same unconditional path: a
+    // currentTilesJson read after this close must not hand back a rect for
+    // a window that no longer exists.
+    forgetTileEntriesForWindow(windowId);
     // A move-release one-shot for a window that closed instead of
     // re-announcing dies with it — instance ids are unique, so the entry
     // could never fire again, but the set must not accumulate corpses.
@@ -728,6 +768,11 @@ void TilingAdaptor::windowClosed(const QString& windowId)
         return;
     }
     qCDebug(lcDbusTiling) << "windowClosed: windowId=" << windowId;
+    // Read BEFORE the engine untracks the window, for the focus re-read at
+    // the end: after windowClosed the engine no longer knows which screen
+    // the window was on, and a close of the focused window is exactly the
+    // change focusedWindowChanged exists to announce.
+    const QString closingScreen = trackedScreenForWindow(windowId);
     // Capture the window's final engine slot BEFORE the engine untracks it.
     // The effect relays Tiling.windowClosed ahead of
     // WindowTracking.windowClosed (in-order connection), so by the time the
@@ -750,6 +795,9 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);
     }
+    if (!closingScreen.isEmpty()) {
+        refreshFocusedWindow(closingScreen);
+    }
 }
 
 void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
@@ -759,6 +807,7 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     // pruneStaleFloatBroadcasts.
     m_lastFloatBroadcast.remove(windowId);
     m_lastScrollTabColorsRelay.remove(windowId);
+    forgetTileEntriesForWindow(windowId);
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
     m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
@@ -813,6 +862,12 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)
 {
+    releaseWindowTrackingVia(windowId, nullptr, /*armMoveExcuse=*/true);
+}
+
+void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner,
+                                             bool armMoveExcuse)
+{
     if (windowId.isEmpty()) {
         qCDebug(lcDbusTiling) << "releaseWindowTracking: empty window ID";
         return;
@@ -832,6 +887,9 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // Released from tracking is gone from the engine's point of view, which
+    // is the replay cache's point of view too.
+    forgetTileEntriesForWindow(windowId);
     // Arm the move-release one-shots BEFORE the pipeline gate, mirroring the
     // bookkeeping above: the window is live and being moved, and its next
     // announce must not be mistaken for a session restore (see
@@ -843,7 +901,18 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     // the store's by the engine's takeForReopen (suppressing the
     // reclaim-credit burn). A single flag consumed at the first moment would
     // already be gone by the second — see markInstanceMovedLive.
-    m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    //
+    // Only the ADAPTOR's is optional. Both are one-shots and both can go
+    // stale, but they differ in what a stale one costs. The adaptor's
+    // suppresses a cross-screen RECLAIM of the window itself, which a later
+    // unrelated open genuinely wants, so leaving it standing is a real loss.
+    // The store's suppresses a credit burn that would be taken from a SIBLING
+    // record of the same app that has not reopened yet, so leaving it standing
+    // spares that sibling rather than harming this window — the conservative
+    // direction. burnReclaimCredit's own consume is what ends it.
+    if (armMoveExcuse) {
+        m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    }
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         m_windowTrackingAdaptor->service()->placementStore().markInstanceMovedLive(windowId);
     }
@@ -851,8 +920,16 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
         return;
     }
     qCDebug(lcDbusTiling) << "releaseWindowTracking: windowId=" << windowId;
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+    // Same pre-untrack read as windowClosed, for the same focus re-read. Both
+    // this and the untrack below go to the NAMED engine when the caller
+    // supplied one — see releaseWindowTrackingVia's doc for why re-deriving
+    // either through the id-based predicate would be wrong there.
+    const QString releasingScreen = owner ? owner->screenForTrackedWindow(windowId) : trackedScreenForWindow(windowId);
+    if (PhosphorEngine::IPlacementEngine* engine = owner ? owner : engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);
+    }
+    if (!releasingScreen.isEmpty()) {
+        refreshFocusedWindow(releasingScreen);
     }
 }
 
@@ -876,6 +953,11 @@ void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
     if (PhosphorEngine::IPlacementEngine* engine = engineOwningScreen(screenId)) {
         engine->windowFocused(windowId, screenId);
     }
+    // The compositor's focus report is the canonical hook for the
+    // focusedWindowChanged gate: whatever the engine made of the report
+    // (accepted, refused as a stale echo, read as a cross-screen move), the
+    // re-read answers with what it now believes and emits only on a change.
+    refreshFocusedWindow(screenId);
 }
 
 // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
@@ -884,7 +966,15 @@ void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
 
 void TilingAdaptor::clearEngine()
 {
-    // Interface-only borrows, no connections to drop. Also neutralise any
+    // The registry subscription is the one late-bound borrow here that DOES
+    // hold a connection, so it is severed with the engines rather than left to
+    // the stop path. Harmless today (the surviving lambda would walk an empty
+    // engine list), but the teardown contract in this file is that every
+    // borrow is dropped symmetrically and grep-discoverably.
+    QObject::disconnect(m_registryDesktopConnection);
+    m_registryDesktopConnection = {};
+    m_membershipEngines.clear();
+    // The rest are interface-only borrows, no connections to drop. Also neutralise any
     // pending coalesced announce (its lambda re-checks the empty list) and
     // every per-session queue/dedup cache except m_activeLayouts — none of it
     // may leak into a restart (a stale dedup value could suppress the first
@@ -921,6 +1011,14 @@ void TilingAdaptor::clearEngine()
     // a daemon restart would paint pills for a layout no engine owns any more.
     m_lastScrollTabStrips.clear();
     m_scrollTabPaintOverrides.clear();
+    // The replay cache goes for the strip cache's reason: it names live
+    // windows and their rects, and replaying it into a restart would rebuild
+    // a layout no engine owns any more. The focus memory goes with it,
+    // SILENTLY: a shutdown broadcasts no per-screen "nothing focused", the
+    // same way the announce path refuses to broadcast an empty union, and a
+    // restart's first re-read starts the gate from a blank memory.
+    m_lastTileBatchPerScreen.clear();
+    m_lastFocusedBroadcast.clear();
     // The WTA borrow is NOT cleared here — Daemon::stop's teardown block is
     // its canonical clear (setWindowTrackingAdaptor(nullptr)), and every
     // deref in this file null-checks.

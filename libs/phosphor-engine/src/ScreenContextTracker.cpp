@@ -131,14 +131,15 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
 {
     // COUNT-based semantics, deliberately: the daemon's desktopCountChanged
     // handler calls this for every desktop NUMBER now above the new count —
-    // it does not know which desktop identity was removed. Values are dropped,
-    // never renumbered, and that is consistent with every sibling per-desktop
-    // store (engine states, assignment maps), which all treat numbers as
-    // positional and rely on the daemon's next desktop pushes to re-establish
-    // shifted positions. Renumbering only these maps would desync them from
-    // the stores they key into. A surviving in-range pin whose CONTENT
-    // shifted heals on the next setCurrentDesktopForScreen push, which KWin
-    // triggers when it relocates the screen off the removed desktop.
+    // it does not know which desktop identity was removed. Values are dropped
+    // here rather than shifted, because this call only knows a count.
+    //
+    // The SHIFT is renumberDesktopsAfterRemoval's job, and the daemon runs it
+    // straight after this one on the path that does know which desktop went
+    // away. The two must stay paired: these maps hold positional numbers into
+    // the same numbering the engine state keys use, so renumbering the stores
+    // without renumbering these would leave a pin naming a position whose
+    // content moved.
     //
     // Dropping a per-output entry here is safe, and NOT in tension with
     // releaseScreenOwnership's argument that the same entry must survive a mode
@@ -162,6 +163,24 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
             ++it;
         }
     }
+}
+
+void ScreenContextTracker::renumberDesktopsAfterRemoval(int removedDesktop)
+{
+    // Plain in-place decrement: both maps hold a desktop number per screen,
+    // not a desktop-keyed bucket, so there is no collision to order around
+    // (unlike the engines' state stores, which must walk ascending).
+    // pruneDesktop has already dropped anything that named removedDesktop, so
+    // no value here can equal it.
+    const auto shift = [removedDesktop](QHash<QString, int>& map) {
+        for (auto it = map.begin(); it != map.end(); ++it) {
+            if (it.value() > removedDesktop) {
+                --it.value();
+            }
+        }
+    };
+    shift(m_screenDesktopOverride);
+    shift(m_screenCurrentDesktop);
 }
 
 } // namespace PhosphorEngine

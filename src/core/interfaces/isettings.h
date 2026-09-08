@@ -195,8 +195,14 @@ public:
     virtual QString decorationProfileTreeJson() const = 0;
     virtual void setDecorationProfileTreeJson(const QString& json) = 0;
 
+    /// JSON-string facade over IAnimationSettings::motionProfileTree, for the
+    /// Q_PROPERTY meta-object dirty-tracking loop. Same role
+    /// `shaderProfileTreeJson` plays for the pack half.
+    virtual QString motionProfileTreeJson() const = 0;
+    virtual void setMotionProfileTreeJson(const QString& json) = 0;
+
     // Zone-overlay shader assignments — an OverlayShaderTree (global baseline
-    // + per-layout-UUID overrides) under Snapping.OverlayShaders. Flat
+    // + per-layout-UUID overrides) under Overlays. Flat
     // counterpart of the two trees above; same typed-getter + JSON-facade
     // split so the Q_PROPERTY dirty-tracking loop and the D-Bus adaptor both
     // ride the facade. No committed getter: per-page Discard rides the
@@ -365,15 +371,16 @@ public:
         return false;
     }
 
-    // The four defaults below are spelled as literals rather than calling
+    // The five defaults below are spelled as literals rather than calling
     // their ConfigDefaults twins, because this interface header deliberately
     // does not depend on the config layer. A stub answering the opposite of
     // what the real Settings would is a silent behaviour split, so each is
     // pinned from the other side: settings/scrolling.cpp — a TU that sees
     // both — static_asserts the tab-indicator default, the drop-indicator
-    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() and
-    // ConfigDefaults::scrollingKeepFloatingAbove() against the literals here,
-    // and names this comment. Change any of them and fix both places.
+    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
+    // ConfigDefaults::scrollingKeepFloatingAbove() and
+    // ConfigDefaults::scrollingGroupSameAppAsTabs() against the literals
+    // here, and names this comment. Change any of them and fix both places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default because two readers reach it through this interface
@@ -609,6 +616,25 @@ public:
     /// Writer for the toggle above, same no-op-default rationale as
     /// setScrollingRestoreFloatedWindowsOnLogin.
     virtual void setScrollingKeepFloatingAbove(bool /*keep*/)
+    {
+    }
+
+    /// Open a fresh scrolling window as a tab of a column that already holds
+    /// a window of the same application (Scrolling.Behavior.GroupSameAppAsTabs).
+    /// Defaulted like the two toggles above so the D-Bus settings registry
+    /// registers the key through the interface (the preferred shape for new
+    /// keys). The engine reads it through IScrollSettings, which declares the
+    /// same defaulted getter; Settings overrides both with one body. Pinned to
+    /// ConfigDefaults::scrollingGroupSameAppAsTabs() by the static_assert in
+    /// settings/scrolling.cpp.
+    virtual bool scrollingGroupSameAppAsTabs() const
+    {
+        return false;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingRestoreFloatedWindowsOnLogin.
+    virtual void setScrollingGroupSameAppAsTabs(bool /*group*/)
     {
     }
 
@@ -941,6 +967,17 @@ Q_SIGNALS:
     void snapToZone8ShortcutChanged();
     void snapToZone9ShortcutChanged();
 
+    // Focus Tab by Number Shortcuts
+    void scrollFocusTab1ShortcutChanged();
+    void scrollFocusTab2ShortcutChanged();
+    void scrollFocusTab3ShortcutChanged();
+    void scrollFocusTab4ShortcutChanged();
+    void scrollFocusTab5ShortcutChanged();
+    void scrollFocusTab6ShortcutChanged();
+    void scrollFocusTab7ShortcutChanged();
+    void scrollFocusTab8ShortcutChanged();
+    void scrollFocusTab9ShortcutChanged();
+
     // Rotate Windows Shortcuts
     void rotateWindowsClockwiseShortcutChanged();
     void rotateWindowsCounterclockwiseShortcutChanged();
@@ -1003,6 +1040,7 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
+    void motionProfileTreeChanged();
 
     // Surface decoration settings
     void decorationProfileTreeChanged();
@@ -1082,6 +1120,7 @@ Q_SIGNALS:
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();
     void scrollingFocusNewWindowsChanged();
+    void scrollingGroupSameAppAsTabsChanged();
     void scrollingFocusFollowsMouseChanged();
     void scrollingFocusFollowsMouseMaxScrollChanged();
     void scrollingStickyWindowHandlingChanged();
@@ -1105,6 +1144,8 @@ Q_SIGNALS:
     void scrollingConsumeOrExpelRightShortcutChanged();
     void scrollingCenterColumnShortcutChanged();
     void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingCycleTabShortcutChanged();
+    void scrollingCycleTabBackShortcutChanged();
     void scrollingToggleWindowedFullscreenShortcutChanged();
     void scrollingCycleColumnWidthShortcutChanged();
     void scrollingCycleColumnWidthBackShortcutChanged();

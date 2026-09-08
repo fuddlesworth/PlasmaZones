@@ -221,6 +221,70 @@ inline constexpr QLatin1String TabPosition("tabPosition");
 inline constexpr QLatin1String TabLength("tabLength");
 }
 
+/// Keys of the STRIP MODEL payload, org.plasmazones.Scrolling.stripModelJson:
+/// the whole strip of one screen as the Phosphor shell's placement map draws
+/// it, columns on and off screen alike, in pixels along the strip's own axis.
+/// Spelled here so the daemon's serializer (scrollingadaptor.cpp) and the
+/// shell's reader compile against one definition. Distinct from
+/// StripPreviewKey above, which describes only the VISIBLE tiles as
+/// screen-normalized rects for a thumbnail.
+namespace StripModelKey {
+/// 0 for a horizontal strip, 1 for a vertical one. Every other pixel value
+/// on the payload runs along this axis (main) or across it (cross).
+inline constexpr QLatin1String Axis("axis");
+/// The viewport's leading edge in strip coordinates. May overhang either end
+/// of the strip: the centering policy centres a short strip by design.
+inline constexpr QLatin1String ViewOffsetPx("viewOffsetPx");
+/// The viewport's extent along the strip (the work area's main extent).
+inline constexpr QLatin1String ViewportPx("viewportPx");
+/// The strip's total extent: every non-minimized column plus the gaps.
+inline constexpr QLatin1String StripExtentPx("stripExtentPx");
+/// Strip index of the active column, -1 on an empty strip.
+inline constexpr QLatin1String ActiveColumn("activeColumn");
+/// The column array, in strip order.
+inline constexpr QLatin1String Columns("columns");
+/// A column's strip index, which is also what focusColumnAt takes.
+inline constexpr QLatin1String Index("index");
+/// A column's leading edge in strip coordinates.
+inline constexpr QLatin1String StripPosPx("stripPosPx");
+/// A column's extent along the strip; 0 for a fully minimized column.
+inline constexpr QLatin1String ExtentPx("extentPx");
+/// A column's display as a PhosphorScrollEngine::ColumnDisplay underlying
+/// value (0 Normal, 1 Tabbed).
+inline constexpr QLatin1String Display("display");
+/// Index into the column's tiles of its active tile.
+inline constexpr QLatin1String ActiveTile("activeTile");
+/// The column's declared maximize-to-edges state.
+inline constexpr QLatin1String Maximized("maximized");
+/// The column's tile array, in stack order, minimized tiles included.
+inline constexpr QLatin1String Tiles("tiles");
+/// A tile's window id.
+inline constexpr QLatin1String WindowId("windowId");
+/// A tile's resolved extent across the strip; 0 for a minimized tile.
+inline constexpr QLatin1String CrossPx("crossPx");
+/// Whether the tile is minimized (kept in the stack order, laid out nowhere).
+inline constexpr QLatin1String Minimized("minimized");
+}
+
+/// Keys of the drop-proxy JSON a shell registers on
+/// org.plasmazones.WindowDrag (registerDropProxy). The Phosphor shell's
+/// placement map is a miniature of a snapping screen's zones; registering it
+/// as a drop proxy lets a real compositor drag that lands on the miniature
+/// resolve to the full-size zone under the cursor. The shell builds the
+/// object, the daemon (src/dbus/windowdragadaptor/dropproxy.cpp) parses it.
+/// Every rect is [x, y, w, h] in the registering screen's own pixels, with
+/// the screen's top-left corner as the origin.
+namespace DropProxyKey {
+/// The miniature's bounding rect on its screen. A cursor outside it is not
+/// over the proxy at all.
+inline constexpr QLatin1String Rect("rect");
+/// Array of cells, one per drawn zone, each {id, rect}.
+inline constexpr QLatin1String Cells("cells");
+/// A cell's target: the snapping zone id, braces included, as the layout
+/// interfaces spell it.
+inline constexpr QLatin1String Id("id");
+}
+
 /// Single-instance app identities. Each Phosphor sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.

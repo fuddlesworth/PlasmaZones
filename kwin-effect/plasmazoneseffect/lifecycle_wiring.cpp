@@ -745,6 +745,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // address from inheriting a dead window's desktop set (which would make
         // the arrival arm misread the new window's first desktop edit).
         m_trackedDesktopsPerWindow.remove(w);
+        m_preStickyDesktopsPerWindow.remove(w);
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

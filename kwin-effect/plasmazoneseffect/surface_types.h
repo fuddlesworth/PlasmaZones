@@ -256,6 +256,16 @@ struct SurfaceFoldPlan
     QPointF foldCursor = kCursorOutside;
 };
 
+/// One output's membership in the backdrop accumulation generation (see
+/// SurfaceMultipassState::backdropGenerationOutputs): the output, keyed by
+/// its logical render rect, and the texture-px destination of the last FULL
+/// canvas slice it blitted, carried across a restart another output starts.
+struct BackdropGenerationMember
+{
+    QRectF outputRect;
+    QRectF lastFullDest;
+};
+
 /// Per-window GL state for the decoration composite fold
 /// (renderSurfaceChainComposite): the raw window capture, the cached static-prefix
 /// fold, the ping-pong composite pair, the per-pack buffer-pass textures
@@ -523,7 +533,13 @@ struct SurfaceMultipassState
     /// the blits alternate A, B, A, B — so "different from the last one" is true every single
     /// time, the restart never fires, and the rect only ever grows. That is the same
     /// never-expiring generation the wall-clock version had, which is what this replaced.
-    QList<QRectF> backdropGenerationOutputs;
+    ///
+    /// Each member also carries the texture-px destination of its last full slice. A restart
+    /// contracts the published rect to the restarting output's slice PLUS those of the other
+    /// members, so a straddling window keeps its neighbour's half valid between the two
+    /// outputs' captures; a member that left the canvas stops updating and drops out at the
+    /// restart after next.
+    QList<BackdropGenerationMember> backdropGenerationOutputs;
 
     /// A backdrop repaint has been ASKED FOR and has not yet produced a fold.
     ///

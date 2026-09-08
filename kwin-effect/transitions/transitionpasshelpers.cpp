@@ -30,6 +30,35 @@ GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
     return targetTex ? targetTex->internalFormat() : GL_RGBA8;
 }
 
+GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget)
+{
+    return alphaCaptureFormatForInternalFormat(captureFormatFor(outputTarget));
+}
+
+void clearAlpha(float alpha)
+{
+    // KWin's renderer leaves the scissor test off between windows, but a
+    // third-party effect ordered after us may not, and a scissored clear
+    // would stamp only a window's rect of the target. Save and restore what
+    // is touched; the colour mask is restored to the all-on state KWin's
+    // renderer expects rather than read back, because nothing in the paint
+    // chain runs with a partial mask.
+    const GLboolean scissorWas = glIsEnabled(GL_SCISSOR_TEST);
+    GLfloat clearWas[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clearWas);
+    if (scissorWas) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, alpha);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(clearWas[0], clearWas[1], clearWas[2], clearWas[3]);
+    if (scissorWas) {
+        glEnable(GL_SCISSOR_TEST);
+    }
+}
+
 std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, GLenum internalFormat)
 {
     if (deviceSize.isEmpty()) {
@@ -66,17 +95,7 @@ void drawOutputQuad(const KWin::RenderViewport& viewport)
 
 const char* outputQuadVertexSource()
 {
-    static constexpr const char* kSource =
-        "#version 450\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n";
-    return kSource;
+    return kOutputQuadVertexSource;
 }
 
 void translatePackParams(

@@ -15,6 +15,8 @@ namespace PhosphorAudio {
 class CavaSpectrumProvider;
 }
 
+class QQuickItem;
+
 namespace PlasmaZones {
 
 /// Shared zone-shader live-preview feed.
@@ -71,7 +73,12 @@ public:
 
     /// Zone-number label texture for the preview's label pass. Null on empty
     /// zones or non-positive dimensions.
-    Q_INVOKABLE QImage buildLabelsTexture(const QVariantList& zones, int width, int height) const;
+    /// Zone-number labels for @p target's shader preview, rasterised at
+    /// @p target's own size AND device-pixel ratio. Takes the item rather than
+    /// a width/height pair because the ratio is only reachable through its
+    /// window, and a logical-resolution texture is upscaled by the shader (see
+    /// ZoneLabelTextureBuilder::build). A null item yields a null image.
+    Q_INVOKABLE QImage buildLabelsTexture(const QVariantList& zones, QQuickItem* target) const;
 
     /// Current Plasma wallpaper as a texture, or null if unavailable.
     Q_INVOKABLE QImage loadWallpaperTexture() const;

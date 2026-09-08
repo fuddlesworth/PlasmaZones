@@ -343,14 +343,14 @@ void SettingsController::resetPage(const QString& page)
 
     // Animation pages: reset to defaults, scoped like the decoration domain
     // below. A SURFACE leaf clears only its own event subtree — its per-event
-    // override FILES and its shader-tree overrides — leaving the other surfaces,
+    // timing-tree entries and its shader-tree overrides — leaving the other surfaces,
     // General's config keys, and the library untouched. General resets only its
     // config keys (enable / motion Profile / filtering). A library leaf resets
-    // the whole tree (every file + every animation key). All staged like ordinary
-    // edits: cleared files are snapshotted so Discard restores them, and Save
-    // commits. Suppress onSettingsPropertyChanged during the reset; reconcile the
-    // whole animation leaf set below (a scoped reset can flip a sibling's badge,
-    // and any stale m_dirtyPages entry must clear too).
+    // the whole tree (both per-event trees plus every animation key). All staged
+    // like ordinary edits: the clears are config writes the committed baseline
+    // still holds, so Discard restores them and Save commits. Suppress onSettingsPropertyChanged during the reset;
+    // reconcile the whole animation leaf set below (a scoped reset can flip a sibling's badge, and any stale
+    // m_dirtyPages entry must clear too).
     if (isAnimationPage(page)) {
         const AnimationPageScope scope = animationPageScope(page);
         // Set when a file clear does not complete. The reconcile and the
@@ -370,7 +370,9 @@ void SettingsController::resetPage(const QString& page)
                 // dirty for a retry rather than reporting a half-done reset as
                 // clean, and tell the user why via pageResetFailed below.
                 if (m_animationsPage != nullptr
-                    && m_animationsPage->clearOverridesUnder(animationScopedBuiltInPaths(scope)) < 0) {
+                    && m_animationsPage->clearOverridesUnder(
+                           animationScopedTimingPaths(scope, m_animationsPage->storedTimingPaths()))
+                        < 0) {
                     failed = true;
                 }
                 if (!failed) {
@@ -391,7 +393,7 @@ void SettingsController::resetPage(const QString& page)
                     }
                 }
             } else {
-                // WholeTree library leaf: files + every animation key.
+                // WholeTree library leaf: both per-event trees plus every animation key.
                 if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
                     failed = true;
                 } else {
@@ -575,10 +577,11 @@ void SettingsController::discardPage(const QString& page)
 
     // Animation pages: discard reverts to the committed baseline, scoped like the
     // decoration domain below. A SURFACE leaf reverts only its own event subtree —
-    // its override FILES (revertPendingUnder) and its shader-tree paths (restored
-    // to baseline) — so discarding OSDs cannot drop a pending Windows edit.
-    // General reverts only its config keys. A library leaf reverts the whole tree
-    // (all files via revertPending + every animation key via discardKeys).
+    // its timing-tree entries (revertPendingUnder) and its shader-tree paths
+    // (restored to baseline) — so discarding OSDs cannot drop a pending Windows
+    // edit. General reverts only its config keys. A library leaf reverts the
+    // whole tree via discardKeys(animationConfigKeys()), which carries BOTH
+    // profile trees; revertPending alongside it only drops the page's memo.
     // Reverting the shader tree re-emits shaderProfileTreeChanged, which the
     // controller observes to refresh the cards.
     if (isAnimationPage(page)) {
@@ -595,13 +598,13 @@ void SettingsController::discardPage(const QString& page)
         // reconcile below, which reads the dirty state the discard just
         // produced. Letting it run to the end of the `if` would leave
         // suppression up across the reconcile.
-        // Set when a revert refuses OUTRIGHT (returns false) and no async
-        // discard worker owns the snapshot map — i.e. a genuine failure a retry
-        // could fix, not the benign "the global async discard already took the
-        // restore" case revertPending()/revertPendingUnder() document. Mirrors
-        // resetPage's `failed`/pageResetFailed pairing so a refused Discard is
-        // not silent (the value-based reconcile leaves the page badged, and
-        // without a word the user reads that as "Discard did nothing").
+        // Set when a revert refuses, which since schema v8 means exactly one
+        // thing: no settings object to read a baseline from, i.e. a wiring bug.
+        // Mirrors resetPage's `failed`/pageResetFailed pairing so a refused
+        // Discard is not silent (the value-based reconcile leaves the page
+        // badged, and without a word the user reads that as "Discard did
+        // nothing"), and gates the remaining steps so a refusal cannot leave
+        // the event half-reverted.
         bool failed = false;
         {
             const ScopedFlag loadingScope(m_loading);
@@ -609,31 +612,44 @@ void SettingsController::discardPage(const QString& page)
                 m_settings.discardKeys(animationGeneralConfigKeys());
             } else if (scope.kind == AnimationPageScope::EventSubtree) {
                 if (m_animationsPage != nullptr
-                    && !m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope))
-                    && !m_animationsPage->asyncRevertInFlight()) {
+                    && !m_animationsPage->revertPendingUnder(
+                        animationScopedTimingPaths(scope, m_animationsPage->storedTimingPaths()))) {
                     failed = true;
                 }
-                // Shader tree: restore only this scope's paths to their baseline value
-                // (re-add / change / remove), leaving the other surfaces' staged
-                // edits. Covered by the scope opened above.
-                PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
-                const PhosphorAnimationShaders::ShaderProfileTree baseline = m_settings.committedShaderProfileTree();
-                if (restoreScopeToBaseline(current, baseline, [&scope](const QString& path) {
-                        return animationPathInScope(path, scope);
-                    })) {
-                    m_settings.setShaderProfileTree(current);
+                // Gated on the timing half having landed, the same way
+                // resetPage gates its own second and third steps. Without the
+                // gate a refused timing revert still reverted the pack half and
+                // the general keys, leaving the event split down the middle:
+                // the pack back at its baseline, the timing still staged. The
+                // page reports the failure either way, but a partial revert is
+                // a worse thing to report than a refused one.
+                if (!failed) {
+                    // Shader tree: restore only this scope's paths to their baseline value
+                    // (re-add / change / remove), leaving the other surfaces' staged
+                    // edits. Covered by the scope opened above.
+                    PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
+                    const PhosphorAnimationShaders::ShaderProfileTree baseline =
+                        m_settings.committedShaderProfileTree();
+                    if (restoreScopeToBaseline(current, baseline, [&scope](const QString& path) {
+                            return animationPathInScope(path, scope);
+                        })) {
+                        m_settings.setShaderProfileTree(current);
+                    }
+                    // A page hosting the global timing / filter cards discards those
+                    // keys too (the condensed simple page), mirroring its reset scope.
+                    if (scope.includeGeneralKeys)
+                        m_settings.discardKeys(animationGeneralConfigKeys());
                 }
-                // A page hosting the global timing / filter cards discards those
-                // keys too (the condensed simple page), mirroring its reset scope.
-                if (scope.includeGeneralKeys)
-                    m_settings.discardKeys(animationGeneralConfigKeys());
             } else {
-                // WholeTree library leaf.
-                if (m_animationsPage != nullptr && !m_animationsPage->revertPending()
-                    && !m_animationsPage->asyncRevertInFlight()) {
+                // WholeTree library leaf. Same gate as the subtree branch and
+                // as resetPage: a refused revert must not leave half the leaf
+                // reverted.
+                if (m_animationsPage != nullptr && !m_animationsPage->revertPending()) {
                     failed = true;
                 }
-                m_settings.discardKeys(animationConfigKeys());
+                if (!failed) {
+                    m_settings.discardKeys(animationConfigKeys());
+                }
             }
         }
 

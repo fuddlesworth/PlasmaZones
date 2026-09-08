@@ -49,18 +49,25 @@ namespace PlasmaZones {
 // group/key declarations belong to the Settings layer (future work).
 
 namespace {
-PhosphorConfig::Schema makeMigrationSchema()
+PhosphorConfig::Schema makeMigrationSchema(ConfigMigration::ExternalImports imports)
 {
+    const bool importFiles = imports == ConfigMigration::ExternalImports::Enabled;
     PhosphorConfig::Schema s;
     s.version = ConfigSchemaVersion;
     s.versionKey = ConfigKeys::versionKey();
     // clang-format off — one entry per line keeps the version-ordered
     // registry greppable and every future bump a one-line diff.
     s.migrations = {
-        {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
-        {5, &ConfigMigration::migrateV5ToV6}, {6, &ConfigMigration::migrateV6ToV7},
-        {7, &ConfigMigration::migrateV7ToV8},
+        {1, &ConfigMigration::migrateV1ToV2},
+        {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4},
+        {4, &ConfigMigration::migrateV4ToV5},
+        {5, &ConfigMigration::migrateV5ToV6},
+        {6, &ConfigMigration::migrateV6ToV7},
+        {7,
+         [importFiles](QJsonObject& root) {
+             ConfigMigration::migrateV7ToV8(root, importFiles);
+         }},
     };
     // clang-format on
     return s;
@@ -69,15 +76,15 @@ PhosphorConfig::Schema makeMigrationSchema()
 
 // ── Migration chain runner (delegates to PhosphorConfig::MigrationRunner) ──
 
-void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
+void ConfigMigration::runMigrationChainInMemory(QJsonObject& root, ExternalImports imports)
 {
-    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    const PhosphorConfig::Schema schema = makeMigrationSchema(imports);
     PhosphorConfig::MigrationRunner(schema).runInMemory(root);
 }
 
-bool ConfigMigration::runMigrationChain(const QString& jsonPath)
+bool ConfigMigration::runMigrationChain(const QString& jsonPath, ExternalImports imports)
 {
-    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    const PhosphorConfig::Schema schema = makeMigrationSchema(imports);
     return PhosphorConfig::MigrationRunner(schema).runOnFile(jsonPath);
 }
 
@@ -385,7 +392,9 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         if (!prevalidateLegacyAssignmentsFile(legacyAssignmentsFilePath())) {
                             return false;
                         }
-                        if (!runMigrationChain(jsonPath)) {
+                        // The live config on this machine, which is the one
+                        // document whose loose files are its own.
+                        if (!runMigrationChain(jsonPath, ExternalImports::Enabled)) {
                             return false;
                         }
                         // The v3→v4 chain step stamps _version and stashes
@@ -432,6 +441,9 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
+                // The chain never ran on this path, so the v8 import has to be
+                // driven directly — see finalizeV8MotionImport.
+                finalizeV8MotionImport(jsonPath);
                 return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
@@ -448,15 +460,19 @@ bool ConfigMigration::ensureJsonConfigImpl()
 
     const QString iniPath = ConfigDefaults::legacyConfigFilePath();
     if (!QFile::exists(iniPath)) {
-        // Fresh install — no old config. Still run the v4 finalizer so a
-        // stray assignments.json from a partial earlier conversion is folded
-        // into rules.json rather than left orphaned.
+        // Fresh install, or a config that was just removed as empty — no old
+        // config to migrate. Still run all three finalizers: the v4 one folds a
+        // stray assignments.json from a partial earlier conversion into
+        // rules.json rather than leaving it orphaned, the v8 one recovers
+        // per-event timing files the chain never got to look at, and the v9 one
+        // lifts a layout-settings sidecar left behind by a partial run.
+        finalizeV8MotionImport(jsonPath);
         return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
 
-    if (!migrateIniToJson(iniPath, jsonPath)) {
+    if (!migrateIniToJson(iniPath, jsonPath, ExternalImports::Enabled)) {
         qWarning("ConfigMigration: migration failed — old config preserved at %s", qPrintable(iniPath));
         return false;
     }
@@ -489,7 +505,7 @@ void ConfigMigration::resetMigrationGuardForTesting()
 
 // ── INI → JSON ──────────────────────────────────────────────────────────────
 
-bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath)
+bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath, ExternalImports imports)
 {
     const QMap<QString, QVariant> flatMap = PhosphorConfig::QSettingsBackend::readConfigFromDisk(iniPath);
     if (flatMap.isEmpty()) {
@@ -498,8 +514,10 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
 
     QJsonObject root = iniMapToJson(flatMap);
     // INI migration produces v1 format; the chain upgrades to current version.
+    // Stamping v1 means EVERY step runs, including the import-bearing ones, so
+    // a foreign INI must say so — see the ExternalImports doc.
     root[ConfigKeys::versionKey()] = 1;
-    runMigrationChainInMemory(root);
+    runMigrationChainInMemory(root, imports);
 
     // Verify the chain ran to completion before persisting. The v1→v2
     // step has side-effect writes (session.json, assignments.json) and

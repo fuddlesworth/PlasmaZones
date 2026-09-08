@@ -58,6 +58,21 @@ enum class PackModel {
 /// validator logic, and only the flag-override policy on top of it is CLI.
 std::optional<PackModel> detectPackModel(const QString& packDir);
 
+/// The `shared/` include roots for @p packDir, in resolution order: the pack's
+/// own sibling `shared/` first, then the XDG data chain for its family.
+///
+/// The second half is what lets the tool work on an INSTALLED pack. A pack in
+/// `~/.local/share/plasmazones/<family>/<id>` has no sibling `shared/` — the
+/// helpers ship once into the system prefix — so a sibling-only lookup fails
+/// on exactly the third-party and user packs this validator exists to check,
+/// reporting every include as missing. The widened list is the same set of
+/// roots the runtime registries resolve includes against, so what the
+/// validator compiles is still what the runtime will compile.
+///
+/// The sibling entry is always first and always present, so a source tree
+/// resolves exactly as before and never consults the system.
+QStringList packSharedRoots(const QString& packDir);
+
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
 // path, or nullopt when the path is empty or escapes the pack dir. See the
 // definition for the canonical-vs-lexical domain rules and why this gate is

@@ -17,6 +17,13 @@
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
+// Both of these are used below and reach this file only through a sibling
+// translation unit under a UNITY build, so their absence breaks a non-unity
+// configure (a packager build, or -DCMAKE_UNITY_BUILD=OFF) while the default
+// build stays green.
+#include "scrollenginelogging.h"
+
+#include <PhosphorEngine/IWindowTrackingService.h>
 
 #include <QList>
 #include <QMetaType>
@@ -148,8 +155,14 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& sc
 
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap& overrides) const
 {
+    // Bounded against the enumerators, not against literals: a fourth mode
+    // added to CenterFocusedColumn would otherwise be silently rejected here
+    // and fall back to the global, which is the kind of miss that reads as
+    // "the per-screen override does not work" rather than as a missed update.
     int mode = 0;
-    if (overrideInt(overrides, ScrollPerScreenKeys::centerFocusedColumn(), mode) && mode >= 0 && mode <= 2) {
+    if (overrideInt(overrides, ScrollPerScreenKeys::centerFocusedColumn(), mode)
+        && mode >= static_cast<int>(CenterFocusedColumn::Never)
+        && mode <= static_cast<int>(CenterFocusedColumn::OnOverflow)) {
         return static_cast<CenterFocusedColumn>(mode);
     }
     return m_centerFocusedColumn;
@@ -184,7 +197,7 @@ StripAxis ScrollEngine::effectiveStripAxis(const QVariantMap& overrides, const Q
 }
 
 // ── behaviour toggles ──
-// One shape for all eight callers (the five behaviour toggles plus the three
+// One shape for all nine callers (the six behaviour toggles plus the three
 // tab-indicator bools): a rule-written per-screen key wins, an absent key
 // falls back to the member the global config seeded. The value is taken only
 // when it is a real bool — a hand-edited string would otherwise coerce to
@@ -684,7 +697,7 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overri
     // silently override the configured value with a zero.
     //
     // The three bools go through effectiveBoolOverride, the same reader the
-    // five behaviour toggles use: it takes the value only when it IS a bool,
+    // six behaviour toggles use: it takes the value only when it IS a bool,
     // so a hand-edited string cannot coerce to false and turn the indicator
     // off while every setting still reports it on. Two resolvers over one map
     // disagreeing about reject-vs-coerce is a bug in itself.

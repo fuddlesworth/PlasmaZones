@@ -173,6 +173,13 @@ void Settings::load()
     // operator== will silently miscompare here.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
+    // The animation Profile blob is not a Q_PROPERTY either, and unlike the
+    // per-mode lists below it is not merely a stale-reader problem: the daemon
+    // picks the registry layer for the global profile from its explicit-ness,
+    // so a reload that changes it without saying so leaves the layer wrong for
+    // the life of the process. See animationProfileState.
+    const AnimationProfileState animProfileSnapshot = animationProfileState();
+
     // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
     // argument, which Q_PROPERTY can't express). Snapshot them explicitly
     // so the post-reparse re-emission below can fire the per-mode signals
@@ -269,6 +276,7 @@ void Settings::load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    emitAnimationProfileChangeIfMoved(animProfileSnapshot);
 
     // Per-mode disable lists: emit one signal per Mode whose list changed.
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
@@ -745,8 +753,22 @@ bool Settings::isKeyModified(const QString& group, const QString& key) const
     return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
 }
 
+Settings::AnimationProfileState Settings::animationProfileState() const
+{
+    return {m_store->readVariant(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey()),
+            hasExplicitAnimationProfile()};
+}
+
+void Settings::emitAnimationProfileChangeIfMoved(const AnimationProfileState& before)
+{
+    if (animationProfileState() != before) {
+        Q_EMIT animationProfileChanged();
+    }
+}
+
 void Settings::discardKeys(const ConfigKeyList& keys)
 {
+    const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
     for (const ConfigKey& gk : keys) {
         // Only keys captured in the committed baseline (i.e. schema-declared) can
@@ -766,17 +788,20 @@ void Settings::discardKeys(const ConfigKeyList& keys)
             m_store->write(gk.first, gk.second, *keyIt);
     }
     normalizeScrollingColumnWidthValue();
+    emitAnimationProfileChangeIfMoved(animProfileBefore);
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
 
 void Settings::resetKeys(const ConfigKeyList& keys)
 {
+    const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
     }
     normalizeScrollingColumnWidthValue();
+    emitAnimationProfileChangeIfMoved(animProfileBefore);
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }

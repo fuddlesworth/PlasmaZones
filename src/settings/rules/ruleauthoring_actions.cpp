@@ -132,7 +132,7 @@ PickerCategory actionCategory(const QString& type, const QString& cat)
         // engine's per-window arm, and the name is what makes them findable.
         if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
             || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight
-            || type == ActionType::OpenMaximized || type == ActionType::OpenFocused
+            || type == ActionType::OpenMaximized || type == ActionType::OpenFocused || type == ActionType::OpenTabGroup
             || type == ActionType::OpenFullscreen) {
             return {windowSubcategory(PhosphorI18n::tr("Scrolling", "tiling mode name")), kOrderWindowScrolling};
         }
@@ -308,6 +308,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::OpenFocused) {
         return PhosphorI18n::tr("Focus when opened");
+    }
+    if (type == ActionType::OpenTabGroup) {
+        return PhosphorI18n::tr("Open in a tab group");
     }
     if (type == ActionType::OpenFullscreen) {
         return PhosphorI18n::tr("Open in fullscreen");

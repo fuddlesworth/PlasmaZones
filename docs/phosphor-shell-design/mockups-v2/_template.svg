@@ -1,0 +1,184 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: shared template.
+  Copy this file, keep the <defs> ids and the four base layers, replace the
+  "SCENE" group. See README.md for the conventions.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <!-- The one spectrum. Everything that encodes screen position samples this by x. -->
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- Vertical variant for side rails / brightness band -->
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- Wallpaper: navy field, never blurred by chrome -->
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <!-- Soft wallpaper light (a hint of the spectrum in the wallpaper itself) -->
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Gleam: a short bright segment that travels a stroke. Use as a stroke with dasharray. -->
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Backdrop blur for glass over windows -->
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- Reveal mask: a surface draws in from its source edge -->
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <!-- App glyph placeholder used inside miniature cells -->
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <!-- Mote: margin dust, opt-in (lock/dashboard only) -->
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows (drawn by the engine; frames carry the spectrum stroke) =====
+       Work area starts at y=28 (bar) + 8 (outer gap). Gaps 8. Three windows: a 2:1 split, right stacked. -->
+  <g id="windows">
+    <!-- Focused window: white 1px edge over the spectrum stroke, gleam drifting -->
+    <g id="win-a">
+      <rect x="36" y="44" width="792" height="640" rx="8" fill="#0B1730" fill-opacity="0.92"/>
+      <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+      <!-- gleam travelling the top edge -->
+      <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="36;708;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </rect>
+      <!-- placeholder content lines -->
+      <g fill="#E6EDFF" opacity="0.08">
+        <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+        <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+        <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+      </g>
+    </g>
+    <g id="win-b">
+      <rect x="836" y="44" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+      <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    </g>
+    <g id="win-c">
+      <rect x="836" y="368" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+      <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the bar. 2px rail on the screen edge + 26px navy-glass band, 0 inset, no radius ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <!-- idle gleam, one pass per 9s -->
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Placement map: 18px tall, aspect-true (16:9 -> 32px). Cells sample the rail at their x. -->
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <!-- cell A (focused): hue at x~0.33 of screen = blue; white edge -->
+      <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+      <!-- cells B, C at x~0.8 = purple-rose -->
+      <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <!-- desktop ticks -->
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <!-- group hairline -->
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <!-- focused window chip: glyph + title, underline in the hue of the window's position -->
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+      <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+    </g>
+    <!-- clock: tabular mono, minute underline ticks -->
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <!-- right group: metrics as 2px bars in the rail hue at their x, glyphs, notifications, cc dot, power -->
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <!-- notifications bell + tabular count -->
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <!-- control center dot in rail hue at its x (~0.93 -> rose-ish) -->
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <!-- power -->
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE (replace) ===== -->
+  <g id="scene"></g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(880 400)">
+    <rect width="300" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#3B82F6">Template</text>
+    <text x="12" y="40" class="ui note-body">Rail + band bar, placement map, three engine-placed</text>
+    <text x="12" y="55" class="ui note-body">windows with spectrum frames. Replace the SCENE group.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · template · spectrum identity</text>
+</svg>

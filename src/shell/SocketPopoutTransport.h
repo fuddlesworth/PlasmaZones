@@ -4,6 +4,7 @@
 
 #include <PhosphorPopout/IPopoutTransport.h>
 
+#include <QObject>
 #include <QString>
 #include <QtCore/qtclasshelpermacros.h>
 
@@ -14,11 +15,11 @@ namespace PhosphorShellApp {
 class ControlCenterController;
 
 // IPopoutTransport for a popout that is painted INTO the bar rather than
-// given a surface of its own: the control center growing out of the
-// capsule through BarCanvas's socket (the connected-corner design).
+// given a surface of its own: the control center as the floating fallback
+// pane under the band, on an output with no placement engine (A2 §4.2).
 //
 // There is nothing to create here. The visible open/close is BarHost
-// animating its socket depth off ControlCenterController.openScreen, and
+// animating its pane progress off ControlCenterController.openScreen, and
 // this transport's whole job is to be the ONLY writer of that property,
 // so the open state is driven by PopoutController's arbitration like
 // every other popout's. That is what lets the Modal power menu close the
@@ -79,6 +80,11 @@ private:
     QString m_openHandle;
     int m_counter = 0;
     std::function<void(const QString&)> m_dismissed;
+    // The screenRemoved subscription. This class is not a QObject, so the
+    // connection cannot die with it automatically, and it is contexted on
+    // qGuiApp, which outlives the transport. Held so the destructor can
+    // sever it before the captured `this` dangles.
+    QMetaObject::Connection m_screenRemovedConnection;
 };
 
 } // namespace PhosphorShellApp

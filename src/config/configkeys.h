@@ -108,12 +108,10 @@ public:
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
-    // Snapping.OverlayShaders — zone-overlay shader assignments
-    // (OverlayShaderTree: global baseline + per-layout-UUID overrides).
-    // Its own group so the settings page and the per-page reset manifest
-    // address one subtree, mirroring how the animation/decoration trees
-    // each own a group.
-    P_CONFIG_GROUP(snappingOverlayShadersGroup, "Snapping.OverlayShaders")
+    // NOTE: zone-overlay shader assignments are NOT a Snapping.* group. They
+    // live in the top-level `overlaysGroup` below, beside Animations and
+    // Decorations, because the page that edits them sits under Appearance with
+    // those two rather than under Snapping.
     // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
     // shared inner/outer gap values live in the top-level Gaps group (gapsGroup)
     // and are read through Settings' gap getters.
@@ -174,6 +172,15 @@ public:
     // mirroring how the animation ShaderProfileTree sits under Animations; the
     // Decorations.WindowFiltering sub-group is the border-pass window filter.
     P_CONFIG_GROUP(decorationsGroup, "Decorations")
+
+    // Overlays — zone-overlay shader assignments (OverlayShaderTree: global
+    // baseline + per-layout-UUID overrides). Top-level and singular like
+    // Animations and Decorations, and for the same reason: the three are
+    // siblings under Appearance in the settings tree, and a v2 group name
+    // mirrors where its page lives. A zone overlay only draws in snapping mode,
+    // but so does every zone, and that is a placement fact rather than an
+    // appearance one.
+    P_CONFIG_GROUP(overlaysGroup, "Overlays")
 
     // Decorations.Performance — what the decoration chain is allowed to keep
     // redrawing. An animated pack (a drifting mote layer, an orbiting gleam)
@@ -396,12 +403,12 @@ public:
     P_CONFIG_KEY(gridColumnsKey, "GridColumns")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.OverlayShaders
+    // Config Keys — Overlays
     // ═══════════════════════════════════════════════════════════════════════════
 
     // OverlayShaderTree JSON blob — zone-overlay shader assignments
     // (global baseline + per-layout overrides), nested under
-    // Snapping.OverlayShaders. Replaces the pre-v7 per-layout
+    // Overlays. Replaces the pre-v7 per-layout
     // shaderId/shaderParams that lived in the layout-settings sidecar.
     P_CONFIG_KEY(overlayShaderTreeKey, "OverlayShaderTree")
 
@@ -524,6 +531,7 @@ public:
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
     P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")
     P_CONFIG_KEY(focusFollowsMouseMaxScrollKey, "FocusFollowsMouseMaxScroll")
+    P_CONFIG_KEY(groupSameAppAsTabsKey, "GroupSameAppAsTabs")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior.DragScroll
@@ -645,6 +653,13 @@ public:
     // selection layered alongside the motion Profile (separate tree,
     // same dot-path namespace — see design doc decision AA).
     P_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
+    /// Per-event motion overrides (curve, duration, stagger, ...), the timing
+    /// twin of ShaderProfileTree above and the config home the per-event
+    /// override FILES under the data dir migrate into. Config-backed for the
+    /// same reason the decoration tree is: a settings profile, a set snapshot
+    /// and the normal Save/Discard staging all reach config and none of them
+    /// reach loose files.
+    P_CONFIG_KEY(motionProfileTreeKey, "MotionProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
@@ -712,6 +727,23 @@ public:
             qFatal("snapToZoneKey: n out of range: %d", n);
         }
         return snapToZoneKeyPattern().arg(n);
+    }
+
+    // Scrolling's tab ordinals. In Shortcuts.Global rather than
+    // Shortcuts.Scrolling because that is where every INDEXED family lives
+    // (the quick-layout and snap-to-zone digits are equally mode-specific and
+    // sit here): the Shortcuts.Scrolling parity canary derives one action id
+    // per schema key by snake-casing it, which a pattern key has no spelling
+    // for, and the indexed families are registered outside the static table
+    // that canary reads.
+    P_CONFIG_KEY(scrollFocusTabKeyPattern, "ScrollFocusTab%1")
+    static QString scrollFocusTabKey(int n)
+    {
+        // Same guard and same protocol bound as snapToZoneKey above.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+            qFatal("scrollFocusTabKey: n out of range: %d", n);
+        }
+        return scrollFocusTabKeyPattern().arg(n);
     }
 
     P_CONFIG_KEY(rotateWindowsClockwiseKey, "RotateWindowsClockwise")

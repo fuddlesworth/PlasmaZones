@@ -5,7 +5,8 @@
 //   * buildApplicationController() — wires the PhosphorControl
 //     PageRegistry with PlasmaZones' settings pages and sidebar categories
 //     (the navigable leaf pages are enumerated in validPageNames()).
-//   * What's-New dismissal + last-seen-version state.
+//
+// What's New state lives in the sibling settingscontroller_whatsnew.cpp.
 //
 // The static sidebar topology accessors (pageGroupChildren,
 // pageOwnedConfigKeys, validPageNames) live in the sibling
@@ -15,18 +16,13 @@
 // as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
-#include "version.h"
 
-#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 #include "pageadapter.h"
 #include "settings/services/settingsstagingdomain.h"
 
-#include <QSettings>
-#include <QStringList>
 #include <QUrl>
-#include <QVersionNumber>
 
 namespace PlasmaZones {
 
@@ -91,8 +87,9 @@ void SettingsController::buildApplicationController()
     // belongs here rather than among the tools. regPage trackDomain()s the
     // controller so its staged active-profile pointer joins the Save/Discard
     // transaction; the applied config rides the Settings staging path.
-    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("pages/profiles/ProfilesPage.qml"),
-            QStringLiteral("bookmarks"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regPage(m_profilesPage.get(), QString(), PhosphorI18n::tr("Profiles"),
+            QStringLiteral("pages/profiles/ProfilesPage.qml"), QStringLiteral("bookmarks"), /*collapsible=*/false,
+            /*divider=*/false, AdvancedOnly);
     // General leads near the top (mirrors the Animations section leading with
     // its own "General" child). Divider after it closes the top/global block.
     regPage(m_generalPage, QString(), PhosphorI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
@@ -252,18 +249,6 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/snapping/SnappingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    // Overlay shader assignment page — edits the OverlayShaderTree (global
-    // default + per-layout overrides) through m_snappingShadersPage's
-    // invokables. Registered as a virtual leaf: the controller stays bound
-    // to the "snapping-shaders" id below (regPage), and dirty tracking rides
-    // the global overlayShaderTreeChanged NOTIFY loop either way.
-    regVirtual(QStringLiteral("snapping-shader-assignments"), QStringLiteral("snapping-config-cat"),
-               PhosphorI18n::tr("Shaders"), QStringLiteral("pages/snapping/SnappingShaderAssignmentsPage.qml"),
-               QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-config-cat"), PhosphorI18n::tr("Shader Library"),
-            QStringLiteral("pages/snapping/SnappingShadersPage.qml"), QStringLiteral("folder-templates"),
-            /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-
     // Tiling children — organised by subject (Window / Algorithm / Configuration)
     // to match the snapping reorg. Tiling has no drag-overlay or selector popup,
     // so its only interaction surface (the drag-insert indicator) folds into
@@ -529,6 +514,27 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
+    // Overlays — the third Appearance drill-down, beside Animations and
+    // Decorations. Which shader a zone overlay draws is a display preference
+    // like those two, not a property of the layout the zones came from, which
+    // is why it sits here rather than under Snapping. (Snapping → Overlay is a
+    // different thing: when the drag overlay appears and what its rectangles
+    // look like.) No sub-buckets — two leaves do not need a Library tier.
+    regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
+               QStringLiteral("preferences-desktop-display"));
+    // Assignments edits the OverlayShaderTree (global default + per-layout
+    // overrides) through m_overlaysPage's invokables. Registered as a virtual
+    // leaf: the controller stays bound to the "overlays-library" id below
+    // (regPage), and dirty tracking rides the global overlayShaderTreeChanged
+    // NOTIFY loop either way.
+    regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Assignments"),
+               QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
+               QStringLiteral("preferences-desktop-display"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regPage(m_overlaysPage.get(), QStringLiteral("overlays"), PhosphorI18n::tr("Library"),
+            QStringLiteral("pages/overlays/OverlaysLibraryPage.qml"), QStringLiteral("folder-templates"),
+            /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
     // Every page declared its simple/advanced tier at registration above.
     // Seed the registry's mode from m_advancedMode (default simple) so the
     // very first sidebar build is already filtered — the registry's own
@@ -588,60 +594,6 @@ void SettingsController::buildApplicationController()
             m_app->setCurrentPageId(m_activePage);
         }
     });
-}
-
-// Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
-// sorts after "1.9.0" (plain string compare gets that wrong). Entries come
-// from the bundled whatsnew.json resource in no guaranteed order.
-QString SettingsController::latestWhatsNewVersion() const
-{
-    QVersionNumber best;
-    QString bestStr;
-    for (const QVariant& v : m_whatsNewEntries) {
-        const QString ver = v.toMap().value(QStringLiteral("version")).toString();
-        const QVersionNumber parsed = QVersionNumber::fromString(ver);
-        if (parsed.isNull())
-            continue;
-        if (bestStr.isEmpty() || best < parsed) {
-            best = parsed;
-            bestStr = ver;
-        }
-    }
-    return bestStr;
-}
-
-bool SettingsController::hasUnseenWhatsNew() const
-{
-    const QString latest = latestWhatsNewVersion();
-    if (latest.isEmpty())
-        return false;
-    // Unseen iff the latest bundled entry is strictly newer than what the
-    // user last marked seen. String compare after normalisation would still
-    // mis-order "1.10" vs "1.9", so go through QVersionNumber.
-    const QVersionNumber latestV = QVersionNumber::fromString(latest);
-    const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
-    // Belt-and-braces: the ctor already clamps m_whatsNewEntries to
-    // VERSION_STRING (settingscontroller.cpp), so latestV can only exceed
-    // the running version if that filter regresses. Same version source on
-    // both sides, so the two can never disagree.
-    const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
-    if (!appV.isNull() && appV < latestV) {
-        return false;
-    }
-    return seenV < latestV;
-}
-
-void SettingsController::markWhatsNewSeen()
-{
-    const QString latest = latestWhatsNewVersion();
-    if (latest.isEmpty())
-        return;
-    if (m_lastSeenWhatsNewVersion != latest) {
-        m_lastSeenWhatsNewVersion = latest;
-        QSettings appSettings;
-        appSettings.setValue(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey(), latest);
-        Q_EMIT lastSeenWhatsNewVersionChanged();
-    }
 }
 
 } // namespace PlasmaZones

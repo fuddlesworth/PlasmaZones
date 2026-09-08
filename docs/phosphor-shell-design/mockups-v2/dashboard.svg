@@ -1,0 +1,410 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: dashboard.
+  The desktop pulls back (the shell's one scale transition, 280 ms) into a grid of every
+  desktop's live placement map. Row 1: four desktops (tiling, snapping, scrolling, empty).
+  Row 2: calendar, weather, media as three same-grammar cells, and a "+" cell.
+  Loop 8 s: 0.0 shrink, 3.2 hover cell 3, 5.0 click cell 3, the grid grows back into it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <!-- scrolling cell clip: the strip may overflow into the gutters but not further -->
+    <clipPath id="cell3clip"><rect x="636" y="78" width="304" height="157"/></clipPath>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+      .cell-label { font-size: 12px; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- Dashboard ground: void 0.90, enters with the pull-back, leaves on the click -->
+  <rect id="ground" width="1280" height="720" fill="#050916" opacity="0.9">
+    <animate attributeName="opacity" values="0;0.9;0.9;0;0" keyTimes="0;0.035;0.625;0.66;1" dur="8s" repeatCount="indefinite"
+             calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+  </rect>
+
+  <!-- phosphor-motes: sparse dust drifting on the ground between cells -->
+  <g id="motes" color="#E6EDFF" opacity="0.35">
+    <animate attributeName="opacity" values="0;0.35;0.35;0;0" keyTimes="0;0.06;0.625;0.66;1" dur="8s" repeatCount="indefinite"/>
+    <use xlink:href="#mote" x="344" y="120" width="4" height="4"><animate attributeName="y" values="120;96;120" dur="11s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="640" y="200" width="4" height="4" opacity="0.6"><animate attributeName="y" values="200;176;200" dur="13s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="936" y="150" width="4" height="4"><animate attributeName="y" values="150;130;150" dur="9s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="200" y="244" width="4" height="4" opacity="0.5"><animate attributeName="x" values="200;224;200" dur="12s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="500" y="246" width="4" height="4"><animate attributeName="x" values="500;480;500" dur="10s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="800" y="242" width="4" height="4" opacity="0.6"><animate attributeName="x" values="800;820;800" dur="14s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="1100" y="246" width="4" height="4"><animate attributeName="y" values="246;238;246" dur="8s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="30" y="300" width="4" height="4" opacity="0.5"><animate attributeName="y" values="300;280;300" dur="12s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="1248" y="340" width="4" height="4"><animate attributeName="y" values="340;318;340" dur="11s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="344" y="380" width="4" height="4" opacity="0.6"><animate attributeName="y" values="380;360;380" dur="10s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="936" y="330" width="4" height="4"><animate attributeName="y" values="330;350;330" dur="13s" repeatCount="indefinite"/></use>
+    <use xlink:href="#mote" x="640" y="420" width="4" height="4" opacity="0.5"><animate attributeName="x" values="640;660;640" dur="9s" repeatCount="indefinite"/></use>
+  </g>
+
+  <!-- ===== LAYER 1: the grid. Cells 272x153 (1/4 scale of 1280x720... at mock scale), 24 px gaps.
+       Desktop cells are the live placement map in miniature grammar: 3 px rects, 1 px outlines
+       sampled from the rail by the rect's own x on the real screen, occupied cells filled 40%. ===== -->
+  <g id="grid">
+    <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.035;0.625;0.66;1" dur="8s" repeatCount="indefinite"
+             calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+
+    <!-- Cell 1: desktop 1, tiling, CURRENT: outline blue -->
+    <g id="cell1" transform="translate(60 80)">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#3B82F6" stroke-width="1"/>
+      <text x="1" y="-7" class="ui cell-label">1 · Tiling</text>
+      <rect x="8" y="9" width="168" height="136" rx="3" fill="#3B82F6" fill-opacity="0.4" stroke="#3B82F6" stroke-width="1"/>
+      <rect x="178" y="9" width="86" height="67" rx="3" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-width="1"/>
+      <rect x="178" y="78" width="86" height="67" rx="3" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-width="1"/>
+      <g color="#E6EDFF" opacity="0.7">
+        <use xlink:href="#glyph" x="84" y="69" width="16" height="16"/>
+        <use xlink:href="#glyph" x="215" y="36" width="12" height="12"/>
+        <use xlink:href="#glyph" x="215" y="105" width="12" height="12"/>
+      </g>
+    </g>
+
+    <!-- Cell 2: desktop 2, snapping, five zones, three occupied. focus-fade dims non-current cells -->
+    <g id="cell2" transform="translate(356 80)" opacity="0.62">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.6"/>
+      <text x="1" y="-7" class="ui cell-label">2 · Snapping</text>
+      <rect x="8" y="20" width="80" height="125" rx="3" fill="#2FB0F2" fill-opacity="0.4" stroke="#2FB0F2" stroke-width="1"/>
+      <rect x="92" y="20" width="88" height="60" rx="3" fill="#6F6CF7" fill-opacity="0.4" stroke="#6F6CF7" stroke-width="1"/>
+      <rect x="92" y="84" width="88" height="61" rx="3" fill="none" stroke="#6F6CF7" stroke-width="1" stroke-opacity="0.6"/>
+      <rect x="184" y="20" width="80" height="60" rx="3" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-width="1"/>
+      <rect x="184" y="84" width="80" height="61" rx="3" fill="none" stroke="#CE4BA8" stroke-width="1" stroke-opacity="0.6"/>
+      <g color="#E6EDFF" opacity="0.7">
+        <use xlink:href="#glyph" x="42" y="76" width="12" height="12"/>
+        <use xlink:href="#glyph" x="130" y="44" width="12" height="12"/>
+        <use xlink:href="#glyph" x="218" y="44" width="12" height="12"/>
+      </g>
+      <!-- a window arriving live on desktop 2 -->
+      <rect x="92" y="84" width="88" height="61" rx="3" fill="#6F6CF7" fill-opacity="0.4" stroke="#6F6CF7" stroke-width="1">
+        <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.3;0.32;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+      </rect>
+    </g>
+
+    <!-- Cell 3: desktop 3, scrolling: the lens is the cell, columns overflow into the gutters at 40% -->
+    <g id="cell3" transform="translate(652 80)" opacity="0.62">
+      <animate attributeName="opacity" values="0.62;0.62;1;1;1" keyTimes="0;0.4;0.415;0.625;1" dur="8s" repeatCount="indefinite"
+               calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0 0 1 1"/>
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.6"/>
+      <!-- hover: outline enters white -->
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0.35;0" keyTimes="0;0.4;0.415;0.625;0.7;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <text x="1" y="-7" class="ui cell-label">3 · Scrolling</text>
+      <!-- strip: structure axis, first column cyan, last rose. Overflow past the lens at 40% -->
+      <g clip-path="url(#cell3clip)" transform="translate(-652 -80)">
+        <g transform="translate(652 80)">
+          <rect x="-12" y="20" width="60" height="125" rx="3" fill="#22D3EE" fill-opacity="0.4" stroke="#22D3EE" stroke-width="1" opacity="0.4"/>
+          <rect x="54" y="20" width="96" height="125" rx="3" fill="#6F6CF7" fill-opacity="0.4" stroke="#6F6CF7" stroke-width="1"/>
+          <rect x="156" y="20" width="110" height="60" rx="3" fill="#A855F7" fill-opacity="0.4" stroke="#A855F7" stroke-width="1"/>
+          <rect x="156" y="84" width="110" height="61" rx="3" fill="#A855F7" fill-opacity="0.4" stroke="#A855F7" stroke-width="1"/>
+          <rect x="272" y="20" width="16" height="125" rx="3" fill="#F43F5E" fill-opacity="0.4" stroke="#F43F5E" stroke-width="1" opacity="0.4"/>
+          <g color="#E6EDFF" opacity="0.7">
+            <use xlink:href="#glyph" x="96" y="76" width="12" height="12"/>
+            <use xlink:href="#glyph" x="205" y="44" width="12" height="12"/>
+            <use xlink:href="#glyph" x="205" y="108" width="12" height="12"/>
+          </g>
+        </g>
+      </g>
+      <!-- lens: white 1 px at 0.3, the visible viewport of the strip -->
+      <rect x="6.5" y="17.5" width="259" height="130" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="3 3"/>
+    </g>
+
+    <!-- Cell 4: desktop 4, empty -->
+    <g id="cell4" transform="translate(948 80)" opacity="0.62">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.6"/>
+      <text x="1" y="-7" class="ui cell-label">4 · Empty</text>
+      <text x="136" y="88" text-anchor="middle" class="ui t2" font-size="12" opacity="0.6">no windows</text>
+    </g>
+
+    <!-- ===== Row 2: calendar, weather, media. Same size, same outline, same grammar. ===== -->
+    <g id="calendar" transform="translate(60 257)" opacity="0.85">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.6"/>
+      <text x="1" y="-7" class="ui cell-label">Calendar</text>
+      <text x="264" y="14" text-anchor="end" class="mono t1" font-size="12">May 2026</text>
+      <g class="mono" font-size="10.5" fill="#94A3B8" text-anchor="middle">
+        <text x="43"  y="38">Mo</text><text x="73" y="38">Tu</text><text x="103" y="38">We</text><text x="133" y="38">Th</text>
+        <text x="163" y="38">Fr</text><text x="193" y="38">Sa</text><text x="223" y="38">Su</text>
+      </g>
+      <g class="mono" font-size="11" fill="#E6EDFF" fill-opacity="0.85" text-anchor="middle">
+        <text x="163" y="58">1</text><text x="193" y="58">2</text><text x="223" y="58">3</text>
+        <text x="43" y="76">4</text><text x="73" y="76">5</text><text x="103" y="76">6</text><text x="133" y="76">7</text><text x="163" y="76">8</text><text x="193" y="76">9</text><text x="223" y="76">10</text>
+        <text x="43" y="94">11</text><text x="73" y="94">12</text><text x="103" y="94">13</text><text x="133" y="94">14</text><text x="163" y="94">15</text><text x="193" y="94">16</text><text x="223" y="94">17</text>
+        <text x="43" y="112">18</text><text x="73" y="112">19</text><text x="103" y="112">20</text><text x="133" y="112">21</text><text x="163" y="112">22</text><text x="193" y="112">23</text><text x="223" y="112" fill="#FFFFFF" fill-opacity="1">24</text>
+        <text x="43" y="130">25</text><text x="73" y="130">26</text><text x="103" y="130">27</text><text x="133" y="130">28</text><text x="163" y="130">29</text><text x="193" y="130">30</text><text x="223" y="130">31</text>
+      </g>
+      <!-- today: a 3 px miniature rect outline in blue with a 2 px underline -->
+      <rect x="211.5" y="100.5" width="23" height="15" rx="3" fill="#3B82F6" fill-opacity="0.4" stroke="#3B82F6" stroke-width="1"/>
+      <rect x="215" y="115" width="16" height="2" fill="#3B82F6"/>
+    </g>
+
+    <g id="weather" transform="translate(356 257)" opacity="0.85">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.6"/>
+      <text x="1" y="-7" class="ui cell-label">Weather</text>
+      <text x="264" y="14" text-anchor="end" class="ui t2" font-size="12">Bristol</text>
+      <!-- one 20 px glyph: sun behind cloud, stroke only -->
+      <g transform="translate(24 44)" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.9">
+        <circle cx="13" cy="7" r="4"/>
+        <path d="M4 18 a4 4 0 0 1 1-7.9 a5.5 5.5 0 0 1 10.5-1 a3.5 3.5 0 0 1 0.5 7 z"/>
+      </g>
+      <text x="24" y="102" class="mono t1" font-size="22" font-weight="500">14°</text>
+      <text x="24" y="122" class="ui t2" font-size="13">Partly cloudy</text>
+      <!-- tabular readouts, changed digit underline ticks -->
+      <g class="mono" font-size="12" fill="#94A3B8" text-anchor="end">
+        <text x="252" y="72">H 17°</text>
+        <text x="252" y="92">L  9°</text>
+        <text x="252" y="112">62 %</text>
+        <text x="252" y="132">1013 hPa</text>
+      </g>
+      <rect x="223" y="115" width="14" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.2;0.25;0.34;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <!-- next hours as 3 px rects along the bottom, height = temperature -->
+      <g fill="#3B82F6" fill-opacity="0.4" stroke="#3B82F6" stroke-width="1">
+        <rect x="8.5" y="139.5" width="8" height="5" rx="1"/><rect x="20.5" y="137.5" width="8" height="7" rx="1"/>
+        <rect x="32.5" y="135.5" width="8" height="9" rx="1"/><rect x="44.5" y="133.5" width="8" height="11" rx="1"/>
+        <rect x="56.5" y="134.5" width="8" height="10" rx="1"/><rect x="68.5" y="137.5" width="8" height="7" rx="1"/>
+      </g>
+    </g>
+
+    <g id="media" transform="translate(652 257)" opacity="0.85">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="#070F22" fill-opacity="0.6" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.6"/>
+      <text x="1" y="-7" class="ui cell-label">Media</text>
+      <text x="264" y="14" text-anchor="end" class="ui t2" font-size="12">spotify</text>
+      <!-- album art placeholder as a miniature rect -->
+      <rect x="16" y="40" width="56" height="56" rx="3" fill="#A855F7" fill-opacity="0.4" stroke="#A855F7" stroke-width="1"/>
+      <use xlink:href="#glyph" x="34" y="58" width="20" height="20" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="56" class="ui t1" font-size="14">Phosphor Dust</text>
+      <text x="88" y="76" class="ui t2" font-size="13">Halcyon Fields</text>
+      <text x="88" y="98" class="mono t2" font-size="12">2:41 / 4:08</text>
+      <!-- 2 px playback band: track hairline, fill samples the rail at its screen x -->
+      <rect x="16" y="120" width="240" height="1" fill="#1E293B"/>
+      <rect x="16" y="119.5" width="156" height="2" fill="#6F6CF7">
+        <animate attributeName="width" values="156;168" dur="8s" repeatCount="indefinite"/>
+      </rect>
+      <!-- transport: three text glyphs, stroke only -->
+      <g transform="translate(88 130)" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.85">
+        <path d="M8 0 l-6 5 6 5 M16 0 l-6 5 6 5"/>
+        <path d="M36 0 l9 5 -9 5 z" fill="#E6EDFF"/>
+        <path d="M60 0 l6 5 -6 5 M68 0 l6 5 -6 5"/>
+      </g>
+    </g>
+
+    <!-- "+" cell: add a desktop -->
+    <g id="plus" transform="translate(948 257)" opacity="0.5">
+      <rect x="0.5" y="0.5" width="271" height="152" rx="3" fill="none" stroke="#22D3EE" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="4 4"/>
+      <path d="M136 66 v20 M126 76 h20" stroke="#E6EDFF" stroke-width="1.2" opacity="0.7"/>
+      <text x="136" y="108" text-anchor="middle" class="ui t2" font-size="12">new desktop</text>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the live desktop 1. This is the desktop itself scaling (280 ms) into cell 1,
+       not a UI element. It sits over cell 1's miniature and matches it exactly. ===== -->
+  <g id="desktop1" transform="translate(60 80) scale(0.2125)">
+    <animateTransform attributeName="transform" type="translate" values="0 0;60 80;60 80;60 80" keyTimes="0;0.035;0.625;1"
+                      dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0.22 1 0.36 1;0 0 1 1;0 0 1 1"/>
+    <animateTransform attributeName="transform" type="scale" values="1;0.2125;0.2125;0.2125" keyTimes="0;0.035;0.625;1"
+                      dur="8s" repeatCount="indefinite" additive="sum" calcMode="spline" keySplines="0.22 1 0.36 1;0 0 1 1;0 0 1 1"/>
+    <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.625;0.66;1" dur="8s" repeatCount="indefinite"/>
+    <g id="windows">
+      <g id="win-a">
+        <rect x="36" y="44" width="792" height="640" rx="8" fill="#0B1730" fill-opacity="0.92"/>
+        <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+        <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+        <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+          <animate attributeName="x" values="36;708;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+        </rect>
+        <g fill="#E6EDFF" opacity="0.08">
+          <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+          <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+          <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+        </g>
+      </g>
+      <g id="win-b">
+        <rect x="836" y="44" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+        <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+      </g>
+      <g id="win-c">
+        <rect x="836" y="368" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+        <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2b: desktop 3 at full size, grown out of cell 3 on the click (the reverse of the same transition) ===== -->
+  <g id="desktop3" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;1;0" keyTimes="0;0.625;0.63;0.97;0.99;1" dur="8s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="652 80;652 80;0 0;0 0" keyTimes="0;0.625;0.66;1"
+                      dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.22 1 0.36 1;0 0 1 1"/>
+    <animateTransform attributeName="transform" type="scale" values="0.2125;0.2125;1;1" keyTimes="0;0.625;0.66;1"
+                      dur="8s" repeatCount="indefinite" additive="sum" calcMode="spline" keySplines="0 0 1 1;0.22 1 0.36 1;0 0 1 1"/>
+    <!-- scrolling strip at full size: a column half off the left, the focused column, a stacked column, one past the right edge -->
+    <rect x="-56" y="94" width="282" height="588" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+    <rect x="-55.5" y="94.5" width="281" height="587" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    <rect x="254" y="94" width="452" height="588" rx="8" fill="#0B1730" fill-opacity="0.92"/>
+    <rect x="254.5" y="94.5" width="451" height="587" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+    <rect x="254.5" y="94.5" width="451" height="587" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+    <rect x="734" y="94" width="518" height="282" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+    <rect x="734.5" y="94.5" width="517" height="281" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    <rect x="734" y="396" width="518" height="286" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+    <rect x="734.5" y="396.5" width="517" height="285" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    <rect x="1280" y="94" width="76" height="588" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+  </g>
+
+  <!-- ===== LAYER 3: the bar (unchanged, the screen edge stays) ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+      <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+      <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+    </g>
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- pointer, hovering then clicking cell 3 -->
+  <g id="pointer" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.36;0.4;0.625;0.66;1" dur="8s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="900 300;900 300;790 170;790 170" keyTimes="0;0.36;0.4;1"
+                      dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+    <path d="M0 0 l0 14 4-3 3 6 2-1 -3-6 5 0 z" fill="#E6EDFF" stroke="#050916" stroke-width="0.8"/>
+    <circle cx="4" cy="6" r="9" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+      <animate attributeName="opacity" values="0;0;0.8;0;0" keyTimes="0;0.62;0.625;0.66;1" dur="8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(60 440)">
+    <rect width="272" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#3B82F6">Every desktop's map, live</text>
+    <text x="12" y="40" class="ui note-body">Each cell is that desktop's placement map,</text>
+    <text x="12" y="55" class="ui note-body">read from the engine. Current outlined blue,</text>
+    <text x="12" y="70" class="ui note-body">the others cyan under focus-fade.</text>
+  </g>
+  <g class="note" transform="translate(356 440)">
+    <rect width="272" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#2FB0F2">Same grammar in every cell</text>
+    <text x="12" y="40" class="ui note-body">3 px rects, 1 px outline sampled from the rail</text>
+    <text x="12" y="55" class="ui note-body">by the rect's own x, 40% fill when occupied.</text>
+    <text x="12" y="70" class="ui note-body">Calendar, weather and media obey it too.</text>
+  </g>
+  <g class="note" transform="translate(652 440)">
+    <rect width="272" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#A855F7">The single scale transition</text>
+    <text x="12" y="40" class="ui note-body">The desktop itself shrinks into its cell in</text>
+    <text x="12" y="55" class="ui note-body">280 ms and grows back out of the cell you</text>
+    <text x="12" y="70" class="ui note-body">click. No UI element ever scales.</text>
+  </g>
+  <g class="note" transform="translate(948 440)">
+    <rect width="272" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#CE4BA8">Motes and focus-fade</text>
+    <text x="12" y="40" class="ui note-body">phosphor-motes drift sparsely on the void</text>
+    <text x="12" y="55" class="ui note-body">ground between cells. Non-current cells sit</text>
+    <text x="12" y="70" class="ui note-body">under focus-fade at 62%.</text>
+  </g>
+  <g class="note" transform="translate(356 544)">
+    <rect width="568" height="58" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#FFFFFF">Hover and click</text>
+    <text x="12" y="40" class="ui note-body">Hover a cell: its outline enters white, focus is never a hue. Click: the grid releases and that desktop scales up to fill the screen.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · dashboard · every desktop's placement map, calendar / weather / media in the same grammar</text>
+</svg>

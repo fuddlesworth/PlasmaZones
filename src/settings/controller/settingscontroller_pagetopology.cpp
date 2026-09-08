@@ -39,14 +39,15 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level, sixteen
+    // leaf to any group it belongs to. Covers parents at every level, seventeen
     // in all. Top-level categories: placement, appearance. Mid-level
     // virtual parents nested beneath them: snapping, tiling and scrolling under
-    // placement; animations and decorations under appearance, each of those two
-    // also a map key in its own right and not only a component of appearance;
-    // animations-transitions, animations-motion and animations-library under
-    // animations; decorations-surfaces and decorations-library under
-    // decorations. Then the four *-cat collapsible headers (snapping-overlay-cat,
+    // placement; animations, decorations and overlays under appearance, each of
+    // those three also a map key in its own right and not only a component of
+    // appearance; animations-transitions, animations-motion and
+    // animations-library under animations; decorations-surfaces and
+    // decorations-library under decorations. Overlays has no sub-buckets, only
+    // its two leaves. Then the four *-cat collapsible headers (snapping-overlay-cat,
     // snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
     // name prefix, so the explicit set sidesteps the asymmetry between a
     // prefix-walk and a direct membership lookup.
@@ -99,6 +100,13 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kDecorationDirectChildren{QStringLiteral("window-appearance")};
     static const QSet<QString> kDecorationAllLeaves =
         kDecorationDirectChildren + kDecorationSurfacesChildren + kDecorationLibraryChildren;
+    // Overlays — the third Appearance sibling beside animations and
+    // decorations. Assignments edits the OverlayShaderTree; library is a
+    // read-only pack browser that edits no config, exactly as
+    // animations-shaders and decorations-shaders are for their trees. Flat
+    // rather than Surfaces/Library sub-buckets: two leaves do not need them.
+    static const QSet<QString> kOverlaysAllLeaves{QStringLiteral("overlays-assignments"),
+                                                  QStringLiteral("overlays-library")};
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -128,8 +136,6 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kSnappingConfigChildren{
         QStringLiteral("snapping-ordering"),
         QStringLiteral("snapping-shortcuts"),
-        QStringLiteral("snapping-shader-assignments"),
-        QStringLiteral("snapping-shaders"),
     };
     static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren
         + QSet<QString>{kSnappingSimple, kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
@@ -177,11 +183,12 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("decorations-surfaces"), kDecorationSurfacesChildren},
         {QStringLiteral("decorations-library"), kDecorationLibraryChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
-        // "appearance" wraps the Animations and Decoration trees (the window-
-        // appearance page rides kDecorationAllLeaves as Decoration → General);
-        // its collapsed badge lights if any of them is dirty.
-        {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves},
+        // "appearance" wraps the Animations, Decoration and Overlays trees (the
+        // window-appearance page rides kDecorationAllLeaves as Decoration →
+        // General); its collapsed badge lights if any of them is dirty.
+        {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves + kOverlaysAllLeaves},
         {QStringLiteral("decorations"), kDecorationAllLeaves},
+        {QStringLiteral("overlays"), kOverlaysAllLeaves},
         // No "rules" or "virtualscreens" entries — both are top-level
         // leaves, so their dirty state propagates without a parent-bucket
         // intermediary.
@@ -317,12 +324,12 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
          }},
-        {QStringLiteral("snapping-shader-assignments"),
+        {QStringLiteral("overlays-assignments"),
          {
              // The whole OverlayShaderTree blob (baseline + per-layout
              // overrides) is one key, owned solely by this page — the browser
-             // leaf (snapping-shaders) edits no config.
-             {CD::snappingOverlayShadersGroup(), CD::overlayShaderTreeKey()},
+             // leaf (overlays-library) edits no config.
+             {CD::overlaysGroup(), CD::overlayShaderTreeKey()},
          }},
         {QStringLiteral("snapping-zoneselector"),
          {
@@ -516,6 +523,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::insertPositionKey()},
              {CD::scrollingBehaviorGroup(), CD::smartGapsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusNewWindowsKey()},
+             {CD::scrollingBehaviorGroup(), CD::groupSameAppAsTabsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()},
              {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},
@@ -727,8 +735,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
-        QStringLiteral("snapping-shader-assignments"),
-        QStringLiteral("snapping-shaders"),
+        QStringLiteral("overlays-assignments"),
+        QStringLiteral("overlays-library"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-simple"),
         QStringLiteral("tiling-library"),

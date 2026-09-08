@@ -1,0 +1,11 @@
+{
+  "name": "phosphor-release",
+  "displayName": "Phosphor release (fast head, long tail)",
+  "typeId": "cubic-bezier",
+  "parameters": {
+    "x1": 0.05,
+    "y1": 0.60,
+    "x2": 0.15,
+    "y2": 1.00
+  }
+}

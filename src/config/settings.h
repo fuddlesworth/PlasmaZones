@@ -520,6 +520,8 @@ public:
                    scrollingInsertPositionChanged)
     Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
                    scrollingFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollingGroupSameAppAsTabs READ scrollingGroupSameAppAsTabs WRITE setScrollingGroupSameAppAsTabs
+                   NOTIFY scrollingGroupSameAppAsTabsChanged)
     Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
                    NOTIFY scrollingFocusFollowsMouseChanged)
     Q_PROPERTY(int scrollingFocusFollowsMouseMaxScroll READ scrollingFocusFollowsMouseMaxScroll WRITE
@@ -560,6 +562,10 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
+    // Per-event animation timing tree — same meta-object dirty-tracking
+    // rationale as shaderProfileTreeJson above.
+    Q_PROPERTY(QString motionProfileTreeJson READ motionProfileTreeJson WRITE setMotionProfileTreeJson NOTIFY
+                   motionProfileTreeChanged)
     // JSON string facade for the per-surface decoration tree — same
     // meta-object dirty-tracking rationale as shaderProfileTreeJson above.
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
@@ -638,6 +644,10 @@ public:
                    setScrollingCenterColumnShortcut NOTIFY scrollingCenterColumnShortcutChanged)
     Q_PROPERTY(QString scrollingToggleColumnTabbedShortcut READ scrollingToggleColumnTabbedShortcut WRITE
                    setScrollingToggleColumnTabbedShortcut NOTIFY scrollingToggleColumnTabbedShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleTabShortcut READ scrollingCycleTabShortcut WRITE setScrollingCycleTabShortcut
+                   NOTIFY scrollingCycleTabShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleTabBackShortcut READ scrollingCycleTabBackShortcut WRITE
+                   setScrollingCycleTabBackShortcut NOTIFY scrollingCycleTabBackShortcutChanged)
     Q_PROPERTY(QString scrollingToggleWindowedFullscreenShortcut READ scrollingToggleWindowedFullscreenShortcut WRITE
                    setScrollingToggleWindowedFullscreenShortcut NOTIFY scrollingToggleWindowedFullscreenShortcutChanged)
     Q_PROPERTY(QString scrollingCycleColumnWidthShortcut READ scrollingCycleColumnWidthShortcut WRITE
@@ -819,6 +829,26 @@ public:
                    snapToZone8ShortcutChanged)
     Q_PROPERTY(QString snapToZone9Shortcut READ snapToZone9Shortcut WRITE setSnapToZone9Shortcut NOTIFY
                    snapToZone9ShortcutChanged)
+
+    // Focus Tab by Number Shortcuts (scrolling; all nine ship unbound)
+    Q_PROPERTY(QString scrollFocusTab1Shortcut READ scrollFocusTab1Shortcut WRITE setScrollFocusTab1Shortcut NOTIFY
+                   scrollFocusTab1ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab2Shortcut READ scrollFocusTab2Shortcut WRITE setScrollFocusTab2Shortcut NOTIFY
+                   scrollFocusTab2ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab3Shortcut READ scrollFocusTab3Shortcut WRITE setScrollFocusTab3Shortcut NOTIFY
+                   scrollFocusTab3ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab4Shortcut READ scrollFocusTab4Shortcut WRITE setScrollFocusTab4Shortcut NOTIFY
+                   scrollFocusTab4ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab5Shortcut READ scrollFocusTab5Shortcut WRITE setScrollFocusTab5Shortcut NOTIFY
+                   scrollFocusTab5ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab6Shortcut READ scrollFocusTab6Shortcut WRITE setScrollFocusTab6Shortcut NOTIFY
+                   scrollFocusTab6ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab7Shortcut READ scrollFocusTab7Shortcut WRITE setScrollFocusTab7Shortcut NOTIFY
+                   scrollFocusTab7ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab8Shortcut READ scrollFocusTab8Shortcut WRITE setScrollFocusTab8Shortcut NOTIFY
+                   scrollFocusTab8ShortcutChanged)
+    Q_PROPERTY(QString scrollFocusTab9Shortcut READ scrollFocusTab9Shortcut WRITE setScrollFocusTab9Shortcut NOTIFY
+                   scrollFocusTab9ShortcutChanged)
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise
@@ -1538,10 +1568,17 @@ public:
     // Scrolling Behavior Settings (Scrolling.Behavior group)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Store-backed scalars under Scrolling.Behavior; shared leaf key names
-    // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
+    // Store-backed scalars under Scrolling.Behavior; mostly shared leaf key
+    // names (FocusNewWindows, StickyWindowHandling, …) disambiguated by
+    // group, plus the scrolling-only GroupSameAppAsTabs. Its getter satisfies
+    // both ISettings (defaulted virtual, so the D-Bus registry can publish
+    // the key through the interface) and IScrollSettings (the engine's live
+    // read) with one body; its setter overrides the ISettings no-op alone,
+    // hence the override on it too.
     bool scrollingFocusNewWindows() const override;
     void setScrollingFocusNewWindows(bool focus);
+    bool scrollingGroupSameAppAsTabs() const override;
+    void setScrollingGroupSameAppAsTabs(bool group) override;
     bool scrollingFocusFollowsMouse() const;
     void setScrollingFocusFollowsMouse(bool follows);
     int scrollingFocusFollowsMouseMaxScroll() const;
@@ -1586,6 +1623,10 @@ public:
     void setScrollingCenterColumnShortcut(const QString& shortcut);
     QString scrollingToggleColumnTabbedShortcut() const;
     void setScrollingToggleColumnTabbedShortcut(const QString& shortcut);
+    QString scrollingCycleTabShortcut() const;
+    void setScrollingCycleTabShortcut(const QString& shortcut);
+    QString scrollingCycleTabBackShortcut() const;
+    void setScrollingCycleTabBackShortcut(const QString& shortcut);
     QString scrollingToggleWindowedFullscreenShortcut() const;
     void setScrollingToggleWindowedFullscreenShortcut(const QString& shortcut);
     QString scrollingCycleColumnWidthShortcut() const;
@@ -1677,6 +1718,32 @@ public:
     /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
     /// returns a C++-only PhosphorAnimation::Profile value.
     PhosphorAnimation::Profile animationProfile() const;
+
+    /// Whether the user has actually written the global animation Profile,
+    /// as opposed to it being served from ConfigDefaults.
+    ///
+    /// `animationProfile()` cannot answer this: it substitutes the full
+    /// ConfigDefaults blob for an absent key, so a pristine config and a
+    /// deliberately-configured one are byte-identical there. Consumers that
+    /// rank the global profile against the per-family seeds need the
+    /// distinction, because a layer that is always fully engaged would
+    /// otherwise outrank the seeds unconditionally and make them dead.
+    bool hasExplicitAnimationProfile() const override;
+
+    /// Point this Settings at a CurveRegistry after construction.
+    ///
+    /// `animationProfile()` reparses the stored blob on every call and
+    /// resolves its curve through whatever registry this holds. A Settings
+    /// built by the standalone ctor has none, and falls back to a process
+    /// static that nothing ever loads from disk — so a global profile naming a
+    /// user-authored curve resolved to nothing there while the daemon played
+    /// the real curve. A composition root that owns a loaded registry should
+    /// hand it over here before the first read.
+    void setCurveRegistry(PhosphorAnimation::CurveRegistry* registry)
+    {
+        m_curveRegistry = registry;
+    }
+
     void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
@@ -1706,6 +1773,17 @@ public:
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
 
+    // Per-event animation TIMING tree, persisted as one nested JSON entry
+    // under Animations/MotionProfileTree. The timing sibling of
+    // shaderProfileTree above; carried as a raw map because parsing a
+    // PhosphorAnimation::ProfileTree needs a CurveRegistry the config layer
+    // does not own. The JSON-string facade backs the Q_PROPERTY.
+    QVariantMap motionProfileTree() const override;
+    void setMotionProfileTree(const QVariantMap& tree) override;
+    QVariantMap committedMotionProfileTree() const override;
+    QString motionProfileTreeJson() const override;
+    void setMotionProfileTreeJson(const QString& json) override;
+
     // Per-surface decoration tree (DecorationProfile: shader-pack chain + its
     // per-pack parameters), persisted under the Decorations group. Typed accessors
     // mirror shaderProfileTree; the JSON-string facade backs the Q_PROPERTY
@@ -1726,7 +1804,7 @@ public:
     PhosphorSurfaceShaders::DecorationProfileTree committedDecorationProfileTree() const;
 
     // Zone-overlay shader tree (OverlayShaderTree: global baseline +
-    // per-layout overrides), persisted under Snapping.OverlayShaders. Typed
+    // per-layout overrides), persisted under Overlays. Typed
     // accessors mirror the two trees above; the JSON-string facade backs the
     // Q_PROPERTY.
     OverlayShaderTree overlayShaderTree() const override;
@@ -1962,6 +2040,27 @@ public:
     void setSnapToZone9Shortcut(const QString& shortcut);
     QString snapToZoneShortcut(int index) const;
     void setSnapToZoneShortcut(int index, const QString& shortcut);
+
+    QString scrollFocusTab1Shortcut() const;
+    void setScrollFocusTab1Shortcut(const QString& shortcut);
+    QString scrollFocusTab2Shortcut() const;
+    void setScrollFocusTab2Shortcut(const QString& shortcut);
+    QString scrollFocusTab3Shortcut() const;
+    void setScrollFocusTab3Shortcut(const QString& shortcut);
+    QString scrollFocusTab4Shortcut() const;
+    void setScrollFocusTab4Shortcut(const QString& shortcut);
+    QString scrollFocusTab5Shortcut() const;
+    void setScrollFocusTab5Shortcut(const QString& shortcut);
+    QString scrollFocusTab6Shortcut() const;
+    void setScrollFocusTab6Shortcut(const QString& shortcut);
+    QString scrollFocusTab7Shortcut() const;
+    void setScrollFocusTab7Shortcut(const QString& shortcut);
+    QString scrollFocusTab8Shortcut() const;
+    void setScrollFocusTab8Shortcut(const QString& shortcut);
+    QString scrollFocusTab9Shortcut() const;
+    void setScrollFocusTab9Shortcut(const QString& shortcut);
+    QString scrollFocusTabShortcut(int index) const;
+    void setScrollFocusTabShortcut(int index, const QString& shortcut);
 
     QString rotateWindowsClockwiseShortcut() const;
     void setRotateWindowsClockwiseShortcut(const QString& shortcut);
@@ -2266,6 +2365,29 @@ private:
     // let a palette change masquerade as (or mask) a store mutation.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
+
+    /// The animation Profile blob's state, for change detection across a
+    /// load / discard / reset.
+    ///
+    /// `animationProfileChanged` is a bare signal with no backing Q_PROPERTY,
+    /// so the meta-object loop above never re-emits it — only the setters do,
+    /// and those three paths bypass them. That matters beyond a stale reader:
+    /// the daemon and the settings app both choose which registry LAYER the
+    /// global profile occupies from `hasExplicitAnimationProfile()`, so a
+    /// missed emission leaves the layer wrong until the process restarts.
+    ///
+    /// Carries the explicit-ness as well as the value because explicit-ness is
+    /// a STORAGE fact, not a value: sparse persistence deletes a default-equal
+    /// key, so resetting the blob while it already held the shipped defaults
+    /// changes no value at all and still flips the layer.
+    struct AnimationProfileState
+    {
+        QVariant stored;
+        bool explicitlySet = false;
+        bool operator==(const AnimationProfileState&) const = default;
+    };
+    AnimationProfileState animationProfileState() const;
+    void emitAnimationProfileChangeIfMoved(const AnimationProfileState& before);
 
     // Refresh the committed baseline — the last-persisted value of every
     // schema-declared key. Called at the end of load() and save() (the only

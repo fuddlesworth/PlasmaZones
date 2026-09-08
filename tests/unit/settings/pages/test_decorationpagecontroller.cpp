@@ -57,6 +57,7 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include "config/configdefaults.h"
 #include "settings/pages/decorationpagecontroller.h"
 #include "helpers/TreeStubSettings.h"
 
@@ -258,6 +259,119 @@ private Q_SLOTS:
         QVERIFY2(!c.clearOverride(QString()), "the baseline override cannot be cleared");
         // Clearing a surface with no override reports nothing removed.
         QVERIFY(!c.clearOverride(QStringLiteral("window.snapped")));
+    }
+
+    /// A surface that ships a seed chain (the OSD / PopupFrame card chrome in
+    /// ConfigDefaults::decorationProfileTree) cannot be turned off by a bare
+    /// clear — the read-side seed overlay puts the override straight back. OFF
+    /// therefore persists the explicit empty chain, which the overlay's master
+    /// gate honours, and the card reads that marker as OFF via
+    /// isExplicitlyUndecorated. Turning the surface back ON drops the marker so
+    /// the shipped chain flows in again.
+    void clearOverride_onSeededSurface_persistsUndecoratedMarker()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString path = QStringLiteral("popup.zoneSelector");
+        QVERIFY(c.clearOverride(path));
+        const auto stored = settings.decorationProfileTree();
+        QVERIFY(stored.hasOverride(path));
+        QVERIFY(stored.directOverride(path).chain.has_value());
+        QVERIFY(stored.directOverride(path).chain->isEmpty());
+        // The marker survives the read-side seed overlay — the whole point of
+        // writing it rather than clearing. TreeStubSettings stores the tree
+        // raw, so the overlay Settings::decorationProfileTree() applies on
+        // every read is applied here explicitly; without it this case would
+        // only prove the marker was written, not that it holds.
+        const auto merged = stored.withSeedDefaults(ConfigDefaults::decorationProfileTree());
+        QVERIFY(merged.directOverride(path).chain.has_value());
+        QVERIFY(merged.directOverride(path).chain->isEmpty());
+        QVERIFY(merged.resolve(path).effectiveChain().isEmpty());
+        QVERIFY(c.isExplicitlyUndecorated(path));
+        QVERIFY(c.chainAt(path).isEmpty());
+
+        // Back ON: the marker goes, the path inherits again.
+        QVERIFY(c.clearUndecorated(path));
+        QVERIFY(!c.isExplicitlyUndecorated(path));
+        QVERIFY(!c.hasOverride(path));
+        // A second call has nothing left to do.
+        QVERIFY(!c.clearUndecorated(path));
+    }
+
+    /// The shipped card chrome arrives as an INJECTED override at its seed
+    /// paths, so an untouched seed must not read as a descendant that shadows
+    /// its parent — that put an unclearable "3 surfaces shadow this parent"
+    /// warning on the popup card of a config nobody had edited. A seeded path
+    /// the user actually edited counts again.
+    void overrideDescendantCount_ignoresUntouchedSeeds()
+    {
+        TreeStubSettings settings;
+        settings.setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
+        DecorationPageController c(nullptr, &settings);
+
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 0);
+
+        c.setChain(QStringLiteral("popup.layoutPicker"), QStringList{QStringLiteral("glow")});
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 1);
+    }
+
+    /// The overlay injects a seed field only where the tree engages that field
+    /// nowhere on the walk-up, so an engagement at an ANCESTOR gates part of
+    /// the seed off and the injection arrives partial (chain only). That is
+    /// still an untouched seed at the leaf, and a whole-profile compare
+    /// against the shipped seed would miscount all three popups as shadowing
+    /// their parent — the exact phantom warning this exclusion removes.
+    void overrideDescendantCount_ignoresPartiallyGatedSeeds()
+    {
+        TreeStubSettings settings;
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        // Parameters engaged at the baseline gate the seed's parameters off
+        // everywhere, so each seeded popup is injected with its chain alone.
+        PhosphorSurfaceShaders::DecorationProfile baseline;
+        baseline.parameters = QVariantMap{};
+        tree.setBaseline(baseline);
+        PhosphorSurfaceShaders::DecorationProfile chainOnly;
+        chainOnly.chain =
+            ConfigDefaults::decorationProfileTree().directOverride(QStringLiteral("popup.zoneSelector")).chain;
+        tree.setOverride(QStringLiteral("popup.zoneSelector"), chainOnly);
+        settings.setDecorationProfileTree(tree);
+
+        DecorationPageController c(nullptr, &settings);
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 0);
+    }
+
+    /// An engaged-but-empty chain at an UNSEEDED path is a real user look —
+    /// the documented way for a leaf to disable an ancestor's chain — not the
+    /// OFF marker. Reading it as undecorated would mislabel the card and let
+    /// the toggle's ON path delete the user's choice.
+    void isExplicitlyUndecorated_onlyAtSeededPaths()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString leaf = QStringLiteral("window.tiled");
+        c.setChain(QStringLiteral("window"), QStringList{QStringLiteral("glow")});
+        c.setChain(leaf, QStringList{});
+        QVERIFY(c.hasOverride(leaf));
+        QVERIFY(!c.isExplicitlyUndecorated(leaf));
+        QVERIFY(!c.clearUndecorated(leaf));
+        // Still overriding to "no packs", so the ancestor's chain stays out.
+        QVERIFY(c.chainAt(leaf).isEmpty());
+    }
+
+    /// An unseeded surface keeps the plain clear-to-inherit behaviour: no
+    /// empty-chain marker is left behind, and it never reads as undecorated.
+    void clearOverride_onUnseededSurface_leavesNoMarker()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("border")});
+        QVERIFY(c.clearOverride(path));
+        QVERIFY(!c.hasOverride(path));
+        QVERIFY(!c.isExplicitlyUndecorated(path));
     }
 
     /// setChain on an unsupported path is a no-op guard — no override is

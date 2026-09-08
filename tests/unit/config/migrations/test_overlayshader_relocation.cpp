@@ -17,7 +17,7 @@ using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 /// v7 → v8: overlay shader assignments lift out of the layout-settings
-/// sidecar into the config's Snapping.OverlayShaders/OverlayShaderTree blob
+/// sidecar into the config's Overlays/OverlayShaderTree blob
 /// (relocateOverlayShaderAssignments), plus the OverlayShaderTree value
 /// type's own JSON round-trip and resolve contracts.
 class TestOverlayShaderRelocation : public QObject
@@ -68,12 +68,40 @@ private:
 
     static QJsonObject treeFromConfig(const QJsonObject& root)
     {
-        return root.value(QStringLiteral("Snapping"))
-            .toObject()
-            .value(QStringLiteral("OverlayShaders"))
-            .toObject()
-            .value(QStringLiteral("OverlayShaderTree"))
-            .toObject();
+        return groupFromConfig(root).value(ConfigDefaults::overlayShaderTreeKey()).toObject();
+    }
+
+    /// The overlay group object inside a config root. Walks the group's
+    /// dot-path segments rather than hardcoding the nesting, so a group rename
+    /// moves these fixtures with it instead of silently pointing them at a
+    /// subtree that no longer holds the data.
+    static QJsonObject groupFromConfig(const QJsonObject& root)
+    {
+        QJsonObject obj = root;
+        const QStringList segments = ConfigDefaults::overlaysGroup().split(QLatin1Char('.'));
+        for (const QString& segment : segments)
+            obj = obj.value(segment).toObject();
+        return obj;
+    }
+
+    /// @p root with the overlay group replaced by @p group — the write half of
+    /// groupFromConfig, rebuilding the same dot-path.
+    static QJsonObject withGroup(const QJsonObject& root, const QJsonObject& group)
+    {
+        const QStringList segments = ConfigDefaults::overlaysGroup().split(QLatin1Char('.'));
+        QList<QJsonObject> ancestors;
+        QJsonObject cursor = root;
+        for (const QString& segment : segments) {
+            ancestors.append(cursor);
+            cursor = cursor.value(segment).toObject();
+        }
+        cursor = group;
+        for (int i = segments.size() - 1; i >= 0; --i) {
+            QJsonObject parent = ancestors.at(i);
+            parent.insert(segments.at(i), cursor);
+            cursor = parent;
+        }
+        return cursor;
     }
 
     static const QString& layoutA()
@@ -171,17 +199,13 @@ private Q_SLOTS:
         // A retry against a STALE sidecar (pass 2 failed scenario): the
         // already-lifted tree entry wins — a since-edited assignment must
         // not be clobbered by the sidecar's old copy.
-        QJsonObject root = afterFirst;
-        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        QJsonObject group = snapping.value(QStringLiteral("OverlayShaders")).toObject();
-        QJsonObject tree = group.value(QStringLiteral("OverlayShaderTree")).toObject();
+        QJsonObject group = groupFromConfig(afterFirst);
+        QJsonObject tree = group.value(ConfigDefaults::overlayShaderTreeKey()).toObject();
         QJsonObject overrides = tree.value(QStringLiteral("overrides")).toObject();
         overrides.insert(layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("neon-city")}});
         tree.insert(QStringLiteral("overrides"), overrides);
-        group.insert(QStringLiteral("OverlayShaderTree"), tree);
-        snapping.insert(QStringLiteral("OverlayShaders"), group);
-        root.insert(QStringLiteral("Snapping"), snapping);
-        QVERIFY(writeJson(ConfigDefaults::configFilePath(), root));
+        group.insert(ConfigDefaults::overlayShaderTreeKey(), tree);
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), withGroup(afterFirst, group)));
         // Restore the stale sidecar copy.
         QVERIFY(writeJson(
             ConfigDefaults::layoutSettingsFilePath(),
@@ -211,13 +235,10 @@ private Q_SLOTS:
         // ...and the user then REMOVING the lifted override via the UI
         // (which, with only this override and no baseline, sparse-deletes
         // the whole tree key but leaves the group's lifted marker).
-        QJsonObject root = readJson(ConfigDefaults::configFilePath());
-        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        QJsonObject group = snapping.value(QStringLiteral("OverlayShaders")).toObject();
-        group.remove(QStringLiteral("OverlayShaderTree"));
-        snapping.insert(QStringLiteral("OverlayShaders"), group);
-        root.insert(QStringLiteral("Snapping"), snapping);
-        QVERIFY(writeJson(ConfigDefaults::configFilePath(), root));
+        const QJsonObject root = readJson(ConfigDefaults::configFilePath());
+        QJsonObject group = groupFromConfig(root);
+        group.remove(ConfigDefaults::overlayShaderTreeKey());
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), withGroup(root, group)));
 
         // The retry must strip the stale sidecar WITHOUT re-lifting the
         // removed assignment (the group's SidecarLifted marker gates the

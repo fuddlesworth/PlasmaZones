@@ -34,6 +34,7 @@ set(plasmazones_settings_SRCS
     # page registry → per-domain CRUD.
     controller/settingscontroller_lifecycle.cpp
     controller/settingscontroller_pageregistration.cpp
+    controller/settingscontroller_whatsnew.cpp
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
     controller/settingscontroller_rulelookups.cpp
@@ -91,7 +92,7 @@ set(plasmazones_settings_SRCS
     # methods (sectionForPath / eventLabel / parentChain).
     pages/animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
-    # Consumed by AnimationsPageController + SnappingShadersPageController.
+    # Consumed by AnimationsPageController + OverlaysPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
     services/shaderpackinstaller.h
     services/shaderpackinstaller.cpp
@@ -128,8 +129,8 @@ set(plasmazones_settings_SRCS
     pages/snappingbehaviorcontroller.cpp
     pages/snappingeffectscontroller.h
     pages/snappingeffectscontroller.cpp
-    pages/snappingshaderspagecontroller.h
-    pages/snappingshaderspagecontroller.cpp
+    pages/overlayspagecontroller.h
+    pages/overlayspagecontroller.cpp
     pages/snappingzoneselectorcontroller.h
     pages/snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
@@ -482,9 +483,9 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsMotionSetsPage.qml
         qml/pages/animations/AnimationsPresetsPage.qml
         qml/pages/animations/AnimationsShadersPage.qml
-        qml/pages/snapping/SnappingShadersPage.qml
-        qml/pages/snapping/SnappingShaderAssignmentsPage.qml
-        qml/pages/snapping/SnappingShaderAssignmentCard.qml
+        qml/pages/overlays/OverlaysLibraryPage.qml
+        qml/pages/overlays/OverlaysAssignmentsPage.qml
+        qml/pages/overlays/OverlayShaderAssignmentCard.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
         # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
         # list with per-pack params) and border/titlebar field overrides via

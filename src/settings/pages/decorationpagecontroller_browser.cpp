@@ -35,7 +35,10 @@ namespace {
 /// the raw token so an unknown path stays identifiable rather than blank.
 QString surfacePathLabel(const QString& path)
 {
-    const auto tokenLabel = [](const QString& token) -> QString {
+    // `osd` appears under both the window tree and the Phosphor shell tree, and
+    // the two surfaces have different card labels, so the label depends on the
+    // branch the token was reached through.
+    const auto tokenLabel = [](const QString& token, bool phosphorShell) -> QString {
         if (token == QLatin1String("window"))
             return PhosphorI18n::tr("Windows");
         if (token == QLatin1String("tiled"))
@@ -45,7 +48,8 @@ QString surfacePathLabel(const QString& path)
         if (token == QLatin1String("floating"))
             return PhosphorI18n::tr("Floating");
         if (token == QLatin1String("osd"))
-            return PhosphorI18n::tr("OSDs");
+            return phosphorShell ? PhosphorI18n::tr("OSD Bands", "@item the Phosphor shell's on-screen display bands")
+                                 : PhosphorI18n::tr("OSDs");
         if (token == QLatin1String("popup"))
             return PhosphorI18n::tr("Popups");
         if (token == QLatin1String("snapAssist"))
@@ -62,13 +66,26 @@ QString surfacePathLabel(const QString& path)
             return PhosphorI18n::tr("Panels");
         if (token == QLatin1String("appletPopup"))
             return PhosphorI18n::tr("Applet Popups");
+        if (token == QLatin1String("phosphor"))
+            return PhosphorI18n::tr("Phosphor Shell", "@item breadcrumb level for the Phosphor shell's own surfaces");
+        if (token == QLatin1String("bar"))
+            return PhosphorI18n::tr("Bar", "@item the Phosphor shell's top bar surface, not a progress or menu bar");
+        if (token == QLatin1String("popout"))
+            return PhosphorI18n::tr("Popouts", "@item panels that pop out from the Phosphor shell bar");
+        if (token == QLatin1String("notification"))
+            return PhosphorI18n::tr("Notifications", "@item the Phosphor shell's notification toasts");
+        if (token == QLatin1String("picker"))
+            return PhosphorI18n::tr("Wallpaper Picker");
+        if (token == QLatin1String("lock"))
+            return PhosphorI18n::tr("Lock Screen");
         return token;
     };
     const QStringList tokens = path.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    const bool phosphorShell = tokens.contains(QLatin1String("phosphor"));
     QStringList labels;
     labels.reserve(tokens.size());
     for (const QString& t : tokens) {
-        labels.append(tokenLabel(t));
+        labels.append(tokenLabel(t, phosphorShell));
     }
     // Literal breadcrumb separator between taxonomy levels.
     return labels.join(QStringLiteral(" \u2192 "));

@@ -120,6 +120,7 @@ set(plasmazones_core_SRCS
     config/settingsschema.h
     config/settingsschema.cpp
     config/settingsschema_p.h
+    config/settingsschema_overlayshaders.cpp
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
     config/settingsschemachoices.h
@@ -138,6 +139,7 @@ set(plasmazones_core_SRCS
     config/configmigration_v6.cpp
     config/configmigration_v7.cpp
     config/configmigration_v8.cpp
+    config/configmigration_v8overlay.cpp
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
@@ -156,6 +158,7 @@ set(plasmazones_core_SRCS
     dbus/compositorbridgeadaptor.cpp
     dbus/compositorbridgeadaptor.h
     dbus/controladaptor.cpp
+    dbus/controladaptor_shortcuts.cpp
     dbus/controladaptor.h
     dbus/overlayadaptor.cpp
     dbus/overlayadaptor.h
@@ -179,6 +182,8 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistenceworker.cpp
     dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/convenience.cpp
+    dbus/windowtrackingadaptor/shellsurface.cpp
+    dbus/windowtrackingadaptor/shellsurface_desktop.cpp
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/windowdragadaptor/windowdragadaptor.cpp
@@ -190,6 +195,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/dragzonespan.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
+    dbus/windowdragadaptor/dropproxy.cpp
+    dbus/windowdragadaptor/dropproxy.h
     dbus/windowdragadaptor/windowdragadaptor.h
     dbus/scrollingadaptor/scrollingadaptor.cpp
     dbus/scrollingadaptor/scrollingadaptor.h
@@ -198,6 +205,8 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor/autotileadaptor.h
     dbus/tilingadaptor/tilingadaptor.cpp
     dbus/tilingadaptor/relay.cpp
+    dbus/tilingadaptor/mapmodel.cpp
+    dbus/tilingadaptor/desktopreconcile.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
@@ -225,9 +234,10 @@ generate_export_header(plasmazones_core
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
-# All five TUs below are excluded from unity build:
+# All seven TUs below are excluded from unity build:
 #   configdefaults.cpp — Settings PCH includes that conflict with unity macros
-#   drag.cpp / drag_protocol.cpp / drop.cpp / selector_gate.cpp —
+#   drag.cpp / drag_protocol.cpp / drop.cpp / dragtimers.cpp /
+#   dragzonespan.cpp / selector_gate.cpp —
 #     forward-declaration conflicts with the d-bus-adaptor-generated extern
 #     declarations across these TUs
 set_source_files_properties(
@@ -502,6 +512,7 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
+    daemon/controllers/shortcutmanager_adhoc.cpp
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
@@ -723,11 +734,46 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/routingpopouttransport.cpp
         shell/SocketPopoutTransport.h
         shell/socketpopouttransport.cpp
+        # The engine-placed pane (A2 §4): a real toplevel the daemon
+        # places, with the bar-socket transport as its floating fallback;
+        # the bundled window rule that names its placement; and the
+        # compositor blur request behind the bar's band.
+        shell/PanePopoutTransport.h
+        shell/panepopouttransport.cpp
+        shell/PaneRules.h
+        shell/panerules.cpp
+        shell/ShellEffects.h
+        shell/shelleffects.cpp
+        shell/ShellMotion.h
+        shell/shellmotion.cpp
+        shell/ShellGestures.h
+        shell/shellgestures.cpp
+        shell/ShellChrome.h
+        shell/shellchrome.cpp
         # The launcher's registry owner: built-in providers, the model the
         # launcher popout binds, and the clipboard + Toplevels services the
         # providers read that nothing else in the shell owns yet.
         shell/LauncherController.h
         shell/launchercontroller.cpp
+        # The OSD registry owner + its generic QML-component factory, and
+        # the toast broker: the per-screen OSDHost / ToastHost surfaces in
+        # shell.qml read them as the OsdRegistry / ToastRegistry context
+        # properties, and the `osd` / `notify` IpcTargets fan out through
+        # them.
+        shell/OsdController.h
+        shell/osdcontroller.cpp
+        shell/QmlComponentOSDFactory.h
+        shell/qmlcomponentosdfactory.cpp
+        shell/ToastController.h
+        shell/toastcontroller.cpp
+        # The PolicyKit agent owner (registers the shell as the session's
+        # agent, starts each PAM conversation, carries the requester's pid
+        # and the prompt's placement) and the picker strip's open state:
+        # the PolkitRegistry / PickerRegistry context properties.
+        shell/PolkitController.h
+        shell/polkitcontroller.cpp
+        shell/PickerController.h
+        shell/pickercontroller.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -755,6 +801,47 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellLauncher::PhosphorShellLauncher
             PhosphorShellLauncher::PhosphorShellLauncherQml
             PhosphorShellLauncherQmlplugin
+            # Phosphor.OSD and Phosphor.Notifications + their registrars,
+            # for the per-screen OSD and toast overlays shell.qml mounts.
+            PhosphorShellOsd::PhosphorShellOsdQml
+            PhosphorShellOsdQmlplugin
+            PhosphorShellNotifications::PhosphorShellNotificationsQml
+            PhosphorShellNotificationsQmlplugin
+            # Phosphor.Dashboard + its registrar: the dashboard and the
+            # cheatsheet popouts shell.qml opens, and the ShortcutCatalog
+            # the sheet reads its chords through.
+            PhosphorShellDashboard::PhosphorShellDashboardQml
+            PhosphorShellDashboardQmlplugin
+            # Phosphor.Lock + its registrar, for the per-screen lock
+            # surfaces shell.qml mounts (LockSurface windows + LockScreen).
+            PhosphorShellLock::PhosphorShellLockQml
+            PhosphorShellLockQmlplugin
+            # Phosphor.Picker (the wallpaper and theme strip, whose C++
+            # types ride in the module) and Phosphor.Polkit (the prompt)
+            # + their registrars, for the per-screen strips and the polkit
+            # popout shell.qml mounts. The picker's committed palette is
+            # loaded at startup through PaletteStore (see main.cpp).
+            PhosphorShellPicker::PhosphorShellPickerQml
+            PhosphorShellPickerQmlplugin
+            # ShellGestures subscribes to the daemon's gestureReported relay
+            # by the protocol's interface constants.
+            PhosphorProtocol::PhosphorProtocol
+            # ShellChrome: the decoration tree + pack registry (PhosphorSurface),
+            # the SurfaceShaderItem stage (plasmazones_rendering) and the shared
+            # SurfaceDecoration.qml host (org.plasmazones.common) that draws a
+            # pack chain on the chrome.
+            PhosphorSurface::PhosphorSurface
+            plasmazones_rendering
+            plasmazones_shared_qml
+            plasmazones_shared_qmlplugin
+            # ShellMotion owns the profile registry behind SettleAnimation
+            # and publishes the QML-side motion defaults.
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorAnimation::PhosphorAnimationQml
+            PhosphorAnimationQmlplugin
+            PhosphorShellPolkit::PhosphorShellPolkitQml
+            PhosphorShellPolkitQmlplugin
+            PhosphorTheme::PhosphorTheme
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.
@@ -792,11 +879,28 @@ if(BUILD_PHOSPHOR_SHELL)
             # under XDG paths, ShellLoader falls back to qrc:/qt/qml/...
             # so the binary works without the optional DATADIR install.
             phosphor_shell_exampleplugin
+            # The pane rule is built with the rules library's own types
+            # and seeded over org.plasmazones.Rules.
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
             Qt6::Core
             Qt6::Gui
             Qt6::Quick
             Qt6::Qml
+            Qt6::DBus
     )
+
+    # Compositor blur behind the bar's band goes through the kde-blur
+    # Wayland protocol, which KWindowEffects speaks. Optional: without it
+    # the band is a plain navy tint and ShellEffects.blurAvailable() says
+    # so, rather than the whole shell tier failing to configure.
+    find_package(KF6WindowSystem QUIET)
+    if(KF6WindowSystem_FOUND)
+        target_link_libraries(phosphor-shell PRIVATE KF6::WindowSystem)
+        target_compile_definitions(phosphor-shell PRIVATE PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM)
+    else()
+        message(STATUS "KF6WindowSystem not found: the Phosphor bar band gets no compositor blur")
+    endif()
 
     install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
 endif()

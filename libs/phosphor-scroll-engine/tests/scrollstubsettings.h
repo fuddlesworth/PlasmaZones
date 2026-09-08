@@ -45,6 +45,7 @@ public:
     // to the inert answer, so a case that flips one on a single screen is
     // asserting the OVERRIDE and not the global.
     bool focusNewWindows = true;
+    bool groupSameAppAsTabs = false;
     /// The GLOBAL strip-axis intent (config tri-state: 0 auto / 1 horizontal /
     /// 2 vertical — deliberately NOT the protocol enum's numbering). Seeded to
     /// Auto so the harness's transposed work area decides the axis, which is
@@ -107,6 +108,10 @@ public:
     bool scrollingFocusNewWindows() const override
     {
         return focusNewWindows;
+    }
+    bool scrollingGroupSameAppAsTabs() const override
+    {
+        return groupSameAppAsTabs;
     }
     int scrollingStripAxis() const override
     {

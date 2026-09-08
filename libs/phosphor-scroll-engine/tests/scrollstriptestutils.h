@@ -350,7 +350,10 @@ inline PhosphorScrollEngine::ScrollEngine* makeGappedProviderEngine(QObject* par
     // PerScreenKeys-shaped, per the ContextGapProvider contract. Only the
     // inner gap is set: the outer gaps interact with smart gaps, which would
     // make the expected numbers depend on column count as well.
-    engine->setContextGapProvider([](const QString&) {
+    // Context-independent on purpose: these fixtures vary geometry and column
+    // counts, not gap RULES, so every context resolves the same inner gap and
+    // a background-context call answers exactly as a foreground one does.
+    engine->setContextGapProvider([](const QString&, int, const QString&) {
         QVariantMap gaps;
         gaps.insert(QStringLiteral("InnerGap"), kEngineInnerGap);
         return gaps;

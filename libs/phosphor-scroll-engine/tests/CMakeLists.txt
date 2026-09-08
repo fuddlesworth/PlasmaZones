@@ -147,11 +147,20 @@ pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstu
 # sticky gate and the client-decides width and height all short-circuit on a
 # null tracker, so their per-screen resolution is unobservable without one.
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
+pse_add_test(test_scrollengine_grouping test_scrollengine_grouping.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
-# The close-settle reflow hold's observable contract (deferred windowsTiled
-# batch, deadline push, zero-delay immediacy). Needs the settings stub: the
-# interface default is 0, so without one the hold never arms.
+# The compositor focus-report protocol: which self-activation echoes the
+# filter swallows and which it adopts. Its own file rather than more of the
+# verbs suite, which is past the size ceiling.
+pse_add_test(test_scrollengine_focusreport test_scrollengine_focusreport.cpp)
+# Column maximize at the engine layer: what the published maximizedToEdges
+# flag means, which column the window-scoped verbs act on, and what survives
+# the transitions that discard the pre-maximize slot.
 pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
+# The tile-focus family: cycleTab and focusTab, plus the float refusal and the
+# panned-view hand-back they share with focusWindowTop/Bottom. Its own file
+# rather than more of the smoke suite, which is past the size ceiling.
+pse_add_test(test_scrollengine_tabfocus test_scrollengine_tabfocus.cpp)

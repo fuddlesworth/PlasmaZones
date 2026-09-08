@@ -14,7 +14,6 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>

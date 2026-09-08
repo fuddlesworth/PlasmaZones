@@ -16,10 +16,12 @@ import org.phosphor.animation
  * The card keeps a thin forwarder for each, so every call site still reads
  * `root._foo(...)`.
  *
- * The asymmetry between the two commits mirrors the shader side's and is just
- * as easy to "tidy" into a bug. Duration is drag-rate, so a refused write is
- * dropped without restoring the slider. Curve is discrete, so a refused write
- * DOES restore: there is no later tick to correct it.
+ * Neither commit reads a return value, and neither needs to: since schema v8
+ * the write path has no refusal left to report. What differs between them is
+ * refresh, not failure handling. Duration is drag-rate, so it deliberately
+ * does not re-seed the slider per tick — the handle would fight the pointer.
+ * Curve is discrete, so it refreshes through `_setOverrideMerged`'s finally
+ * and picks up whatever actually landed.
  */
 QtObject {
     id: timingIo
@@ -61,40 +63,30 @@ QtObject {
     }
 
     function commitDurationOverride() {
-        // Drag-rate (the slider emits per move), so a refused write is dropped
-        // without restoring the slider — refreshing per tick would pull the
-        // handle back out from under the user. Same trade as
-        // `_writeShaderParam`; `commitCurveOverride` below is discrete and does
-        // restore.
-        if (card._writesRefused)
-            return;
-
+        // Drag-rate: the slider emits per pointer move. Nothing is refreshed
+        // per tick here, because re-seeding the control from the store would
+        // pull the handle back out from under the user. `commitCurveOverride`
+        // below is discrete and does refresh; that asymmetry is deliberate.
+        //
         // The merged writer overlays only the fields in `profile`, and the
         // `undefined` curve means "each path keeps its own curve, or keeps
         // inheriting" — decided PER PATH so a mirror that owns a curve is
         // preserved and one that inherits stays inheriting.
-        card._noteWriteResult(card._setOverrideMerged({
+        card._setOverrideMerged({
             "duration": card.currentDuration
-        }, undefined));
+        }, undefined);
     }
 
     function commitCurveOverride() {
-        // Discrete (a combo activation or the curve dialog accepting), so a
-        // refused write leaves the editor showing a curve that never reached
-        // disk with no later tick to correct it. Restore the stored state.
-        //
-        // selfDriven, like every other refresh this card drives itself. Without
-        // it the refresh would clear `_writesRefused` — the very latch that
-        // just refused this write — and would take the close-the-editor branch
-        // if the discard has already emptied the store, folding the timing
-        // editor away under the user who just picked the curve.
-        if (card._writesRefused) {
-            card.refreshFromTree(true);
-            return;
-        }
-
         // Empty profile map: nothing but the curve travels. Each path's own
         // stored duration (or its absence) survives the merge untouched.
-        card._noteWriteResult(card._setOverrideMerged({}, card.currentCurveString));
+        //
+        // Discrete (a combo activation or the curve dialog accepting), so it
+        // refreshes afterwards — via `_setOverrideMerged`'s own `finally`,
+        // which always calls `refreshFromTree(true)`. The `selfDriven` flag
+        // matters there: it keeps a revert that happens to clear the last
+        // field from folding the timing editor away under the user who just
+        // picked a curve.
+        card._setOverrideMerged({}, card.currentCurveString);
     }
 }

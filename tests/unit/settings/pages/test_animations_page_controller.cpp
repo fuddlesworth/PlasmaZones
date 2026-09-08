@@ -8,8 +8,8 @@
  *        the path-traversal gate, the disk-read normalisation, and the
  *        spring-slider bounds.
  *
- * Pins the file-per-path persistence model: setOverride writes one JSON
- * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
+ * Pins the config-backed persistence model: setOverride writes one entry
+ * into `Animations/MotionProfileTree`, clearOverride removes it, and
  * resolvedProfile walks the parent chain and fills library defaults.
  * How that walk stays honest against the process-wide
  * PhosphorProfileRegistry is pinned by the companion
@@ -17,9 +17,10 @@
  * mirror (`stockSuppressedEvents`) moved to its own companion,
  * test_animations_suppression_mirror.cpp.
  *
- * Uses `setUserProfilesDirOverride()` to redirect override-file I/O into
- * a tmpdir, and `IsolatedConfigGuard` where a real Settings is needed, so
- * the test never touches the real user XDG dirs.
+ * Isolation comes from the fixture's `IsolatedConfigGuard`, which is what
+ * keeps these writes off the real user config. Slots that also touch the
+ * preset or motion-set FILES call `setUserProfilesDirOverride()` for that
+ * directory; timing writes no longer go near it.
  *
  * Companion test files:
  *   - test_animations_qml_contracts.cpp    — QML↔controller contracts, scraped
@@ -52,21 +53,10 @@
 #include "config/settings.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "settings/pages/animationspagecontroller.h"
+#include "helpers/AnimationsControllerFixture.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-namespace {
-
-QString readFile(const QString& path)
-{
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly))
-        return {};
-    return QString::fromUtf8(f.readAll());
-}
-
-} // namespace
 
 class TestAnimationsPageController : public QObject
 {
@@ -90,7 +80,8 @@ private Q_SLOTS:
 
     void springBounds_areUsableSubsetOfEngineClamp()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         // The engine clamps to omega ∈ [0.1, 200], zeta ∈ [0, 10]
         // (PhosphorAnimation/Spring.h). The slider exposes a deliberately
         // narrower, usable band within that clamp: above omega ~40 the spring
@@ -121,7 +112,8 @@ private Q_SLOTS:
 
     void sectionForPath_mapsTopLevelToUiSection()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         // sectionForPath maps a path's top level to its UI section — which is NOT
         // always the first segment: osd/popup/panel all collapse into "overlays".
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
@@ -133,7 +125,8 @@ private Q_SLOTS:
 
     void eventLabel_titleCasesCamelLeaf()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         QCOMPARE(c.eventLabel(QStringLiteral("global")), QStringLiteral("Global"));
         QCOMPARE(c.eventLabel(QStringLiteral("editor.snapIn")), QStringLiteral("Snap In"));
         QCOMPARE(c.eventLabel(QStringLiteral("popup.layoutPicker")), QStringLiteral("Layout Picker"));
@@ -142,7 +135,8 @@ private Q_SLOTS:
 
     void parentChain_walksToGlobal()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const auto chain = c.parentChain(QStringLiteral("editor.snapIn"));
         QCOMPARE(chain,
                  (QStringList{QStringLiteral("editor.snapIn"), QStringLiteral("editor"), QStringLiteral("global")}));
@@ -150,14 +144,16 @@ private Q_SLOTS:
 
     void parentChain_globalIsRoot()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const auto chain = c.parentChain(QStringLiteral("global"));
         QCOMPARE(chain, QStringList{QStringLiteral("global")});
     }
 
     void eventSections_groupsAllBuiltInPaths()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const QVariantList sections = c.eventSections();
 
         // Every built-in path must land in some section (no orphans).
@@ -191,7 +187,8 @@ private Q_SLOTS:
 
     void eventSections_categoryFlagSetForParents()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const QVariantList sections = c.eventSections();
 
         // Find the "editor" section's "editor" entry — it should be flagged
@@ -232,7 +229,8 @@ private Q_SLOTS:
     /// entry publishes it under the name QML looks for, with the right value.
     void eventSections_publishesAcceptsWindowRulesKey()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         const QVariantList sections = c.eventSections();
 
         bool sawPerWindowLeaf = false;
@@ -266,11 +264,12 @@ private Q_SLOTS:
 
     // ─── Override CRUD ────────────────────────────────────────────────────
 
-    void setOverride_writesFileWithNameField()
+    void setOverride_storesTheProfileInTheTimingTree()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
@@ -283,23 +282,21 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().at(0).toString(), QStringLiteral("editor.snapIn"));
 
-        const QString filePath = tmp.path() + QStringLiteral("/editor.snapIn.json");
-        QVERIFY(QFileInfo::exists(filePath));
-
-        // Verify the on-disk shape: name field present, Profile fields preserved.
-        const auto doc = QJsonDocument::fromJson(readFile(filePath).toUtf8());
-        QVERIFY(doc.isObject());
-        const QJsonObject obj = doc.object();
-        QCOMPARE(obj.value(QStringLiteral("name")).toString(), QStringLiteral("editor.snapIn"));
-        QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 250);
-        QCOMPARE(obj.value(QStringLiteral("curve")).toString(), QStringLiteral("0.33,1,0.68,1"));
+        // The stored shape: Profile fields preserved, and no `name` — the
+        // entry's own path names it now, where the per-event FILE needed the
+        // field to name itself.
+        const QVariantMap stored = c.rawProfile(QStringLiteral("editor.snapIn"));
+        QVERIFY(!stored.contains(QStringLiteral("name")));
+        QCOMPARE(stored.value(QStringLiteral("duration")).toInt(), 250);
+        QCOMPARE(stored.value(QStringLiteral("curve")).toString(), QStringLiteral("0.33,1,0.68,1"));
     }
 
-    void hasOverride_reflectsFileExistence()
+    void hasOverride_reflectsAStoredEntry()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
@@ -311,7 +308,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVariantMap input;
@@ -329,11 +327,12 @@ private Q_SLOTS:
         QCOMPARE(raw.value(QStringLiteral("minDistance")).toInt(), 8);
     }
 
-    void clearOverride_removesFileAndEmits()
+    void clearOverride_removesTheEntryAndEmits()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 200}}));
@@ -346,11 +345,12 @@ private Q_SLOTS:
         QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
     }
 
-    void clearOverride_noFileReturnsFalseNoSignal()
+    void clearOverride_noEntryReturnsFalseNoSignal()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
@@ -362,7 +362,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
@@ -371,12 +372,13 @@ private Q_SLOTS:
     }
 
     // Backs the per-page "Reset to defaults" on the animation pages: clears
-    // every per-event override file, returning them to built-in defaults.
-    void clearAllOverrides_removesEveryOverrideFile()
+    // every per-event timing entry, returning them to built-in defaults.
+    void clearAllOverrides_removesEveryEntry()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         const QVariantMap profile{{QStringLiteral("duration"), 250},
@@ -395,11 +397,12 @@ private Q_SLOTS:
 
     // Per-page kebab Reset: clearing ONE surface's scope must leave every other
     // surface's override files standing (the cross-page-isolation bug fix).
-    void clearOverridesUnder_clearsOnlyScopedFiles()
+    void clearOverridesUnder_clearsOnlyScopedEntries()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         const QVariantMap profile{{QStringLiteral("duration"), 250}};
@@ -418,11 +421,12 @@ private Q_SLOTS:
 
     // Per-page kebab Discard: reverting ONE surface's scope restores only that
     // surface's files and leaves the others staged (still pending).
-    void revertPendingUnder_restoresOnlyScopedFiles()
+    void revertPendingUnder_restoresOnlyScopedEntries()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         const QVariantMap profile{{QStringLiteral("duration"), 250}};
@@ -438,9 +442,9 @@ private Q_SLOTS:
         // the window edit stays pending and on disk.
         QVERIFY(c.revertPendingUnder(osdScope));
         QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
-        QVERIFY(!c.hasScopedPendingFiles(osdScope));
+        QVERIFY(!c.hasScopedPendingOverrides(osdScope));
         QVERIFY(c.hasOverride(QStringLiteral("window.appearance.open")));
-        QVERIFY(c.hasScopedPendingFiles(windowScope));
+        QVERIFY(c.hasScopedPendingOverrides(windowScope));
         QVERIFY(c.hasPendingChanges());
     }
 
@@ -457,18 +461,26 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
+        // Written straight into the store and then COMMITTED, so clearing it is
+        // a real edit against the baseline and the batch genuinely ends dirty.
+        // The save is what makes that true: the raw helper only moves the live
+        // value, and without a committed baseline carrying this entry the batch
+        // would end with live == committed and the page legitimately clean,
+        // which exercises nothing. (This slot used to pass without the save,
+        // but only because clearing the last override left a `{"overrides":[]}`
+        // residue that could never compare equal to the empty baseline — it was
+        // pinning that bug rather than this behaviour.)
+        TestHelpers::setRawMotionOverride(fx.settings, QStringLiteral("editor.snapIn"),
+                                          QJsonObject{{QStringLiteral("duration"), 250}});
+        QVERIFY(fx.settings.save());
+        c.refreshDirtyState();
         // Staged this session, so its snapshot is "was absent" and removing it
-        // drops the entry.
+        // drops the entry — the phantom half of the trap.
         QVERIFY(c.setOverride(QStringLiteral("global"), {{QStringLiteral("duration"), 300}}));
-        // Placed directly on disk: pre-existing, unstaged, so clearing it
-        // stages a real snapshot the user can still discard back.
-        QFile prior(tmp.path() + QStringLiteral("/editor.snapIn.json"));
-        QVERIFY(prior.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        QVERIFY(prior.write(QByteArrayLiteral(R"({"name":"editor.snapIn","duration":250})")) > 0);
-        prior.close();
 
         // pendingChangesChanged carries no payload, so record the state the
         // page would read at each emission and check the LAST one.
@@ -481,17 +493,23 @@ private Q_SLOTS:
         QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("global"), QStringLiteral("editor.snapIn")}), 2);
 
         QVERIFY(c.hasPendingChanges());
-        // Whatever was announced, the last of it must describe where the batch
-        // actually ended. Endpoints match here (dirty → dirty), so the correct
-        // behaviour is to say nothing at all.
-        QVERIFY2(announced.isEmpty(), "a batch that started and ended dirty announced an intermediate flip");
+        // Whatever was announced, the LAST of it must describe where the batch
+        // actually ended. `pendingChangesChanged` is a "may have changed"
+        // signal — the controller's own forwarder gates the outward
+        // `dirtyChanged` on a real flip — so an extra emission is allowed and a
+        // WRONG last one is not.
+        // A loop over a possibly-empty list, deliberately: this leg pins that
+        // nothing WRONG is announced, and the leg below pins that something is
+        // announced at all. Neither is sufficient alone and the pair is.
+        for (const bool announcedState : std::as_const(announced))
+            QCOMPARE(announcedState, true);
 
         // Second scenario, endpoints DIFFERING, so a signal IS owed. Without
         // this leg the assertion above would also pass if the batch stopped
-        // announcing anything at all. Start from clean: discard the staged
-        // edit above, then stage one fresh override whose snapshot is a
-        // phantom, so clearing it empties the map and ends the batch clean.
-        QVERIFY(c.revertPending());
+        // announcing anything at all. Start from clean.
+        QVERIFY(c.clearAllOverrides() >= 0);
+        fx.settings.save();
+        c.refreshDirtyState();
         QVERIFY(!c.hasPendingChanges());
         QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 400}}));
         QVERIFY(c.hasPendingChanges());
@@ -503,22 +521,24 @@ private Q_SLOTS:
         QCOMPARE(announced.last(), false);
     }
 
-    // hasScopedPendingFiles reports the file half of a per-page dirty check and
-    // must ignore edits outside the queried scope.
-    void hasScopedPendingFiles_reflectsOnlyScope()
+    // hasScopedPendingOverrides reports the TIMING half of a per-page dirty
+    // check — a value comparison against the committed tree — and must ignore
+    // edits outside the queried scope.
+    void hasScopedPendingOverrides_reflectsOnlyScope()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         const QStringList osdScope{QStringLiteral("osd"), QStringLiteral("osd.show")};
         const QStringList editorScope{QStringLiteral("editor"), QStringLiteral("editor.snapIn")};
 
-        QVERIFY(!c.hasScopedPendingFiles(osdScope));
+        QVERIFY(!c.hasScopedPendingOverrides(osdScope));
         QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 100}}));
-        QVERIFY(c.hasScopedPendingFiles(osdScope));
-        QVERIFY(!c.hasScopedPendingFiles(editorScope));
+        QVERIFY(c.hasScopedPendingOverrides(osdScope));
+        QVERIFY(!c.hasScopedPendingOverrides(editorScope));
     }
 
     // ─── Effective resolution ─────────────────────────────────────────────
@@ -723,17 +743,19 @@ private Q_SLOTS:
 
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // The parent carries a value the leaf can fall back to, so "rejected"
         // and "kept" produce visibly different results.
         QVERIFY(c.setOverride(QStringLiteral("editor"), {{key, parentValue}}));
 
-        QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
-        QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
-        leaf.close();
+        // Straight into the store, bypassing the controller: these values are
+        // exactly the ones setOverride would normalise away, and the point is
+        // what the READ side does with them.
+        TestHelpers::setRawMotionOverride(fx.settings, QStringLiteral("editor.snapIn"),
+                                          QJsonDocument::fromJson(leafJson).object());
 
         const QVariant resolved = c.resolvedProfile(QStringLiteral("editor.snapIn")).value(key);
         if (expectedResolved.typeId() == QMetaType::QString) {
@@ -757,17 +779,15 @@ private Q_SLOTS:
         using P = PhosphorAnimation::Profile;
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Parent asks for Cascade; the leaf's mode is nonsense.
         QVERIFY(c.setOverride(QStringLiteral("editor"),
                               {{QStringLiteral("sequenceMode"), int(PhosphorAnimation::SequenceMode::Cascade)}}));
-        const QByteArray leafJson = QByteArrayLiteral(R"({"name":"editor.snapIn","sequenceMode":7})");
-        QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
-        QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
-        leaf.close();
+        TestHelpers::setRawMotionOverride(fx.settings, QStringLiteral("editor.snapIn"),
+                                          QJsonObject{{QStringLiteral("sequenceMode"), 7}});
 
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("sequenceMode")).toInt(),
                  int(P::DefaultSequenceMode));
@@ -778,10 +798,14 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        // Deliberately bare: with a Settings object the walk seeds its root
+        // from the user's GLOBAL animation values, which is the whole point of
+        // that seed and would mask the library defaults this slot pins.
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // No registry, no files. Walk falls through to library defaults.
+        // No registry, no settings, no overrides. Walk falls through to
+        // library defaults.
         const QVariantMap resolved = c.resolvedProfile(QStringLiteral("editor.snapIn"));
         using P = PhosphorAnimation::Profile;
         QCOMPARE(resolved.value(QStringLiteral("duration")).toDouble(), P::DefaultDuration);
@@ -794,7 +818,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Override the parent (editor) but not the leaf (editor.snapIn). The
@@ -809,7 +834,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 100}}));
@@ -823,7 +849,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Parent supplies curve only; leaf supplies duration only.
@@ -842,14 +869,18 @@ private Q_SLOTS:
 
     // ─── Path traversal hardening (security) ──────────────────────────────
 
-    /// `setOverride` MUST reject any path that isn't a built-in event
-    /// path. A crafted `"../etc/passwd"` would otherwise let a hostile
-    /// QML caller write outside `userProfilesDir()`.
+    /// `setOverride` MUST reject any path that isn't a built-in event path.
+    /// Since schema v8 the gate no longer keeps a hostile QML caller from
+    /// writing outside `userProfilesDir()` — there is no file — it keeps a
+    /// bogus path out of the shared `Animations/MotionProfileTree`, where an
+    /// entry no page's scoped walk covers would be both invisible and
+    /// impossible to remove.
     void setOverride_rejectsTraversalPaths()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
@@ -865,11 +896,20 @@ private Q_SLOTS:
 
         QCOMPARE(spy.count(), 0);
 
-        // No file landed anywhere under the tmp dir.
-        QDir scan(tmp.path());
-        const auto entries = scan.entryList(QDir::Files | QDir::NoDotAndDotDot);
-        QVERIFY2(entries.isEmpty(),
-                 qPrintable(QStringLiteral("traversal write leaked: ") + entries.join(QLatin1Char(','))));
+        // Nothing reached the tree. Since schema v8 the hazard is no longer a
+        // file written outside the profiles dir — setOverride writes a config
+        // key — it is a bogus path landing as an ENTRY in the shared timing
+        // tree, where it would be invisible to every page's scoped walk and
+        // permanently undeletable. Asserting on the store is what makes this
+        // slot fail if the isValidEventPath gate on the READ side goes: the
+        // returns above only cover the write side.
+        for (const QString& bad :
+             {QStringLiteral("../etc/passwd"), QStringLiteral("../../bad"), QStringLiteral("..\\windows-path"),
+              QStringLiteral("editor/../../etc"), QStringLiteral("not.a.real.path")}) {
+            QVERIFY2(TestHelpers::rawMotionOverride(fx.settings, bad).isEmpty(),
+                     qPrintable(QStringLiteral("traversal path stored an entry: ") + bad));
+        }
+        QVERIFY(fx.settings.motionProfileTree().value(QStringLiteral("overrides")).toList().isEmpty());
     }
 
     /// `clearOverride` and `hasOverride` MUST also reject non-event paths
@@ -878,7 +918,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.hasOverride(QStringLiteral("../etc/passwd")));
@@ -896,7 +937,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         const auto profile = QVariantMap{{QStringLiteral("duration"), 250},
@@ -936,7 +978,8 @@ private Q_SLOTS:
     /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/drag_snap.cpp`.
     void supportsShaderLeg_matchesConsumedLegCallSites()
     {
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
 
         // Collected, not asserted one at a time. A taxonomy change can flip
         // several paths at once, and a bare QVERIFY aborts the whole slot on

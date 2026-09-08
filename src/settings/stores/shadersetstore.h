@@ -15,8 +15,8 @@
 namespace PlasmaZones {
 
 /// Persistence + CRUD for shader-set JSON files, shared by the two set
-/// domains (motion sets over per-event override files, decoration sets over
-/// the surface profile tree). One instance per domain, hosted as a child
+/// domains (motion sets over the animation motion profile tree, decoration
+/// sets over the surface profile tree). One instance per domain, hosted as a child
 /// QObject of that domain's page controller and handed to QML as the
 /// `bridge` of ShaderSetsPage.
 ///
@@ -24,12 +24,12 @@ namespace PlasmaZones {
 /// atomic writes, listing, apply / save / remove / update / export / import,
 /// and the coverage + "active" summaries. It treats a set's payload as
 /// opaque JSON and delegates the domain-specific steps to the injected
-/// callables in Config below (snapshot / validate / apply, plus the optional
-/// file-snapshot and mutation-guard hooks).
+/// callables in Config below (snapshot / validate / apply, and the optional
+/// entry-satisfied predicate).
 ///
 /// Both domains happen to serialise the SAME envelope:
 /// ```
-/// { "name": …, "description": …, "version": 1,
+/// { "name": …, "description": …, "version": <domain formatVersion>,
 ///   "overrides": [ { "path": …, "profile": { … } }, … ] }
 /// (a "baseline" key, even an empty one, is REFUSED by both domain validators)
 /// ```
@@ -61,31 +61,22 @@ public:
     /// set does not cover keep their current values).
     using ApplyFn = std::function<bool(const QJsonObject& /*root*/)>;
 
-    /// Optional pre-write snapshot of a set file, wired to the animations
-    /// controller's `snapshotFileIfFirst` so Discard can restore set files
-    /// it overwrote. Decoration leaves this null (its writes ride the
-    /// normal settings staging flow).
+    /// True when @p live already holds everything @p setProfile would write —
+    /// i.e. applying that one entry would change nothing at its path.
     ///
-    /// Returns false when the pre-edit content could NOT be captured. The
-    /// store then refuses the write rather than proceeding: overwriting a
-    /// file whose prior content was never captured would permanently lose
-    /// it, with Discard unable to restore. A null callable reads as true
-    /// (the domain does not stage set files at all).
-    using FileSnapshotFn = std::function<bool(const QString& /*filePath*/)>;
-
-    /// Optional companion to FileSnapshotFn: drop the snapshot staged for
-    /// @p filePath again, because the write it was taken for failed and the
-    /// file was never touched. Without it the page reports unsaved changes
-    /// with nothing to discard. The controller only drops a snapshot whose
-    /// content still matches the file on disk, so an earlier edit that DID
-    /// land keeps its way back.
-    using FileSnapshotRollbackFn = std::function<void(const QString& /*filePath*/)>;
-
-    /// Optional gate consulted before every mutation. Returns an empty
-    /// string when the mutation may proceed, or a user-facing refusal
-    /// reason (surfaced via toastRequested) when it may not. Wired to the
-    /// animations controller's in-flight-discard guard.
-    using MutationGuardFn = std::function<QString()>;
+    /// Optional. The default is exact equality, which is right for a domain
+    /// whose `apply` REPLACES the whole profile at a path: after applying,
+    /// live equals the set, so anything else means it has not been applied.
+    /// That is the decoration domain.
+    ///
+    /// A domain whose entry has independent HALVES, either of which may be
+    /// absent, has to supply one. Motion is that case: an entry carries a
+    /// timing half, a pack half, or both, and `apply` writes only the halves
+    /// present — a pack-only entry deliberately leaves the path's timing
+    /// alone. Under exact equality such an entry can never match a path that
+    /// legitimately carries timing the set never mentioned, so the whole set
+    /// reads as inactive because of one field it does not own.
+    using EntrySatisfiedFn = std::function<bool(const QJsonObject& setProfile, const QJsonObject& live)>;
 
     struct Config
     {
@@ -93,9 +84,7 @@ public:
         SnapshotFn snapshot;
         ValidateFn validate;
         ApplyFn apply;
-        FileSnapshotFn fileSnapshot; // optional
-        FileSnapshotRollbackFn snapshotRollback; // optional, pairs with fileSnapshot
-        MutationGuardFn mutationGuard; // optional
+        EntrySatisfiedFn entrySatisfied; // optional, defaults to exact equality
         /// Current on-disk format. Save stamps it; apply and import refuse a
         /// NEWER file, so a set written by a future build (carrying fields
         /// this build drops on parse) fails cleanly instead of committing a
@@ -123,10 +112,11 @@ public:
     /// Saved sets, one row per file:
     /// `{ name, description, slug, coverage: [section…], coverageCount,
     ///    active, modified }`
-    /// `active` is true when every entry the set carries is already live
-    /// with an equal profile (containment, not equality — apply merges, so
-    /// unrelated live overrides must not clear the badge). `modified` is the
-    /// set file's mtime.
+    /// `active` is true when every entry the set carries is already satisfied
+    /// live (containment, not equality — apply merges, so unrelated live
+    /// overrides must not clear the badge). What "satisfied" means for one
+    /// entry is the domain's, via Config::entrySatisfied; the default is
+    /// exact equality. `modified` is the set file's mtime.
     Q_INVOKABLE QVariantList availableSets() const;
 
     Q_INVOKABLE bool applySet(const QString& name);
@@ -143,8 +133,8 @@ public:
     ///
     /// Re-saving over an existing name is how the user updates a set after
     /// tweaking their look, so it must stay possible — but it destroys the
-    /// stored payload, and on a domain with no fileSnapshot hook (decoration)
-    /// no Discard could bring it back. So it requires explicit consent:
+    /// stored payload and no Discard brings a set file back — set CRUD is
+    /// immediate on every domain. So it requires explicit consent:
     /// @p overwrite defaults to false and the call is REFUSED (with a toast)
     /// when the name is taken. QML checks existingSetName() first and passes
     /// overwrite=true only after the user confirms.
@@ -187,10 +177,6 @@ Q_SIGNALS:
     /// flag is derived from. QML reloads availableSets() on this.
     void setsChanged();
 
-    /// Mirrors the animations controller's staging signal (its set writes
-    /// are snapshotted for Discard). Decoration ignores it.
-    void pendingChangesChanged();
-
     /// User-facing failure reason for the chrome toast.
     void toastRequested(const QString& text);
 
@@ -214,28 +200,8 @@ private:
     /// Version gate shared by applySet and importSet.
     bool versionAccepted(const QJsonObject& root, const QString& context) const;
 
-    /// True when the mutation may proceed; emits the refusal toast when not.
-    bool mutationAllowed();
-
-    /// Capture pre-edit content of @p filePath before the store overwrites or
-    /// removes it. False = the capture failed and the caller must NOT write.
-    /// True when no fileSnapshot hook is wired (the domain does not stage).
-    bool snapshotFile(const QString& filePath);
-    /// Un-stage a snapshotFile() capture whose write then failed. No-op on a
-    /// domain that wires no rollback hook.
-    void rollbackSnapshot(const QString& filePath);
-
-    /// Atomically write @p root to @p filePath. On failure calls
-    /// rollbackSnapshot(): snapshotFile() may already have staged the pre-edit
-    /// content, and the write never landed, so the staging has to go back (the
-    /// rollback hook owns the resulting dirty-state signal) rather than leave
-    /// flag.
+    /// Atomically write @p root to @p filePath.
     bool writeSetFile(const QString& filePath, const QJsonObject& root);
-
-    /// Emit pendingChangesChanged, but only on a domain that actually stages
-    /// set files. Without a fileSnapshot hook (decoration) nothing was staged,
-    /// so the signal would announce a dirty-state move that never happened.
-    void notifyPendingChanges();
 
     /// A free (non-colliding) set name derived from @p desiredName.
     QString uniqueSetName(const QString& desiredName) const;

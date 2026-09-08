@@ -77,7 +77,9 @@ bool isAnimationPage(const QString& page)
 // enable, the baseline motion Profile blob, and window filtering. Owned by the
 // Animations → General leaf. The ShaderProfileTree key is deliberately ABSENT —
 // it is per-event state scoped through animationPageScope, not a General-page
-// key. (The per-event override FILES are likewise not config keys.)
+// key. The MotionProfileTree key is absent for exactly the same reason: since
+// schema v8 it is a config key too, and it is per-event state scoped the same
+// way. Both appear in animationConfigKeys() below, which is the whole-tree list.
 const Settings::ConfigKeyList& animationGeneralConfigKeys()
 {
     using CD = ConfigDefaults;
@@ -92,16 +94,23 @@ const Settings::ConfigKeyList& animationGeneralConfigKeys()
     return keys;
 }
 
-// The WHOLE animation "value" surface — General's keys PLUS the ShaderProfileTree
-// key. Used only by the non-surface library leaves (presets / motion sets / shaders), whose
-// Reset/Discard act on the entire editable tree (paired with clearAllOverrides /
-// revertPending for the per-event FILES).
+// The WHOLE animation "value" surface — General's keys PLUS BOTH profile trees.
+// Used only by the non-surface library leaves (presets / motion sets / shaders),
+// whose Reset/Discard act on the entire editable tree.
+//
+// Both trees must be here. Since schema v8 per-event timing is a config key like
+// everything else, and `revertPending()` no longer restores anything on its own
+// (it drops the page's dirty memo and documents that the caller's
+// `Settings::load()` does the actual revert). Leaving the motion key out meant
+// Discard on those pages silently reverted the pack half and kept the timing
+// half, reported no failure, and left the page badged with no way to clear it.
 const Settings::ConfigKeyList& animationConfigKeys()
 {
     using CD = ConfigDefaults;
     static const Settings::ConfigKeyList keys = []() {
         Settings::ConfigKeyList k = animationGeneralConfigKeys();
         k.append({CD::animationsGroup(), CD::shaderProfileTreeKey()});
+        k.append({CD::animationsGroup(), CD::motionProfileTreeKey()});
         return k;
     }();
     return keys;

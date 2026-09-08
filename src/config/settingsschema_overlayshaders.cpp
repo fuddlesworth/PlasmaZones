@@ -1,0 +1,131 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// The zone-overlay shader half of the settings schema: the single
+// Overlays group and its OverlayShaderTree blob. Split out of
+// settingsschema.cpp for file-size the way the scrolling and tiling TUs were;
+// the entry point (appendOverlayShadersSchema) is declared alongside every
+// other appendXxxSchema in settingsschema.h. sanitizeOverlayShaderTree stays
+// file-local: the overlay tree is the one key that round-trips through
+// OverlayShaderTree, so this is its only consumer.
+
+#include "settingsschema.h"
+
+#include "configdefaults.h"
+#include "core/types/overlayshadertree.h"
+
+#include <QJsonObject>
+#include <QStringList>
+#include <QUuid>
+
+namespace PlasmaZones {
+
+namespace {
+
+/// A shaderId, a parameter name, and a colour or image-path parameter value
+/// are all short. Well above anything a pack can legitimately declare, and far
+/// below the cost of letting an unbounded string reach the key.
+constexpr int kMaxStringChars = 1024;
+/// A pack's parameters are UBO lanes, and data/schemas/shader-metadata.schema.json
+/// caps a slot at 31 — 32 scalar lanes, 16 colour, 4 image. Comfortably above
+/// any pack that can exist.
+constexpr int kMaxParameters = 64;
+/// One override per layout. Above any plausible layout collection; the point
+/// is that the count is bounded at all.
+constexpr int kMaxOverrides = 1024;
+
+bool overLongString(const QVariant& value)
+{
+    return value.typeId() == QMetaType::QString && value.toString().size() > kMaxStringChars;
+}
+
+OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
+{
+    OverlayShaderProfile out;
+    if (profile.shaderId.size() <= kMaxStringChars)
+        out.shaderId = profile.shaderId;
+    for (auto it = profile.parameters.cbegin(); it != profile.parameters.cend(); ++it) {
+        if (out.parameters.size() >= kMaxParameters)
+            break;
+        if (it.key().size() > kMaxStringChars || overLongString(it.value()))
+            continue;
+        // Every parameter type a pack can declare is one scalar value: float,
+        // int, bool, a colour string, an image path. A map or a list is
+        // nesting no pack produces, so it can only have come from a hand-edit
+        // or a foreign writer.
+        if (it.value().typeId() == QMetaType::QVariantMap || it.value().typeId() == QMetaType::QVariantList)
+            continue;
+        out.parameters.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+/// Canonicalize the overlay shader tree: round-trip through
+/// @c OverlayShaderTree so unknown fields are dropped, then bound the parts
+/// that round trip survives verbatim — string lengths, the parameter map's
+/// size and value shapes, and the count and spelling of override keys.
+///
+/// This is a PERSISTENCE boundary, not a UI convenience, and it sits on the
+/// schema key rather than in @c Settings::setOverlayShaderTree because the
+/// typed setter is not the only door. A settings profile being applied goes
+/// through @c Store::importFromJson, which writes the blob's value for every
+/// declared key straight into the store; @c config.json is hand-editable; and
+/// a validator runs on read as well as write, so this covers both without a
+/// second copy at each writer.
+///
+/// Override paths are layout UUIDs in the braced @c QUuid::toString() form the
+/// project uses everywhere. The v8 sidecar lift already refuses a non-UUID key
+/// (the `autotile:<algoId>` entries the pre-v8 editor could stamp); this is
+/// the same refusal at every other door. A key the resolver can never match is
+/// junk in a shared key, and it surfaces on the assignments page as a nameless
+/// broken row rather than staying invisible.
+///
+/// Deliberately does NOT judge a shaderId against the installed packs, or a
+/// parameter against the type its pack declares. Both would need a
+/// ShaderRegistry this layer must not grow, the same argument the motion
+/// tree's setter makes about CurveRegistry, and an assignment naming a pack
+/// the user is about to install must not be erased for being early.
+///
+/// Idempotent by construction: a projection onto the two declared fields
+/// composed with bounds that are stable under reapplication, over
+/// @c overriddenLayouts()'s sorted order so the same entries survive a second
+/// pass.
+QVariant sanitizeOverlayShaderTree(const QVariant& v)
+{
+    const OverlayShaderTree in = OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(v.toMap()));
+    OverlayShaderTree out;
+    out.setBaseline(boundedProfile(in.baseline()));
+    int kept = 0;
+    const QStringList layouts = in.overriddenLayouts();
+    for (const QString& layoutId : layouts) {
+        if (kept >= kMaxOverrides)
+            break;
+        if (QUuid::fromString(layoutId).isNull())
+            continue;
+        out.setOverride(layoutId, boundedProfile(in.directOverride(layoutId)));
+        ++kept;
+    }
+    return QVariant(out.toJson().toVariantMap());
+}
+
+} // namespace
+
+// ─── Overlays ────────────────────────────────────────────────
+// Zone-overlay shader assignments — one nested JSON blob (baseline +
+// per-layout overrides), persisted as a QVariantMap like the animation
+// ShaderProfileTree entry. Unlike that one it CAN be sanitized: the animation
+// tree cannot round-trip without a CurveRegistry to re-resolve its curves,
+// whereas OverlayShaderTree's own fromJson/toJson needs no registry at all.
+void appendOverlayShadersSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::overlaysGroup()] = {
+        {CD::overlayShaderTreeKey(), CD::overlayShaderTree(), QMetaType::QVariantMap,
+         QStringLiteral("Zone-overlay shader assignments (global baseline plus per-layout overrides). The "
+                        "settings app's Snapping Shaders page writes this, so it is not meant to be edited "
+                        "by hand."),
+         sanitizeOverlayShaderTree},
+    };
+}
+
+} // namespace PlasmaZones

@@ -146,9 +146,6 @@ ApplicationWindow {
         id: osdHost
 
         anchors.fill: parent
-        // Float clear of the cheat sheet at the very bottom of this demo
-        // window. A real shell uses the default (near the bottom edge).
-        bottomMargin: 160
         provider: osdController
     }
 }

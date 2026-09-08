@@ -194,6 +194,7 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::OpenWindowHeight,
     ActionType::OpenMaximized,
     ActionType::OpenFocused,
+    ActionType::OpenTabGroup,
     // Effect-consumed open verdict (Tag::EffectVerdict, unlike its Open*
     // siblings) — the KWin effect flips real fullscreen at windowAdded.
     ActionType::OpenFullscreen,
@@ -941,6 +942,7 @@ private Q_SLOTS:
         rejectsStray(ActionType::OpenColumnPlacement, QJsonValue(QStringLiteral("consume")));
         rejectsStray(ActionType::OpenMaximized, QJsonValue(true));
         rejectsStray(ActionType::OpenFocused, QJsonValue(true));
+        rejectsStray(ActionType::OpenTabGroup, QJsonValue(QStringLiteral("work")));
         rejectsStray(ActionType::OpenFullscreen, QJsonValue(true));
         rejectsStray(ActionType::ScrollFactor, QJsonValue(0.75));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));

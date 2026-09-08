@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+#include "desktopvisibility.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -124,8 +125,13 @@ void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& window
     // floating flag) BEFORE calling, so the resolve sees the new state.
     // Exact-id re-check like the windowDecorationRestored path: the fuzzy
     // appId fallback must not decorate a same-app sibling under a dead id.
+    // Per-output desktop reading, not the global one: the callers now include
+    // the desktop-arrival arm, which admits a window whose own output shows
+    // its desktop while the session-wide current is a different one. On the
+    // global reading that window took the remove branch and the funnel undid
+    // exactly what it was called to fix.
     KWin::EffectWindow* w = findWindowById(windowId);
-    if (w && getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
+    if (w && getWindowId(w) == windowId && isOnOwnOutputCurrentDesktop(w)) {
         updateWindowDecoration(windowId, w);
     } else {
         // Same exact-id discipline for the remove hint: a fuzzy same-app

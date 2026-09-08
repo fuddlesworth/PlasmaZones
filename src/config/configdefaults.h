@@ -717,7 +717,15 @@ public:
         return {};
     }
 
-    /// Zone-overlay shader assignments (Snapping.OverlayShaders /
+    /// The timing twin of shaderProfileTree(). Empty: a fresh config owns no
+    /// per-event override, and the built-in seeds live in the profile registry
+    /// at low precedence rather than in the stored blob.
+    static QVariantMap motionProfileTree()
+    {
+        return {};
+    }
+
+    /// Zone-overlay shader assignments (Overlays /
     /// OverlayShaderTree). Schema default is the empty tree — no baseline
     /// shader, no per-layout overrides — same materialization as the
     /// animation shaderProfileTree above (a bare {}).
@@ -1026,6 +1034,49 @@ public:
     static QString snapToZone9Shortcut()
     {
         return QStringLiteral("Meta+Ctrl+9");
+    }
+    // Scrolling tab ordinals. ALL NINE SHIP UNBOUND, and deliberately so:
+    // both digit rows a Meta chord can reach are already spoken for
+    // (Meta+Alt+N is a quick-layout slot, Meta+Ctrl+N a snap-to-zone slot),
+    // and there is no third row to take without displacing a shipped
+    // binding. The precedent is the scrolling wrap and one-way float verbs,
+    // which ship unbound for the same reason — the keys exist so a user who
+    // wants tab ordinals can bind them, not because we found free chords.
+    static QString scrollFocusTab1Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab2Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab3Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab4Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab5Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab6Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab7Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab8Shortcut()
+    {
+        return {};
+    }
+    static QString scrollFocusTab9Shortcut()
+    {
+        return {};
     }
     static QString rotateWindowsClockwiseShortcut()
     {

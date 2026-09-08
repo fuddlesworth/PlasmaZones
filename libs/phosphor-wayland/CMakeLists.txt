@@ -189,6 +189,7 @@ set(phosphorwayland_public_HDRS
     include/PhosphorWayland/CompositorLost.h
     include/PhosphorWayland/ClipboardDevice.h
     include/PhosphorWayland/SessionLock.h
+    include/PhosphorWayland/LockSurface.h
 )
 
 # --- Layer-shell sources ---
@@ -202,12 +203,15 @@ set(phosphorwayland_layershell_SRCS
     src/surfaceidentity.cpp
     src/clipboarddevice.cpp
     src/sessionlock.cpp
+    src/locksurface.cpp
     src/compositorlost.cpp
     src/compositorlost_internal.h
     src/qpa/layershellintegration.cpp
     src/qpa/layershellintegration.h
     src/qpa/layershellwindow.cpp
     src/qpa/layershellwindow.h
+    src/qpa/sessionlockwindow.cpp
+    src/qpa/sessionlockwindow.h
     src/qpa/xdg_popup_stub.c
     src/qpa/xdg_toplevel_stub.c
     ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
