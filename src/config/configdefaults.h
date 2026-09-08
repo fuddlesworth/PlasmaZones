@@ -1201,6 +1201,14 @@ public:
         return QStringLiteral("/plasmazones/decorationsets");
     }
 
+    /// Overlay sets — named snapshots of the zone-overlay shader assignments
+    /// (the global default plus the per-layout overrides), the overlay twin of
+    /// `userDecorationSetsSubdir()`.
+    static QString userOverlaySetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/overlaysets");
+    }
+
     /// Surface shader packs (the `data/surface/` family — border, etc.).
     /// Mirrors the `userAnimationsSubdir()` convention so settings + daemon
     /// + compositor code share one source of truth for the on-disk location.

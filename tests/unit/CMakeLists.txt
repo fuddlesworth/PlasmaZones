@@ -1862,12 +1862,24 @@ target_link_libraries(test_decorationpagecontroller
 target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
+# One source list, shared by the overlay controller test and the QML-contract
+# test below, so a new controller TU can't silently miss one of the two.
+set(_overlays_ctrl_SRCS
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller.cpp
+    # The ctor builds the set store, so every TU linking the controller needs
+    # the sets TU and the store — omitting either is a link error, not a silent
+    # degradation.
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/animationfileutils.cpp
+    # installShaderPack forwards into the shared installer, so the symbol is
+    # needed at link even though the suites do not exercise it.
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+)
+
 add_executable(test_overlays_page_controller
     settings/pages/test_overlays_page_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller.cpp
-    # installShaderPack forwards into the shared installer, so the symbol is
-    # needed at link even though the suite does not exercise it.
-    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+    ${_overlays_ctrl_SRCS}
 )
 target_link_libraries(test_overlays_page_controller
     PRIVATE
@@ -1886,8 +1898,7 @@ add_test(NAME test_overlays_page_controller COMMAND test_overlays_page_controlle
 # is what keeps it out of the controller suite above.
 add_executable(test_overlays_qml_contracts
     settings/pages/test_overlays_qml_contracts.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+    ${_overlays_ctrl_SRCS}
 )
 target_compile_definitions(test_overlays_qml_contracts PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 target_link_libraries(test_overlays_qml_contracts
@@ -1901,6 +1912,26 @@ target_link_libraries(test_overlays_qml_contracts
         plasmazones_core
 )
 add_test(NAME test_overlays_qml_contracts COMMAND test_overlays_qml_contracts)
+
+# Overlay sets — the domain closures over the shared ShaderSetStore. Needs a
+# real LayoutRegistry (and so PhosphorRules, which its ctor takes a store from)
+# because the layout-applicability rule is the whole point of the suite.
+add_executable(test_overlays_sets
+    settings/pages/test_overlays_sets.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_link_libraries(test_overlays_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        PhosphorAudio::PhosphorAudio
+        PhosphorControl::PhosphorControl
+        PhosphorRules::PhosphorRules
+        plasmazones_core
+)
+add_test(NAME test_overlays_sets COMMAND test_overlays_sets)
 
 # Data surface behind the settings app's live decoration preview: chain
 # composition, the extended-FBO padding request, and the degraded paths a

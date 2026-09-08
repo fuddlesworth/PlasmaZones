@@ -4,6 +4,11 @@
 #pragma once
 
 #include <PhosphorControl/PageController.h>
+
+// Complete type, not a forward declaration: moc must see it to register the
+// pointer meta-type for the setsBridge Q_PROPERTY.
+#include "settings/stores/shadersetstore.h"
+
 #include <QObject>
 #include <QString>
 #include <QVariantList>
@@ -62,6 +67,9 @@ class OverlaysPageController : public PhosphorControl::PageController
     /// null. Present only on the zone-shader bridge — the animation bridge has
     /// no equivalent, so ShaderBrowserDetailDialog gates its live preview pane
     /// on `bridge.previewController` being set.
+    /// The overlay-set store, bound by OverlaySetsPage as its `bridge`.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
+
     Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
 
 public:
@@ -102,6 +110,18 @@ public:
 
     /// The borrowed live-preview controller (see the previewController property).
     QObject* previewController() const;
+
+    ShaderSetStore* setsBridge() const
+    {
+        return m_sets;
+    }
+
+    /// Point the set store at @p dir instead of the XDG data location.
+    ///
+    /// Deliberately NOT Q_INVOKABLE — a test seam, not UI. ctest runs suites in
+    /// parallel and they share one qttest data dir, so two set-owning suites
+    /// would otherwise wipe each other's files mid-run.
+    void setSetsDirOverride(const QString& dir);
 
     // ── Assignment surface ────────────────────────────────────────────────
 
@@ -170,6 +190,16 @@ public:
     /// @return true on success.
     Q_INVOKABLE bool installShaderPack(const QString& sourceUrl);
 
+    /// A readable label for one of a set's coverage tokens.
+    ///
+    /// The store derives coverage from each entry's path, which here is either
+    /// the reserved global-default token or a layout UUID. A UUID means nothing
+    /// on screen, and the QML page has no handle on the layout registry, so the
+    /// mapping lives here: the global token names itself, a live layout gets
+    /// its name, and a layout this machine does not have says so rather than
+    /// printing 36 characters of hex.
+    Q_INVOKABLE QString setCoverageLabel(const QString& token) const;
+
     /// Reverse-lookup over the assignment tree: a "Global default" entry
     /// (empty path) when the baseline uses @p effectId, plus `{path,
     /// label}` for every layout whose override does — `path` the layout
@@ -235,6 +265,17 @@ private:
     void writeTreeAnnouncing(const OverlayShaderTree& tree, const QString& path);
 
     std::optional<QString> m_writingPath;
+
+    /// Build the overlay-set store and wire its live-state signal. Defined in
+    /// the sibling overlayspagecontroller_sets.cpp with the domain closures.
+    void initSetsStore();
+
+    /// Directory the set files live in — the XDG data location, or
+    /// m_setsDirOverride when a test set one.
+    QString overlaySetsDirectoryPath() const;
+
+    ShaderSetStore* m_sets = nullptr;
+    QString m_setsDirOverride;
 
     PlasmaZones::ShaderRegistry* m_shaderRegistry = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry = nullptr;

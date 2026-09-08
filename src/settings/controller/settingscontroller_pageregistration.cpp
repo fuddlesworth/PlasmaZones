@@ -533,6 +533,9 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
                QStringLiteral("preferences-desktop-display"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("overlays-sets"), QStringLiteral("overlays"), PhosphorI18n::tr("Overlay Sets"),
+               QStringLiteral("pages/overlays/OverlaySetsPage.qml"), QStringLiteral("color-palette"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regPage(m_overlaysPage.get(), QStringLiteral("overlays"), PhosphorI18n::tr("Library"),
             QStringLiteral("pages/overlays/OverlaysLibraryPage.qml"), QStringLiteral("folder-templates"),
             /*collapsible=*/false, /*divider=*/false, AdvancedOnly);

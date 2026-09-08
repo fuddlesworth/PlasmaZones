@@ -68,6 +68,8 @@ OverlaysPageController::OverlaysPageController(PlasmaZones::ShaderRegistry* shad
             Q_EMIT shaderProfileChanged(QString(), /*wholeTree=*/true);
         });
     }
+    // Last: the store's closures capture `this` and read the members above.
+    initSetsStore();
 }
 
 OverlaysPageController::~OverlaysPageController() = default;

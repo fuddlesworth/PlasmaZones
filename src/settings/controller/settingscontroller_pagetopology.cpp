@@ -115,6 +115,11 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("overlays-appearance"),
         QStringLiteral("overlays-assignments"),
         QStringLiteral("overlays-library"),
+        // overlays-sets is deliberately ABSENT, like the per-mode library pages
+        // below: set files are written immediately and own no config key, so
+        // the page can never be dirty and listing it would only add a dead hop
+        // to the hot isPageDirty walk. Applying a set writes the assignments
+        // key, and overlays-assignments reports that.
     };
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
@@ -750,6 +755,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
         QStringLiteral("overlays-assignments"),
+        QStringLiteral("overlays-sets"),
         QStringLiteral("overlays-library"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-simple"),

@@ -131,6 +131,7 @@ set(plasmazones_settings_SRCS
     pages/snappingeffectscontroller.cpp
     pages/overlayspagecontroller.h
     pages/overlayspagecontroller.cpp
+    pages/overlayspagecontroller_sets.cpp
     pages/snappingzoneselectorcontroller.h
     pages/snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
@@ -486,6 +487,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/overlays/OverlaysLibraryPage.qml
         qml/pages/overlays/OverlaysAssignmentsPage.qml
         qml/pages/overlays/OverlayShaderAssignmentCard.qml
+        qml/pages/overlays/OverlaySetsPage.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
         # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
         # list with per-pack params) and border/titlebar field overrides via

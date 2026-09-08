@@ -70,11 +70,14 @@ QStringList coverageSections(const QJsonObject& root)
 /// carries one half: a pack-only motion entry never matched a path that also
 /// held timing, so one field the set does not own kept the whole set dark.
 bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live,
-                        const ShaderSetStore::EntrySatisfiedFn& satisfied)
+                        const ShaderSetStore::EntrySatisfiedFn& satisfied,
+                        const ShaderSetStore::EntryApplicableFn& applicable)
 {
     const QJsonArray setOverrides = set.value(kOverridesKey).toArray();
-    // An empty set covers nothing; it is never "active". No baseline to compare:
-    // both domain validators refuse a set that carries the key at all.
+    // An empty set covers nothing; it is never "active". No baseline key to
+    // compare either: a domain with a global default of its own encodes it as
+    // an ordinary entry under a reserved path (the overlay domain does), so it
+    // arrives here in the array like any other.
     if (setOverrides.isEmpty()) {
         return false;
     }
@@ -86,9 +89,17 @@ bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live,
         liveByPath.insert(entry.value(kPathKey).toString(), entry.value(kProfileKey).toObject());
     }
 
+    int applicableEntries = 0;
     for (const QJsonValue& v : setOverrides) {
         const QJsonObject entry = v.toObject();
-        const auto it = liveByPath.constFind(entry.value(kPathKey).toString());
+        const QString path = entry.value(kPathKey).toString();
+        // An entry apply itself skips must not decide the badge, or a set
+        // would read dark forever over content it could never have written.
+        if (applicable && !applicable(path)) {
+            continue;
+        }
+        ++applicableEntries;
+        const auto it = liveByPath.constFind(path);
         if (it == liveByPath.cend()) {
             return false;
         }
@@ -97,7 +108,9 @@ bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live,
             return false;
         }
     }
-    return true;
+    // Every entry was skipped: nothing of this set is live here, whatever the
+    // machine happens to be showing.
+    return applicableEntries > 0;
 }
 
 } // namespace
@@ -284,7 +297,8 @@ QVariantList ShaderSetStore::availableSets() const
         // file may carry entries applySet later rejects, and one carrying zero
         // renders without the count badge (the card hides it at 0).
         row.insert(QLatin1String("coverageCount"), root.value(kOverridesKey).toArray().size());
-        row.insert(QLatin1String("active"), payloadContainedIn(root, live, m_config.entrySatisfied));
+        row.insert(QLatin1String("active"),
+                   payloadContainedIn(root, live, m_config.entrySatisfied, m_config.entryApplicable));
         // File mtime, for the row's "Updated …" line.
         row.insert(QLatin1String("modified"), info.lastModified());
         result.append(row);

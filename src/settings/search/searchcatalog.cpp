@@ -1091,6 +1091,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("User sets"));
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("savedDecorationSets"),
                PhosphorI18n::tr("Saved sets"));
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("saveOverlaySet"),
+               PhosphorI18n::tr("Save current state"));
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("importOverlaySets"),
+               PhosphorI18n::tr("User sets"));
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("savedOverlaySets"),
+               PhosphorI18n::tr("Saved sets"));
 
     // The per-event animation anchors live in their own TU
     // (searchcatalog_animations.cpp) — the single catalog file had crossed
