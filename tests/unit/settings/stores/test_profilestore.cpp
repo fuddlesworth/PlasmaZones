@@ -28,6 +28,7 @@
 #include <QJsonValue>
 #include <QSaveFile>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUuid>
@@ -756,6 +757,66 @@ private Q_SLOTS:
     /// A profile file stamped v6 whose delta carries a shader override on a
     /// retired placement node loads through migrateV6ToV7: the override is
     /// served under its v7 path with its profile intact.
+    /// A settings profile must never acquire the LOADING machine's own
+    /// per-event timing.
+    ///
+    /// `readProfileFile` migrates a profile's sparse delta with
+    /// `ExternalImports::Disabled`, and that one argument is the whole guard:
+    /// the v7→v8 step, when imports are enabled, reads
+    /// `<data>/plasmazones/profiles/*.json` off the local filesystem and folds
+    /// them into `Animations/MotionProfileTree`. A profile is a document that
+    /// never held those, so enabling imports there would write this user's
+    /// timings into every profile they load.
+    ///
+    /// Both of the things that would otherwise mask a regression are defeated
+    /// deliberately: the override file is planted under the per-target
+    /// XDG_DATA_HOME the migration actually reads, and MotionProfileTree is
+    /// declared in the defaults so the schema filter cannot be what drops it.
+    /// Without either, flipping the argument to Enabled leaves this green.
+    void profileDeltaNeverAcquiresThisMachinesTimingFiles()
+    {
+        const QString profilesDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/profiles");
+        QVERIFY(QDir().mkpath(profilesDir));
+        QFile f(profilesDir + QStringLiteral("/osd.show.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QJsonObject local;
+        local.insert(QStringLiteral("name"), QStringLiteral("osd.show"));
+        local.insert(QStringLiteral("duration"), 999);
+        const QByteArray localBytes = QJsonDocument(local).toJson();
+        QCOMPARE(f.write(localBytes), static_cast<qint64>(localBytes.size()));
+        f.close();
+
+        // A v7-stamped profile carrying something unrelated, so the chain runs
+        // the v8 step over it.
+        const QUuid id = QUuid::createUuid();
+        QJsonObject delta;
+        delta.insert(QStringLiteral("Snapping.Behavior"), QJsonObject{{QStringLiteral("Enabled"), true}});
+        QVERIFY(writeProfileFileFixture(id, 7, delta));
+
+        auto config = makeCurrentVersionConfig();
+        config.defaultConfig = []() {
+            QJsonObject defaults = baseDefaults();
+            defaults[QStringLiteral("Animations")] = QJsonObject{{QStringLiteral("MotionProfileTree"), QJsonObject()}};
+            defaults[QStringLiteral("_version")] = ConfigSchemaVersion;
+            return defaults;
+        };
+        ProfileStore store(config);
+        QCOMPARE(store.availableProfiles().size(), 1);
+        QVERIFY(store.activateProfile(id.toString()));
+
+        // Present-as-a-declared-default is fine and expected; carrying an
+        // ENTRY is the regression. The planted file is for `osd.show`, so any
+        // override at all here came off this machine's filesystem.
+        const QJsonArray overrides = m_lastApplied.value(QStringLiteral("Animations"))
+                                         .toObject()
+                                         .value(QStringLiteral("MotionProfileTree"))
+                                         .toObject()
+                                         .value(QStringLiteral("overrides"))
+                                         .toArray();
+        QVERIFY2(overrides.isEmpty(), "the profile acquired this machine's per-event timing files");
+    }
+
     void olderProfileFileV6RenamesPlacementNodes()
     {
         const QUuid id = QUuid::createUuid();
