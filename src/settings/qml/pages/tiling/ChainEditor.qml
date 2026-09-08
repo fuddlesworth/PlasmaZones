@@ -319,47 +319,80 @@ ColumnLayout {
                         opacity: packDelegate._layerEnabled ? 0.7 : 0.4
                     }
 
-                    // This layer's pack, rendered exactly as the browser's
-                    // detail dialog renders it. Lives inside the lazy
-                    // expansion, so a collapsed row instantiates no shader
-                    // item at all — which is what makes a preview per row
-                    // affordable in the first place. `active` follows the
-                    // row's own expansion rather than the loader's lifetime:
-                    // the loader deliberately outlives the collapse animation,
-                    // and the preview should stop at collapse-start so a row
-                    // being opened elsewhere can take the slot immediately.
-                    // How many run at once is capped globally by
-                    // PackPreviewGate.
-                    PackPreview {
+                    // Parameters and preview sit SIDE BY SIDE, the layout the
+                    // browser's detail dialog already uses: the editor takes
+                    // the left column and the preview is pinned right at its
+                    // own width. Stacked, the preview's fixed canvas floated
+                    // centred in a row several times its width, which left a
+                    // wide empty band down each side and stretched every
+                    // parameter row until its label and its slider sat at
+                    // opposite ends of the window.
+                    //
+                    // Two columns only while there is room for both. Below
+                    // that the grid folds to one, because a preview column
+                    // wide enough to be worth showing would leave the editor
+                    // too narrow to read. The threshold is the preview's own
+                    // column plus a comparable share for the editor.
+                    GridLayout {
+                        id: bodyGrid
+
+                        readonly property real _previewWidth: Kirigami.Units.gridUnit * 24
+                        readonly property bool _twoColumn: packDelegate._hasParams && root._previewEnabled && width >= bodyGrid._previewWidth * 2
+
                         Layout.fillWidth: true
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
-                        visible: root._previewEnabled
-                        previewKind: root.previewKind
-                        previewController: root.previewController
-                        packId: packDelegate.packId
-                        params: packDelegate._values
-                        active: root._previewEnabled && packDelegate.expanded
-                    }
+                        columns: bodyGrid._twoColumn ? 2 : 1
+                        columnSpacing: Kirigami.Units.largeSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
 
-                    PZCommon.ShaderParamsEditor {
-                        Layout.fillWidth: true
-                        visible: packDelegate._hasParams
-                        compact: true
-                        enableGroups: true
-                        enableLocking: true
-                        enableRandomize: true
-                        enableImage: false
-                        parameters: packDelegate._schema
-                        currentValues: packDelegate._values
-                        effectId: packDelegate.packId
-                        onValueChanged: function (effectId, paramId, value) {
-                            root.paramChangeRequested(effectId, paramId, value);
+                        PZCommon.ShaderParamsEditor {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignTop
+                            visible: packDelegate._hasParams
+                            compact: true
+                            enableGroups: true
+                            enableLocking: true
+                            enableRandomize: true
+                            enableImage: false
+                            parameters: packDelegate._schema
+                            currentValues: packDelegate._values
+                            effectId: packDelegate.packId
+                            onValueChanged: function (effectId, paramId, value) {
+                                root.paramChangeRequested(effectId, paramId, value);
+                            }
+                            onRandomizeRequested: function (rolled) {
+                                root.paramsRandomizeRequested(packDelegate.packId, rolled);
+                            }
+                            onResetRequested: function (defaults) {
+                                root.paramsResetRequested(packDelegate.packId, defaults);
+                            }
                         }
-                        onRandomizeRequested: function (rolled) {
-                            root.paramsRandomizeRequested(packDelegate.packId, rolled);
-                        }
-                        onResetRequested: function (defaults) {
-                            root.paramsResetRequested(packDelegate.packId, defaults);
+
+                        // This layer's pack, rendered exactly as the browser's
+                        // detail dialog renders it. Lives inside the lazy
+                        // expansion, so a collapsed row instantiates no shader
+                        // item at all — which is what makes a preview per row
+                        // affordable in the first place. `active` follows the
+                        // row's own expansion rather than the loader's
+                        // lifetime: the loader deliberately outlives the
+                        // collapse animation, and the preview should stop at
+                        // collapse-start so a row being opened elsewhere can
+                        // take the slot immediately. How many run at once is
+                        // capped globally by PackPreviewGate.
+                        //
+                        // A fixed column rather than fillWidth: the preview
+                        // composes at one canvas size and only ever scales
+                        // DOWN, so handing it the whole row would not enlarge
+                        // it, it would only centre it in empty space.
+                        PackPreview {
+                            Layout.preferredWidth: bodyGrid._twoColumn ? bodyGrid._previewWidth : Math.min(bodyGrid.width, bodyGrid._previewWidth)
+                            Layout.alignment: Qt.AlignTop | (bodyGrid._twoColumn ? Qt.AlignRight : Qt.AlignHCenter)
+                            visible: root._previewEnabled
+                            previewKind: root.previewKind
+                            previewController: root.previewController
+                            packId: packDelegate.packId
+                            params: packDelegate._values
+                            active: root._previewEnabled && packDelegate.expanded
                         }
                     }
                 }
