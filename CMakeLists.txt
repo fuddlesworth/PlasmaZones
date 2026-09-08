@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.4.14 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.4.15 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -595,8 +595,8 @@ install(FILES data/whatsnew.json
 # (e.g. `"curve": "widget-out"`) so a single edit to a curve file
 # retunes every profile that uses it, and users can drop their own
 # JSON under ~/.local/share/plasmazones/curves/ to override a shipped
-# curve system-wide. The daemon's CurveLoader scans this path before
-# ProfileLoader runs.
+# curve system-wide. The daemon's CurveLoader scans this path first, so
+# every later consumer resolves curve names against the merged set.
 install(DIRECTORY data/curves/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/curves
     FILES_MATCHING PATTERN "*.json"

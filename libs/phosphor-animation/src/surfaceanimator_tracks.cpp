@@ -3,6 +3,11 @@
 
 #include "surfaceanimator_p.h"
 
+// applyEffectStaticConfig() is called below. A UNITY build happens to see this
+// declaration through a sibling translation unit in the same blob, so the
+// missing include only breaks a non-unity configure — which is what a packager
+// or a -DCMAKE_UNITY_BUILD=OFF developer build uses.
+#include <PhosphorAnimation/AnimationShaderItemConfig.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -27,10 +32,15 @@ using namespace detail;
 namespace {
 
 /// Resolve a Profile path through the registry, falling back to a
-/// library-default Profile. Empty path is the documented "use
-/// defaults" sentinel; a non-empty unresolved path warns on the
-/// journal — typo backstop for C++ profile registrations the QML-
-/// side lint can't see.
+/// library-default Profile. Empty path is the documented "use defaults"
+/// sentinel.
+///
+/// A path nothing has registered is NOT distinguishable here and is not
+/// reported: `resolveWithInheritance` is total, answering the inherited or
+/// library-default profile for any path, so there is no failure for this
+/// function to see. A typo in a C++ registration therefore shows up as an
+/// animation running on defaults, not as a journal warning. Catching it would
+/// need the registry to answer "was anything found", which nothing else needs.
 PhosphorAnimation::Profile resolveProfile(PhosphorAnimation::PhosphorProfileRegistry& registry, const QString& path)
 {
     if (path.isEmpty()) {

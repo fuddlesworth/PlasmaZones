@@ -72,7 +72,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified."/>
         </signal>
         <signal name="motionProfileTreeChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed (a profiles/&lt;path&gt;.json override was edited and rescanned). Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own profile-file writes; the KWin effect re-fetches motionProfileTree on this signal."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed. Since schema v8 that tree is the Animations/MotionProfileTree config key, so this fires on a write to it rather than on a file rescan. Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own timing writes. The KWin effect re-fetches motionProfileTree on this signal."/>
         </signal>
         <signal name="sessionIdleChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the session went idle (no input for the configured timeout) or became active again. The effect pauses decoration-chain animation while idle, which is what lets the GPU leave its top performance state — the per-frame work being cheap does not, since what costs is that there is work every frame at all. The daemon owns this because idleness is a Wayland CLIENT concern (ext-idle-notify-v1) and the effect lives inside the compositor, which serves that protocol rather than consuming it."/>

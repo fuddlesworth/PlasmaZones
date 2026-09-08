@@ -616,6 +616,76 @@ private Q_SLOTS:
         }
     }
 
+    /// An INSTALLED pack detects from the XDG data chain, not just its sibling.
+    ///
+    /// This is the layout every third-party and user pack actually ships in:
+    /// the pack lands in `~/.local/share/plasmazones/<family>/<id>` while the
+    /// shared helpers stay in the system prefix, so the pack has NO sibling
+    /// `shared/` at all. A sibling-only lookup therefore failed on exactly the
+    /// packs the tool exists to check, reporting the pack as undetected and
+    /// then every one of its includes as missing. Widening to the family's XDG
+    /// roots keeps this a marker lookup — the same roots the runtime resolves
+    /// includes against — rather than a guess from metadata.
+    void anInstalledPackDetectsThroughTheXdgChain()
+    {
+        using PlasmaZones::ShaderValidate::detectPackModel;
+        using PlasmaZones::ShaderValidate::PackModel;
+
+        QTemporaryDir sysRoot; // stands in for /usr/share
+        QTemporaryDir userRoot; // stands in for ~/.local/share
+        QVERIFY(sysRoot.isValid());
+        QVERIFY(userRoot.isValid());
+
+        // The helpers, installed once into the system prefix.
+        const QString sharedDir = sysRoot.filePath(QStringLiteral("plasmazones/animations/shared"));
+        QVERIFY(QDir().mkpath(sharedDir));
+        QFile marker(sharedDir + QStringLiteral("/animation_uniforms.glsl"));
+        QVERIFY(marker.open(QIODevice::WriteOnly));
+        marker.close();
+
+        // The pack, installed on its own with no sibling shared/.
+        const QString pack = userRoot.filePath(QStringLiteral("plasmazones/animations/some-pack"));
+        QVERIFY(QDir().mkpath(pack));
+        QVERIFY(!QDir(userRoot.filePath(QStringLiteral("plasmazones/animations/shared"))).exists());
+
+        const QByteArray savedDirs = qgetenv("XDG_DATA_DIRS");
+        const QByteArray savedHome = qgetenv("XDG_DATA_HOME");
+        qputenv("XDG_DATA_DIRS", sysRoot.path().toUtf8());
+        qputenv("XDG_DATA_HOME", userRoot.path().toUtf8());
+
+        const std::optional<PackModel> got = detectPackModel(pack);
+
+        qputenv("XDG_DATA_DIRS", savedDirs);
+        qputenv("XDG_DATA_HOME", savedHome);
+
+        QVERIFY(got.has_value());
+        QCOMPARE(*got, PackModel::Animation);
+    }
+
+    /// The pack's OWN sibling shared/ always comes first in the include roots,
+    /// so a source tree resolves exactly as it did before the XDG fallback was
+    /// added and can never be shadowed by an installed copy of the helpers.
+    /// That ordering is what keeps the repo's own validation reproducible on a
+    /// machine that also has PlasmaZones installed.
+    void theSiblingSharedDirIsAlwaysTheFirstIncludeRoot()
+    {
+        using PlasmaZones::ShaderValidate::packSharedRoots;
+
+        const QString pack = QStringLiteral(P_SOURCE_DIR "/data/animations/fade");
+        const QStringList roots = packSharedRoots(pack);
+        QVERIFY(!roots.isEmpty());
+        QCOMPARE(roots.first(), QDir::cleanPath(QStringLiteral(P_SOURCE_DIR "/data/animations/shared")));
+
+        // A pack outside the canonical layout gets the sibling root and nothing
+        // else: there is no family name to resolve against, so no XDG lookup
+        // happens and the behaviour is exactly what it was before.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString orphan = tmp.filePath(QStringLiteral("orphan-pack"));
+        QVERIFY(QDir().mkpath(orphan));
+        QCOMPARE(packSharedRoots(orphan).size(), 1);
+    }
+
     /// A pack tree with no shared/ marker is reported as UNDETECTED rather than
     /// guessed at. The caller turns that into the overlay fallback plus a
     /// message telling the author to pass a flag, which is honest; silently

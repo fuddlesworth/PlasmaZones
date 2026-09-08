@@ -6,6 +6,7 @@
 #include "core/platform/logging.h"
 #include "core/types/animationshadersupportedpaths.h"
 
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
@@ -93,6 +94,165 @@ void Settings::setShaderProfileTreeJson(const QString& json)
         return;
     }
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
+}
+
+// ── Motion (timing) tree (PhosphorConfig::Store-backed) ─────────────────────
+// The timing sibling of the shader tree above, persisted under
+// Animations/MotionProfileTree in `PhosphorAnimation::ProfileTree`'s own
+// serialized shape. Before schema v8 this lived in loose per-event JSON files
+// under `<data>/plasmazones/profiles`, which split one animation event across
+// two stores: its pack in config, its timing on disk. That split is what made
+// a settings profile capture the pack and lose the timing, and what forced the
+// motion-set domain to carry a file-staging layer the decoration domain, whose
+// single tree holds everything, never needed.
+//
+// Carried as a raw QVariantMap, not a parsed tree. Parsing a ProfileTree needs
+// a CurveRegistry, and the config layer owning one would drag curve loading
+// into every process that reads a setting. Consumers that animate parse with
+// the registry they already have; consumers that only read or rewrite a path's
+// fields work on the map.
+//
+// No seed layer here, unlike the decoration tree. The animation timing seeds
+// live in PhosphorProfileRegistry at its low-precedence owner tag, where they
+// have always lived, and the schema default for this key is the empty tree.
+
+QVariantMap Settings::motionProfileTree() const
+{
+    return m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey());
+}
+
+QVariantMap Settings::committedMotionProfileTree() const
+{
+    // The baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline lookup so a per-page Discard and the dirty check agree.
+    return m_baseline.value(ConfigDefaults::animationsGroup()).value(ConfigDefaults::motionProfileTreeKey()).toMap();
+}
+
+namespace {
+
+/// The keys a motion-tree entry's `profile` may carry, and how long a string in
+/// one may be.
+///
+/// This is a PERSISTENCE boundary, not a UI convenience. The tree is one shared
+/// config key that every read of per-event timing copies whole, the file is
+/// hand-editable, and several writers reach it: the animations page, a settings
+/// profile being applied, `setMotionProfileTreeJson` from QML, and the v7→v8
+/// migration. The page filtered its own writes and the migration filtered its
+/// own import, which left every other door unguarded — a stray key or a 64 KB
+/// string entering through one of them would then stay, because
+/// `Profile::fromJson` ignores what it does not recognise rather than pruning
+/// it.
+///
+/// Deliberately does NOT parse. Judging a curve would need a CurveRegistry this
+/// layer must not grow, for the reason the setter's own comment gives.
+QVariantMap boundedProfileMap(const QVariantMap& profile, const QString& path)
+{
+    using P = PhosphorAnimation::Profile;
+    static const QSet<QString> kKnownFields = {
+        QLatin1String(P::JsonFieldCurve),           QLatin1String(P::JsonFieldDuration),
+        QLatin1String(P::JsonFieldMinDistance),     QLatin1String(P::JsonFieldSequenceMode),
+        QLatin1String(P::JsonFieldStaggerInterval), QLatin1String(P::JsonFieldPresetName),
+    };
+    // Above any legitimate curve spec or preset name and far below the cost of
+    // letting an unbounded string reach the key.
+    constexpr int kMaxStringChars = 1024;
+
+    QVariantMap out;
+    for (auto it = profile.cbegin(); it != profile.cend(); ++it) {
+        if (!kKnownFields.contains(it.key())) {
+            qCWarning(lcConfig) << "setMotionProfileTree: dropping unknown field" << it.key() << "at" << path;
+            continue;
+        }
+        if (it.value().typeId() == QMetaType::QString && it.value().toString().size() > kMaxStringChars) {
+            qCWarning(lcConfig) << "setMotionProfileTree: dropping over-long" << it.key() << "at" << path;
+            continue;
+        }
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+} // namespace
+
+void Settings::setMotionProfileTree(const QVariantMap& tree)
+{
+    refreshCleanBackendFromDisk();
+    // Stored VERBATIM, with no round trip through ProfileTree. That round trip
+    // looks like harmless canonicalisation and is not: Profile stores its curve
+    // as a resolved object, so re-serializing one parsed against a registry
+    // that has not loaded the user's curve packs drops the `curve` key
+    // outright, silently retiming every event that names a curve by name. The
+    // config layer has no curve registry and must not grow one, so it does not
+    // parse. Callers assemble the tree from what they read here, and the write
+    // side of the animations page is the only thing that builds one.
+    //
+    // The ONE normalisation applied here is dropping an empty `overrides` list
+    // (and, with it, an empty `baseline`). A tree carrying no overrides is the
+    // schema default, and storing it as `{"overrides": []}` would leave the key
+    // permanently unequal to its default: sparse persistence would never prune
+    // it, `isKeyModified` would report the page dirty forever, and the key would
+    // join every settings-profile delta captured afterwards. This touches only
+    // the empty case and never inspects a profile body, so the curve hazard
+    // above does not apply. Doing it here rather than only at the page's helper
+    // makes the persistence boundary canonical whoever builds the map —
+    // `setMotionProfileTreeJson`, a profile apply, or a future writer.
+    // Filter each entry's profile body before anything else looks at the map,
+    // so the comparison below and the stored value are the same shape.
+    QVariantMap canonical = tree;
+    {
+        const QVariantList entries = canonical.value(QLatin1String("overrides")).toList();
+        QVariantList filtered;
+        filtered.reserve(entries.size());
+        for (const QVariant& entryVar : entries) {
+            QVariantMap entry = entryVar.toMap();
+            const QString path = entry.value(QLatin1String("path")).toString();
+            entry.insert(QLatin1String("profile"),
+                         boundedProfileMap(entry.value(QLatin1String("profile")).toMap(), path));
+            filtered.append(entry);
+        }
+        if (!filtered.isEmpty()) {
+            canonical.insert(QLatin1String("overrides"), filtered);
+        }
+    }
+    if (canonical.value(QLatin1String("overrides")).toList().isEmpty()) {
+        canonical.remove(QLatin1String("overrides"));
+        if (canonical.value(QLatin1String("baseline")).toMap().isEmpty()) {
+            canonical.remove(QLatin1String("baseline"));
+        }
+    }
+    // Compared against the canonical READ. A blob that is not a map at all
+    // reads back as an empty map, so this short-circuits against it, and the
+    // key is nonetheless repaired: at that point the value equals its default,
+    // and sparse persistence deletes a default-equal key on save. The test
+    // `aMalformedTreeBlobIsRepairedRatherThanLeftInPlace` pins that route,
+    // which is the only one that removes it.
+    if (canonical == motionProfileTree())
+        return;
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey(), canonical);
+    Q_EMIT motionProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::motionProfileTreeJson() const
+{
+    return QString::fromUtf8(
+        QJsonDocument(QJsonObject::fromVariantMap(motionProfileTree())).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setMotionProfileTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        // Empty string = drop every per-event timing override, the same
+        // "reset to canonical default" the shader facade gives.
+        setMotionProfileTree({});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setMotionProfileTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setMotionProfileTree(doc.object().toVariantMap());
 }
 
 // ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────

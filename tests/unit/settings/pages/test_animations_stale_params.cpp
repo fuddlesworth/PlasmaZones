@@ -33,8 +33,6 @@
  *     reported
  */
 
-#include <QRegularExpression>
-#include <QSignalSpy>
 #include <QTest>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -341,53 +339,6 @@ private Q_SLOTS:
         QCOMPARE(c.staleParamDescendantCountForPaths({parent}), 1);
         QCOMPARE(c.clearStaleParamDescendantsOnPaths({parent}), 1);
         QVERIFY2(storesEffectId(c.rawShaderProfile(PP::WindowClose)), "the clear swept up a path that owned its pack");
-    }
-
-    /// The group writers all refuse while an async discard is in flight, and
-    /// this one is destructive, so the refusal matters more here than on most
-    /// of them. -1 rather than 0: the caller has to be able to tell "refused"
-    /// from "nothing to do", and the banner's action would otherwise report
-    /// success having cleared nothing.
-    void clearStaleParamDescendants_isRefusedWhileAnAsyncDiscardIsInFlight()
-    {
-        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
-        PopulatedControllerFixture fx;
-        auto& c = fx.c;
-
-        const QString parent = PP::WindowAppearance;
-        const PackPair packs = disjointPacks(c, PP::WindowOpen);
-        if (!packs.found)
-            QSKIP("no two bundled packs declare disjoint parameter ids");
-
-        QVERIFY(c.setShaderOverride(parent, packs.a, {}));
-        QCOMPARE(
-            c.setShaderParametersOnPaths({PP::WindowOpen}, QVariantMap{{*declaredIds(c, packs.a).constBegin(), 0.5}}),
-            1);
-        QVERIFY(c.setShaderOverride(parent, packs.b, {}));
-        QCOMPARE(c.staleParamDescendantCountForPaths({parent}), 1);
-
-        // The discard needs something of its own to revert or it never
-        // dispatches a worker, and with no worker in flight there is no
-        // refusal to observe. A profile override rather than a shader edit:
-        // the shader tree lives in Settings, which the discard worker does not
-        // own, so only the profile files give it real work.
-        QVERIFY(c.setOverride(QStringLiteral("global"), QVariantMap{{QStringLiteral("duration"), 200}}));
-
-        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
-        QSignalSpy done(&c, &AnimationsPageController::discardResult);
-        c.asyncRevertPending();
-
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("refusing while an async discard is in flight")));
-        QCOMPARE(c.clearStaleParamDescendantsOnPaths({parent}), -1);
-        QCOMPARE(toasts.count(), 1);
-
-        // The shader tree lives in Settings rather than in the profile files
-        // the worker restores, so the refused call leaving it intact is a real
-        // no-mutation check rather than a race with the discard.
-        QVERIFY2(!c.rawShaderProfile(PP::WindowOpen).isEmpty(), "the refused clear deleted the override anyway");
-
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 
     /// An empty group, and a group of paths that carry nothing, are both zero

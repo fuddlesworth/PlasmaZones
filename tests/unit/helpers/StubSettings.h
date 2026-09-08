@@ -11,6 +11,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QJsonObject>
 #include <QJsonDocument>
 #include <QSet>
 
@@ -2108,6 +2109,28 @@ public:
         Q_EMIT shaderProfileTreeChanged();
         Q_EMIT settingsChanged();
     }
+    QVariantMap motionProfileTree() const override
+    {
+        return m_motionProfileTree;
+    }
+    void setMotionProfileTree(const QVariantMap& value) override
+    {
+        if (m_motionProfileTree == value) {
+            return;
+        }
+        m_motionProfileTree = value;
+        Q_EMIT motionProfileTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString motionProfileTreeJson() const override
+    {
+        return QString::fromUtf8(
+            QJsonDocument(QJsonObject::fromVariantMap(m_motionProfileTree)).toJson(QJsonDocument::Compact));
+    }
+    void setMotionProfileTreeJson(const QString& json) override
+    {
+        setMotionProfileTree(QJsonDocument::fromJson(json.toUtf8()).object().toVariantMap());
+    }
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
     {
         return m_decorationProfileTree;
@@ -3048,6 +3071,7 @@ private:
     // Empty, matching ConfigDefaults::shaderProfileTree() — which is a QVariantMap and so
     // cannot seed the tree type directly. The default IS the empty tree either way.
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    QVariantMap m_motionProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
     bool m_pointerEnabled = ConfigDefaults::pointerEnabled();

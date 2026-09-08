@@ -559,7 +559,7 @@ public:
     }
     ProfilePageController* profilesPage() const
     {
-        return m_profilesPage;
+        return m_profilesPage.get();
     }
 
     PhosphorControl::ApplicationController* app() const
@@ -803,8 +803,9 @@ Q_SIGNALS:
     /// pageResetFailed. The animation branch reconciles value-based, so a
     /// refused revert leaves the page BADGED with no other word. The only
     /// refusal is a WRITE that could not complete, so `reason` is always
-    /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
-    /// first so a benign refusal during a global async discard never emits.
+    /// `ReasonOverridesNotCleared`. Since schema v8 the animation revert has
+    /// no failure mode a user can reach — it refuses only with no settings
+    /// object at all — so this is effectively a wiring-bug signal there.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
     void scopeScreenNameChanged();
@@ -1018,13 +1019,7 @@ private:
     /// same thing done to the in-memory session. The whole body runs under
     /// m_loading, and the caller owns the trailing setNeedsSave(false).
     ///
-    /// @param treatAsyncRevertAsClean whether an animation revert refused because
-    ///        an async discard already owns the snapshot map counts as clean. True
-    ///        on Discard, where that worker IS the restore. False on import, where
-    ///        the snapshots hold pre-import content for files just rewritten.
-    /// @return whether the animation page's snapshots came back clean. False means
-    ///         the adopt only partly landed and needsSave must not be cleared.
-    bool adoptOnDiskState(bool treatAsyncRevertAsClean);
+    void adoptOnDiskState();
 
     /// Shared tail of the two KZones import entry points: stash the layout to
     /// auto-select, schedule the layout refresh, report count and message to QML,
@@ -1097,10 +1092,6 @@ private:
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
-    /// Profiles page sub-controller. Parented to `this`; owns its ProfileStore
-    /// internally. Registered via regPage so its active-pointer staging
-    /// participates in the framework's Save/Discard.
-    ProfilePageController* m_profilesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.
@@ -1308,6 +1299,24 @@ private:
     // determinism: m_app unregisters its tracked domains against live objects
     // instead of leaving the teardown order to self-nulling handles.
     std::unique_ptr<PhosphorControl::ApplicationController> m_app;
+
+    /// Profiles page sub-controller. Owns its ProfileStore internally, and
+    /// that store holds closures over `m_rulesPage` (a RuleController&).
+    ///
+    /// Hence the `unique_ptr`, following the `m_tilingAlgorithmPage` idiom: a
+    /// member unique_ptr resets BEFORE ~QObject reaches the raw children, so
+    /// this is destroyed while the RuleController it borrows is still alive.
+    /// As a plain child it would have gone the other way — ~QObject deletes
+    /// children in construction order, m_rulesPage first, leaving the store
+    /// holding a dangling reference for the rest of teardown. Still
+    /// constructed with parent `this`, because regPage adopts a parentless
+    /// page to m_app, which is destroyed first and would double-free it.
+    /// Registered via regPage so its active-pointer staging participates in
+    /// the framework's Save/Discard, which is why it is declared AFTER m_app:
+    /// reverse member order then destroys this page first, with m_app still up
+    /// to unregister it, exactly as the old explicit delete at the top of the
+    /// destructor body did.
+    std::unique_ptr<ProfilePageController> m_profilesPage;
 
     void buildApplicationController();
 

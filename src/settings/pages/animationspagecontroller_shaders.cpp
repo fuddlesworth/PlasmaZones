@@ -172,6 +172,21 @@ QVariantMap AnimationsPageController::rawShaderProfile(const QString& path) cons
     return shaderProfileToMap(tree.directOverride(path));
 }
 
+QVariantMap AnimationsPageController::allRawShaderProfiles() const
+{
+    using namespace PhosphorAnimationShaders;
+    QVariantMap out;
+    if (!m_settings)
+        return out;
+    // One tree fetch for every path, which is the whole point of this overload
+    // existing beside rawShaderProfile().
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& path : paths)
+        out.insert(path, shaderProfileToMap(tree.directOverride(path)));
+    return out;
+}
+
 QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path) const
 {
     using namespace PhosphorAnimationShaders;
@@ -300,18 +315,6 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (!m_settings || path.isEmpty())
         return false;
 
-    // Same race rationale as setOverride/clearOverride in
-    // animationspagecontroller_overrides.cpp — the shader tree is
-    // captured in m_pendingFileSnapshots when a discard starts, and
-    // a concurrent mutation here would race the worker's
-    // setShaderProfileTree write. The QML does NOT gate the picker on
-    // `discarding` (only Main.qml's Apply/Discard buttons are gated), so this
-    // guard is load-bearing rather than defence-in-depth.
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "setShaderOverride: refusing write while async discard is in flight; path=" << path;
-        return false;
-    }
-
     if (!acceptableShaderEffectId(effectId, QLatin1String("setShaderOverride"))) {
         return false;
     }
@@ -398,10 +401,6 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "clearShaderOverride: refusing while async discard is in flight; path=" << path;
-        return false;
-    }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     if (!tree.hasOverride(path))
         return false;
@@ -423,16 +422,6 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
-    if (m_asyncRevertInFlight) {
-        // -1, not 0: a caller must be able to tell "refused, try again" from
-        // "there was nothing to clear" — the clearAllOverrides convention.
-        qCWarning(lcConfig) << "clearShaderOverrideDescendants: refusing while async discard is in flight; path="
-                            << path;
-        // Not "Cannot reset": the only caller is the card's "Clear shadowing
-        // children" button, which the user did not experience as a reset.
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
-    }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     const QStringList toClear = collectShaderOverrideDescendants(tree, path);
     if (toClear.isEmpty())

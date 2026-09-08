@@ -7,6 +7,10 @@
 #include <PhosphorEngine/WindowRegistry.h>
 
 #include "scrollverbresolve_p.h"
+// lcScrollEngine is used below and reaches this file only through a sibling
+// translation unit under a UNITY build, so its absence breaks a non-unity
+// configure while the default build stays green.
+#include "scrollenginelogging.h"
 
 #include <cmath>
 
@@ -186,8 +190,12 @@ void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
                                   screen);
         return;
     }
-    const int activeCol = state->strip().activeColumnIndex();
-    const bool willExpel = activeCol >= 0 && state->strip().columns().at(activeCol).tiles.size() > 1;
+    // Through the guarded accessor rather than indexing with
+    // activeColumnIndex(): that index is returned unclamped, and the class's
+    // own activeColumn() checks BOTH ends, so a stale index past a shrunken
+    // column list would be an out-of-bounds read here and nowhere else.
+    const auto* activeColumn = state->strip().activeColumn();
+    const bool willExpel = activeColumn != nullptr && activeColumn->tiles.size() > 1;
     const QString action = willExpel ? QStringLiteral("expel") : QStringLiteral("consume");
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().consumeOrExpel(delta, params);
@@ -536,7 +544,18 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // percent reads as "nothing to move" rather than reaching qRound, the
     // same guard the drag auto-scroll tick applies to its public qreal: no
     // in-tree caller can pass one, but this is exported library API.
-    const int deltaPx = std::isfinite(percent) ? qRound(percent / 100.0 * params.axis.mainSize(params.workArea)) : 0;
+    //
+    // Finite is not enough on its own. `qRound` of a double past int's range is
+    // undefined, and a caller outside this repo can pass 1e12 as easily as a
+    // NaN — the same hazard `setColumnWidth` guards against a few functions
+    // below, and for the same reason. Bounded before the round rather than
+    // after, since after is already too late. The band is far wider than any
+    // meaningful scroll (a hundred viewports) and far inside int.
+    constexpr qreal kMaxScrollPx = 1e6;
+    const qreal rawPx = std::isfinite(percent)
+        ? qBound(-kMaxScrollPx, percent / 100.0 * params.axis.mainSize(params.workArea), kMaxScrollPx)
+        : 0.0;
+    const int deltaPx = qRound(rawPx);
     scrollViewResolved(deltaPx, screen, state, params);
 }
 
@@ -891,6 +910,7 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 }
 
 #undef P_SCROLL_VERB
+#undef P_SCROLL_TILE_FOCUS_VERB
 // P_SCROLL_RESOLVE deliberately NOT #undef'd — it comes from
 // scrollverbresolve_p.h, whose include guard would make an #undef here erase
 // it for the next file in a unity chunk.

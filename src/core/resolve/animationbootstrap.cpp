@@ -2,14 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "animationbootstrap.h"
+#include "config/settings.h"
 
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
+// ProfilePaths::Global — the chain root the global profile registers at.
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ProfileTree.h>
 
 #include <QDir>
+#include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QStandardPaths>
 #include <QStringList>
@@ -22,10 +27,12 @@ namespace PlasmaZones {
 constexpr QLatin1StringView kShellAnimationFamilySeedsOwnerTag{"plasmazones-shell-family-seeds"};
 
 namespace {
-// Owner-tag partition used by secondary processes' ProfileLoader. Distinct
-// from the daemon's tag so the registry remains correctly partitioned even
-// in a hypothetical scenario where daemon and settings/editor share a
-// process — today they don't, but the narrower contract is correct.
+// Owner-tag partition the secondary processes (settings, editor) install the
+// config-backed timing tree under. Distinct from the daemon's tag so the
+// registry remains correctly partitioned even in a hypothetical scenario where
+// daemon and settings/editor share a process — today they don't, but the
+// narrower contract is correct. No resolver distinguishes the two tags; only
+// the seed tag is special.
 constexpr QLatin1StringView kSecondaryProfilesOwnerTag{"plasmazones-secondary-profiles"};
 
 QString writableUserDir(QLatin1StringView xdgRelative)
@@ -71,55 +78,38 @@ QStringList discoverDataDirs(QLatin1StringView xdgRelative)
 }
 } // namespace
 
-AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistry& curveRegistry,
-                                                 PhosphorAnimation::PhosphorProfileRegistry& profileRegistry,
-                                                 QLatin1StringView ownerTag, QObject* parent)
+AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistry& curveRegistry, QObject* parent)
 {
     using namespace PhosphorAnimation;
 
     AnimationLoaderHandles handles;
     handles.dirs.curveDirs = discoverDataDirs(QLatin1StringView{"plasmazones/curves"});
-    handles.dirs.profileDirs = discoverDataDirs(QLatin1StringView{"plasmazones/profiles"});
 
-    // Materialise the user dirs eagerly so live-reload works on fresh
+    // Materialise the curves dir eagerly so live-reload works on fresh
     // installs. `WatchedDirectorySet`'s parent-watch climb refuses to
     // attach a `QFileSystemWatcher` to forbidden ancestors (`$HOME`,
-    // `$XDG_DATA_HOME`, etc.) — without these dirs existing, the climb
-    // terminates at `~/.local/share` and NO watch is installed. The
-    // user could then drop `~/.local/share/plasmazones/profiles/foo.json`
-    // and live-reload would silently never fire until daemon restart.
+    // `$XDG_DATA_HOME`, etc.) — without the dir existing, the climb
+    // terminates at `~/.local/share` and NO watch is installed, so a curve
+    // the user drops in later would not be picked up until a restart.
     // Failures are non-fatal — the initial on-demand scan still works
     // without a watch.
+    //
+    // The profiles dir is materialised too, but for an unrelated reason and
+    // NOT for live reload: nothing watches it since schema v8. It holds the
+    // user's saved-preset library, which the animations page creates on
+    // demand, and the v8 migration reads pre-v8 override files out of it.
     QDir().mkpath(writableUserDir(QLatin1StringView{"plasmazones/curves"}));
     QDir().mkpath(writableUserDir(QLatin1StringView{"plasmazones/profiles"}));
 
-    // Construct loaders with NO initial load — callers run the scan
+    // Construct the loader with NO initial load — callers run the scan
     // explicitly (runInitialCurveLoad → seedShellAnimationFamilies →
-    // runInitialProfileLoad) AFTER they have wired any consumer-side
+    // installMotionProfileTree) AFTER they have wired any consumer-side
     // signals so the initial scan's emits are observed.
     //
     // Registry reference is captured at loader construction — this
     // prevents any later async rescan from landing on a different
     // registry than the one the caller initialized against.
     handles.curveLoader = std::make_unique<CurveLoader>(curveRegistry, parent);
-    handles.profileLoader = std::make_unique<ProfileLoader>(profileRegistry, curveRegistry, ownerTag, parent);
-
-    // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
-    // whose `curve` spec references a user-authored curve name that
-    // wasn't yet in CurveRegistry at parse time is stored with
-    // `curve = nullptr` (falls back to library default at animation
-    // time). When the user drops or edits a curve JSON AFTER the
-    // profile files were scanned, we need to re-parse every profile
-    // so the newly-available curve gets resolved. Without this wire,
-    // drop-order-matters: curves-before-profiles works, profiles-
-    // before-curves silently loses the curve reference until the
-    // profile file itself is touched.
-    //
-    // ProfileLoader::requestRescan goes through DirectoryLoader's
-    // debounced rescan path, so a curve-pack edit that changes many
-    // files coalesces into one profile rescan.
-    QObject::connect(handles.curveLoader.get(), &CurveLoader::curvesChanged, handles.profileLoader.get(),
-                     &ProfileLoader::requestRescan);
 
     return handles;
 }
@@ -134,12 +124,28 @@ void runInitialCurveLoad(PhosphorAnimation::CurveLoader& curveLoader, const Anim
     curveLoader.loadFromDirectories(dirs.curveDirs, LiveReload::On);
 }
 
-void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
+void installMotionProfileTree(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                              const PhosphorAnimation::CurveRegistry& curves, const QVariantMap& treeJson,
+                              const QString& ownerTag)
 {
     using namespace PhosphorAnimation;
 
-    profileLoader.loadLibraryBuiltins();
-    profileLoader.loadFromDirectories(dirs.profileDirs, LiveReload::On);
+    const ProfileTree tree = ProfileTree::fromJson(QJsonObject::fromVariantMap(treeJson), curves);
+
+    QHash<QString, Profile> profiles;
+    const QStringList paths = tree.overriddenPaths();
+    profiles.reserve(paths.size());
+    for (const QString& path : paths) {
+        profiles.insert(path, tree.directOverride(path));
+    }
+
+    // reloadFromOwner, not a loop of registerProfile: it REPLACES this owner's
+    // whole partition, so a path the user just cleared disappears from the
+    // registry instead of lingering at its last value. Entries owned by other
+    // tags (the family seeds, the settings-driven global) are untouched.
+    // Called with an empty map on a config that carries no overrides, which is
+    // exactly the clear-everything case and must not be short-circuited.
+    registry.reloadFromOwner(ownerTag, profiles);
 }
 
 void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,
@@ -152,30 +158,32 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
     // mattered enough to preserve). These re-create the prior bundled-
     // JSON character WITHOUT shadowing leaf-level Settings overrides:
     // PhosphorProfileRegistry::resolveWithInheritance walks up from each
-    // leaf, so a Settings edit at the leaf wins, an unset leaf
+    // leaf, so a per-event override at the leaf wins, an unset leaf
     // inherits from its family parent here, and an unseeded family
     // falls through to library defaults (150 ms OutCubic).
     //
-    // Registered under the "shell-family-seeds" owner tag so the
-    // ProfileLoader's reloadFromOwner correctly overwrites a seed when
-    // the user authors `~/.local/share/plasmazones/profiles/<path>.json`
-    // for the same path (loader's "direct-owner-wins" check only
-    // protects empty-owner entries, not other tagged ones). Settings
-    // publishes via direct-owner registerProfile, which always wins
-    // because it overwrites unconditionally and direct-owner is
-    // protected from the loader on subsequent rescans.
+    // Registered under the "shell-family-seeds" owner tag, which the registry
+    // stores as a SEPARATE layer. That is what lets a per-event override sit
+    // on top of a seed without destroying it, and what makes clearing that
+    // override reveal the seed again rather than dropping to library defaults.
+    // The global profile joins this same layer while the user has not set one,
+    // and moves out of it the moment they do — that move is what makes a
+    // "retime everything" control outrank the per-family character, and the
+    // callers that perform it must evict the entry from the layer they are
+    // moving it out of (see publishActiveAnimationProfile).
     //
-    // MUST be called AFTER curves are loaded (so `curves.tryCreate`
-    // can resolve curve names like "widget-out") and BEFORE the
-    // profile loader's initial scan (so a user JSON at a seeded path
-    // can overwrite the seed in the same setup pass).
+    // MUST be called AFTER curves are loaded (so `curves.tryCreate` can
+    // resolve names like "widget-out") and BEFORE `installMotionProfileTree`,
+    // so a per-event override lands in the upper layer above its seed rather
+    // than racing it. Re-run whenever the curve registry reloads: each seeded
+    // Profile holds the curve it resolved at parse time.
     struct FamilySeed
     {
         QLatin1StringView path;
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 29> seeds{{
+    constexpr std::array<FamilySeed, 27> seeds{{
         // ── Popups ────────────────────────────────────────────────
         // Family parent — leaves (popup.layoutPicker.*,
         // popup.zoneSelector.*, popup.snapAssist.*, popup.cheatsheet.*)
@@ -233,11 +241,27 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         {QLatin1StringView{"widget.pulse.slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
 
         // ── Windows ───────────────────────────────────────────────
-        // Family ease-out for open/move/focus/maximize;
-        // close is the notable ease-in exception. (No resize legs exist —
-        // they were dropped from the taxonomy, see profilepaths.cpp.)
-        {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
-        {QLatin1StringView{"window.appearance.close"}, QLatin1StringView{"cubic-in"}, 150.0},
+        // NO window seeds. There used to be two — a `window` family root at
+        // 200 ms widget-out and a `window.appearance.close` leaf at 150 ms
+        // cubic-in — and they were preview noise with a user-visible cost.
+        //
+        // Window legs are animated by the COMPOSITOR, and the D-Bus getter
+        // strips this layer before shipping the tree, deliberately: a `window`
+        // seed arriving as an override would pin every window leg's duration
+        // and turn the global animation settings into a no-op, which is #795.
+        // So no seed here ever reached the effect.
+        //
+        // They did reach the settings page, which resolves an unoverridden
+        // path through this same registry. The result was a card confidently
+        // reporting 200 ms for an animation the compositor was playing at the
+        // user's global duration — preview and reality disagreeing out of the
+        // box, which is the one thing this architecture exists to prevent.
+        //
+        // Nothing in-process resolves a `window.*` profile (the shell, editor
+        // and settings QML animate their own surfaces, which keep their seeds
+        // below), so removing them costs no behaviour and closes the gap at
+        // its source. Do NOT re-add one without a consumer that the getter's
+        // exclusion does not cut off.
 
         // ── Editor ────────────────────────────────────────────────
         // Layout-editor fill-preview / snap-resize animations on the
@@ -281,10 +305,8 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
 AnimationBootstrap::AnimationBootstrap()
     : m_curveRegistry(std::make_unique<PhosphorAnimation::CurveRegistry>())
 {
-    auto handles =
-        constructAnimationLoaders(*m_curveRegistry, m_profileRegistry, kSecondaryProfilesOwnerTag, /*parent=*/nullptr);
+    auto handles = constructAnimationLoaders(*m_curveRegistry, /*parent=*/nullptr);
     m_curveLoader = std::move(handles.curveLoader);
-    m_profileLoader = std::move(handles.profileLoader);
 
     // Configure the registry's two-layer resolveWithInheritance so
     // seed entries form the lowest-precedence layer — a user edit at
@@ -299,9 +321,84 @@ AnimationBootstrap::AnimationBootstrap()
     // when the user authored a JSON at the same path), then profiles.
     runInitialCurveLoad(*m_curveLoader, handles.dirs);
     seedShellAnimationFamilies(m_profileRegistry, *m_curveRegistry);
-    runInitialProfileLoad(*m_profileLoader, handles.dirs);
+    // The per-event timing tree is NOT installed here: it is config, and the
+    // composition root has no Settings instance yet at bootstrap-construction
+    // time. The root calls applyMotionProfileTree once it does, and again on
+    // every change.
+}
+
+void AnimationBootstrap::applyMotionProfileTree(const QVariantMap& treeJson)
+{
+    installMotionProfileTree(m_profileRegistry, *m_curveRegistry, treeJson, QString(kSecondaryProfilesOwnerTag));
+}
+
+void AnimationBootstrap::applyGlobalProfile(const PhosphorAnimation::Profile& profile, bool explicitlySet)
+{
+    // Same layer choice the daemon makes in publishActiveAnimationProfile, so
+    // a preview resolves through the same precedence the compositor will —
+    // including the eviction below, without which this process's own previews
+    // stay pinned to a cleared global for the life of the process.
+    if (explicitlySet) {
+        m_profileRegistry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profile);
+    } else {
+        // registerProfile writes one store and never clears the other, so the
+        // demotion to the seed layer has to drop the untagged entry itself or
+        // the resolver keeps overlaying it above every seed. See the fuller
+        // rationale at the daemon's copy of this branch.
+        //
+        // Guarded on an empty owner: `global` is a real taxonomy path, so a
+        // motion-tree override can legitimately hold it under the secondary
+        // tag, and that entry is not ours to evict.
+        if (m_profileRegistry.ownerOf(PhosphorAnimation::ProfilePaths::Global).isEmpty()) {
+            m_profileRegistry.unregisterProfile(PhosphorAnimation::ProfilePaths::Global);
+        }
+        m_profileRegistry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profile,
+                                          QString(kShellAnimationFamilySeedsOwnerTag));
+    }
 }
 
 AnimationBootstrap::~AnimationBootstrap() = default;
+
+void AnimationBootstrap::bindToSettings(Settings& settings, bool keepLive)
+{
+    // Curve resolution first: a Profile holds the curve it RESOLVED at parse
+    // time, so the two applies below have to run against this process's own
+    // registry. Left on the never-populated process static, a global naming a
+    // user-authored curve previews as the library default while the compositor
+    // plays the real one.
+    settings.setCurveRegistry(curveRegistry());
+
+    const auto applyTree = [this, &settings]() {
+        applyMotionProfileTree(settings.motionProfileTree());
+    };
+    // The LAYER the global lands in is chosen by hasExplicitAnimationProfile,
+    // matching the daemon: an unset global is a shipped default and belongs
+    // beneath the family seeds, one the user chose belongs above them.
+    const auto applyGlobal = [this, &settings]() {
+        applyGlobalProfile(settings.animationProfile(), settings.hasExplicitAnimationProfile());
+    };
+    applyTree();
+    applyGlobal();
+
+    if (!keepLive) {
+        return;
+    }
+
+    QObject::connect(&settings, &Settings::motionProfileTreeChanged, &settings, applyTree);
+    QObject::connect(&settings, &Settings::animationProfileChanged, &settings, applyGlobal);
+
+    // Curves reload live here, and everything parsed against this registry —
+    // the family seeds and every tree entry — holds a stale curve object the
+    // moment a curve file changes. Re-run all three or the page previews a
+    // curve the compositor is no longer playing.
+    if (auto* loader = curveLoader()) {
+        QObject::connect(loader, &PhosphorAnimation::CurveLoader::curvesChanged, &settings,
+                         [this, applyTree, applyGlobal]() {
+                             seedShellAnimationFamilies(*profileRegistry(), *curveRegistry());
+                             applyTree();
+                             applyGlobal();
+                         });
+    }
+}
 
 } // namespace PlasmaZones

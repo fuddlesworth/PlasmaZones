@@ -294,7 +294,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             // (not just `shared/`) bakes identically here and can't false-fail
             // the gate. The sibling zone validator uses the same
             // {root/shared, root} pair.
-            const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
+            // Sibling shared/ first, then the family's XDG roots, so an
+            // INSTALLED pack (whose helpers live in the system prefix, not
+            // beside it) resolves its includes the way the runtime does.
+            const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
             QString err;
             // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body, no
             // main()) into a full TU before expansion, identical to the daemon /
@@ -327,7 +330,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         // that resolves an include from the packs-root (not just `shared/`) bakes
         // identically here and can't false-fail the gate. The sibling zone
         // validator uses the same {root/shared, root} pair.
-        const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
+        // Sibling shared/ first, then the family's XDG roots, so an
+        // INSTALLED pack (whose helpers live in the system prefix, not
+        // beside it) resolves its includes the way the runtime does.
+        const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
         for (const QString& buf : eff.bufferShaderPaths) {
             if (!QFile::exists(buf)) {
                 continue; // missing buffers already linted above
@@ -377,7 +383,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         // that resolves an include from the packs-root (not just `shared/`) bakes
         // identically here and can't false-fail the gate. The sibling zone
         // validator uses the same {root/shared, root} pair.
-        const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
+        // Sibling shared/ first, then the family's XDG roots, so an
+        // INSTALLED pack (whose helpers live in the system prefix, not
+        // beside it) resolves its includes the way the runtime does.
+        const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
             // Beside the FRAGMENT (matching the daemon runtime and the comment

@@ -536,6 +536,12 @@ target_link_libraries(test_migration_v6_to_v7
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v6_to_v7 COMMAND test_migration_v6_to_v7)
 
+# v7→v8: per-event motion timing overrides move from loose files into config.
+add_executable(test_migration_v7_to_v8 config/migrations/test_migration_v7_to_v8.cpp)
+target_link_libraries(test_migration_v7_to_v8
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v7_to_v8 COMMAND test_migration_v7_to_v8)
+
 # Retired provider-default rule pruned from rules.json (finalizeV4Conversion cleanup).
 add_executable(test_provider_default_cleanup config/test_provider_default_cleanup.cpp)
 target_link_libraries(test_provider_default_cleanup
@@ -551,13 +557,12 @@ add_test(NAME test_rule_store COMMAND test_rule_store)
 # ═══════════════════════════════════════════════════════════════════════════════
 # daemon/ - Daemon-level Integration Tests (animation profile publication, etc.)
 # ═══════════════════════════════════════════════════════════════════════════════
-# Daemon-level publication contract: ProfileLoader registers user JSON
-# under its owner tag, Settings publishes to the registry's `Global`
-# path under the empty/direct owner, and a loader-side `Global.json`
-# collision is silently skipped (Phase 1b inversion: Settings wins on
-# settings-driven paths). Mirrors the daemon's setupAnimationProfiles
-# without constructing a real Daemon (which requires D-Bus + KWin
-# binding - out of scope for unit tests).
+# Daemon-level publication contract: installMotionProfileTree registers the
+# user's per-event timing under its owner tag, Settings publishes to the
+# registry's `Global` path under the empty/direct owner, and a tree entry at
+# `Global` is silently skipped (Settings wins on settings-driven paths).
+# Mirrors the daemon's setupAnimationProfiles without constructing a real
+# Daemon (which requires D-Bus + KWin binding - out of scope for unit tests).
 add_executable(test_animation_profile_publication daemon/test_animation_profile_publication.cpp)
 target_link_libraries(test_animation_profile_publication
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorAnimation::PhosphorAnimation)
@@ -1714,6 +1719,9 @@ target_link_libraries(test_animations_motion_sets
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
+# The shader-half round-trip tests use AnimationsControllerFixture, whose
+# PopulatedControllerFixture::dataDir() names the bundled pack tree.
+target_compile_definitions(test_animations_motion_sets PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 
 # Companion test executable: the user-preset library (AnimationPresetLibrary).

@@ -87,8 +87,9 @@ void SettingsController::buildApplicationController()
     // belongs here rather than among the tools. regPage trackDomain()s the
     // controller so its staged active-profile pointer joins the Save/Discard
     // transaction; the applied config rides the Settings staging path.
-    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("pages/profiles/ProfilesPage.qml"),
-            QStringLiteral("bookmarks"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regPage(m_profilesPage.get(), QString(), PhosphorI18n::tr("Profiles"),
+            QStringLiteral("pages/profiles/ProfilesPage.qml"), QStringLiteral("bookmarks"), /*collapsible=*/false,
+            /*divider=*/false, AdvancedOnly);
     // General leads near the top (mirrors the Animations section leading with
     // its own "General" child). Divider after it closes the top/global block.
     regPage(m_generalPage, QString(), PhosphorI18n::tr("General"), QStringLiteral("GeneralPage.qml"),

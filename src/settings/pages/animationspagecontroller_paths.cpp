@@ -13,6 +13,7 @@
 #include "phosphor_i18n.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QLatin1Char>
 #include <QLatin1String>
@@ -255,6 +256,11 @@ QString AnimationsPageController::eventLabel(const QString& path) const
     return segmentLabel(segment);
 }
 
+QString AnimationsPageController::shaderIsolationRoot(const QString& path) const
+{
+    return PhosphorAnimationShaders::shaderPathIsolationRoot(path);
+}
+
 QStringList AnimationsPageController::parentChain(const QString& path) const
 {
     QStringList chain;
@@ -264,6 +270,14 @@ QStringList AnimationsPageController::parentChain(const QString& path) const
         cur = PhosphorAnimation::ProfilePaths::parentPath(cur);
     }
     return chain;
+}
+
+QStringList AnimationsPageController::parentChainLabels(const QString& path) const
+{
+    QStringList out;
+    for (const QString& step : parentChain(path))
+        out.append(eventLabel(step));
+    return out;
 }
 
 } // namespace PlasmaZones

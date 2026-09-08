@@ -25,6 +25,7 @@
 #include <PhosphorRules/RuleSet.h>
 #include <PhosphorRules/WindowQuery.h>
 
+#include <QCryptographicHash>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -744,6 +745,14 @@ void PlasmaZonesEffect::scheduleShaderTransitionTeardown(KWin::EffectWindow* win
         // to run — the open animation is cut mid-flight and the window pops. Re-arm
         // for the remainder instead. Any future rebase gets the same treatment for
         // free, which is why this is a re-check and not a suppression special case.
+        //
+        // No iteration budget is needed and none is wanted. Each re-arm waits
+        // at least a millisecond of real time and asks for at most the leg's
+        // own remaining duration, and rebasing happens only while a window is
+        // under restore suppression, which carries its own deadline. So the
+        // chain is bounded by the suppression window plus one duration, and a
+        // budget here would instead cut a leg short exactly in the case this
+        // re-check exists to protect.
         const qint64 remaining =
             static_cast<qint64>(live->durationMs) - (ShaderInternal::shaderClockNowMs() - live->startTimeMs);
         if (remaining > 0) {
@@ -1207,6 +1216,15 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
     // balanced. Name the constant where it is used and there is nothing to resolve.
     PhosphorProtocol::ClientHelpers::loadSettingAsync(
         this, PhosphorProtocol::Service::SettingProperty::MotionProfileTree, [this](const QVariant& v) {
+            // Skip the parse when the bytes have not moved. Both the generic
+            // settingsChanged refresh and this key's own signal land here on
+            // every Save, and rebuilding the tree resolves a curve per node on
+            // the compositor thread.
+            const QByteArray digest = QCryptographicHash::hash(v.toString().toUtf8(), QCryptographicHash::Sha256);
+            if (digest == m_motionProfileTreeDigest) {
+                return;
+            }
+            m_motionProfileTreeDigest = digest;
             dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::MotionProfileTree, v,
                                 [this](const QJsonObject& obj) {
                                     // ProfileTree::fromJson resolves each node's optional
@@ -1249,9 +1267,15 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
     // Before the async settings load lands, the animator's `duration` is still
     // nullopt, so effectiveDuration() falls back to Profile::DefaultDuration
     // while `animationDurationMs()` reports Limits::DefaultAnimationDurationMs.
-    // Callers rely on those two agreeing (it is what makes the pre-load window
-    // resolve to the same duration either way), so pin the coupling here rather
-    // than let a future bump to one silently skew it.
+    // Callers rely on those two agreeing, so pin the coupling here rather than
+    // let a future bump to one silently skew it.
+    //
+    // Note what this does NOT say: neither constant is the duration a user
+    // actually runs at. ConfigDefaults::animationDuration() ships 320, so on a
+    // default install the pre-load window animates at 150 and settles to 320
+    // once the fetch lands. The assert keeps the two library constants from
+    // drifting APART; closing the gap to the shipped default would be a
+    // behaviour change across every consumer of Profile::DefaultDuration.
     static_assert(
         qRound(PhosphorAnimation::Profile::DefaultDuration) == PhosphorAnimation::Limits::DefaultAnimationDurationMs,
         "Profile::DefaultDuration and Limits::DefaultAnimationDurationMs must agree, or the pre-settings-load "
@@ -1300,11 +1324,11 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()
 {
-    // A per-event animation duration was edited (daemon rescanned a
-    // `profiles/*.json` override). Re-fetch so per-event durations apply
-    // live, without a logout/login. loadCachedSettings() also re-fetches
-    // it on settingsChanged; this dedicated path covers the profile-file
-    // edits that deliberately do NOT ride settingsChanged.
+    // A per-event animation timing override was edited: since schema v8 that
+    // is a write to the `Animations/MotionProfileTree` config key, which the
+    // daemon relays here. Re-fetch so per-event durations apply live, without
+    // a logout/login. loadCachedSettings() also re-fetches on settingsChanged;
+    // this dedicated path exists because the tree carries its own signal.
     loadMotionProfileTreeFromDbus();
 }
 

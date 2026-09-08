@@ -625,18 +625,27 @@ void SettingsAdaptor::initializeRegistry()
     // The merged per-event `PhosphorAnimation::Profile` set — every
     // entry the daemon's `m_profileRegistry` holds, which is the SAME
     // registry the OverlayService SurfaceAnimator resolves OSD / popup
-    // durations from. Settings persists per-event overrides as one
-    // `profiles/<path>.json` file each; the daemon's ProfileLoader
-    // scans them into the registry, and `publishActiveAnimationProfile`
+    // durations from. Settings persists per-event overrides in the
+    // `Animations/MotionProfileTree` config key; the daemon's
+    // motionProfileTreeChanged handler installs them into the registry via
+    // `installMotionProfileTree`, and `publishActiveAnimationProfile`
     // registers the settings-driven `Global` profile on top.
     //
     // The kwin-effect lives in a separate process and cannot share the
     // registry object, so the merged set is flattened into a
     // `ProfileTree` and shipped over the bus: `Global` becomes the
-    // tree baseline, every other path an override. The effect resolves
-    // per-event durations from the tree exactly as the SurfaceAnimator
-    // resolves them from the registry. Read-only — Settings owns the
-    // authoritative per-event files, never the effect.
+    // tree baseline, every other path an override.
+    //
+    // The effect does NOT read that baseline. It seeds `overlayChainOnto` with
+    // its own animator profile (the global duration and curve it already has
+    // from the plain settings keys) and overlays the tree's per-path entries
+    // onto it, and overlayChainOnto skips the tree's own baseline by design.
+    // The baseline is written anyway so the shipped tree is a complete
+    // serialisation of the registry rather than a lossy one. Note the
+    // consequence: the global's minDistance, sequenceMode and staggerInterval
+    // reach the daemon's SurfaceAnimator but have no route to the compositor.
+    //
+    // Read-only — Settings owns the authoritative config key, never the effect.
     if (m_profileRegistry) {
         auto* registry = m_profileRegistry;
         m_getters[QString(PhosphorProtocol::Service::SettingProperty::MotionProfileTree)] = [registry]() {

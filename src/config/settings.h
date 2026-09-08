@@ -561,6 +561,10 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
+    // Per-event animation timing tree — same meta-object dirty-tracking
+    // rationale as shaderProfileTreeJson above.
+    Q_PROPERTY(QString motionProfileTreeJson READ motionProfileTreeJson WRITE setMotionProfileTreeJson NOTIFY
+                   motionProfileTreeChanged)
     // JSON string facade for the per-surface decoration tree — same
     // meta-object dirty-tracking rationale as shaderProfileTreeJson above.
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
@@ -1714,6 +1718,32 @@ public:
     /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
     /// returns a C++-only PhosphorAnimation::Profile value.
     PhosphorAnimation::Profile animationProfile() const;
+
+    /// Whether the user has actually written the global animation Profile,
+    /// as opposed to it being served from ConfigDefaults.
+    ///
+    /// `animationProfile()` cannot answer this: it substitutes the full
+    /// ConfigDefaults blob for an absent key, so a pristine config and a
+    /// deliberately-configured one are byte-identical there. Consumers that
+    /// rank the global profile against the per-family seeds need the
+    /// distinction, because a layer that is always fully engaged would
+    /// otherwise outrank the seeds unconditionally and make them dead.
+    bool hasExplicitAnimationProfile() const override;
+
+    /// Point this Settings at a CurveRegistry after construction.
+    ///
+    /// `animationProfile()` reparses the stored blob on every call and
+    /// resolves its curve through whatever registry this holds. A Settings
+    /// built by the standalone ctor has none, and falls back to a process
+    /// static that nothing ever loads from disk — so a global profile naming a
+    /// user-authored curve resolved to nothing there while the daemon played
+    /// the real curve. A composition root that owns a loaded registry should
+    /// hand it over here before the first read.
+    void setCurveRegistry(PhosphorAnimation::CurveRegistry* registry)
+    {
+        m_curveRegistry = registry;
+    }
+
     void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
@@ -1742,6 +1772,17 @@ public:
     /// loop in SettingsController catches it.
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
+
+    // Per-event animation TIMING tree, persisted as one nested JSON entry
+    // under Animations/MotionProfileTree. The timing sibling of
+    // shaderProfileTree above; carried as a raw map because parsing a
+    // PhosphorAnimation::ProfileTree needs a CurveRegistry the config layer
+    // does not own. The JSON-string facade backs the Q_PROPERTY.
+    QVariantMap motionProfileTree() const override;
+    void setMotionProfileTree(const QVariantMap& tree) override;
+    QVariantMap committedMotionProfileTree() const override;
+    QString motionProfileTreeJson() const override;
+    void setMotionProfileTreeJson(const QString& json) override;
 
     // Per-surface decoration tree (DecorationProfile: shader-pack chain + its
     // per-pack parameters), persisted under the Decorations group. Typed accessors
@@ -2327,6 +2368,29 @@ private:
     // let a palette change masquerade as (or mask) a store mutation.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
+
+    /// The animation Profile blob's state, for change detection across a
+    /// load / discard / reset.
+    ///
+    /// `animationProfileChanged` is a bare signal with no backing Q_PROPERTY,
+    /// so the meta-object loop above never re-emits it — only the setters do,
+    /// and those three paths bypass them. That matters beyond a stale reader:
+    /// the daemon and the settings app both choose which registry LAYER the
+    /// global profile occupies from `hasExplicitAnimationProfile()`, so a
+    /// missed emission leaves the layer wrong until the process restarts.
+    ///
+    /// Carries the explicit-ness as well as the value because explicit-ness is
+    /// a STORAGE fact, not a value: sparse persistence deletes a default-equal
+    /// key, so resetting the blob while it already held the shipped defaults
+    /// changes no value at all and still flips the layer.
+    struct AnimationProfileState
+    {
+        QVariant stored;
+        bool explicitlySet = false;
+        bool operator==(const AnimationProfileState&) const = default;
+    };
+    AnimationProfileState animationProfileState() const;
+    void emitAnimationProfileChangeIfMoved(const AnimationProfileState& before);
 
     // Refresh the committed baseline — the last-persisted value of every
     // schema-declared key. Called at the end of load() and save() (the only

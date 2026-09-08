@@ -717,6 +717,14 @@ public:
         return {};
     }
 
+    /// The timing twin of shaderProfileTree(). Empty: a fresh config owns no
+    /// per-event override, and the built-in seeds live in the profile registry
+    /// at low precedence rather than in the stored blob.
+    static QVariantMap motionProfileTree()
+    {
+        return {};
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;
