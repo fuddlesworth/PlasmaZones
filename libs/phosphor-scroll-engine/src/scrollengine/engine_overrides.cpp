@@ -17,6 +17,13 @@
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
+// Both of these are used below and reach this file only through a sibling
+// translation unit under a UNITY build, so their absence breaks a non-unity
+// configure (a packager build, or -DCMAKE_UNITY_BUILD=OFF) while the default
+// build stays green.
+#include "scrollenginelogging.h"
+
+#include <PhosphorEngine/IWindowTrackingService.h>
 
 #include <QList>
 #include <QMetaType>

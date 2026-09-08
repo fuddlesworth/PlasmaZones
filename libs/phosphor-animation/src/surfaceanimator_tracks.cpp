@@ -3,6 +3,11 @@
 
 #include "surfaceanimator_p.h"
 
+// applyEffectStaticConfig() is called below. A UNITY build happens to see this
+// declaration through a sibling translation unit in the same blob, so the
+// missing include only breaks a non-unity configure — which is what a packager
+// or a -DCMAKE_UNITY_BUILD=OFF developer build uses.
+#include <PhosphorAnimation/AnimationShaderItemConfig.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>

@@ -7,6 +7,10 @@
 #include <PhosphorEngine/WindowRegistry.h>
 
 #include "scrollverbresolve_p.h"
+// lcScrollEngine is used below and reaches this file only through a sibling
+// translation unit under a UNITY build, so its absence breaks a non-unity
+// configure while the default build stays green.
+#include "scrollenginelogging.h"
 
 #include <cmath>
 

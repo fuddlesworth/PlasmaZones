@@ -13,6 +13,7 @@
 
 #include <QLoggingCategory>
 
+#include "handlers/snaphandler.h"
 #include "tilinghandler/tilinghandler.h"
 
 namespace PlasmaZones {
