@@ -626,40 +626,63 @@ private Q_SLOTS:
     /// then every one of its includes as missing. Widening to the family's XDG
     /// roots keeps this a marker lookup — the same roots the runtime resolves
     /// includes against — rather than a guess from metadata.
+    /// EVERY family, not just one. The widening is gated on a hardcoded list of
+    /// family directory names, so a table over a single family proves nothing
+    /// about the others: the pointer family shipped with its marker wired into
+    /// the detector but its directory name missing from that gate, and a
+    /// single-family slot here passed throughout. Every installed pointer pack
+    /// was undetectable in consequence. Adding a family means adding a row.
     void anInstalledPackDetectsThroughTheXdgChain()
     {
         using PlasmaZones::ShaderValidate::detectPackModel;
         using PlasmaZones::ShaderValidate::PackModel;
 
-        QTemporaryDir sysRoot; // stands in for /usr/share
-        QTemporaryDir userRoot; // stands in for ~/.local/share
-        QVERIFY(sysRoot.isValid());
-        QVERIFY(userRoot.isValid());
+        struct Family
+        {
+            const char* dir;
+            const char* marker;
+            PackModel expected;
+        };
+        const QList<Family> families = {
+            {"animations", "animation_uniforms.glsl", PackModel::Animation},
+            {"surface", "surface_uniforms.glsl", PackModel::Surface},
+            {"pointer", "pointer_uniforms.glsl", PackModel::Pointer},
+            {"overlays", "common.glsl", PackModel::Overlay},
+        };
 
-        // The helpers, installed once into the system prefix.
-        const QString sharedDir = sysRoot.filePath(QStringLiteral("plasmazones/animations/shared"));
-        QVERIFY(QDir().mkpath(sharedDir));
-        QFile marker(sharedDir + QStringLiteral("/animation_uniforms.glsl"));
-        QVERIFY(marker.open(QIODevice::WriteOnly));
-        marker.close();
+        for (const Family& family : families) {
+            QTemporaryDir sysRoot; // stands in for /usr/share
+            QTemporaryDir userRoot; // stands in for ~/.local/share
+            QVERIFY2(sysRoot.isValid(), family.dir);
+            QVERIFY2(userRoot.isValid(), family.dir);
 
-        // The pack, installed on its own with no sibling shared/.
-        const QString pack = userRoot.filePath(QStringLiteral("plasmazones/animations/some-pack"));
-        QVERIFY(QDir().mkpath(pack));
-        QVERIFY(!QDir(userRoot.filePath(QStringLiteral("plasmazones/animations/shared"))).exists());
+            const QString familyPath = QStringLiteral("plasmazones/") + QLatin1String(family.dir);
 
-        const QByteArray savedDirs = qgetenv("XDG_DATA_DIRS");
-        const QByteArray savedHome = qgetenv("XDG_DATA_HOME");
-        qputenv("XDG_DATA_DIRS", sysRoot.path().toUtf8());
-        qputenv("XDG_DATA_HOME", userRoot.path().toUtf8());
+            // The helpers, installed once into the system prefix.
+            const QString sharedDir = sysRoot.filePath(familyPath + QStringLiteral("/shared"));
+            QVERIFY2(QDir().mkpath(sharedDir), family.dir);
+            QFile marker(sharedDir + QLatin1Char('/') + QLatin1String(family.marker));
+            QVERIFY2(marker.open(QIODevice::WriteOnly), family.dir);
+            marker.close();
 
-        const std::optional<PackModel> got = detectPackModel(pack);
+            // The pack, installed on its own with no sibling shared/.
+            const QString pack = userRoot.filePath(familyPath + QStringLiteral("/some-pack"));
+            QVERIFY2(QDir().mkpath(pack), family.dir);
+            QVERIFY2(!QDir(userRoot.filePath(familyPath + QStringLiteral("/shared"))).exists(), family.dir);
 
-        qputenv("XDG_DATA_DIRS", savedDirs);
-        qputenv("XDG_DATA_HOME", savedHome);
+            const QByteArray savedDirs = qgetenv("XDG_DATA_DIRS");
+            const QByteArray savedHome = qgetenv("XDG_DATA_HOME");
+            qputenv("XDG_DATA_DIRS", sysRoot.path().toUtf8());
+            qputenv("XDG_DATA_HOME", userRoot.path().toUtf8());
 
-        QVERIFY(got.has_value());
-        QCOMPARE(*got, PackModel::Animation);
+            const std::optional<PackModel> got = detectPackModel(pack);
+
+            qputenv("XDG_DATA_DIRS", savedDirs);
+            qputenv("XDG_DATA_HOME", savedHome);
+
+            QVERIFY2(got.has_value(), family.dir);
+            QVERIFY2(*got == family.expected, family.dir);
+        }
     }
 
     /// The pack's OWN sibling shared/ always comes first in the include roots,

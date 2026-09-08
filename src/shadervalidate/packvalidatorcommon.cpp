@@ -133,7 +133,8 @@ namespace {
 /// so the name identifies the family without guessing at metadata.
 bool isKnownFamilyDir(const QString& name)
 {
-    return name == QLatin1String("animations") || name == QLatin1String("overlays") || name == QLatin1String("surface");
+    return name == QLatin1String("animations") || name == QLatin1String("overlays") || name == QLatin1String("surface")
+        || name == QLatin1String("pointer");
 }
 
 /// Which family's marker header @p shared holds, if any.

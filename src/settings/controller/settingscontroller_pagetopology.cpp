@@ -106,9 +106,13 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // that predicate routes Reset, Discard and dirty through the shared
     // DecorationProfileTree machinery. The pointer page owns Pointer.Enabled
     // and Pointer.Chain through the ordinary pageOwnedConfigKeys manifest
-    // instead, so its Reset touches those two keys and nothing else. They are
-    // folded into the two parent-bucket entries below so a collapsed Surfaces
-    // or Library section still lights its badge for a pending pointer edit.
+    // instead, so its Reset touches those two keys and nothing else. Both are
+    // folded into the parent-bucket entries below for navigation, but only the
+    // Surfaces badge can ever light for a pointer edit: that bucket carries the
+    // pointer PAGE, whose manifest entry gives isPageDirty a value-based
+    // answer. The Library bucket carries only the pack browser, which is
+    // read-only and writes no config key, so it has no dirty state of its own
+    // to contribute and is folded in for the collapse behaviour alone.
     static const QString kPointerPage = QStringLiteral("decorations-pointer");
     static const QString kPointerShaders = QStringLiteral("decorations-pointer-shaders");
     // Mid-level *-cat collapsible category headers under the snapping /
