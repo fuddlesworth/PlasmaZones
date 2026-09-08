@@ -159,7 +159,16 @@ void ProfileTree::overlay(Profile& dst, const Profile& src)
 QJsonObject ProfileTree::toJson() const
 {
     QJsonObject root;
-    root.insert(QLatin1String("baseline"), m_baseline.toJson());
+    // Omitted when it carries nothing. fromJson treats an absent baseline the
+    // same as an empty one, and always emitting it wrote a dead `"baseline":{}`
+    // into every stored tree, which is then copied on every read and joins
+    // every settings-profile delta. Config's own canonicalisation strips it
+    // afterwards, but only when `overrides` is empty too, so the usual tree
+    // kept it.
+    const QJsonObject baseline = m_baseline.toJson();
+    if (!baseline.isEmpty()) {
+        root.insert(QLatin1String("baseline"), baseline);
+    }
 
     // Array shape preserves user-visible ordering — QJsonObject keys are
     // alphabetically sorted on serialization.

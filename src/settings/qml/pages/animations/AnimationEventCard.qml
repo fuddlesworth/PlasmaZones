@@ -386,7 +386,8 @@ Item {
     readonly property string _shaderIsolationRoot: settingsController.animationsPage.shaderIsolationRoot(root.eventPath)
 
     function parentChainText() {
-        var chain = settingsController.animationsPage.parentChain(root.eventPath);
+        // Labels, not raw dotted paths: this text is read by the user.
+        var chain = settingsController.animationsPage.parentChainLabels(root.eventPath);
         // Drop chain[0] (self) — show only ancestors as "window ← global"
         if (chain.length <= 1)
             return "";

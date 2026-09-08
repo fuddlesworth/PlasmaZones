@@ -182,6 +182,14 @@ public:
     /// root. Useful for "snap → zone → global" breadcrumbs.
     Q_INVOKABLE QStringList parentChain(const QString& path) const;
 
+    /// The same chain, each entry replaced by its translated label.
+    ///
+    /// What the "Inheriting from" line should show. Joining `parentChain`
+    /// straight into that sentence put internal dotted identifiers in front of
+    /// the user, which `segmentLabel` exists to prevent everywhere else a path
+    /// is displayed.
+    Q_INVOKABLE QStringList parentChainLabels(const QString& path) const;
+
     /// The isolation root governing @p path's SHADER resolution, or an empty
     /// string when the path inherits normally.
     ///

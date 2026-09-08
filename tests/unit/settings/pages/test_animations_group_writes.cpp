@@ -31,9 +31,16 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QVariant>
+
+#include "config/configdefaults.h"
+#include "config/configkeys.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -641,6 +648,60 @@ private Q_SLOTS:
     }
 
     // ─── Refusal parity across the group writers ──────────────────────────
+
+    /// A malformed MotionProfileTree blob can be repaired by writing over it.
+    ///
+    /// The key is hand-editable. A blob that is not a map at all reads back as
+    /// an empty map, so the setter's equality short-circuit saw "already empty,
+    /// nothing to do" and returned before writing. The junk then sat in the
+    /// config with no route to repair it from inside the app, since every
+    /// writer goes through this setter.
+    void aMalformedTreeBlobIsRepairedRatherThanLeftInPlace()
+    {
+        IsolatedConfigGuard guard;
+
+        // Planted the only way it can happen: straight into config.json, the
+        // way a hand edit does. Every writer inside the app goes through the
+        // setter, so the app itself cannot produce this state.
+        const QString configPath = ConfigDefaults::configFilePath();
+        QVERIFY(QDir().mkpath(QFileInfo(configPath).absolutePath()));
+        QJsonObject root;
+        {
+            QFile in(configPath);
+            if (in.open(QIODevice::ReadOnly))
+                root = QJsonDocument::fromJson(in.readAll()).object();
+        }
+        QJsonObject animations = root.value(ConfigKeys::animationsGroup()).toObject();
+        animations.insert(ConfigKeys::motionProfileTreeKey(), QStringLiteral("not a tree"));
+        root.insert(ConfigKeys::animationsGroup(), animations);
+        {
+            QFile out(configPath);
+            QVERIFY(out.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            const QByteArray bytes = QJsonDocument(root).toJson();
+            QCOMPARE(out.write(bytes), static_cast<qint64>(bytes.size()));
+        }
+
+        Settings settings;
+        // Reads back empty, indistinguishable from "no overrides stored".
+        QVERIFY(settings.motionProfileTree().isEmpty());
+
+        // The repair case is the one that canonicalises to EMPTY, which is
+        // what a reset asks for: with the short-circuit comparing against the
+        // canonical read, "already empty" was true and the setter returned
+        // before touching the junk.
+        settings.setMotionProfileTree({});
+        settings.save();
+
+        QJsonObject after;
+        {
+            QFile in(configPath);
+            QVERIFY(in.open(QIODevice::ReadOnly));
+            after = QJsonDocument::fromJson(in.readAll()).object();
+        }
+        const QJsonValue stored =
+            after.value(ConfigKeys::animationsGroup()).toObject().value(ConfigKeys::motionProfileTreeKey());
+        QVERIFY2(!stored.isString(), "the malformed blob survived a reset, with no route to repair it from the app");
+    }
 
     /// A timing entry at a path outside the built-in taxonomy is still visible
     /// to the scoped dirty check and still removable by a scoped clear.

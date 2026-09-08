@@ -272,4 +272,12 @@ QStringList AnimationsPageController::parentChain(const QString& path) const
     return chain;
 }
 
+QStringList AnimationsPageController::parentChainLabels(const QString& path) const
+{
+    QStringList out;
+    for (const QString& step : parentChain(path))
+        out.append(eventLabel(step));
+    return out;
+}
+
 } // namespace PlasmaZones

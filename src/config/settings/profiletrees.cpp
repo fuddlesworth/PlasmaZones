@@ -220,6 +220,12 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
             canonical.remove(QLatin1String("baseline"));
         }
     }
+    // Compared against the canonical READ. A blob that is not a map at all
+    // reads back as an empty map, so this short-circuits against it, and the
+    // key is nonetheless repaired: at that point the value equals its default,
+    // and sparse persistence deletes a default-equal key on save. The test
+    // `aMalformedTreeBlobIsRepairedRatherThanLeftInPlace` pins that route,
+    // which is the only one that removes it.
     if (canonical == motionProfileTree())
         return;
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey(), canonical);
