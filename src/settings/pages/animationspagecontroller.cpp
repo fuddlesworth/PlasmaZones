@@ -383,6 +383,18 @@ bool AnimationsPageController::isValidEventPath(const QString& path) const
     return kKnownPathSet.contains(path);
 }
 
+bool AnimationsPageController::isRemovableEventPath(const QString& path) const
+{
+    if (isValidEventPath(path))
+        return true;
+    if (path.isEmpty() || m_settings == nullptr)
+        return false;
+    if (path.contains(QLatin1Char('/')) || path.contains(QLatin1Char('\\')) || path.contains(QLatin1String("..")))
+        return false;
+    return treeHasOverrideForPath(m_settings->motionProfileTree(), path)
+        || treeHasOverrideForPath(m_settings->committedMotionProfileTree(), path);
+}
+
 // ─── Pending-changes ───────────────────────────────────────────────────
 
 bool AnimationsPageController::hasPendingChanges() const
@@ -517,7 +529,7 @@ bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
     QVariantMap live = m_settings->motionProfileTree();
     QStringList restored;
     for (const QString& path : eventPaths) {
-        if (!isValidEventPath(path))
+        if (!isRemovableEventPath(path))
             continue;
         const QJsonObject baseline = treeProfileForPath(committed, path);
         if (treeProfileForPath(live, path) == baseline)

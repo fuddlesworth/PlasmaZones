@@ -287,6 +287,20 @@ inline QJsonObject treeProfileForPath(const QVariantMap& tree, const QString& pa
     return {};
 }
 
+/// Every path @p tree carries an entry for, in stored order.
+inline QStringList treeOverriddenPaths(const QVariantMap& tree)
+{
+    QStringList out;
+    const QVariantList overrides = tree.value(TreeOverridesKey).toList();
+    out.reserve(overrides.size());
+    for (const QVariant& entry : overrides) {
+        const QString path = entry.toMap().value(TreePathKey).toString();
+        if (!path.isEmpty() && !out.contains(path))
+            out.append(path);
+    }
+    return out;
+}
+
 inline bool treeHasOverrideForPath(const QVariantMap& tree, const QString& path)
 {
     const QVariantList overrides = tree.value(TreeOverridesKey).toList();

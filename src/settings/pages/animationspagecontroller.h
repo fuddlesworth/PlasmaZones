@@ -213,6 +213,21 @@ public:
     /// naming the culprit.
     Q_INVOKABLE bool isValidEventPath(const QString& path) const;
 
+    /// True when a SCOPED clear / revert may act on @p path.
+    ///
+    /// Wider than `isValidEventPath` in exactly one direction: a path already
+    /// carrying an entry in the live or committed tree qualifies even when it
+    /// is outside the built-in taxonomy. The tree is one hand-editable config
+    /// key, so such an entry exists; with the strict gate on every walk it was
+    /// unreachable from inside the app — never dirty, never discarded, never
+    /// reset. This never invents a path, it only lets a stored one be removed
+    /// or restored, and the traversal characters stay refused either way.
+    ///
+    /// NOT usable for writes that CREATE an entry. `setOverride` and the batch
+    /// writer keep the strict gate, which is what stops an arbitrary path
+    /// entering the tree in the first place.
+    bool isRemovableEventPath(const QString& path) const;
+
     /// True iff a user timing override is stored for @p path. Returns false
     /// for any @p path that is not a built-in event path (rejecting
     /// traversal attempts).
@@ -550,6 +565,17 @@ public:
     /// committedMotionProfileTree(). The shader-tree half is the same shape of
     /// comparison the caller runs against committedShaderProfileTree().
     bool hasScopedPendingOverrides(const QStringList& eventPaths) const;
+
+    /// Every path carrying a timing entry in the LIVE or the COMMITTED tree.
+    ///
+    /// The scoped Reset / Discard / dirty walks are driven by the built-in
+    /// taxonomy, which is the right default because that is what the pages
+    /// render. It is not the whole universe though: the tree is one
+    /// hand-editable config key, so an entry can sit at a path no page lists,
+    /// and such an entry was invisible to all three — never reported dirty,
+    /// never discarded, never reset, and so permanently stuck. Unioning this
+    /// in makes the walks cover what is actually stored.
+    QStringList storedTimingPaths() const;
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
     /// (`curve`, `duration`, `name`, …) sitting in the same `profiles/`

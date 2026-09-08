@@ -315,7 +315,7 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
     QVariantMap tree = motionTree();
     QStringList cleared;
     for (const QString& path : eventPaths) {
-        if (!isValidEventPath(path))
+        if (!isRemovableEventPath(path))
             continue;
         if (!treeHasOverrideForPath(tree, path))
             continue; // nothing to clear here, which is most paths on a scoped reset
@@ -336,6 +336,18 @@ int AnimationsPageController::clearOverridesUnder(const QStringList& eventPaths)
     return clearOverridesForPaths(eventPaths, QLatin1String("clearOverridesUnder"));
 }
 
+QStringList AnimationsPageController::storedTimingPaths() const
+{
+    if (m_settings == nullptr)
+        return {};
+    QStringList out = treeOverriddenPaths(m_settings->motionProfileTree());
+    for (const QString& path : treeOverriddenPaths(m_settings->committedMotionProfileTree())) {
+        if (!out.contains(path))
+            out.append(path);
+    }
+    return out;
+}
+
 bool AnimationsPageController::hasScopedPendingOverrides(const QStringList& eventPaths) const
 {
     // The timing half of a per-page dirty check: any in-scope path whose stored
@@ -346,7 +358,7 @@ bool AnimationsPageController::hasScopedPendingOverrides(const QStringList& even
     const QVariantMap live = m_settings->motionProfileTree();
     const QVariantMap committed = m_settings->committedMotionProfileTree();
     for (const QString& path : eventPaths) {
-        if (!isValidEventPath(path))
+        if (!isRemovableEventPath(path))
             continue;
         if (treeProfileForPath(live, path) != treeProfileForPath(committed, path))
             return true;

@@ -642,6 +642,48 @@ private Q_SLOTS:
 
     // ─── Refusal parity across the group writers ──────────────────────────
 
+    /// A timing entry at a path outside the built-in taxonomy is still visible
+    /// to the scoped dirty check and still removable by a scoped clear.
+    ///
+    /// The motion tree is one hand-editable config key, so an entry can sit at
+    /// a path no page renders. Every scoped walk gated on `isValidEventPath`,
+    /// which is membership in the compile-time built-in list, so such an entry
+    /// was invisible to dirty, Discard and Reset alike and could not be removed
+    /// from inside the app at all. The traversal characters stay refused, and
+    /// the strict gate still guards the writes that CREATE an entry, which this
+    /// slot pins too.
+    void aStoredPathOutsideTheTaxonomyIsStillReachableByScopedWalks()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c(nullptr, &settings);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QString stray = QStringLiteral("window.appearance.notabuiltin");
+        QVERIFY2(!c.isValidEventPath(stray), "the fixture path is in the taxonomy after all");
+
+        // Creating one still needs the strict gate, so plant it the way a hand
+        // edit does: straight into the config key.
+        QVariantMap tree;
+        tree.insert(
+            QStringLiteral("overrides"),
+            QVariantList{QVariantMap{{QStringLiteral("path"), stray},
+                                     {QStringLiteral("profile"), QVariantMap{{QStringLiteral("duration"), 700}}}}});
+        settings.setMotionProfileTree(tree);
+        QVERIFY(c.isRemovableEventPath(stray));
+
+        // Writes that would INVENT the path are still refused.
+        QVERIFY(!c.setOverride(QStringLiteral("../etc/passwd"), QVariantMap{{QStringLiteral("duration"), 1}}));
+
+        const QStringList scoped{kPrimary, stray};
+        QVERIFY2(c.hasScopedPendingOverrides(scoped),
+                 "a stray entry the user cannot see is also not reported as unsaved");
+        QCOMPARE(c.clearOverridesUnder(scoped), 1);
+        QVERIFY(!c.isRemovableEventPath(stray));
+    }
+
     /// The merged-write failure toast fires ONCE per run of failures and clears
     /// on the first write that fully lands.
     ///

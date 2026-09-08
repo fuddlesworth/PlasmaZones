@@ -370,7 +370,9 @@ void SettingsController::resetPage(const QString& page)
                 // dirty for a retry rather than reporting a half-done reset as
                 // clean, and tell the user why via pageResetFailed below.
                 if (m_animationsPage != nullptr
-                    && m_animationsPage->clearOverridesUnder(animationScopedBuiltInPaths(scope)) < 0) {
+                    && m_animationsPage->clearOverridesUnder(
+                           animationScopedTimingPaths(scope, m_animationsPage->storedTimingPaths()))
+                        < 0) {
                     failed = true;
                 }
                 if (!failed) {
@@ -610,7 +612,8 @@ void SettingsController::discardPage(const QString& page)
                 m_settings.discardKeys(animationGeneralConfigKeys());
             } else if (scope.kind == AnimationPageScope::EventSubtree) {
                 if (m_animationsPage != nullptr
-                    && !m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope))) {
+                    && !m_animationsPage->revertPendingUnder(
+                        animationScopedTimingPaths(scope, m_animationsPage->storedTimingPaths()))) {
                     failed = true;
                 }
                 // Gated on the timing half having landed, the same way
