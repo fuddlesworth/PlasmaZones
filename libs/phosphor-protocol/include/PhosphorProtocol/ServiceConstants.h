@@ -76,8 +76,6 @@ inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
 inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
-inline constexpr QLatin1String PointerEnabled("pointerEnabled");
-inline constexpr QLatin1String PointerChain("pointerChain");
 }
 
 /// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument

@@ -15,7 +15,6 @@
 #   * PointerUniformExtension — IUniformExtension writing the tail on the
 #     Qt-RHI preview runtime, plus the PointerFrameState both hosts share.
 #   * PointerHistory        — the ring-buffer pointer sampler both hosts use.
-#   * PointerProfile        — the user's layer chain (JSON round trip).
 #
 # Mirrors libs/phosphor-surface. Rendering lives in the consumers.
 
@@ -66,7 +65,6 @@ set(phosphorpointer_public_HDRS
     include/PhosphorPointer/PointerShaderRegistry.h
     include/PhosphorPointer/PointerUniformExtension.h
     include/PhosphorPointer/PointerHistory.h
-    include/PhosphorPointer/PointerProfile.h
 )
 
 # ===============================================================================
@@ -78,7 +76,6 @@ set(phosphorpointer_SRCS
     src/pointershaderregistry.cpp
     src/pointeruniformextension.cpp
     src/pointerhistory.cpp
-    src/pointerprofile.cpp
     src/pointer_contract_pins.cpp
 )
 

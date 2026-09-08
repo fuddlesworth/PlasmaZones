@@ -3,7 +3,7 @@
 
 /**
  * @file test_pointer_qml_contracts.cpp
- * @brief Contracts between the pointer settings QML and its C++ controllers,
+ * @brief Contracts between the pointer preview QML and PointerPreviewController,
  *        pinned by parsing the QML source itself.
  *
  * QML resolves names at runtime and the settings app has no QML test harness,
@@ -19,7 +19,6 @@
  * not what it does.
  */
 
-#include "pages/pointerpagecontroller.h"
 #include "pages/pointerpreviewcontroller.h"
 
 #include <QFile>
@@ -100,7 +99,6 @@ QStringList unreachableOn(const QMetaObject* meta, const QSet<QString>& used)
 }
 
 const QString kShadersQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
-const QString kPointerQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/pointer");
 
 } // namespace
 
@@ -110,8 +108,7 @@ class TestPointerQmlContracts : public QObject
 
 private Q_SLOTS:
     void everyPreviewControllerCallFromThePointerQmlIsReachable();
-    void everyBridgeCallFromThePointerPageIsReachable();
-    void thePointerRouteDeclaresItsOwnPreviewKind();
+    void theBrowserDialogRoutesThePointerPreviewKind();
 };
 
 void TestPointerQmlContracts::everyPreviewControllerCallFromThePointerQmlIsReachable()
@@ -134,37 +131,12 @@ void TestPointerQmlContracts::everyPreviewControllerCallFromThePointerQmlIsReach
                             .arg(unreachable.join(QStringLiteral(", ")))));
 }
 
-void TestPointerQmlContracts::everyBridgeCallFromThePointerPageIsReachable()
+void TestPointerQmlContracts::theBrowserDialogRoutesThePointerPreviewKind()
 {
-    // The chain editor writes every edit straight through the bridge, so a
-    // rename here is a control that silently does nothing rather than one that
-    // visibly fails.
-    const QStringList paths{kPointerQml + QStringLiteral("/PointerPage.qml"),
-                            kPointerQml + QStringLiteral("/PointerShadersPage.qml")};
-
-    QString readError;
-    const QSet<QString> used = scrapeCalls(paths, QStringLiteral("bridge"), &readError);
-    QVERIFY2(readError.isEmpty(), qPrintable(QStringLiteral("cannot read ") + readError));
-    QVERIFY2(!used.isEmpty(), "scraped no bridge.* names — a pointer page file or the receiver moved");
-
-    PointerPageController controller;
-    const QStringList unreachable = unreachableOn(controller.metaObject(), used);
-    QVERIFY2(unreachable.isEmpty(),
-             qPrintable(QStringLiteral("the pointer page QML calls these on the bridge, but "
-                                       "PointerPageController lacks them: %1")
-                            .arg(unreachable.join(QStringLiteral(", ")))));
-}
-
-void TestPointerQmlContracts::thePointerRouteDeclaresItsOwnPreviewKind()
-{
-    // The browser dialog picks a preview pane by the bridge's previewKind, so
-    // a controller answering the wrong token silently renders another family's
-    // pane against a pointer pack.
-    PointerPageController controller;
-    QCOMPARE(controller.previewKind(), QStringLiteral("pointer"));
-
-    // And the dialog must actually route that token somewhere, or the pane is
-    // dead code no matter what the controller answers.
+    // The browser dialog picks a preview pane by the page's previewKind, so it
+    // must actually route the pointer token somewhere or the pane is dead code
+    // whatever the controller answers. Which controller answers "pointer" is
+    // checked on the decoration route that now owns the pointer surface.
     const QString dialog = readFile(kShadersQml + QStringLiteral("/ShaderBrowserDetailDialog.qml"));
     QVERIFY2(!dialog.isEmpty(), "cannot read ShaderBrowserDetailDialog.qml");
     QVERIFY2(dialog.contains(QLatin1String("\"pointer\"")),

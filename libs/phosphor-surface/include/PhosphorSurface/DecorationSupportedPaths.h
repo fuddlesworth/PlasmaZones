@@ -96,6 +96,14 @@ inline QStringList decorationShellPhosphorLeafPaths()
             decorationShellPhosphorPickerPath(), decorationShellPhosphorLockPath()};
 }
 
+/// The mouse pointer. Decorated by the compositor's pointer pass rather than
+/// by a window paint, and it takes pointer packs rather than surface packs,
+/// so it is baseline-isolated (see decorationPathIsBaselineIsolated below).
+inline QString decorationPointerPath()
+{
+    return QStringLiteral("pointer");
+}
+
 /// Leaf surface paths a per-surface decoration profile actually resolves
 /// against. Each names a concrete surface PlasmaZones decorates: the three
 /// window placement states (tiled / snapped / floating), the OSD, the
@@ -137,6 +145,10 @@ inline QStringList decorationLeafSurfacePaths()
                // surface is styled by an explicit pack chain here or not at all.
                decorationShellPanelPath(),
                decorationShellAppletPopupPath(),
+               // pointer — the mouse cursor, drawn by the compositor's pointer
+               // pass from a chain of pointer packs. Baseline-isolated, so it
+               // ships undecorated until a chain is engaged at this path.
+               decorationPointerPath(),
            }
     + decorationShellPhosphorLeafPaths();
 }
@@ -190,8 +202,19 @@ inline QStringList decorationSupportedSurfacePaths()
 /// from overrides inside its own subtree, and an unconfigured shell surface
 /// resolves empty (undecorated). Consulted by DecorationProfileTree::resolve
 /// and withSeedDefaults so the two cannot disagree.
+///
+/// `pointer` is isolated for a stronger version of the same reason. It is not
+/// a window at all, and its chain is drawn from the POINTER pack family, not
+/// the surface family. If it inherited the baseline, a user who configured a
+/// global window decoration chain would have those surface packs resolve onto
+/// the cursor and be handed to the pointer pass, which cannot render them:
+/// the packs speak a different uniform contract entirely. Isolation is what
+/// keeps the cursor undecorated until the user engages a pointer chain at
+/// this exact path.
 inline bool decorationPathIsBaselineIsolated(const QString& path)
 {
+    if (path == decorationPointerPath())
+        return true;
     const QString root = decorationShellRootPath();
     return path == root || path.startsWith(root + QLatin1Char('.'));
 }

@@ -18,7 +18,7 @@
  *   - the Override toggle's ON branch writes nothing, and its OFF branch closes
  *     the timing editor only when the clear was accepted. Both live entirely in
  *     QML and so cannot be observed by driving the controller from C++;
- *   - the shader browser's `_typeCatalog` declares exactly the event-class
+ *   - the shader browser's `typeCatalog` declares exactly the event-class
  *     vocabulary (every class present, the synthetic universal bucket absent,
  *     keying independent of declaration order).
  *
@@ -459,7 +459,7 @@ private Q_SLOTS:
                  "the caption's inherited fallthrough changed");
     }
 
-    /// ShaderBrowserPage's `_typeCatalog` labels the shader browser's type
+    /// ShaderBrowserPage's `typeCatalog` labels the shader browser's type
     /// axis, one entry per event class. There is no way to derive it from the
     /// C++ SSOT (ProfilePaths::allEventClassTokens) inside QML, so it is a
     /// hand-maintained list — and a class added without an entry here ships
@@ -481,23 +481,23 @@ private Q_SLOTS:
         const QString src = readFile(qmlPath).remove(catalogBlockCommentRe).remove(catalogLineCommentRe);
         QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
 
-        const int start = src.indexOf(QStringLiteral("_typeCatalog"));
-        QVERIFY2(start >= 0, "_typeCatalog is gone from ShaderBrowserPage.qml");
+        const int start = src.indexOf(QStringLiteral("typeCatalog"));
+        QVERIFY2(start >= 0, "typeCatalog is gone from ShaderBrowserPage.qml");
         const int end = src.indexOf(QStringLiteral("_universalKey"), start);
-        QVERIFY2(end > start, "could not find the end of the _typeCatalog block (_universalKey moved?)");
+        QVERIFY2(end > start, "could not find the end of the typeCatalog block (_universalKey moved?)");
         const QString block = src.mid(start, end - start);
 
         // The C++ SSOT itself, not a mirror: a hand-copied literal here passed
         // green when a class was added to the vocabulary and NEITHER the QML
         // catalog nor the copy was updated — the exact failure this slot
         // exists to prevent. Reading the SSOT makes a new class fail here
-        // until _typeCatalog grows its entry. "universal" is deliberately
+        // until typeCatalog grows its entry. "universal" is deliberately
         // absent from the vocabulary: it is the synthetic order-0 bucket the
         // helpers resolve, not a declared class — pinned below.
         const QStringList classTokens = PhosphorAnimation::ProfilePaths::allEventClassTokens();
         QVERIFY(!classTokens.contains(QStringLiteral("universal")));
         QVERIFY2(!block.contains(QStringLiteral("\"key\": \"universal\"")),
-                 "_typeCatalog must not declare the synthetic universal bucket as a class entry");
+                 "typeCatalog must not declare the synthetic universal bucket as a class entry");
         QStringList missing;
         for (const QString& token : classTokens) {
             if (!block.contains(QStringLiteral("\"key\": \"") + token + QLatin1Char('"'))) {
@@ -505,7 +505,7 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(missing.isEmpty(),
-                 qPrintable(QStringLiteral("_typeCatalog has no entry for event class(es): ")
+                 qPrintable(QStringLiteral("typeCatalog has no entry for event class(es): ")
                             + missing.join(QLatin1String(", "))
                             + QStringLiteral(" — such packs get an untranslated badge sorted last")));
     }
@@ -529,13 +529,13 @@ private Q_SLOTS:
         QVERIFY2(end > start, "could not find the end of _effectTypeKey");
         const QString body = src.mid(start, end - start);
 
-        QVERIFY2(body.contains(QStringLiteral("_typeCatalog")),
-                 "_effectTypeKey must resolve the bucket through _typeCatalog so the result is independent of "
+        QVERIFY2(body.contains(QStringLiteral("typeCatalog")),
+                 "_effectTypeKey must resolve the bucket through typeCatalog so the result is independent of "
                  "the pack's declaration order");
         // The bare first-token read is the regression. The catalog-order
         // walk keeps `appliesTo[0]` only as the unknown-token fallback, so
         // require the catalog lookup to come FIRST.
-        const int catalogAt = body.indexOf(QStringLiteral("_typeCatalog"));
+        const int catalogAt = body.indexOf(QStringLiteral("typeCatalog"));
         const int firstTokenAt = body.indexOf(QStringLiteral("appliesTo[0]"));
         if (firstTokenAt >= 0) {
             QVERIFY2(catalogAt >= 0 && catalogAt < firstTokenAt,
@@ -560,7 +560,18 @@ private Q_SLOTS:
         // the animations controller here, and the zone/overlay controllers
         // that predate the property — falls back to the zone pane, which is
         // exactly what keeps those routes unchanged.
-        const QSet<QString> documentedOptional{QStringLiteral("previewController"), QStringLiteral("previewKind")};
+        // `previewControllerFor` and `previewKindFor` join them, and for a
+        // sharper reason: a bridge that serves TWO pack families cannot answer
+        // with one constant, so the decoration bridge — which now carries both
+        // the surface packs and the pointer packs — resolves per pack instead.
+        // The dialog asks for those methods by `typeof … === "function"` and
+        // falls back to the constant properties above, so a single-family
+        // bridge like this one is answered exactly as before. The capability
+        // check IS the contract here; requiring the methods of every bridge
+        // would force three routes to grow an API only one of them can mean.
+        const QSet<QString> documentedOptional{QStringLiteral("previewController"), QStringLiteral("previewKind"),
+                                               QStringLiteral("previewControllerFor"),
+                                               QStringLiteral("previewKindFor")};
 
         // Only the files the animations route instantiates: the browser page,
         // its card delegate and its detail dialog. ShaderSetsPage lives in the

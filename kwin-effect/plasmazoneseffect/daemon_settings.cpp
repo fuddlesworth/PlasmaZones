@@ -13,9 +13,9 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
-#include <PhosphorPointer/PointerProfile.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <effect/effecthandler.h>
 
@@ -884,39 +884,17 @@ void PlasmaZonesEffect::loadCachedSettings()
             surfaceState.prefixChainEnd = -1;
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
+        // The pointer is a surface in this same tree (path `pointer`), so its
+        // chain re-derives here rather than from a config domain of its own.
+        // It is baseline-isolated, so a global window chain resolves onto it as
+        // nothing — the cursor stays undecorated until a pointer chain is set
+        // at that exact path. setProfile short-circuits on an unchanged
+        // profile, so a tree edit elsewhere does not restart a live trail.
+        m_pointerPass.setProfile(m_decorationTree.resolve(PhosphorSurfaceShaders::decorationPointerPath()));
         updateAllDecorations();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }
-    });
-
-    // Pointer decoration (`Pointer/Enabled` + `Pointer/Chain`): the user's
-    // chain of data/pointer packs drawn over the pointer. Its own config
-    // domain, not part of the decoration tree above, so it carries no
-    // pack-cache invalidation of its own — PointerDecorationPass::setProfile
-    // re-derives the engaged chain and the compiled packs are keyed by id,
-    // whose SOURCE has not changed. A parameter edit does change the baked
-    // slot values, which is why setProfile drops nothing but the chain: the
-    // pack cache is dropped by the registry hot-reload path, and a parameter
-    // change arrives here as a new profile whose layers re-resolve.
-    //
-    // Both re-run whole on every settingsChanged broadcast (this is inside
-    // loadCachedSettings), which is the effect's live-change path; each
-    // setter short-circuits on an unchanged value so a broadcast that touched
-    // something else does not restart a live trail.
-    loadSettingAsync(PhosphorProtocol::Service::SettingProperty::PointerEnabled, [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        m_pointerPass.setEnabled(v.toBool());
-    });
-    loadSettingAsync(PhosphorProtocol::Service::SettingProperty::PointerChain, [this](const QVariant& v) {
-        const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-        if (!doc.isObject()) {
-            qCWarning(lcEffect) << "pointerChain is not a JSON object — keeping the current pointer chain";
-            return;
-        }
-        m_pointerPass.setProfile(PhosphorPointerShaders::PointerProfile::fromJson(doc.object()));
     });
 
     // Type-guard — see showWindowBorder above.

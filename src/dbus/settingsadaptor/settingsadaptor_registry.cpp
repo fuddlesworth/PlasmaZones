@@ -38,7 +38,6 @@
 #include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
-#include <PhosphorPointer/PointerProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <QColor>
@@ -760,33 +759,6 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
-
-    // Pointer decoration chain — the master switch plus the PointerProfile blob
-    // (JSON blob round-trip, same shape as the decoration tree above). The
-    // settings app writes both over D-Bus; the KWin effect reads both to drive
-    // its pointer pass.
-    m_getters[QString(PhosphorProtocol::Service::SettingProperty::PointerEnabled)] = [this]() {
-        return m_settings->pointerEnabled();
-    };
-    m_setters[QString(PhosphorProtocol::Service::SettingProperty::PointerEnabled)] = [this](const QVariant& v) {
-        m_settings->setPointerEnabled(v.toBool());
-        return true;
-    };
-    m_schemas[QString(PhosphorProtocol::Service::SettingProperty::PointerEnabled)] = QStringLiteral("bool");
-
-    m_getters[QString(PhosphorProtocol::Service::SettingProperty::PointerChain)] = [this]() {
-        return m_settings->pointerChainJson();
-    };
-    m_setters[QString(PhosphorProtocol::Service::SettingProperty::PointerChain)] = [this](const QVariant& v) -> bool {
-        QJsonDocument doc;
-        if (!validProfileTreeBlob(v, &doc))
-            return false;
-        // Reuse the already-parsed doc rather than re-parsing the same UTF-8
-        // through the JSON facade, exactly like the two tree setters above.
-        m_settings->setPointerChain(PhosphorPointerShaders::PointerProfile::fromJson(doc.object()));
-        return true;
-    };
-    m_schemas[QString(PhosphorProtocol::Service::SettingProperty::PointerChain)] = QStringLiteral("string");
 
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 

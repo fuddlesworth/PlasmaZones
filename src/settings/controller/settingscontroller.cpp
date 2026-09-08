@@ -737,6 +737,13 @@ SettingsController::SettingsController(QObject* parent)
     m_surfaceShaderRegistry = new PhosphorSurfaceShaders::SurfaceShaderRegistry(this);
     registerXdgPackDirs(m_surfaceShaderRegistry, ConfigDefaults::userSurfaceSubdir());
 
+    // Pointer shader registry — the fourth pack family, scanning the XDG
+    // `plasmazones/pointer` dirs the same way the two registries above scan
+    // theirs. Built BEFORE the decoration page: the pointer is a decoration
+    // surface, so that page owns the pointer chain and takes this registry.
+    m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
+    registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
+
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
     // DecorationProfileTree (per-surface chains of decoration packs) with a
     // baseline global default + walk-up inheritance. The tree persists via the
@@ -745,24 +752,10 @@ SettingsController::SettingsController(QObject* parent)
     // into onSettingsPropertyChanged for dirty tracking — so this controller
     // needs no per-page staging (isDirty/apply/discard are no-ops). It is
     // registered with the framework as a headless domain (the drill-down nav
-    // nodes are virtual PageAdapters) in buildApplicationController.
-    m_decorationPage = new DecorationPageController(m_surfaceShaderRegistry, &m_settings, this);
-
-    // Pointer shader registry — the fourth pack family, scanning the XDG
-    // `plasmazones/pointer` dirs the same way the two registries above scan
-    // theirs.
-    m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
-    registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
-
-    // Pointer page sub-controller. One flat chain of cursor packs plus a
-    // master switch, persisting through the Settings pointerEnabled /
-    // pointerChainJson Q_PROPERTYs, whose NOTIFYs the meta-object loop above
-    // already routes into onSettingsPropertyChanged for dirty tracking — so
-    // this controller needs no per-page staging either. It is deliberately NOT
-    // part of the decoration domain: the two Pointer keys are owned by the
-    // pointer page through the ordinary pageOwnedConfigKeys manifest, so a
-    // Reset there cannot touch the decoration profile tree.
-    m_pointerPage = new PointerPageController(m_pointerShaderRegistry, &m_settings, this);
+    // nodes are virtual PageAdapters) in buildApplicationController. It takes
+    // both pack registries: `pointer` is one of its surfaces.
+    m_decorationPage =
+        new DecorationPageController(m_surfaceShaderRegistry, &m_settings, m_pointerShaderRegistry, this);
 
     // Rules page sub-controller — the unified rule surface. It owns
     // its own RuleModel and talks to the daemon's

@@ -71,13 +71,39 @@ Kirigami.Dialog {
     // preview controller these days, and previewKind selects the pane. The
     // null case remains the contract for a bridge without one: the right
     // pane then degrades to the read-only parameter list below.
-    readonly property var previewController: bridge && bridge.previewController ? bridge.previewController : null
+    readonly property string _effectId: effect ? (effect.id || "") : ""
+    // Resolved PER PACK where the bridge can do that, and per bridge otherwise.
+    // The decoration bridge serves two pack families (surface and pointer) that
+    // preview through different hosts, so it exposes previewControllerFor /
+    // previewKindFor and answers for the selected pack. A bridge that has only
+    // one family exposes neither, and is answered for by its own CONSTANT
+    // previewController / previewKind, so every other browser is unchanged.
+    readonly property var previewController: {
+        if (!bridge)
+            return null;
+        if (_effectId.length > 0 && typeof bridge.previewControllerFor === "function") {
+            const scoped = bridge.previewControllerFor(_effectId);
+            if (scoped)
+                return scoped;
+        }
+        return bridge.previewController ? bridge.previewController : null;
+    }
     readonly property bool _livePreview: previewController !== null && effect !== null
-    // Which preview pane this bridge wants. The decoration bridge reports
-    // "decoration"; the zone/overlay bridges predate the property and report
-    // nothing, so a controller with no declared kind falls back to "zone" —
-    // that fallback is what keeps the snapping and overlay browsers unchanged.
-    readonly property string _previewKind: (bridge && bridge.previewKind) ? bridge.previewKind : (previewController ? "zone" : "")
+    // Which preview pane this pack wants. The decoration bridge reports
+    // "decoration" or "pointer" per pack; the zone/overlay bridges predate the
+    // property and report nothing, so a controller with no declared kind falls
+    // back to "zone" — that fallback is what keeps the snapping and overlay
+    // browsers unchanged.
+    readonly property string _previewKind: {
+        if (!bridge)
+            return "";
+        if (_effectId.length > 0 && typeof bridge.previewKindFor === "function") {
+            const scoped = bridge.previewKindFor(_effectId);
+            if (scoped)
+                return scoped;
+        }
+        return bridge.previewKind ? bridge.previewKind : (previewController ? "zone" : "");
+    }
     // The two panes need different halves of this dialog. A zone preview drives
     // the shader-info / translated-param / preset machinery below; a decoration
     // preview drives none of it (its controller composes a whole chain instead,

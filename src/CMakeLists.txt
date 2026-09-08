@@ -100,7 +100,6 @@ set(plasmazones_core_SRCS
     config/settings/perscreen_selector.cpp
     config/settings/animationprofile.cpp
     config/settings/profiletrees.cpp
-    config/settings/pointer.cpp
     config/settings/disable.cpp
     config/settings/uienums.cpp
     config/settings/triggers.cpp
@@ -119,7 +118,6 @@ set(plasmazones_core_SRCS
     config/settingsschema.h
     config/settingsschema.cpp
     config/settingsschema_p.h
-    config/settingsschema_pointer.cpp
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
     config/settingsschemachoices.h
@@ -288,13 +286,6 @@ target_link_libraries(plasmazones_core
         # ConfigDefaults baseline), so consumers linking plasmazones_core need
         # the include path + link edge.
         PhosphorSurface::PhosphorSurface
-        # PhosphorPointer: PointerProfile — the pointer decoration chain type.
-        # PUBLIC for the same reason as PhosphorSurface above: configdefaults
-        # holds the shipped-empty chain and core/isettings.h plus
-        # config/settings.h expose the type by value on the pointerChain
-        # accessors, so consumers linking plasmazones_core need the include
-        # path + link edge.
-        PhosphorPointer::PhosphorPointer
         # PhosphorRules: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a RuleStore for the per-mode
         # disable lists, the RuleAdaptor exposes the store on D-Bus, and

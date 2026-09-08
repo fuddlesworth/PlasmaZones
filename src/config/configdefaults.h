@@ -1192,14 +1192,6 @@ public:
         return QStringLiteral("/plasmazones/decorationsets");
     }
 
-    /// Pointer sets — named snapshots of the pointer chain (the ordered pack
-    /// list with its parameter overrides), the pointer twin of
-    /// `userDecorationSetsSubdir()`.
-    static QString userPointerSetsSubdir()
-    {
-        return QStringLiteral("/plasmazones/pointersets");
-    }
-
     /// Surface shader packs (the `data/surface/` family — border, etc.).
     /// Mirrors the `userAnimationsSubdir()` convention so settings + daemon
     /// + compositor code share one source of truth for the on-disk location.

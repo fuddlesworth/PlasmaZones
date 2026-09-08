@@ -581,11 +581,6 @@ public:
     Q_PROPERTY(double decorationBlurScaleMultiplier READ decorationBlurScaleMultiplier WRITE
                    setDecorationBlurScaleMultiplier NOTIFY decorationBlurScaleMultiplierChanged)
 
-    // Pointer — the master switch plus a JSON string facade for the pointer
-    // chain, same meta-object dirty-tracking rationale as the two trees above.
-    Q_PROPERTY(bool pointerEnabled READ pointerEnabled WRITE setPointerEnabled NOTIFY pointerEnabledChanged)
-    Q_PROPERTY(QString pointerChainJson READ pointerChainJson WRITE setPointerChainJson NOTIFY pointerChainChanged)
-
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
                    autotileFocusFollowsMouseChanged)
@@ -1812,18 +1807,6 @@ public:
     void setDecorationIdleTimeoutSec(int value) override;
     double decorationBlurScaleMultiplier() const override;
     void setDecorationBlurScaleMultiplier(double value) override;
-
-    // Pointer decoration chain — PhosphorConfig::Store-backed, under the
-    // Pointer group. The typed accessors mirror the decoration tree pair and
-    // the JSON-string facade backs the Q_PROPERTY above. No seed layer and no
-    // committed-baseline accessor: the pointer page's Reset works on the two
-    // owned keys directly.
-    bool pointerEnabled() const override;
-    void setPointerEnabled(bool value) override;
-    PhosphorPointerShaders::PointerProfile pointerChain() const override;
-    void setPointerChain(const PhosphorPointerShaders::PointerProfile& chain) override;
-    QString pointerChainJson() const override;
-    void setPointerChainJson(const QString& json) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

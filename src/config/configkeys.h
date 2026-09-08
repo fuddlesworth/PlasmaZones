@@ -180,13 +180,6 @@ public:
     // each frame does rather than gating when frames happen.
     P_CONFIG_GROUP(decorationsPerformanceGroup, "Decorations.Performance")
 
-    // Pointer — the pointer-decoration shader chain (trails, halos, click
-    // ripples). Its own config domain, NOT part of the decoration tree: the
-    // chain is a flat ordered layer list rather than a path-keyed profile
-    // tree, and it decorates the cursor rather than a surface. Two leaf keys
-    // live here, Enabled (the master switch) and Chain (the JSON blob).
-    P_CONFIG_GROUP(pointerGroup, "Pointer")
-
     // Parent groups (for purge enumeration — covers all sub-groups)
     P_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
     P_CONFIG_GROUP(editorGroup, "Editor")
@@ -550,16 +543,6 @@ public:
     // serialized empty tree ({"baseline":…,"overrides":[]}, non-empty as a
     // map), whereas the animation default is a bare {}.
     P_CONFIG_KEY(decorationProfileTreeKey, "DecorationProfileTree")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Pointer
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // The pointer chain JSON blob (a PointerProfile: an ordered list of pack
-    // ids with their per-pack parameter overrides and an enable switch each).
-    // The master switch reuses the generic enabledKey() — the Pointer group
-    // disambiguates it, the same way every other group's Enabled key does.
-    P_CONFIG_KEY(chainKey, "Chain")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Decorations.Performance

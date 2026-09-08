@@ -251,27 +251,19 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("taskbar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("applet"),
                              PhosphorI18n::tr("applet popup"), PhosphorI18n::tr("launcher"), PhosphorI18n::tr("tray"),
                              PhosphorI18n::tr("system tray"), PhosphorI18n::tr("dock"), PhosphorI18n::tr("widget")});
+    // The pointer is a decoration surface, so it sits beside its siblings
+    // rather than in a section of its own.
+    search->setPageKeywords(QStringLiteral("decorations-pointer"),
+                            {PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("mouse"),
+                             PhosphorI18n::tr("trail"), PhosphorI18n::tr("click"), PhosphorI18n::tr("ripple"),
+                             PhosphorI18n::tr("halo"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("sparks")});
     search->setPageKeywords(QStringLiteral("decorations-sets"),
                             {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
                              PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
     search->setPageKeywords(QStringLiteral("decorations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("surface"), PhosphorI18n::tr("pack"),
-                             PhosphorI18n::tr("border"), PhosphorI18n::tr("glass"), PhosphorI18n::tr("glow"),
-                             PhosphorI18n::tr("blur")});
-
-    // Pointer — its own section under Appearance, beside Animations and Decorations.
-    search->setPageKeywords(QStringLiteral("pointer-chain"),
-                            {PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("mouse"),
-                             PhosphorI18n::tr("trail"), PhosphorI18n::tr("click"), PhosphorI18n::tr("ripple"),
-                             PhosphorI18n::tr("halo"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("sparks")});
-    search->setPageKeywords(QStringLiteral("pointer-sets"),
-                            {PhosphorI18n::tr("pointer set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
-                             PhosphorI18n::tr("profile"), PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"),
-                             PhosphorI18n::tr("pack")});
-    search->setPageKeywords(QStringLiteral("pointer-shaders"),
-                            {PhosphorI18n::tr("shader"), PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"),
-                             PhosphorI18n::tr("mouse"), PhosphorI18n::tr("pack"), PhosphorI18n::tr("trail"),
-                             PhosphorI18n::tr("comet"), PhosphorI18n::tr("halo")});
+                             PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("border"),
+                             PhosphorI18n::tr("glass"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("blur")});
 
     // Top-level + tools
     search->setPageKeywords(QStringLiteral("window-appearance"),
@@ -1096,17 +1088,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("decorations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
-    addSection(search, QStringLiteral("pointer-shaders"), QStringLiteral("userShaders"),
-               PhosphorI18n::tr("User shaders"));
-    // The Pointer page's two cards. The master switch is the searchable
-    // setting; the chain card is a section anchor because what it holds is the
-    // user's own layer list rather than a named knob.
-    addSetting(search, QStringLiteral("pointer-chain"), QStringLiteral("pointerEnabled"),
-               PhosphorI18n::tr("Decorate the pointer"),
-               {PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("mouse"),
-                PhosphorI18n::tr("enable"), PhosphorI18n::tr("toggle")});
-    addSection(search, QStringLiteral("pointer-chain"), QStringLiteral("pointerChain"),
-               PhosphorI18n::tr("Pointer chain"));
     addSection(search, QStringLiteral("animations-presets"), QStringLiteral("easingPresets"),
                PhosphorI18n::tr("Easing presets"));
     addSection(search, QStringLiteral("animations-presets"), QStringLiteral("springPresets"),
@@ -1122,12 +1103,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("importDecorationSets"),
                PhosphorI18n::tr("User sets"));
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("savedDecorationSets"),
-               PhosphorI18n::tr("Saved sets"));
-    addSection(search, QStringLiteral("pointer-sets"), QStringLiteral("savePointerSet"),
-               PhosphorI18n::tr("Save current state"));
-    addSection(search, QStringLiteral("pointer-sets"), QStringLiteral("importPointerSets"),
-               PhosphorI18n::tr("User sets"));
-    addSection(search, QStringLiteral("pointer-sets"), QStringLiteral("savedPointerSets"),
                PhosphorI18n::tr("Saved sets"));
 
     // The per-event animation anchors live in their own TU

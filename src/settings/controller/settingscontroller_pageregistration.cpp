@@ -149,15 +149,6 @@ void SettingsController::buildApplicationController()
     // to m_domains so applyAllAsync walks it, exactly as registerPage would
     // have, but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_animationsPage);
-    // "pointer" is the third shader family, a no-QML drill-down parent under
-    // Appearance beside Animations and Decorations rather than a leaf inside
-    // one of them. It decorates the CURSOR, which is not a window surface and
-    // not part of the shared DecorationProfileTree: it owns the two Pointer.*
-    // keys outright. Nesting it under Decoration → Surfaces put it among
-    // Windows / OSDs / Popups / Shell, which is a category error, and split
-    // its navigation from its config ownership.
-    regVirtual(QStringLiteral("pointer"), QStringLiteral("appearance"), PhosphorI18n::tr("Pointer"), QString(),
-               QStringLiteral("input-mouse"));
     // Rules is a top-level leaf (its old "Rules" parent retired after
     // the v4 fold left a single rule surface). Divider after it closes the
     // feature block and opens the tools-and-meta block below.
@@ -519,6 +510,13 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/decoration/DecorationShellPage.qml"), QStringLiteral("computer"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    // The mouse pointer is a decoration surface like any other: its chain
+    // lives at the `pointer` path in the same DecorationProfileTree, so it
+    // rides the same card, the same sets and the same per-page reset.
+    regVirtual(QStringLiteral("decorations-pointer"), QStringLiteral("decorations-surfaces"),
+               PhosphorI18n::tr("Pointer"), QStringLiteral("pages/decoration/DecorationPointerPage.qml"),
+               QStringLiteral("input-mouse"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),
@@ -527,27 +525,6 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
-    // Chain is the family's General page: the ordered stack of packs plus the
-    // master switch, and the owner of both Pointer.* keys. It hangs directly
-    // off the family parent with a divider under it, the slot
-    // window-appearance occupies under Decoration and animations-general
-    // under Animations.
-    regVirtual(QStringLiteral("pointer-chain"), QStringLiteral("pointer"), PhosphorI18n::tr("Chain"),
-               QStringLiteral("pages/pointer/PointerPage.qml"), QStringLiteral("input-mouse"),
-               /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
-    // Library — the collapsible section every shader family groups its saved
-    // sets and its installed-pack browser under (animations-library,
-    // decorations-library). Same no-QML virtual node, same folder-open icon,
-    // so the pointer sidebar reads like its two siblings rather than as a flat
-    // run of leaves.
-    regVirtual(QStringLiteral("pointer-library"), QStringLiteral("pointer"), PhosphorI18n::tr("Library"), QString(),
-               QStringLiteral("folder-open"), /*collapsible=*/true);
-    regVirtual(QStringLiteral("pointer-sets"), QStringLiteral("pointer-library"), PhosphorI18n::tr("Pointer Sets"),
-               QStringLiteral("pages/pointer/PointerSetsPage.qml"), QStringLiteral("color-palette"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("pointer-shaders"), QStringLiteral("pointer-library"), PhosphorI18n::tr("Shaders"),
-               QStringLiteral("pages/pointer/PointerShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // Every page declared its simple/advanced tier at registration above.
     // Seed the registry's mode from m_advancedMode (default simple) so the
     // very first sidebar build is already filtered — the registry's own

@@ -5,11 +5,14 @@
 
 // Inline helpers for the DecorationPageController translation units (currently
 // decorationpagecontroller.cpp; the class is split across several TUs). They
-// convert surface-pack effect / parameter values to QVariantMap for QML and
-// build the sparse / resolved DecorationProfile -> QVariantMap projections.
+// convert surface-pack and pointer-pack effect / parameter values to
+// QVariantMap for QML and build the sparse / resolved DecorationProfile ->
+// QVariantMap projections. The pointer is a decoration surface like any other,
+// so its packs are projected here beside the surface family.
 // Inline definitions here let any consuming TU get its own copy without relying
 // on unity-build TU merging for cross-TU linkage.
 
+#include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
@@ -63,6 +66,55 @@ inline QVariantMap effectToMap(const PhosphorSurfaceShaders::SurfaceShaderEffect
     m.insert(QLatin1String("providesOpacityTint"), effect.providesOpacityTint);
     // No previewPath: the browser previews live decoration chains now, and
     // no QML reads the key (see the animation twin's note).
+    QVariantList params;
+    params.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters)
+        params.append(parameterInfoToMap(p));
+    m.insert(QLatin1String("parameters"), params);
+    return m;
+}
+
+/// Convert a pointer-pack ParameterInfo to the same QVariantMap shape the
+/// surface twin above emits, so the shared QML editor components consume a
+/// pointer pack's parameters without knowing which family it came from.
+inline QVariantMap parameterInfoToMap(const PhosphorPointerShaders::PointerShaderEffect::ParameterInfo& p)
+{
+    QVariantMap m;
+    m.insert(QLatin1String("id"), p.id);
+    m.insert(QLatin1String("name"), p.name);
+    m.insert(QLatin1String("type"), p.type);
+    if (!p.description.isEmpty())
+        m.insert(QLatin1String("description"), p.description);
+    if (!p.group.isEmpty())
+        m.insert(QLatin1String("group"), p.group);
+    if (p.defaultValue.isValid())
+        m.insert(QLatin1String("default"), p.defaultValue);
+    if (p.minValue.isValid())
+        m.insert(QLatin1String("min"), p.minValue);
+    if (p.maxValue.isValid())
+        m.insert(QLatin1String("max"), p.maxValue);
+    if (p.stepValue.isValid())
+        m.insert(QLatin1String("step"), p.stepValue);
+    return m;
+}
+
+/// Row for one pointer pack. Shares every key the surface row carries so the
+/// chain editor and the pack browser render both families with one code path.
+/// `previewPath` and `layer` are pointer-only extras the surface family has no
+/// analogue for; `providesBorder` / `providesOpacityTint` are surface-only and
+/// are absent here, which reads as false in QML.
+inline QVariantMap effectToMap(const PhosphorPointerShaders::PointerShaderEffect& effect)
+{
+    QVariantMap m;
+    m.insert(QLatin1String("id"), effect.id);
+    m.insert(QLatin1String("name"), effect.name);
+    m.insert(QLatin1String("description"), effect.description);
+    m.insert(QLatin1String("author"), effect.author);
+    m.insert(QLatin1String("version"), effect.version);
+    m.insert(QLatin1String("category"), effect.category);
+    m.insert(QLatin1String("isUserEffect"), effect.isUserEffect);
+    m.insert(QLatin1String("previewPath"), effect.previewPath);
+    m.insert(QLatin1String("layer"), PhosphorPointerShaders::PointerShaderEffect::layerToken(effect.layer));
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters)

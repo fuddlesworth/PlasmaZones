@@ -87,14 +87,20 @@ SettingsFlickable {
     //   "src:builtin" / "src:user" gate source; "cat:<name>" gate a category.
     readonly property bool showBuiltIn: !shaderFilterButton.isExcluded("src:builtin")
     readonly property bool showUser: !shaderFilterButton.isExcluded("src:user")
-    // ── Type axis (`appliesTo` event-class capability) ──────────────────
-    // Ordered catalog of the known event-class capabilities. Universal (an
-    // empty `appliesTo`) is the synthetic order-0 bucket resolved in the
+    // ── Type axis (`appliesTo` capability) ──────────────────────────────
+    // Ordered catalog of the type keys a row's `appliesTo` may name. Universal
+    // (an empty `appliesTo`) is the synthetic order-0 bucket resolved in the
     // helpers below. The whole axis — a Type filter group, a Type group-by /
-    // sort option, and the card badge — only surfaces when the installed
-    // packs actually span more than one type (`_hasTypeAxis`). Snapping and
-    // decoration packs are all universal, so those pages look unchanged.
-    readonly property var _typeCatalog: [
+    // sort option, and the card badge — only surfaces when the installed packs
+    // actually span more than one type (`_hasTypeAxis`).
+    //
+    // Host-supplied, like this page's copy properties: the default below is
+    // the animation event-class catalog, so the animations browser reads
+    // unchanged, and a host serving more than one pack family (the decoration
+    // browser, which carries surface and pointer packs) supplies its own. A
+    // key a row names that is absent from the catalog still buckets — it just
+    // sorts last and badges with its raw token.
+    property var typeCatalog: [
         {
             "key": "geometry",
             "label": i18nc("@item shader capability", "Geometry"),
@@ -309,8 +315,8 @@ SettingsFlickable {
         if (!e || !e.appliesTo || e.appliesTo.length === 0)
             return root._universalKey;
 
-        for (var i = 0; i < root._typeCatalog.length; i++) {
-            var key = root._typeCatalog[i].key;
+        for (var i = 0; i < root.typeCatalog.length; i++) {
+            var key = root.typeCatalog[i].key;
             for (var j = 0; j < e.appliesTo.length; j++)
                 if (String(e.appliesTo[j]) === key)
                     return key;
@@ -321,9 +327,9 @@ SettingsFlickable {
         if (key === root._universalKey)
             return i18nc("@item shader capability (applies to every event)", "Universal");
 
-        for (var i = 0; i < root._typeCatalog.length; i++)
-            if (root._typeCatalog[i].key === key)
-                return root._typeCatalog[i].label;
+        for (var i = 0; i < root.typeCatalog.length; i++)
+            if (root.typeCatalog[i].key === key)
+                return root.typeCatalog[i].label;
 
         // Unknown future token — show it capitalized rather than dropping it.
         return key.length > 0 ? key.charAt(0).toUpperCase() + key.slice(1) : key;
@@ -332,9 +338,9 @@ SettingsFlickable {
         if (key === root._universalKey)
             return 0;
 
-        for (var i = 0; i < root._typeCatalog.length; i++)
-            if (root._typeCatalog[i].key === key)
-                return root._typeCatalog[i].order;
+        for (var i = 0; i < root.typeCatalog.length; i++)
+            if (root.typeCatalog[i].key === key)
+                return root.typeCatalog[i].order;
 
         return 99;
     }

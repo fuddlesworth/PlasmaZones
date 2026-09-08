@@ -29,10 +29,6 @@ namespace PhosphorSurfaceShaders {
 class DecorationProfileTree;
 }
 
-namespace PhosphorPointerShaders {
-class PointerProfile;
-}
-
 namespace PlasmaZones {
 
 namespace isettings_detail {
@@ -221,20 +217,6 @@ public:
     /// the cost.
     virtual double decorationBlurScaleMultiplier() const = 0;
     virtual void setDecorationBlurScaleMultiplier(double value) = 0;
-
-    // Pointer decoration chain — an ordered PointerProfile of pack ids with
-    // their per-pack parameters, plus the master switch. Its own config domain
-    // (group "Pointer"), NOT part of the decoration tree: the pointer is not a
-    // surface and the chain is a flat list rather than a path-keyed tree. Same
-    // typed-getter plus JSON-string-facade pair as the decoration tree, so the
-    // Q_PROPERTY meta-object dirty-tracking loop and the settings adaptor can
-    // carry it as a string.
-    virtual bool pointerEnabled() const = 0;
-    virtual void setPointerEnabled(bool value) = 0;
-    virtual PhosphorPointerShaders::PointerProfile pointerChain() const = 0;
-    virtual void setPointerChain(const PhosphorPointerShaders::PointerProfile& chain) = 0;
-    virtual QString pointerChainJson() const = 0;
-    virtual void setPointerChainJson(const QString& json) = 0;
 
     /// The system colour scheme as a "light" / "dark" token, or empty when the
     /// process cannot observe a palette (no GUI application, or an off-GUI-thread
@@ -1051,10 +1033,6 @@ Q_SIGNALS:
     void decorationPauseWhenIdleChanged();
     void decorationIdleTimeoutSecChanged();
     void decorationBlurScaleMultiplierChanged();
-
-    // Pointer decoration settings
-    void pointerEnabledChanged();
-    void pointerChainChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

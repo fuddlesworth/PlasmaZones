@@ -27,9 +27,9 @@ import org.kde.kirigami as Kirigami
  * top-level toggles. A child that DOES shadow the parent keeps its own look
  * — the warning below offers to clear those — and so do the popup leaves
  * that ship seed chrome, each of which has its own toggle. The
- * `shell` subtree is the exception: it is baseline-isolated
- * (DecorationSupportedPaths.h), inherits nothing, and stays undecorated
- * until a chain is engaged inside it. A category root additionally shows
+ * `shell` subtree and the `pointer` surface are the exceptions: both are
+ * baseline-isolated (DecorationSupportedPaths.h), inherit nothing, and stay
+ * undecorated until a chain is engaged inside them. A category root additionally shows
  * the "applies to all children" cascade banner while editing. The
  * alwaysEnabled escape hatch (no toggle, always editing) remains for any
  * future surface that must never be disableable.
@@ -61,6 +61,19 @@ Item {
     // this card claiming "Using global defaults": the shell subtree never
     // inherits the tree baseline.
     readonly property bool _baselineIsolated: root.bridge ? root.bridge.isBaselineIsolated(root.surfacePath) : false
+
+    // The pointer surface renders through the pointer pass, not the surface
+    // decoration host, so it takes the other pack family and the other preview
+    // pane. Everything else on this card — the override toggle, the
+    // inheritance banner, the chain editor — is identical, which is the point
+    // of folding the pointer into this tree.
+    readonly property bool _isPointer: root.surfacePath === "pointer"
+    readonly property string _previewKind: root._isPointer ? "pointer" : "decoration"
+    readonly property var _previewController: {
+        if (!root.bridge)
+            return null;
+        return root._isPointer ? root.bridge.pointerPreviewController : root.bridge.previewController;
+    }
 
     // Session-local "the user opened the chain editor" latch, mirroring
     // AnimationEventCard._editingTiming: flipping the toggle ON sets this and
@@ -110,12 +123,14 @@ Item {
     // The pack catalogue changes only on shaderEffectsChanged (install /
     // uninstall), so it is NOT re-read on every profile write — refresh()
     // runs on every built card for every tree edit, including each slider
-    // drag tick, and availableShaderEffects() materialises a map per
+    // drag tick, and availableShaderEffectsForPath() materialises a map per
     // installed pack.
     function _refreshEffects() {
         if (!root.bridge)
             return;
-        root._effects = root.bridge.availableShaderEffects();
+        // Path-scoped: a cursor chain must offer only pointer packs and a
+        // window chain only surface packs.
+        root._effects = root.bridge.availableShaderEffectsForPath(root.surfacePath);
     }
 
     function refresh() {
@@ -311,8 +326,8 @@ Item {
                     // Live preview inside each expanded layer row: the same
                     // stand-in card the pack browser shows, on this page's
                     // controller.
-                    previewKind: "decoration"
-                    previewController: root.bridge ? root.bridge.previewController : null
+                    previewKind: root._previewKind
+                    previewController: root._previewController
                     onChainChangeRequested: function (newChain) {
                         if (root.bridge)
                             root.bridge.setChain(root.surfacePath, newChain);

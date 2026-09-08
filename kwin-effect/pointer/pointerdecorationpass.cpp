@@ -44,24 +44,7 @@ PointerDecorationPass::~PointerDecorationPass()
 
 // ── Settings ────────────────────────────────────────────────────────────────
 
-void PointerDecorationPass::setEnabled(bool enabled)
-{
-    if (m_enabled == enabled) {
-        return;
-    }
-    m_enabled = enabled;
-    rebuildChain();
-    if (!m_engaged) {
-        // Turning the feature off mid-trail must not leave the pointer
-        // invisible behind an `above` layer's hide, and must not leave the
-        // history to be picked up by a later enable as a stale burst.
-        updateCursorHiding();
-        m_history.reset();
-        m_hasTimeOrigin = false;
-    }
-}
-
-void PointerDecorationPass::setProfile(const PPS::PointerProfile& profile)
+void PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile)
 {
     if (m_profile == profile) {
         return;
@@ -69,6 +52,9 @@ void PointerDecorationPass::setProfile(const PPS::PointerProfile& profile)
     m_profile = profile;
     rebuildChain();
     if (!m_engaged) {
+        // Emptying the chain mid-trail must not leave the pointer invisible
+        // behind an `above` layer's hide, and must not leave the history to be
+        // picked up by a later chain as a stale burst.
         updateCursorHiding();
         m_history.reset();
         m_hasTimeOrigin = false;
@@ -82,7 +68,11 @@ void PointerDecorationPass::rebuildChain()
     m_maxReachLogical = 0.0;
     m_maxTrailSeconds = 0.0;
 
-    if (!m_enabled || m_profile.isEmpty()) {
+    // enabledChain() is effectiveChain() minus the per-layer disable toggles,
+    // which is exactly the set of layers the renderer should paint. An empty
+    // one is the "off" state: there is no separate master switch.
+    const QStringList chain = m_profile.enabledChain();
+    if (chain.isEmpty()) {
         m_engaged = false;
         return;
     }
@@ -92,27 +82,32 @@ void PointerDecorationPass::rebuildChain()
     // pays for the scan or the file watcher.
     ensureRegistryPaths();
 
-    m_engagedLayers.reserve(static_cast<size_t>(m_profile.layers.size()));
-    for (const PPS::PointerLayer& layer : m_profile.layers) {
-        if (!layer.enabled || layer.effectId.isEmpty()) {
+    const QVariantMap allParameters = m_profile.effectiveParameters();
+    m_engagedLayers.reserve(static_cast<size_t>(chain.size()));
+    for (const QString& effectId : chain) {
+        if (effectId.isEmpty()) {
             continue;
         }
-        const PPS::PointerShaderEffect eff = m_registry.effect(layer.effectId);
+        const PPS::PointerShaderEffect eff = m_registry.effect(effectId);
         if (!eff.isValid()) {
             // Not a per-frame warning: the resolve happens only when the
-            // profile, the enable flag or the registry changes.
-            qCWarning(lcEffect) << "Pointer pack" << layer.effectId << "is not in the registry — layer skipped";
+            // profile or the registry changes.
+            qCWarning(lcEffect) << "Pointer pack" << effectId << "is not in the registry — layer skipped";
             continue;
         }
+        // The decoration tree keys per-pack overrides by pack id, so a chain
+        // that names the same pack twice shares one parameter set — the same
+        // contract every other decoration surface runs under.
+        const QVariantMap parameters = allParameters.value(effectId).toMap();
         // reach is LOGICAL px, possibly overridden by the pack's reachParam
         // against this layer's parameter overrides. It sets the damage rect,
         // so a pack painting past it is clipped rather than smeared.
-        m_maxReachLogical = std::max(m_maxReachLogical, eff.resolvedReach(layer.parameters));
+        m_maxReachLogical = std::max(m_maxReachLogical, eff.resolvedReach(parameters));
         m_maxTrailSeconds = std::max(m_maxTrailSeconds, eff.trailSeconds);
         if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
             m_anyAboveLayer = true;
         }
-        m_engagedLayers.push_back(EngagedLayer{layer.effectId, eff, layer.parameters});
+        m_engagedLayers.push_back(EngagedLayer{effectId, eff, parameters});
     }
     // A chain whose every layer resolved away is NOT engaged: the cost rule
     // is about live layers, not about a non-empty profile.

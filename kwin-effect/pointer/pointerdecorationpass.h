@@ -4,11 +4,12 @@
 #pragma once
 
 #include <PhosphorPointer/PointerHistory.h>
-#include <PhosphorPointer/PointerProfile.h>
 #include <PhosphorPointer/PointerShaderContract.h>
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorPointer/PointerUniformExtension.h>
+
+#include <PhosphorSurface/DecorationProfile.h>
 
 #include <QHash> // std::hash<QString> specialization for the unordered_map key below
 #include <QPointF>
@@ -120,12 +121,15 @@ public:
         return m_registry;
     }
 
-    /// `Pointer/Enabled`. Re-derives the engaged-chain cache.
-    void setEnabled(bool enabled);
-    /// `Pointer/Chain`. Re-derives the engaged-chain cache; a no-op when the
-    /// profile is unchanged, so a settings broadcast that touched something
-    /// else does not restart a live chain.
-    void setProfile(const PhosphorPointerShaders::PointerProfile& profile);
+    /// The decoration profile resolved at the `pointer` path of the effect's
+    /// DecorationProfileTree. Its enabled chain, its per-pack parameters and
+    /// its disabled-pack set are the whole configuration of this pass: there
+    /// is no master switch, exactly as for every other decoration surface, so
+    /// "on" means "the resolved chain has at least one enabled layer".
+    /// Re-derives the engaged-chain cache; a no-op when the profile is
+    /// unchanged, so a settings broadcast that touched something else does not
+    /// restart a live chain.
+    void setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile);
 
     /// The pointer moved and/or its buttons changed. Called from
     /// PlasmaZonesEffect::slotMouseChanged, the only cursor-motion signal the
@@ -370,8 +374,7 @@ private:
     PhosphorPointerShaders::PointerShaderRegistry m_registry;
     bool m_registryPathsAdded = false;
 
-    bool m_enabled = false;
-    PhosphorPointerShaders::PointerProfile m_profile;
+    PhosphorSurfaceShaders::DecorationProfile m_profile;
 
     /// The cost-rule verdict and its derived budgets. See rebuildChain().
     bool m_engaged = false;

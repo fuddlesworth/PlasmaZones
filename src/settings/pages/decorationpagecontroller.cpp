@@ -5,10 +5,12 @@
 
 #include "decoration_controller_detail.h"
 #include "decorationpreviewcontroller.h"
+#include "pointerpreviewcontroller.h"
 
 #include "config/configdefaults.h"
 #include "core/interfaces/isettings.h"
 
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
@@ -160,18 +162,28 @@ const DecorationProfileTree& DecorationPageController::tree() const
 }
 
 DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
-                                                   ISettings* settings, QObject* parent)
+                                                   ISettings* settings,
+                                                   PhosphorPointerShaders::PointerShaderRegistry* pointerRegistry,
+                                                   QObject* parent)
     // "decoration-staging", not "decorations": the sidebar nav node owns the
     // bare id (regVirtual in settingscontroller_pageregistration.cpp), and the
     // staging controller stays independently addressable — same split as
     // AnimationsPageController's "animations-staging".
     : PhosphorControl::PageController(QStringLiteral("decoration-staging"), parent)
     , m_registry(registry)
+    , m_pointerRegistry(pointerRegistry)
     , m_settings(settings)
     , m_preview(new DecorationPreviewController(registry, settings, this))
+    , m_pointerPreview(new PointerPreviewController(pointerRegistry, this))
 {
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &DecorationPageController::shaderEffectsChanged);
+    }
+    // Both families feed the same browser and the same set of cards, so a
+    // rescan on either registry has to re-fire the one catalogue signal.
+    if (m_pointerRegistry) {
+        connect(m_pointerRegistry, &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
                 &DecorationPageController::shaderEffectsChanged);
     }
     if (m_settings) {
@@ -197,20 +209,64 @@ QObject* DecorationPageController::previewController() const
     return m_preview;
 }
 
+QObject* DecorationPageController::pointerPreviewController() const
+{
+    return m_pointerPreview;
+}
+
 QString DecorationPageController::previewKind() const
 {
     return QStringLiteral("decoration");
 }
 
+QString DecorationPageController::previewKindFor(const QString& effectId) const
+{
+    if (m_pointerRegistry && !effectId.isEmpty() && m_pointerRegistry->hasEffect(effectId))
+        return QStringLiteral("pointer");
+    return previewKind();
+}
+
+QObject* DecorationPageController::previewControllerFor(const QString& effectId) const
+{
+    if (m_pointerRegistry && !effectId.isEmpty() && m_pointerRegistry->hasEffect(effectId))
+        return m_pointerPreview;
+    return m_preview;
+}
+
 // ── Available packs ───────────────────────────────────────────────────────
+
+namespace {
+
+/// Type token a browser row carries, and the sole value of its `appliesTo`
+/// list. Two families share the decoration browser now, and the type axis is
+/// what separates them there.
+constexpr QLatin1String kTypeSurface{"surface"};
+constexpr QLatin1String kTypePointer{"pointer"};
+
+/// Tag @p row with the family it came from, in the shape ShaderBrowserPage's
+/// type axis reads: a `type` token plus a one-element `appliesTo`.
+QVariantMap tagged(QVariantMap row, QLatin1String type)
+{
+    row.insert(QLatin1String("type"), QString(type));
+    row.insert(QLatin1String("appliesTo"), QStringList{QString(type)});
+    return row;
+}
+
+} // namespace
 
 QVariantList DecorationPageController::availableShaderEffects() const
 {
     QVariantList result;
+    if (m_pointerRegistry) {
+        const auto pointerEffects = m_pointerRegistry->availableEffects();
+        result.reserve(pointerEffects.size());
+        for (const auto& effect : pointerEffects)
+            result.append(tagged(effectToMap(effect), kTypePointer));
+    }
     if (!m_registry)
         return result;
     const auto effects = m_registry->availableEffects();
-    result.reserve(effects.size());
+    result.reserve(result.size() + effects.size());
     for (const auto& effect : effects) {
         // EVERY pack is offered, including "border" and "opacity-tint". Those two
         // also back the plain config/rule-owned layers in easy mode, but that is a
@@ -219,8 +275,32 @@ QVariantList DecorationPageController::availableShaderEffects() const
         // into a chain they are ordinary packs that render through their OWN params
         // (setChain seeds those from the plain setting via providesBorder /
         // providesOpacityTint), exactly like frost's contentOpacity.
-        result.append(effectToMap(effect));
+        result.append(tagged(effectToMap(effect), kTypeSurface));
     }
+    return result;
+}
+
+QVariantList DecorationPageController::availableShaderEffectsForPath(const QString& path) const
+{
+    QVariantList result;
+    // The pointer surface renders through the pointer pass, which knows only
+    // the pointer contract, so offering it a surface pack would be offering a
+    // pack that cannot draw. The reverse holds for every other surface.
+    if (path == PhosphorSurfaceShaders::decorationPointerPath()) {
+        if (!m_pointerRegistry)
+            return result;
+        const auto effects = m_pointerRegistry->availableEffects();
+        result.reserve(effects.size());
+        for (const auto& effect : effects)
+            result.append(tagged(effectToMap(effect), kTypePointer));
+        return result;
+    }
+    if (!m_registry)
+        return result;
+    const auto effects = m_registry->availableEffects();
+    result.reserve(effects.size());
+    for (const auto& effect : effects)
+        result.append(tagged(effectToMap(effect), kTypeSurface));
     return result;
 }
 

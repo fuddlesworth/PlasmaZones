@@ -2163,48 +2163,6 @@ public:
         setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
     }
 
-    // Pointer chain (ISettings). Real storage, same rationale as the decoration
-    // tree above: the KWin effect fetches both pointer keys by SettingProperty,
-    // so a no-op setter would make the pointer pass untestable through the stub.
-    bool pointerEnabled() const override
-    {
-        return m_pointerEnabled;
-    }
-    void setPointerEnabled(bool value) override
-    {
-        if (m_pointerEnabled == value) {
-            return;
-        }
-        m_pointerEnabled = value;
-        Q_EMIT pointerEnabledChanged();
-        Q_EMIT settingsChanged();
-    }
-    PhosphorPointerShaders::PointerProfile pointerChain() const override
-    {
-        return m_pointerChain;
-    }
-    void setPointerChain(const PhosphorPointerShaders::PointerProfile& value) override
-    {
-        if (m_pointerChain == value) {
-            return;
-        }
-        m_pointerChain = value;
-        Q_EMIT pointerChainChanged();
-        Q_EMIT settingsChanged();
-    }
-    QString pointerChainJson() const override
-    {
-        return QString::fromUtf8(QJsonDocument(pointerChain().toJson()).toJson(QJsonDocument::Compact));
-    }
-    void setPointerChainJson(const QString& json) override
-    {
-        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-        if (doc.isNull() || !doc.isObject()) {
-            return;
-        }
-        setPointerChain(PhosphorPointerShaders::PointerProfile::fromJson(doc.object()));
-    }
-
     // Decorations.Performance (ISettings). Real storage, not no-op setters: the
     // daemon arms its idle ladder off decorationPauseWhenIdleChanged /
     // decorationIdleTimeoutSecChanged, so a stub that could never emit them would make
@@ -3074,8 +3032,6 @@ private:
     QVariantMap m_motionProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
-    bool m_pointerEnabled = ConfigDefaults::pointerEnabled();
-    PhosphorPointerShaders::PointerProfile m_pointerChain = ConfigDefaults::pointerChain();
     QColor m_borderColor = ConfigDefaults::borderFallbackColor();
     QColor m_highlightColor = ConfigDefaults::highlightFallbackColor();
     QColor m_inactiveColor = ConfigDefaults::inactiveFallbackColor();
