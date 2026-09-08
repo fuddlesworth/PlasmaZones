@@ -257,7 +257,8 @@ Item {
         // label was going to trigger anyway) rather than a full refreshFromTree, which
         // would re-create the very N-round-trip storm _inheritRev exists to
         // prevent: this fires at slider rate while the Global duration is
-        // dragged, and every built card would pay six file opens per tick.
+        // dragged, and every built card would re-read the whole override tree
+        // several times per tick.
         function onAnimationDurationChanged() {
             root._reseedFromInherited();
         }

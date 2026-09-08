@@ -25,6 +25,7 @@
 #include <PhosphorRules/RuleSet.h>
 #include <PhosphorRules/WindowQuery.h>
 
+#include <QCryptographicHash>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -1207,6 +1208,15 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
     // balanced. Name the constant where it is used and there is nothing to resolve.
     PhosphorProtocol::ClientHelpers::loadSettingAsync(
         this, PhosphorProtocol::Service::SettingProperty::MotionProfileTree, [this](const QVariant& v) {
+            // Skip the parse when the bytes have not moved. Both the generic
+            // settingsChanged refresh and this key's own signal land here on
+            // every Save, and rebuilding the tree resolves a curve per node on
+            // the compositor thread.
+            const QByteArray digest = QCryptographicHash::hash(v.toString().toUtf8(), QCryptographicHash::Sha256);
+            if (digest == m_motionProfileTreeDigest) {
+                return;
+            }
+            m_motionProfileTreeDigest = digest;
             dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::MotionProfileTree, v,
                                 [this](const QJsonObject& obj) {
                                     // ProfileTree::fromJson resolves each node's optional
@@ -1249,9 +1259,15 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
     // Before the async settings load lands, the animator's `duration` is still
     // nullopt, so effectiveDuration() falls back to Profile::DefaultDuration
     // while `animationDurationMs()` reports Limits::DefaultAnimationDurationMs.
-    // Callers rely on those two agreeing (it is what makes the pre-load window
-    // resolve to the same duration either way), so pin the coupling here rather
-    // than let a future bump to one silently skew it.
+    // Callers rely on those two agreeing, so pin the coupling here rather than
+    // let a future bump to one silently skew it.
+    //
+    // Note what this does NOT say: neither constant is the duration a user
+    // actually runs at. ConfigDefaults::animationDuration() ships 320, so on a
+    // default install the pre-load window animates at 150 and settles to 320
+    // once the fetch lands. The assert keeps the two library constants from
+    // drifting APART; closing the gap to the shipped default would be a
+    // behaviour change across every consumer of Profile::DefaultDuration.
     static_assert(
         qRound(PhosphorAnimation::Profile::DefaultDuration) == PhosphorAnimation::Limits::DefaultAnimationDurationMs,
         "Profile::DefaultDuration and Limits::DefaultAnimationDurationMs must agree, or the pre-settings-load "

@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QVarLengthArray>
 
 namespace PhosphorAnimation {
 
@@ -28,19 +29,23 @@ Profile ProfileTree::overlayChain(const QString& path, Profile seed) const
     // their @p seed value, and a chain with no override returns @p seed
     // unchanged. resolve() and overlayChainOnto() differ only in the seed
     // (m_baseline vs a caller-owned base) and whether they apply withDefaults().
-    QStringList chain;
+    // Built leaf-first then walked in reverse, rather than prepending into a
+    // QStringList. Prepend shifts every element already there, and this is on
+    // the snap path, which calls it once per retiled item. Depth is 2-3, so the
+    // inline capacity covers the usual case with no allocation at all.
+    QVarLengthArray<QString, 4> chain;
     QString cursor = path;
     while (!cursor.isEmpty()) {
-        chain.prepend(cursor);
+        chain.append(cursor);
         cursor = ProfilePaths::parentPath(cursor);
     }
 
-    for (const QString& step : chain) {
-        auto it = m_overrides.constFind(step);
-        if (it == m_overrides.constEnd()) {
+    for (auto it = chain.crbegin(); it != chain.crend(); ++it) {
+        auto found = m_overrides.constFind(*it);
+        if (found == m_overrides.constEnd()) {
             continue;
         }
-        overlay(seed, it.value());
+        overlay(seed, found.value());
     }
     return seed;
 }
