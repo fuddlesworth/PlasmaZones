@@ -6,6 +6,7 @@
 #include "core/platform/logging.h"
 #include "core/types/animationshadersupportedpaths.h"
 
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
@@ -127,6 +128,52 @@ QVariantMap Settings::committedMotionProfileTree() const
     return m_baseline.value(ConfigDefaults::animationsGroup()).value(ConfigDefaults::motionProfileTreeKey()).toMap();
 }
 
+namespace {
+
+/// The keys a motion-tree entry's `profile` may carry, and how long a string in
+/// one may be.
+///
+/// This is a PERSISTENCE boundary, not a UI convenience. The tree is one shared
+/// config key that every read of per-event timing copies whole, the file is
+/// hand-editable, and several writers reach it: the animations page, a settings
+/// profile being applied, `setMotionProfileTreeJson` from QML, and the v7→v8
+/// migration. The page filtered its own writes and the migration filtered its
+/// own import, which left every other door unguarded — a stray key or a 64 KB
+/// string entering through one of them would then stay, because
+/// `Profile::fromJson` ignores what it does not recognise rather than pruning
+/// it.
+///
+/// Deliberately does NOT parse. Judging a curve would need a CurveRegistry this
+/// layer must not grow, for the reason the setter's own comment gives.
+QVariantMap boundedProfileMap(const QVariantMap& profile, const QString& path)
+{
+    using P = PhosphorAnimation::Profile;
+    static const QSet<QString> kKnownFields = {
+        QLatin1String(P::JsonFieldCurve),           QLatin1String(P::JsonFieldDuration),
+        QLatin1String(P::JsonFieldMinDistance),     QLatin1String(P::JsonFieldSequenceMode),
+        QLatin1String(P::JsonFieldStaggerInterval), QLatin1String(P::JsonFieldPresetName),
+    };
+    // Above any legitimate curve spec or preset name and far below the cost of
+    // letting an unbounded string reach the key.
+    constexpr int kMaxStringChars = 1024;
+
+    QVariantMap out;
+    for (auto it = profile.cbegin(); it != profile.cend(); ++it) {
+        if (!kKnownFields.contains(it.key())) {
+            qCWarning(lcConfig) << "setMotionProfileTree: dropping unknown field" << it.key() << "at" << path;
+            continue;
+        }
+        if (it.value().typeId() == QMetaType::QString && it.value().toString().size() > kMaxStringChars) {
+            qCWarning(lcConfig) << "setMotionProfileTree: dropping over-long" << it.key() << "at" << path;
+            continue;
+        }
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+} // namespace
+
 void Settings::setMotionProfileTree(const QVariantMap& tree)
 {
     refreshCleanBackendFromDisk();
@@ -149,7 +196,24 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
     // above does not apply. Doing it here rather than only at the page's helper
     // makes the persistence boundary canonical whoever builds the map —
     // `setMotionProfileTreeJson`, a profile apply, or a future writer.
+    // Filter each entry's profile body before anything else looks at the map,
+    // so the comparison below and the stored value are the same shape.
     QVariantMap canonical = tree;
+    {
+        const QVariantList entries = canonical.value(QLatin1String("overrides")).toList();
+        QVariantList filtered;
+        filtered.reserve(entries.size());
+        for (const QVariant& entryVar : entries) {
+            QVariantMap entry = entryVar.toMap();
+            const QString path = entry.value(QLatin1String("path")).toString();
+            entry.insert(QLatin1String("profile"),
+                         boundedProfileMap(entry.value(QLatin1String("profile")).toMap(), path));
+            filtered.append(entry);
+        }
+        if (!filtered.isEmpty()) {
+            canonical.insert(QLatin1String("overrides"), filtered);
+        }
+    }
     if (canonical.value(QLatin1String("overrides")).toList().isEmpty()) {
         canonical.remove(QLatin1String("overrides"));
         if (canonical.value(QLatin1String("baseline")).toMap().isEmpty()) {
