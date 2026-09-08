@@ -55,6 +55,24 @@ Item {
     /// Dropped-focus freeze: clocks stop, the preview holds its frame.
     property bool animating: true
 
+    /// What this pane adds around the composition: the ColumnLayout's inset on
+    /// each side, plus the frame's 1px border on each side.
+    ///
+    /// A host that wants the stage at 1:1 has to hand the pane THIS MUCH MORE
+    /// than the canvas. Handed the bare canvas width, the frame inside is
+    /// narrower than the canvas it contains, the fit below reduces for no
+    /// reason, and the reduction switches the layer on. That mattered: a
+    /// layered render node whose only per-frame change is a uniform write does
+    /// not repaint, so every class that animates by driving iTime alone —
+    /// appearance (window open and close), geometry, tab, desktop — rendered a
+    /// still frame. Only move and strip kept going, because they dirty the
+    /// scene graph by moving a real item or free-running the shader item.
+    readonly property real chromeWidth: 2 * Kirigami.Units.smallSpacing + 2
+
+    /// The canvas plus that chrome, so a host that simply respects
+    /// implicitWidth lands on 1:1 without knowing any of the above.
+    implicitWidth: PreviewCanvas.size.width + root.chromeWidth
+
     /// Invokable-call dependency tick — see DecorationPreviewPane._rev.
     readonly property int _rev: previewController ? previewController.previewRevision : 0
 

@@ -69,7 +69,12 @@ GridLayout {
     signal randomizeRequested(var rolled)
     signal resetRequested(var defaults)
 
-    readonly property real _previewWidth: Kirigami.Units.gridUnit * 24
+    // Wide enough that a preview lands at 1:1 rather than being reduced to fit,
+    // at any font scale. A pane-shaped preview frames the canvas, so the column
+    // has to carry the canvas plus that frame; derived from the canvas rather
+    // than from grid units alone, because at a small grid unit a purely
+    // grid-derived column is narrower than the canvas and silently reduces.
+    readonly property real _previewWidth: Math.max(Kirigami.Units.gridUnit * 24, PreviewCanvas.size.width + Kirigami.Units.gridUnit)
     readonly property bool _hasParams: (root.parameters || []).length > 0
     readonly property bool _hasPreview: root.previewKind.length > 0 && root.previewController !== null && root.packId.length > 0
     // Two columns need both children AND room for the preview's column twice

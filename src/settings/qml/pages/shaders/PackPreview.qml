@@ -240,9 +240,15 @@ Item {
         if (!isFinite(root.width) || root.width <= 0 || cw <= 0 || ch <= 0)
             return 1.0;
 
+        if (root._paneShaped) {
+            // Measured against what the pane actually occupies, which is the
+            // canvas plus its own frame, or a cramped host would read as 1:1
+            // and let the frame overhang by exactly that chrome.
+            const paneW = cw + ((paneLoader.item && paneLoader.item.chromeWidth !== undefined) ? paneLoader.item.chromeWidth : 0);
+            return Math.min(1.0, root.width / paneW);
+        }
+
         const byWidth = root.width / cw;
-        if (root._paneShaped)
-            return Math.min(1.0, byWidth);
 
         if (!isFinite(root.height) || root.height <= 0)
             return 1.0;
@@ -270,7 +276,23 @@ Item {
         id: stage
 
         anchors.centerIn: parent
-        width: root._selfScaling ? root.width : PreviewCanvas.size.width
+        width: {
+            if (root._selfScaling)
+                return root.width;
+
+            // A pane FRAMES the canvas rather than being it: its inset and
+            // border sit OUTSIDE the composition. Handing it the bare canvas
+            // width leaves the frame inside narrower than the canvas, so the
+            // pane's own fit reduces and switches its layer on — and a layered
+            // render node whose only per-frame change is a uniform write does
+            // not repaint, which froze every iTime-driven class. Ask the pane
+            // what it adds; `chromeWidth` is theme-derived and never depends on
+            // this width, so reading it here cannot loop.
+            if (root._paneShaped && paneLoader.item && paneLoader.item.chromeWidth !== undefined)
+                return PreviewCanvas.size.width + paneLoader.item.chromeWidth;
+
+            return PreviewCanvas.size.width;
+        }
         height: {
             if (root._selfScaling)
                 return root.height;
