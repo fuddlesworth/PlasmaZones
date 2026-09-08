@@ -68,11 +68,20 @@ namespace PlasmaZones::motionset {
 ///                         live snapshot it is compared against shares the same
 ///                         mistake — the set would still read as active while
 ///                         describing a different look.
+/// @param knowsEffectId   Whether this build has the named pack installed.
+///                        Validation refuses a set naming a pack the recipient
+///                        does not have, rather than letting the write refuse
+///                        it mid-batch after earlier entries already landed —
+///                        the same whole-set promise the shader-leg gate keeps.
+///                        Must answer true for an empty id (the "no pack"
+///                        sentinel) and true while the registry is still
+///                        unscanned, so an early call cannot reject everything.
 ShaderSetStore::Config
 makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
            std::function<QVariantMap()> readShaders,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*shader*/)> writeShader,
-           std::function<QString(const QString& /*path*/)> resolvedShaderId);
+           std::function<QString(const QString& /*path*/)> resolvedShaderId,
+           std::function<bool(const QString& /*effectId*/)> knowsEffectId);
 
 } // namespace PlasmaZones::motionset

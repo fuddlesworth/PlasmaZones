@@ -108,7 +108,8 @@ const QSet<QString>& knownEventPaths()
 /// malformed entry rejects the set rather than committing partial state.
 /// Shared by validate (import / apply gate) and apply (the commit), so the
 /// two can never drift apart on what counts as a valid entry.
-bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
+bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged,
+                  const std::function<bool(const QString&)>& knowsEffectId)
 {
     using namespace PhosphorAnimation;
 
@@ -195,6 +196,19 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
                 qCWarning(lcConfig) << "motionset: path carries a shader half but supports no shader leg" << path;
                 return false;
             }
+            // Same argument one step further out: the WRITE refuses an effectId
+            // this build does not have installed, so a set naming a pack the
+            // sender has and the recipient does not passed validation and then
+            // failed mid-commit — the entries before it already written, the
+            // event that failed left carrying the set's new timing over its old
+            // pack. Refuse the whole set here instead, which is the promise the
+            // header makes and the only outcome a user can act on.
+            const QString effectId = shader.value(kEffectIdKey).toString();
+            if (!effectId.isEmpty() && knowsEffectId && !knowsEffectId(effectId)) {
+                qCWarning(lcConfig) << "motionset: set names a pack this build does not have" << effectId << "for path"
+                                    << path;
+                return false;
+            }
             out.hasShader = true;
             out.shader = shader.toVariantMap();
         }
@@ -232,7 +246,8 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
                                   std::function<bool(const QString&, const QVariantMap&)> writeOverride,
                                   std::function<QVariantMap()> readShaders,
                                   std::function<bool(const QString&, const QVariantMap&)> writeShader,
-                                  std::function<QString(const QString&)> resolvedShaderId)
+                                  std::function<QString(const QString&)> resolvedShaderId,
+                                  std::function<bool(const QString&)> knowsEffectId)
 {
     // The domain cannot function without these: a missing callable is a wiring
     // bug, not a runtime condition. Assert in debug; the lambdas below still
@@ -242,6 +257,13 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     Q_ASSERT(writeOverride);
     Q_ASSERT(readShaders);
     Q_ASSERT(writeShader);
+    // Both of these degrade SILENTLY rather than loudly, which is why they are
+    // asserted alongside the rest: a null resolvedShaderId skips the entire
+    // self-containment sweep, so the set saves with almost nothing in it, and a
+    // null knowsEffectId drops the pack-installed gate, putting mid-batch
+    // refusals back. Neither surfaces as an obvious failure at the callsite.
+    Q_ASSERT(resolvedShaderId);
+    Q_ASSERT(knowsEffectId);
 
     ShaderSetStore::Config config;
     // Named rather than left to the default, so a future format bump is a
@@ -381,22 +403,22 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
         return setTiming == liveTiming;
     };
 
-    config.validate = [](const QJsonObject& root) -> bool {
+    config.validate = [knowsEffectId](const QJsonObject& root) -> bool {
         QList<StagedEntry> staged;
-        return stageEntries(root, &staged);
+        return stageEntries(root, &staged, knowsEffectId);
     };
 
     // ── Apply: validate everything up-front, then write each entry. Both
     //    halves are config keys, so a mid-batch failure leaves the settings
     //    baseline untouched and Discard reverts the whole page in one
     //    `Settings::load()` — the same guarantee decoration has.
-    config.apply = [writeOverride = std::move(writeOverride),
-                    writeShader = std::move(writeShader)](const QJsonObject& root) -> bool {
+    config.apply = [writeOverride = std::move(writeOverride), writeShader = std::move(writeShader),
+                    knowsEffectId](const QJsonObject& root) -> bool {
         if (!writeOverride || !writeShader) {
             return false;
         }
         QList<StagedEntry> staged;
-        if (!stageEntries(root, &staged)) {
+        if (!stageEntries(root, &staged, knowsEffectId)) {
             return false;
         }
         QStringList committedPaths;

@@ -143,28 +143,43 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // The per-event overrides a set APPLIES are still staged, exactly as
     // decoration's tree writes are — they are config keys, and Discard is
     // `Settings::load()`.
-    m_motionSets = new ShaderSetStore(motionset::makeConfig(
-                                          [this]() {
-                                              return motionTree();
-                                          },
-                                          motionSetsDirFn, writeOverrideFn, readShadersFn, writeShaderFn,
-                                          [this](const QString& path) {
-                                              // What the path RENDERS with:
-                                              // ancestor chain and built-in
-                                              // default included. readShaders
-                                              // above answers direct overrides
-                                              // only, which is the right shape
-                                              // for the entries a set stores
-                                              // and the wrong one for the
-                                              // self-containment sweep.
-                                              if (m_settings == nullptr) {
-                                                  return QString();
-                                              }
-                                              return PhosphorAnimationShaders::resolveShaderWithDefault(
-                                                         m_settings->shaderProfileTree(), path)
-                                                  .effectiveEffectId();
-                                          }),
-                                      this);
+    m_motionSets = new ShaderSetStore(
+        motionset::makeConfig(
+            [this]() {
+                return motionTree();
+            },
+            motionSetsDirFn, writeOverrideFn, readShadersFn, writeShaderFn,
+            [this](const QString& path) {
+                // What the path RENDERS with:
+                // ancestor chain and built-in
+                // default included. readShaders
+                // above answers direct overrides
+                // only, which is the right shape
+                // for the entries a set stores
+                // and the wrong one for the
+                // self-containment sweep.
+                if (m_settings == nullptr) {
+                    return QString();
+                }
+                return PhosphorAnimationShaders::resolveShaderWithDefault(m_settings->shaderProfileTree(), path)
+                    .effectiveEffectId();
+            },
+            [this](const QString& effectId) {
+                // Mirrors acceptableShaderEffectId's
+                // membership gate, including its
+                // startup grace: an unscanned
+                // registry answers "known" for
+                // everything, because refusing
+                // every set during that window
+                // would be worse than accepting
+                // one that the write then checks
+                // again anyway.
+                if (effectId.isEmpty() || m_shaderRegistry == nullptr || m_shaderRegistry->effectIds().isEmpty()) {
+                    return true;
+                }
+                return m_shaderRegistry->hasEffect(effectId);
+            }),
+        this);
     // Live-preview data source for the shader browser's detail dialog. Both
     // borrows are the controller's own, so the lifetimes already agree.
     m_preview = new AnimationPreviewController(shaderRegistry, settings, this);

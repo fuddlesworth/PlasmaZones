@@ -162,17 +162,20 @@ void Daemon::setupAnimationProfiles()
         requestAnimationProfilePublish();
     });
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
-        // Same staleness rule as the profilesChanged handler above: a cached
-        // raw profile may hold a Profile::curve pointer resolved against the
-        // pre-edit curve. Self-correcting even without this (curvesChanged is
-        // also wired to the profile loader's debounced rescan, whose
-        // profilesChanged clears the cache), but that leaves one publish tick
-        // serving the stale curve; the clear is free.
+        // A cached raw profile may hold a Profile::curve pointer resolved
+        // against the pre-edit curve, and nothing else clears it — since
+        // schema v8 there is no profile loader whose rescan would.
         //
-        // The timing tree is re-installed for the same reason: each Profile
-        // holds the curve it RESOLVED at parse time, so an entry that named a
-        // curve which did not exist yet stores a null curve and silently
-        // animates on the library default until the tree is parsed again.
+        // Everything holding a resolved curve has to be re-parsed, in the same
+        // curves → seeds → tree order the initial load uses. Each Profile holds
+        // the curve it RESOLVED at parse time, so an entry naming a curve that
+        // did not exist yet stores a null curve and silently animates on the
+        // library default until it is parsed again.
+        //
+        // The seeds need this as much as the tree does: their curve specs are
+        // real files in data/curves, so editing one leaves all 29 family seeds
+        // pinned to the pre-edit curve object for the life of the process.
+        seedShellAnimationFamilies(m_profileRegistry, m_curveRegistry);
         installMotionProfileTree(m_profileRegistry, m_curveRegistry, m_settings->motionProfileTree(),
                                  QString(kPlasmaZonesUserProfilesOwnerTag));
         m_rawJsonProfiles.clear();
