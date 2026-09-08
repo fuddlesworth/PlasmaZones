@@ -97,8 +97,28 @@ private Q_SLOTS:
         // Preset file
         QVERIFY(
             c.addUserPreset(QStringLiteral("My Curve"), {{QStringLiteral("curve"), QStringLiteral("0.5,0,0.5,1")}}));
-        // Override file at a known path
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+
+        // An override file at a KNOWN path, planted by hand. It has to be
+        // planted rather than written through setOverride: since schema v8
+        // setOverride writes a config key and puts nothing in this directory,
+        // so driving it here would leave the assertion below true no matter
+        // what the library filtered. The file is what a pre-v8 build left
+        // behind, and it is still sitting in the profiles dir the preset
+        // library reads — the migration copies those files, it does not remove
+        // them.
+        //
+        // This is the KNOWN-path case, which the orphan slot below does not
+        // reach: its file names a path allBuiltInPaths() no longer contains, so
+        // it exercises the dotted-basename guard. This one is caught earlier,
+        // by the known-path membership check.
+        QFile f(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QJsonObject obj;
+        obj.insert(QStringLiteral("name"), QStringLiteral("editor.snapIn"));
+        obj.insert(QStringLiteral("duration"), 250);
+        const QByteArray objBytes = QJsonDocument(obj).toJson();
+        QCOMPARE(f.write(objBytes), static_cast<qint64>(objBytes.size()));
+        f.close();
 
         // userPresets sees ONLY the preset, not the override
         const QVariantList presets = c.userPresets();
@@ -290,26 +310,26 @@ private Q_SLOTS:
         QCOMPARE(presets.size(), 1);
         QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Good"));
     }
-    /// A failed write leaves the file untouched, so the snapshot it staged for
-    /// Discard has to go back too. Without the rollback the page sits dirty
-    /// with nothing to restore, and the only way out is a no-op Discard.
-    void failedWriteDoesNotLeaveThePageDirty()
+    /// A preset write that cannot reach disk reports the failure to the user
+    /// rather than failing silently.
+    ///
+    /// This slot used to assert that the failure also left no staged snapshot
+    /// behind. That assertion is gone because it can no longer fail: preset CRUD
+    /// is immediate since schema v8, the library is constructed with no snapshot
+    /// or rollback hooks at all, and `hasPendingChanges()` is a value comparison
+    /// over the two config trees that never consults a preset file. Asserting
+    /// `!hasPendingChanges()` on a page nothing here can dirty would pass with
+    /// the whole write path deleted.
+    void failedWriteToastsRatherThanFailingSilently()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
-        QVERIFY(!c.hasPendingChanges());
 
-        // Read-execute only: the directory still exists (so the snapshot stages a
-        // "did not exist" entry for the new file and allows the write), but
-        // QSaveFile cannot create anything inside it.
-        //
-        // A directory at the destination would NOT work here: the snapshot guard
-        // refuses a non-regular file before the write is ever attempted, so it
-        // would test that guard instead of this one. The drop-vs-keep semantics of
-        // the rollback are pinned by the two tests below, which do run as root.
+        // Read-execute only: the directory still exists, so the write is
+        // attempted, but QSaveFile cannot create anything inside it.
         QVERIFY(QFile::setPermissions(tmp.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
 
         QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
@@ -325,9 +345,12 @@ private Q_SLOTS:
         if (written)
             QSKIP("The write succeeded, so this environment ignores directory permissions (running as root?).");
 
+        // The load-bearing assertion: the user is told. Deleting the
+        // toastRequested emit in AnimationPresetLibrary's write-failure arm
+        // fails this.
         QCOMPARE(toastSpy.count(), 1);
-        // The load-bearing assertion: the failed write staged nothing.
-        QVERIFY(!c.hasPendingChanges());
+        // And the preset really did not land, so the list is unchanged.
+        QVERIFY(c.userPresets().isEmpty());
     }
 
     /// Preset CRUD is IMMEDIATE, matching the decoration page's set files.

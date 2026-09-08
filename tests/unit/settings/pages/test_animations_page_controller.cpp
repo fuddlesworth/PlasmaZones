@@ -868,9 +868,12 @@ private Q_SLOTS:
 
     // ─── Path traversal hardening (security) ──────────────────────────────
 
-    /// `setOverride` MUST reject any path that isn't a built-in event
-    /// path. A crafted `"../etc/passwd"` would otherwise let a hostile
-    /// QML caller write outside `userProfilesDir()`.
+    /// `setOverride` MUST reject any path that isn't a built-in event path.
+    /// Since schema v8 the gate no longer keeps a hostile QML caller from
+    /// writing outside `userProfilesDir()` — there is no file — it keeps a
+    /// bogus path out of the shared `Animations/MotionProfileTree`, where an
+    /// entry no page's scoped walk covers would be both invisible and
+    /// impossible to remove.
     void setOverride_rejectsTraversalPaths()
     {
         QTemporaryDir tmp;
@@ -892,11 +895,20 @@ private Q_SLOTS:
 
         QCOMPARE(spy.count(), 0);
 
-        // No file landed anywhere under the tmp dir.
-        QDir scan(tmp.path());
-        const auto entries = scan.entryList(QDir::Files | QDir::NoDotAndDotDot);
-        QVERIFY2(entries.isEmpty(),
-                 qPrintable(QStringLiteral("traversal write leaked: ") + entries.join(QLatin1Char(','))));
+        // Nothing reached the tree. Since schema v8 the hazard is no longer a
+        // file written outside the profiles dir — setOverride writes a config
+        // key — it is a bogus path landing as an ENTRY in the shared timing
+        // tree, where it would be invisible to every page's scoped walk and
+        // permanently undeletable. Asserting on the store is what makes this
+        // slot fail if the isValidEventPath gate on the READ side goes: the
+        // returns above only cover the write side.
+        for (const QString& bad :
+             {QStringLiteral("../etc/passwd"), QStringLiteral("../../bad"), QStringLiteral("..\\windows-path"),
+              QStringLiteral("editor/../../etc"), QStringLiteral("not.a.real.path")}) {
+            QVERIFY2(TestHelpers::rawMotionOverride(fx.settings, bad).isEmpty(),
+                     qPrintable(QStringLiteral("traversal path stored an entry: ") + bad));
+        }
+        QVERIFY(fx.settings.motionProfileTree().value(QStringLiteral("overrides")).toList().isEmpty());
     }
 
     /// `clearOverride` and `hasOverride` MUST also reject non-event paths
