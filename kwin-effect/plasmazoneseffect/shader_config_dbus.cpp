@@ -745,6 +745,14 @@ void PlasmaZonesEffect::scheduleShaderTransitionTeardown(KWin::EffectWindow* win
         // to run — the open animation is cut mid-flight and the window pops. Re-arm
         // for the remainder instead. Any future rebase gets the same treatment for
         // free, which is why this is a re-check and not a suppression special case.
+        //
+        // No iteration budget is needed and none is wanted. Each re-arm waits
+        // at least a millisecond of real time and asks for at most the leg's
+        // own remaining duration, and rebasing happens only while a window is
+        // under restore suppression, which carries its own deadline. So the
+        // chain is bounded by the suppression window plus one duration, and a
+        // budget here would instead cut a leg short exactly in the case this
+        // re-check exists to protect.
         const qint64 remaining =
             static_cast<qint64>(live->durationMs) - (ShaderInternal::shaderClockNowMs() - live->startTimeMs);
         if (remaining > 0) {

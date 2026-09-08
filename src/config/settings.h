@@ -1723,7 +1723,7 @@ public:
     /// rank the global profile against the per-family seeds need the
     /// distinction, because a layer that is always fully engaged would
     /// otherwise outrank the seeds unconditionally and make them dead.
-    bool hasExplicitAnimationProfile() const;
+    bool hasExplicitAnimationProfile() const override;
 
     /// Point this Settings at a CurveRegistry after construction.
     ///

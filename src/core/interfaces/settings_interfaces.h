@@ -642,6 +642,23 @@ public:
     virtual QVariantMap motionProfileTree() const = 0;
     virtual void setMotionProfileTree(const QVariantMap& tree) = 0;
 
+    /// Whether the user has ever explicitly stored a global animation profile.
+    ///
+    /// A STORAGE fact, not a value comparison: `animationProfile()` substitutes
+    /// the shipped default blob for an absent key, so every field reads as
+    /// engaged whether or not the user has touched the page. Callers ranking
+    /// the global profile as user INTENT rather than as a shipped default need
+    /// this, and it is what gates the L2 seed layer against L3.
+    ///
+    /// Defaults to false, which is the right answer for a stub with no notion
+    /// of storage: nothing was explicitly set. Declared here so a test double
+    /// can drive the precedence gate at all, which it could not while this
+    /// lived only on the concrete Settings.
+    virtual bool hasExplicitAnimationProfile() const
+    {
+        return false;
+    }
+
     /// The committed-baseline motion tree, for the same dirty-check role
     /// `committedShaderProfileTree()` plays. The default returns the live tree,
     /// so a stub with no baseline notion reports "never diverged".

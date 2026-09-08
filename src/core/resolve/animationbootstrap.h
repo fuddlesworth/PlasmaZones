@@ -24,6 +24,8 @@ class CurveRegistry;
 
 namespace PlasmaZones {
 
+class Settings;
+
 /// Owner-tag partition used by `seedShellAnimationFamilies`. Exposed so a
 /// caller can `clearOwner(tag)` to wipe just the family-seed partition
 /// without touching settings-driven or user-JSON entries. The composition
@@ -239,6 +241,21 @@ public:
     /// disagree with the compositor, which is the whole reason the method
     /// exists.
     void applyGlobalProfile(const PhosphorAnimation::Profile& profile, bool explicitlySet);
+
+    /// Do the whole four-step animation wiring for a secondary composition
+    /// root (settings app, editor) against @p settings.
+    ///
+    /// The four steps are: point the settings object's curve resolution at
+    /// THIS bootstrap's registry, install the timing tree, register the global
+    /// profile at the layer `hasExplicitAnimationProfile()` selects, and, when
+    /// @p keepLive, re-run the last two on every change plus on a curve
+    /// reload. Getting any of them wrong makes the process preview a timing
+    /// the compositor will not play, and the two roots had already drifted
+    /// apart doing it by hand.
+    ///
+    /// @param keepLive false for a short-lived modal process (the editor),
+    ///        which reads once at start-up and has nothing to keep current.
+    void bindToSettings(Settings& settings, bool keepLive);
 
 private:
     std::unique_ptr<PhosphorAnimation::CurveRegistry> m_curveRegistry;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "animationbootstrap.h"
+#include "config/settings.h"
 
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/CurveLoader.h>
@@ -357,5 +358,47 @@ void AnimationBootstrap::applyGlobalProfile(const PhosphorAnimation::Profile& pr
 }
 
 AnimationBootstrap::~AnimationBootstrap() = default;
+
+void AnimationBootstrap::bindToSettings(Settings& settings, bool keepLive)
+{
+    // Curve resolution first: a Profile holds the curve it RESOLVED at parse
+    // time, so the two applies below have to run against this process's own
+    // registry. Left on the never-populated process static, a global naming a
+    // user-authored curve previews as the library default while the compositor
+    // plays the real one.
+    settings.setCurveRegistry(curveRegistry());
+
+    const auto applyTree = [this, &settings]() {
+        applyMotionProfileTree(settings.motionProfileTree());
+    };
+    // The LAYER the global lands in is chosen by hasExplicitAnimationProfile,
+    // matching the daemon: an unset global is a shipped default and belongs
+    // beneath the family seeds, one the user chose belongs above them.
+    const auto applyGlobal = [this, &settings]() {
+        applyGlobalProfile(settings.animationProfile(), settings.hasExplicitAnimationProfile());
+    };
+    applyTree();
+    applyGlobal();
+
+    if (!keepLive) {
+        return;
+    }
+
+    QObject::connect(&settings, &Settings::motionProfileTreeChanged, &settings, applyTree);
+    QObject::connect(&settings, &Settings::animationProfileChanged, &settings, applyGlobal);
+
+    // Curves reload live here, and everything parsed against this registry —
+    // the family seeds and every tree entry — holds a stale curve object the
+    // moment a curve file changes. Re-run all three or the page previews a
+    // curve the compositor is no longer playing.
+    if (auto* loader = curveLoader()) {
+        QObject::connect(loader, &PhosphorAnimation::CurveLoader::curvesChanged, &settings,
+                         [this, applyTree, applyGlobal]() {
+                             seedShellAnimationFamilies(*profileRegistry(), *curveRegistry());
+                             applyTree();
+                             applyGlobal();
+                         });
+    }
+}
 
 } // namespace PlasmaZones

@@ -266,16 +266,10 @@ int main(int argc, char* argv[])
     // latches per process — but it is a side effect, not a lookup, and it is
     // why this is constructed once rather than on demand.
     PlasmaZones::Settings editorMotionSettings;
-    // Resolve curves through the registry this process loaded rather than the
-    // never-populated process static the standalone ctor leaves behind, or a
-    // global naming a user-authored curve previews as the library default
-    // while the compositor plays the real one.
-    editorMotionSettings.setCurveRegistry(animationBootstrap.curveRegistry());
-    animationBootstrap.applyMotionProfileTree(editorMotionSettings.motionProfileTree());
-    // The global profile too, or the editor animates from the family seeds
-    // while the compositor applies the user's global values on top.
-    animationBootstrap.applyGlobalProfile(editorMotionSettings.animationProfile(),
-                                          editorMotionSettings.hasExplicitAnimationProfile());
+    // The same wiring the settings app does, through the same helper. keepLive
+    // is false because this is a short-lived modal process: it reads once at
+    // start-up and has nothing to keep current.
+    animationBootstrap.bindToSettings(editorMotionSettings, /*keepLive=*/false);
 
     // Publish the bootstrap-owned registries + a fresh clock manager as
     // the QML-side defaults. Phase A3 of the architecture refactor

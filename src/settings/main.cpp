@@ -285,48 +285,9 @@ int main(int argc, char* argv[])
     // Without it this process resolves every event at the family seed while
     // the daemon animates at the user's value.
     if (auto* appSettings = controller.settings()) {
-        // Resolve the global profile's curve through the registry this process
-        // actually loaded. Without this the Settings instance falls back to a
-        // process static nothing ever populates, so a global naming a
-        // user-authored curve previewed as the library default here while the
-        // compositor played the real one — the exact disagreement
-        // applyGlobalProfile exists to prevent.
-        appSettings->setCurveRegistry(animationBootstrap.curveRegistry());
-
-        animationBootstrap.applyMotionProfileTree(appSettings->motionProfileTree());
-        QObject::connect(appSettings, &PlasmaZones::ISettings::motionProfileTreeChanged, appSettings,
-                         [&animationBootstrap, appSettings]() {
-                             animationBootstrap.applyMotionProfileTree(appSettings->motionProfileTree());
-                         });
-
-        // The global profile is the other half of what the daemon resolves
-        // against. Registering only the tree left this process resolving
-        // every event from the family seeds while the compositor applied the
-        // user's global values on top, so the page previewed a timing the
-        // user would never see.
-        const auto applyGlobal = [&animationBootstrap, appSettings]() {
-            animationBootstrap.applyGlobalProfile(appSettings->animationProfile(),
-                                                  appSettings->hasExplicitAnimationProfile());
-        };
-        applyGlobal();
-        QObject::connect(appSettings, &PlasmaZones::Settings::animationProfileChanged, appSettings, applyGlobal);
-
-        // A Profile holds the curve it RESOLVED at parse time, and this
-        // process loads curves with live reload on. Editing a curve file
-        // therefore leaves both the family seeds and every timing-tree entry
-        // pointing at the pre-edit object, so the page previews a curve the
-        // compositor is no longer playing. The daemon re-runs exactly these
-        // three for the same reason; the settings app had the loader and no
-        // wire to it.
-        if (auto* curveLoader = animationBootstrap.curveLoader()) {
-            QObject::connect(curveLoader, &PhosphorAnimation::CurveLoader::curvesChanged, appSettings,
-                             [&animationBootstrap, appSettings, applyGlobal]() {
-                                 PlasmaZones::seedShellAnimationFamilies(*animationBootstrap.profileRegistry(),
-                                                                         *animationBootstrap.curveRegistry());
-                                 animationBootstrap.applyMotionProfileTree(appSettings->motionProfileTree());
-                                 applyGlobal();
-                             });
-        }
+        // One call rather than four hand-written steps. The editor does the
+        // same, and the two had already drifted doing it separately.
+        animationBootstrap.bindToSettings(*appSettings, /*keepLive=*/true);
     }
 
     QQmlApplicationEngine engine;
