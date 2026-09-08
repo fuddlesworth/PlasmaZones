@@ -21,18 +21,17 @@
  *     against the EVENT taxonomy (a decoration set is refused here)
  *   - saveCurrentAsSet refuses an unconfirmed overwrite but honours a
  *     confirmed one
- *   - Motion is the only domain that STAGES set files, so it is the only one
- *     that can pin the two staging contracts: a write is refused when the
- *     pre-edit content cannot be captured (rather than losing it), and Discard
- *     restores set files written this session
- *   - The in-flight-discard mutation guard refuses every set write
+ *   - Set file CRUD is IMMEDIATE: saving one is not a staged edit, so Discard
+ *     does not undo it, matching the decoration page
  *   - Pending changes signal emission for revert/commit
  *   - Atomic motion-set application (rejects whole malformed set)
  *   - Motion has no baseline, so a baseline-carrying set is refused at import
- *   - The phantom-snapshot rollback drops a staging whose file is back to its
- *     pre-edit content, and KEEPS one whose edit actually landed
- *   - revertPending() reports its own refusal while an async discard is in
- *     flight, so a caller cannot mark the state clean underneath the worker
+ *   - Applying a set over paths already at their defaults does not freeze those
+ *     defaults as explicit overrides
+ *
+ * The staging contracts this file used to pin went with schema v8: set files
+ * are no longer snapshotted, there is no mutation guard, and no async discard
+ * worker for revertPending to report a refusal from.
  */
 
 #include <QSignalSpy>

@@ -343,6 +343,8 @@ private Q_SLOTS:
         QVERIFY2(storesEffectId(c.rawShaderProfile(PP::WindowClose)), "the clear swept up a path that owned its pack");
     }
 
+    /// An empty group, and a group of paths that carry nothing, are both zero
+    /// rather than a refusal.
     void staleParamDescendants_areZeroForAnEmptyOrUntouchedGroup()
     {
         PZ_SKIP_WITHOUT_BUNDLED_PACKS();

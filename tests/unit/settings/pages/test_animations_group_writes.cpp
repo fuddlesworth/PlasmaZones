@@ -21,8 +21,10 @@
  *   - divergence is measured only on what a single edit can converge, so the
  *     card's banner cannot latch on over an axis no control can clear
  *
- * Every slot redirects override-file I/O into a tmpdir via
- * `setUserProfilesDirOverride()`, so the real user XDG dirs are never touched.
+ * Isolation is the fixture's `IsolatedConfigGuard`: the timing writes these
+ * slots drive are config keys, so that guard is what keeps them off the real
+ * user config. `setUserProfilesDirOverride()` still redirects the preset and
+ * motion-set FILES, which this file does not exercise.
  */
 
 #include <QSignalSpy>

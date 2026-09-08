@@ -21,8 +21,10 @@
  *     that also owns a pack
  *   - the group contract the sibling writers share: every path in the group is
  *     written, a path with no shader leg is skipped rather than failed,
- *     repeats are deduplicated, an identical rewrite costs no signal, and an
- *     async discard refuses the whole call with -1 and one toast
+ *     repeats are deduplicated, and an identical rewrite costs no signal
+ *
+ * The async-discard refusal these slots also covered went with schema v8, and
+ * the slots went with it: there is no worker left to refuse a call.
  *   - shaderOverrideDescendantCountForPaths UNIONS the same "shadowing
  *     descendant" definition the descendant clear uses, so a parent card
  *     cannot report a count its button would not act on, and a descendant

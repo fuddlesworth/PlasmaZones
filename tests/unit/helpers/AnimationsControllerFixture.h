@@ -5,12 +5,13 @@
 
 /**
  * @file AnimationsControllerFixture.h
- * @brief Shared AnimationsPageController fixtures for the shader-side tests.
+ * @brief Shared AnimationsPageController fixtures for the animations tests.
  *
- * Two TUs cover this controller's shader surface —
+ * Eleven TUs now include this, covering both the shader and the timing sides —
  * test_animations_shader_overrides.cpp (per-path writes, resolution, picker
  * contract, leaf isolation) and test_animations_shader_param_writes.cpp (the
- * group writers and the group readers). Both need the same setup, and the
+ * group writers and the group readers) are the two it was written for. They
+ * need the same setup, and the
  * setup is the kind that goes wrong quietly: a slot that forgets
  * IsolatedConfigGuard writes the developer's real user config, and one that
  * forgets to populate the registry silently exercises the permissive

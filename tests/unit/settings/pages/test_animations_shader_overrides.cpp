@@ -754,6 +754,9 @@ private Q_SLOTS:
         QCOMPARE(spy2.count(), 0);
     }
 
+    /// A leaf-isolated path must be SKIPPED by the descendant sweep. Its pack
+    /// does not cascade from the parent, so it is not shadowing anything, and
+    /// clearing it would drop an override the parent never supplied.
     void shaderOverrideDescendants_skipLeafIsolatedMovePath()
     {
         ControllerFixture fx;

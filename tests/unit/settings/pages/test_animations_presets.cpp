@@ -16,9 +16,11 @@
  *   - removeUserPreset must not touch override files, even when an override's
  *     embedded `name` happens to match the preset being removed
  *   - Malformed preset JSON logs and is skipped rather than breaking the list
- *   - A write that fails AFTER the pre-edit snapshot was taken un-stages that
- *     snapshot, so the page does not report an unsaved change to a file that
- *     was never touched
+ *   - A write that cannot reach disk toasts rather than failing silently
+ *   - Preset CRUD is IMMEDIATE: it does not stage, so Discard does not undo it
+ *
+ * The snapshot-and-rollback contract this file used to pin went with schema v8.
+ * The library is constructed with no snapshot or rollback hooks at all.
  */
 
 #include <QSignalSpy>

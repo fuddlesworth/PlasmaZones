@@ -8,8 +8,8 @@
  *        the path-traversal gate, the disk-read normalisation, and the
  *        spring-slider bounds.
  *
- * Pins the file-per-path persistence model: setOverride writes one JSON
- * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
+ * Pins the config-backed persistence model: setOverride writes one entry
+ * into `Animations/MotionProfileTree`, clearOverride removes it, and
  * resolvedProfile walks the parent chain and fills library defaults.
  * How that walk stays honest against the process-wide
  * PhosphorProfileRegistry is pinned by the companion
@@ -17,9 +17,10 @@
  * mirror (`stockSuppressedEvents`) moved to its own companion,
  * test_animations_suppression_mirror.cpp.
  *
- * Uses `setUserProfilesDirOverride()` to redirect override-file I/O into
- * a tmpdir, and `IsolatedConfigGuard` where a real Settings is needed, so
- * the test never touches the real user XDG dirs.
+ * Isolation comes from the fixture's `IsolatedConfigGuard`, which is what
+ * keeps these writes off the real user config. Slots that also touch the
+ * preset or motion-set FILES call `setUserProfilesDirOverride()` for that
+ * directory; timing writes no longer go near it.
  *
  * Companion test files:
  *   - test_animations_qml_contracts.cpp    — QML↔controller contracts, scraped
@@ -56,10 +57,6 @@
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-namespace {
-
-} // namespace
 
 class TestAnimationsPageController : public QObject
 {

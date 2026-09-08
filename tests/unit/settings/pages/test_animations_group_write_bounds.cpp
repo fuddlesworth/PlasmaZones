@@ -16,11 +16,11 @@
  * suite still green, so each names the production line it fails on:
  *   - the knownFields allowlist, asserted against the STORE, because rawProfile
  *     sanitises on read and would drop a stray key whether or not the writer did
- *   - the value bounds, which keep one override small
  *   - the non-string curve type test, without which a numeric becomes an
  *     engaged curve nobody chose
- *   - the value bounds again, this time against the store rather than the
- *     sanitising reader
+ *   - the value bounds, asserted against the STORE rather than the sanitising
+ *     reader, so a writer that stopped bounding could not hide behind the read
+ *     path
  *
  * Three slots retired with schema v8: the partial-failure count, the
  * Unchanged-path snapshot release, and the failure-toast latch reset. All
