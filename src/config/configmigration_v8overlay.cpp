@@ -30,7 +30,7 @@ constexpr QLatin1String kTreeBaseline{"baseline"};
 constexpr QLatin1String kTreeOverrides{"overrides"};
 constexpr QLatin1String kNodeShaderId{"shaderId"};
 constexpr QLatin1String kNodeParameters{"parameters"};
-// One-shot marker stamped into the Overlays group by the same atomic write as
+// One-shot marker stamped into the Snapping.OverlayShaders group by the same atomic write as
 // the lift. Once present, later runs only STRIP the sidecar and never merge
 // from it again — so an override the user removed after a failed sidecar strip
 // cannot be resurrected from the stale sidecar copy on the retry. JsonBackend

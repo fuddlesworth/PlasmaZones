@@ -265,7 +265,7 @@ ColumnLayout {
             return names.join(", ");
         }
         if (kind === "overlayShader") {
-            // Overlay shaders come from the overlays-library registry, not the
+            // Overlay shaders come from the snapping-shaders registry, not the
             // animation one (mirrors ActionRow's _overlayShaderEditor source).
             var ssCtl = root.appSettings ? root.appSettings.overlaysPage : null;
             if (!ssCtl)

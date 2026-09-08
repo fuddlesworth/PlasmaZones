@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The zone-overlay shader half of the settings schema: the single
-// Overlays group and its OverlayShaderTree blob. Split out of
+// Snapping.OverlayShaders group and its OverlayShaderTree blob. Split out of
 // settingsschema.cpp for file-size the way the scrolling and tiling TUs were;
 // the entry point (appendOverlayShadersSchema) is declared alongside every
 // other appendXxxSchema in settingsschema.h. sanitizeOverlayShaderTree stays
@@ -110,7 +110,7 @@ QVariant sanitizeOverlayShaderTree(const QVariant& v)
 
 } // namespace
 
-// ─── Overlays ────────────────────────────────────────────────
+// ─── Snapping.OverlayShaders ────────────────────────────────────────────────
 // Zone-overlay shader assignments — one nested JSON blob (baseline +
 // per-layout overrides), persisted as a QVariantMap like the animation
 // ShaderProfileTree entry. Unlike that one it CAN be sanitized: the animation

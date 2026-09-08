@@ -617,7 +617,7 @@ void SettingsController::reconcilePageDirty(const QString& page)
 {
     // Match m_dirtyPages to the value-based truth for this manifest page,
     // then cascade to any condensed simple page backed by it: a revert on
-    // overlays-behavior must also clear a stale snapping-simple
+    // snapping-overlay-behavior must also clear a stale snapping-simple
     // entry (the simple leaf is where setNeedsSave attributed the edit while
     // the user was in simple mode). Batched into one NOTIFY.
     bool changed = false;
@@ -675,12 +675,7 @@ void SettingsController::beginExternalEdit(const QString& page)
     // library pages lead each section is a never-dirty page (isLibraryPage)
     // that would swallow the attribution.
     static const QHash<QString, QString> kModeEnableOwners{
-        // Snapping's enable key is owned by snapping-window-behavior, NOT by
-        // the overlay Behavior page it used to sit on: that page moved to
-        // Appearance → Overlays, and a pending snapping toggle must light a
-        // badge under Placement where the user flipped it. Must agree with the
-        // manifest in the sibling _pagetopology.cpp.
-        {QStringLiteral("snapping"), QStringLiteral("snapping-window-behavior")},
+        {QStringLiteral("snapping"), QStringLiteral("snapping-overlay-behavior")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("scrolling"), QStringLiteral("scrolling-columns")},
     };

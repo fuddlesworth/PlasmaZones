@@ -114,7 +114,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("User templates"));
 
     // Snapping
-    search->setPageKeywords(QStringLiteral("overlays-behavior"),
+    search->setPageKeywords(QStringLiteral("snapping-overlay-behavior"),
                             {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("trigger"), PhosphorI18n::tr("edge"),
                              PhosphorI18n::tr("magnet"), PhosphorI18n::tr("snap")});
     search->setPageKeywords(QStringLiteral("overlays-appearance"),
@@ -132,7 +132,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
-    search->setPageKeywords(QStringLiteral("overlays-library"),
+    search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
     // Tiling & scrolling
@@ -388,9 +388,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // ── Section anchors ──────────────────────────────────────────────────
     // Jump to a card on its page; paired with searchAnchor tags on those
     // SettingsCards.
-    addSection(search, QStringLiteral("overlays-behavior"), QStringLiteral("triggers"), PhosphorI18n::tr("Triggers"));
-    addSection(search, QStringLiteral("overlays-behavior"), QStringLiteral("zoneSpan"), PhosphorI18n::tr("Zone span"));
-    addSection(search, QStringLiteral("overlays-behavior"), QStringLiteral("display"), PhosphorI18n::tr("Display"));
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("triggers"),
+               PhosphorI18n::tr("Triggers"));
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpan"),
+               PhosphorI18n::tr("Zone span"));
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("display"),
+               PhosphorI18n::tr("Display"));
 
     addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("snapAssist"),
                PhosphorI18n::tr("Snap Assist"));
@@ -571,28 +574,28 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("smart"), PhosphorI18n::tr("single")});
 
     // Snapping › Overlay (behaviour rows)
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("activateOnEveryDrag"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("activateOnEveryDrag"),
                PhosphorI18n::tr("Activate on every drag"), {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("trigger")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("holdToActivate"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("holdToActivate"),
                PhosphorI18n::tr("Hold to activate"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("deactivate")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("triggersToggleMode"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("triggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("activation")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("releaseGracePeriod"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("releaseGracePeriod"),
                PhosphorI18n::tr("Release grace period"),
                {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop"), PhosphorI18n::tr("delay")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("spanModifier"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("spanModifier"),
                PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("zone span"), PhosphorI18n::tr("paint")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("zoneSpanToggleMode"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpanToggleMode"),
                PhosphorI18n::tr("Zone span toggle mode"), {PhosphorI18n::tr("span"), PhosphorI18n::tr("tap")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("zoneSpanReleaseGracePeriod"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpanReleaseGracePeriod"),
                PhosphorI18n::tr("Zone span release grace period"),
                {PhosphorI18n::tr("span"), PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("edgeThreshold"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("edgeThreshold"),
                PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("showZonesOnAllMonitors"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("showZonesOnAllMonitors"),
                PhosphorI18n::tr("Show zones on all monitors"),
                {PhosphorI18n::tr("display"), PhosphorI18n::tr("screens")});
-    addSetting(search, QStringLiteral("overlays-behavior"), QStringLiteral("filterByAspectRatio"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("filterByAspectRatio"),
                PhosphorI18n::tr("Filter by aspect ratio"), {PhosphorI18n::tr("layouts"), PhosphorI18n::tr("monitor")});
 
     // Snapping › Window (behaviour rows)
@@ -1069,7 +1072,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
     // decoration sets. Every page that hosts a ShaderBrowserPage carries its
     // "userShaders" card, so each one registers the anchor.
-    addSection(search, QStringLiteral("overlays-library"), QStringLiteral("userShaders"),
+    addSection(search, QStringLiteral("snapping-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
@@ -1091,11 +1094,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("User sets"));
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("savedDecorationSets"),
                PhosphorI18n::tr("Saved sets"));
-    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("saveOverlaySet"),
+    addSection(search, QStringLiteral("snapping-shader-sets"), QStringLiteral("saveOverlaySet"),
                PhosphorI18n::tr("Save current state"));
-    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("importOverlaySets"),
+    addSection(search, QStringLiteral("snapping-shader-sets"), QStringLiteral("importOverlaySets"),
                PhosphorI18n::tr("User sets"));
-    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("savedOverlaySets"),
+    addSection(search, QStringLiteral("snapping-shader-sets"), QStringLiteral("savedOverlaySets"),
                PhosphorI18n::tr("Saved sets"));
 
     // The per-event animation anchors live in their own TU

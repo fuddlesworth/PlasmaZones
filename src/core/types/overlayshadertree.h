@@ -67,7 +67,7 @@ public:
  * otherwise the baseline.
  *
  * Persisted as one nested JSON entry under
- * `Overlays/OverlayShaderTree`:
+ * `Snapping.OverlayShaders/OverlayShaderTree`:
  * `{ "baseline": {node}, "overrides": { "{uuid}": {node} } }`.
  *
  * Value type, not internally synchronized. Same as the sibling trees.

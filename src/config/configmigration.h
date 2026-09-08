@@ -95,7 +95,7 @@ namespace PlasmaZones {
 ///     and into `Animations/MotionProfileTree`, beside the pack assignment
 ///     already in `Animations/ShaderProfileTree` (see migrateV7ToV8); and
 ///     zone-overlay shader assignments move out of the layout-settings sidecar
-///     into `Overlays/OverlayShaderTree` (global baseline +
+///     into `Snapping.OverlayShaders/OverlayShaderTree` (global baseline +
 ///     per-layout overrides). The overlay half has no chain step of its own:
 ///     the sidecar lift needs filesystem access, so it runs from
 ///     ensureJsonConfig's finalize pass (see relocateOverlayShaderAssignments),

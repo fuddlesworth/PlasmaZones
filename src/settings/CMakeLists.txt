@@ -328,7 +328,7 @@ qt_add_qml_module(plasmazones-settings
         # each with a Behavior page. Shaders lives under Configuration. The
         # window border / title-bar appearance AND the unified gaps are shared
         # across modes and live on the top-level WindowAppearancePage.
-        qml/pages/overlays/OverlaysBehaviorPage.qml
+        qml/pages/snapping/SnappingOverlayBehaviorPage.qml
         qml/pages/overlays/OverlaysAppearancePage.qml
         qml/pages/snapping/SnappingZoneSelectorPage.qml
         qml/pages/snapping/SnappingWindowBehaviorPage.qml

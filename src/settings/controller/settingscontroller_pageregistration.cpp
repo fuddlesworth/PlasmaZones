@@ -200,7 +200,7 @@ void SettingsController::buildApplicationController()
     // toggle), the same lead-page shape as animations-general.
     regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/snapping/SnappingSimplePage.qml"), QStringLiteral("view-split-left-right"),
-               /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("overlays-behavior"));
+               /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("snapping-overlay-behavior"));
     // The snapping layout library — the browser formerly tabbed into
     // Display → Layouts, now this mode's own leaf. Leads the section (it is
     // the mode's primary artifact; the config tree follows) and stays
@@ -211,8 +211,15 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-layouts"), QStringLiteral("snapping"), PhosphorI18n::tr("Layouts"),
                QStringLiteral("pages/snapping/SnappingLayoutsPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true);
-    // (Snapping's Overlay category moved wholesale to Appearance → Overlays,
-    // registered with the rest of that tree below.)
+    // The overlay's BEHAVIOR — when it appears while you drag. A standalone top
+    // leaf rather than a category: its Appearance sibling became the Overlays
+    // entry under Appearance, so a category here would have one child.
+    // Advanced-only, its simple face being the condensed SnappingSimplePage
+    // (its declared counterpart).
+    regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
+               QStringLiteral("pages/snapping/SnappingOverlayBehaviorPage.qml"),
+               QStringLiteral("preferences-desktop-color"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly, QStringLiteral("snapping-simple"));
 
     // Zone Selector is a single top leaf under Snapping (not split into
     // Behavior/Appearance): its behaviour is just the enable toggle + trigger
@@ -240,6 +247,18 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/snapping/SnappingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    // Which shader each layout draws. Under Snapping because the assignment
+    // tree is keyed on LAYOUTS, which only exist in snapping mode. The pack
+    // library and the saved sets are registered under Appearance → Overlays
+    // with the overlay's other appearance surfaces.
+    //
+    // A virtual leaf: the controller stays bound to the "snapping-shaders" id
+    // (regPage, under Overlays), and dirty tracking rides the global
+    // overlayShaderTreeChanged NOTIFY loop either way.
+    regVirtual(QStringLiteral("snapping-shader-assignments"), QStringLiteral("snapping-config-cat"),
+               PhosphorI18n::tr("Shaders"), QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
+               QStringLiteral("preferences-desktop-display"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // Tiling children — organised by subject (Window / Algorithm / Configuration)
     // to match the snapping reorg. Tiling has no drag-overlay or selector popup,
     // so its only interaction surface (the drag-insert indicator) folds into
@@ -511,29 +530,17 @@ void SettingsController::buildApplicationController()
     // is why it sits here rather than under Snapping. (Snapping → Overlay is a
     // different thing: when the drag overlay appears and what its rectangles
     // look like.) No sub-buckets — two leaves do not need a Library tier.
+    // Overlays — the third Appearance drill-down beside Animations and
+    // Decorations: the zone overlay's look, its saved shader sets, and the pack
+    // library. The two pages that did NOT come here are the ones keyed on
+    // snapping's own artifacts, namely which shader each LAYOUT draws and when
+    // the overlay appears while you DRAG; both stay under Snapping.
     regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
                QStringLiteral("preferences-desktop-display"));
-    // Behavior and Appearance came from Snapping → Overlay. Behavior is
-    // advanced-only, its simple face being the condensed SnappingSimplePage
-    // (still its declared counterpart: that page re-hosts these very settings,
-    // which is what a counterpart means, even though the two now sit in
-    // different top-level categories).
-    regVirtual(QStringLiteral("overlays-behavior"), QStringLiteral("overlays"), PhosphorI18n::tr("Behavior"),
-               QStringLiteral("pages/overlays/OverlaysBehaviorPage.qml"), QStringLiteral("preferences-system"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly, QStringLiteral("snapping-simple"));
     regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),
                QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("preferences-desktop-color"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    // Assignments edits the OverlayShaderTree (global default + per-layout
-    // overrides) through m_overlaysPage's invokables. Registered as a virtual
-    // leaf: the controller stays bound to the "overlays-library" id below
-    // (regPage), and dirty tracking rides the global overlayShaderTreeChanged
-    // NOTIFY loop either way.
-    regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Assignments"),
-               QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
-               QStringLiteral("preferences-desktop-display"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("overlays-sets"), QStringLiteral("overlays"), PhosphorI18n::tr("Overlay Sets"),
+    regVirtual(QStringLiteral("snapping-shader-sets"), QStringLiteral("overlays"), PhosphorI18n::tr("Sets"),
                QStringLiteral("pages/overlays/OverlaySetsPage.qml"), QStringLiteral("color-palette"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regPage(m_overlaysPage.get(), QStringLiteral("overlays"), PhosphorI18n::tr("Library"),
