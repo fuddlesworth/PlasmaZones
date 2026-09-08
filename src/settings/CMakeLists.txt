@@ -161,6 +161,9 @@ set(plasmazones_settings_SRCS
     pages/pointerpagecontroller.h
     pages/pointerpagecontroller.cpp
     pages/pointerpagecontroller_browser.cpp
+    # Pointer-set domain closures for the shared ShaderSetStore. Same class,
+    # separate TU, mirroring decorationpagecontroller_sets.cpp.
+    pages/pointerpagecontroller_sets.cpp
     pages/pointerpreviewcontroller.h
     pages/pointerpreviewcontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
@@ -280,6 +283,17 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set_source_files_properties(pages/decorationpagecontroller_sets.cpp PROPERTIES
         COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
 endif()
+
+# pointerpagecontroller_sets.cpp names the set envelope's keys in an anonymous
+# namespace (kOverridesKey / kPathKey / kProfileKey) and so does
+# stores/shadersetstore.cpp, so a Unity blob holding the pair is a
+# redefinition error. Its decoration twin is spared only as a side effect of
+# the compile options set just above, which force CMake to compile that file
+# on its own; this file needs no such options, so it says so directly. The
+# consuming test targets repeat it, source-file properties being
+# directory-scoped.
+set_source_files_properties(pages/pointerpagecontroller_sets.cpp PROPERTIES
+    SKIP_UNITY_BUILD_INCLUSION ON)
 
 target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_BINARY_DIR}/generated
@@ -508,6 +522,7 @@ qt_add_qml_module(plasmazones-settings
         # Pointer — the cursor-decoration chain page and its pack browser.
         qml/pages/pointer/PointerPage.qml
         qml/pages/pointer/PointerLayerCard.qml
+        qml/pages/pointer/PointerSetsPage.qml
         qml/pages/pointer/PointerShadersPage.qml
         qml/pages/tiling/ChainEditor.qml
         # Pack-agnostic shader-browser components — shared by the

@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Decoration → Surfaces → Pointer.
+ * @brief Appearance → Pointer → Chain.
  *
  * The master switch plus the pointer chain: an ordered list of pointer packs
  * that paint around the cursor, each one a PointerLayerCard.

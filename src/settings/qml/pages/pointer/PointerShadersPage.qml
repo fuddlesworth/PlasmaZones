@@ -18,7 +18,7 @@ import QtQuick
 ShaderBrowserPage {
     bridge: settingsController.pointerPage
     settingsCategory: "PointerShadersFilterBar"
-    infoBannerText: i18n("Browse installed pointer packs. Stack them onto the cursor from the Pointer page.")
+    infoBannerText: i18n("Browse installed pointer packs. Stack them onto the cursor from the Chain page.")
     usageHeaderTextFn: function (count) {
         return i18ncp("@info shader usage section header (pointer)", "Used in %n layer", "Used in %n layers", count);
     }

@@ -1891,12 +1891,35 @@ add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcon
 # route's QML calls would go unchecked — the exact gap that sweep exists to
 # close. Covers both pointer controllers, since the chain editor writes every
 # edit straight through the page bridge.
-add_executable(test_pointer_qml_contracts
-    settings/pages/test_pointer_qml_contracts.cpp
+# One source list, shared by the QML-contract test and the pointer-set test
+# below, so a new controller TU can't silently miss one of the two.
+set(_pointer_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpagecontroller_browser.cpp
+    # The page controller constructs the set store in its ctor (initSetsStore),
+    # so every TU that links the controller needs this TU and the store it
+    # builds — omitting either is a link error, not a silent degradation.
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpagecontroller_sets.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpreviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/animationfileutils.cpp  # the store's slugify / size cap
     ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp  # the browser arm's installShaderPack
+)
+
+# pointerpagecontroller_sets.cpp names the set envelope's keys in an anonymous
+# namespace (kOverridesKey / kPathKey / kProfileKey), and shadersetstore.cpp
+# above names the same three the same way. Both are in this list, so a Unity
+# blob holding the pair is a redefinition error. The decoration twin escapes
+# this only as a side effect of its per-source -fno-lto options, which force
+# CMake to compile it alone; say it outright here instead of relying on that.
+# Source-file properties are directory-scoped, so the settings dir's copy of
+# this does not reach these targets.
+set_source_files_properties(${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpagecontroller_sets.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+add_executable(test_pointer_qml_contracts
+    settings/pages/test_pointer_qml_contracts.cpp
+    ${_pointer_ctrl_SRCS}
 )
 target_link_libraries(test_pointer_qml_contracts
     PRIVATE
@@ -1954,6 +1977,30 @@ target_link_libraries(test_decoration_sets_validation
         plasmazones_core
 )
 add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
+
+# Pointer-set CRUD and refusals over the shared ShaderSetStore (save / list /
+# apply / remove / update / export / import, the active flag, the
+# format-version gate, and every validator refusal). The pointer domain
+# REPLACES the whole chain on apply rather than merging, so it is one binary
+# rather than the decoration side's round-trip / validation split.
+add_executable(test_pointer_sets
+    settings/stores/test_pointer_sets.cpp
+    ${_pointer_ctrl_SRCS}
+)
+target_link_libraries(test_pointer_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        PhosphorPointer::PhosphorPointer
+        PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
+        PhosphorControl::PhosphorControl  # PointerPageController's PageController base
+        plasmazones_core
+)
+target_include_directories(test_pointer_sets PRIVATE ${CMAKE_SOURCE_DIR}/src/settings)
+add_test(NAME test_pointer_sets COMMAND test_pointer_sets)
 
 # Settings profiles: the ProfileStore delta / inheritance-resolution engine
 # behind ProfilePageController::bridge. Driven with stub config closures, so it

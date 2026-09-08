@@ -46,7 +46,7 @@ QVariantList parameterRows(const PointerShaderEffect& effect)
 
 PointerPageController::PointerPageController(PhosphorPointerShaders::PointerShaderRegistry* registry,
                                              ISettings* settings, QObject* parent)
-    // "pointer-staging", not "decorations-pointer": the sidebar nav node owns
+    // "pointer-staging", not "pointer-chain": the sidebar nav node owns
     // the bare page id, and the staging controller stays independently
     // addressable — the same split DecorationPageController makes.
     : PhosphorControl::PageController(QStringLiteral("pointer-staging"), parent)
@@ -65,6 +65,9 @@ PointerPageController::PointerPageController(PhosphorPointerShaders::PointerShad
         connect(m_settings, &ISettings::pointerChainChanged, this, &PointerPageController::chainChanged);
         connect(m_settings, &ISettings::pointerEnabledChanged, this, &PointerPageController::enabledChanged);
     }
+    // initSetsStore() wires chainChanged into the store's
+    // notifyLiveStateChanged, so it must run after the connects above.
+    initSetsStore();
 }
 
 PointerPageController::~PointerPageController() = default;

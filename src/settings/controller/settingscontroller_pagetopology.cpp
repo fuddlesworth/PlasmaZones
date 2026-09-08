@@ -99,22 +99,25 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kDecorationDirectChildren{QStringLiteral("window-appearance")};
     static const QSet<QString> kDecorationAllLeaves =
         kDecorationDirectChildren + kDecorationSurfacesChildren + kDecorationLibraryChildren;
-    // The pointer leaves live in the decoration NAVIGATION (a page under
-    // Surfaces and a browser under Library) but NOT in the decoration config
-    // domain. They are kept out of kDecorationAllLeaves on purpose, because
-    // isDecorationPage is defined as membership of the "decorations" group and
-    // that predicate routes Reset, Discard and dirty through the shared
-    // DecorationProfileTree machinery. The pointer page owns Pointer.Enabled
-    // and Pointer.Chain through the ordinary pageOwnedConfigKeys manifest
-    // instead, so its Reset touches those two keys and nothing else. Both are
-    // folded into the parent-bucket entries below for navigation, but only the
-    // Surfaces badge can ever light for a pointer edit: that bucket carries the
-    // pointer PAGE, whose manifest entry gives isPageDirty a value-based
-    // answer. The Library bucket carries only the pack browser, which is
-    // read-only and writes no config key, so it has no dirty state of its own
-    // to contribute and is folded in for the collapse behaviour alone.
-    static const QString kPointerPage = QStringLiteral("decorations-pointer");
-    static const QString kPointerShaders = QStringLiteral("decorations-pointer-shaders");
+    // The pointer family is its own bucket under Appearance, a peer of
+    // Decorations rather than a leaf inside it: the cursor is not a window
+    // surface, and the family owns Pointer.Enabled / Pointer.Chain outright
+    // instead of a subtree of the shared DecorationProfileTree. Keeping it out
+    // of the decoration sets is therefore structural, not a special case —
+    // isDecorationPage is membership of the "decorations" group, and that
+    // predicate routes Reset, Discard and dirty through the tree machinery
+    // this family has no part in. Its Reset runs off the ordinary
+    // pageOwnedConfigKeys manifest and touches those two keys and nothing else.
+    //
+    // Only the Chain leaf can light the parent badge: it is the one with a
+    // manifest entry, so isPageDirty can answer for it by value. The Packs
+    // browser is read-only and writes no config key, and the Sets library
+    // stores sets as FILES rather than config keys, so neither contributes
+    // dirty state — both are listed for the collapse behaviour alone.
+    static const QString kPointerPage = QStringLiteral("pointer-chain");
+    static const QString kPointerSets = QStringLiteral("pointer-sets");
+    static const QString kPointerShaders = QStringLiteral("pointer-shaders");
+    static const QSet<QString> kPointerAllLeaves{kPointerPage, kPointerSets, kPointerShaders};
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -189,13 +192,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-transitions"), kAnimationsTransitionsChildren},
         {QStringLiteral("animations-motion"), kAnimationsMotionChildren},
-        {QStringLiteral("decorations-surfaces"), kDecorationSurfacesChildren + QSet<QString>{kPointerPage}},
-        {QStringLiteral("decorations-library"), kDecorationLibraryChildren + QSet<QString>{kPointerShaders}},
+        {QStringLiteral("decorations-surfaces"), kDecorationSurfacesChildren},
+        {QStringLiteral("decorations-library"), kDecorationLibraryChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
-        // "appearance" wraps the Animations and Decoration trees (the window-
-        // appearance page rides kDecorationAllLeaves as Decoration → General);
-        // its collapsed badge lights if any of them is dirty.
-        {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves},
+        {QStringLiteral("pointer"), kPointerAllLeaves},
+        // "appearance" wraps the Animations, Decoration and Pointer trees (the
+        // window-appearance page rides kDecorationAllLeaves as Decoration →
+        // General); its collapsed badge lights if any of them is dirty.
+        {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves + kPointerAllLeaves},
         {QStringLiteral("decorations"), kDecorationAllLeaves},
         // No "rules" or "virtualscreens" entries — both are top-level
         // leaves, so their dirty state propagates without a parent-bucket
@@ -569,7 +573,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // ordinary Store-backed keys owned outright by this page, which is the
         // whole reason it stays out of the decoration domain: a Reset here
         // resets the pointer and cannot reach the shared decoration tree.
-        {QStringLiteral("decorations-pointer"),
+        {QStringLiteral("pointer-chain"),
          {
              {CD::pointerGroup(), CD::enabledKey()},
              {CD::pointerGroup(), CD::chainKey()},
@@ -769,8 +773,9 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("decorations-shell"),
         QStringLiteral("decorations-sets"),
         QStringLiteral("decorations-shaders"),
-        QStringLiteral("decorations-pointer"),
-        QStringLiteral("decorations-pointer-shaders"),
+        QStringLiteral("pointer-chain"),
+        QStringLiteral("pointer-sets"),
+        QStringLiteral("pointer-shaders"),
         QStringLiteral("rules"),
         QStringLiteral("profiles"),
         QStringLiteral("editor"),

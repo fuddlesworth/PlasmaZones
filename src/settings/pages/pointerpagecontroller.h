@@ -3,6 +3,10 @@
 
 #pragma once
 
+// Not forward-declared: moc needs the complete type to register the
+// ShaderSetStore* Q_PROPERTY below as a pointer meta-type.
+#include "settings/stores/shadersetstore.h"
+
 #include <PhosphorControl/PageController.h>
 
 #include <QObject>
@@ -68,6 +72,9 @@ class PointerPageController : public PhosphorControl::PageController
 
     /// Which preview pane the detail dialog should load for this bridge.
     Q_PROPERTY(QString previewKind READ previewKind CONSTANT)
+
+    /// The pointer-set store — the `bridge` ShaderSetsPage binds to.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
 public:
     /// @param registry Optional — when null, `availableShaderEffects()` and
@@ -179,6 +186,29 @@ public:
 
     QString previewKind() const;
 
+    /// The pointer-set store — the `bridge` ShaderSetsPage binds to. Named
+    /// snapshots of the pointer chain, persisted as JSON under
+    /// ~/.local/share/plasmazones/pointersets/<slug>.json. Applying REPLACES
+    /// the whole chain: there is only one value here, so there is nothing to
+    /// merge into. The write goes through ISettings::setPointerChain, so it
+    /// rides the normal dirty / apply / discard staging flow. The set FILES
+    /// themselves are not staged, so no Discard undoes a set write. Saving
+    /// over an existing set requires explicit consent (see
+    /// ShaderSetStore::saveCurrentAsSet). The domain closures live in
+    /// pointerpagecontroller_sets.cpp.
+    ShaderSetStore* setsBridge() const
+    {
+        return m_sets;
+    }
+
+    /// Test hook: redirect the sets directory to @p dir instead of the XDG
+    /// default. Pass an empty string to restore the default. Mirrors
+    /// DecorationPageController::setSetsDirOverride, and exists for the same
+    /// reason: two test binaries resolving the same per-user qttest path wipe
+    /// each other's files under parallel ctest. Not Q_INVOKABLE — QML callers
+    /// must not redirect persistence.
+    void setSetsDirOverride(const QString& dir);
+
 Q_SIGNALS:
     /// Re-emit of `PointerShaderRegistry::effectsChanged` so QML can rebind
     /// without poking at the registry directly.
@@ -196,7 +226,12 @@ Q_SIGNALS:
     void toastRequested(const QString& text);
 
 private:
+    /// Construct m_sets with the pointer domain closures. Called from the
+    /// constructor; defined in pointerpagecontroller_sets.cpp.
+    void initSetsStore();
+
     QString userShaderDirectoryPath() const;
+    QString pointerSetsDirectoryPath() const;
 
     PhosphorPointerShaders::PointerShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
@@ -205,6 +240,10 @@ private:
     /// until a pane actually asks for a pack, and CONSTANT Q_PROPERTYs must not
     /// change identity after first read.
     PointerPreviewController* m_preview = nullptr;
+
+    QString m_setsDirOverride; ///< Empty = use the XDG default
+
+    ShaderSetStore* m_sets = nullptr;
 };
 
 } // namespace PlasmaZones
