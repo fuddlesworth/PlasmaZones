@@ -43,16 +43,14 @@ extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwne
 /// before the initial scan can pass the same lists into
 /// `runInitialCurveLoad`.
 ///
-/// `profileDirs` is retained for the ONE remaining consumer of the profiles
-/// directory: the user's saved-preset library, which the animations page reads
-/// and writes by name. Per-EVENT timing overrides have not lived there since
-/// schema v8 — they are config, under `Animations/MotionProfileTree`, so that
-/// one animation event is one unit in one store the way a decorated surface
-/// always has been.
+/// Curves only. There was a `profileDirs` beside this, kept on the stated
+/// grounds that the saved-preset library still needed it — it did not: the
+/// animations page derives that path itself, and nothing ever read the field.
+/// Per-event timing overrides have not lived in a directory since schema v8;
+/// they are config, under `Animations/MotionProfileTree`.
 struct AnimationLoaderDirs
 {
     QStringList curveDirs;
-    QStringList profileDirs;
 };
 
 /// Pair of caller-owned loaders — composition roots store these as
@@ -197,6 +195,23 @@ public:
     /// a Settings instance, and the tree changes at runtime. Call it once the
     /// settings object exists, and again on every `motionProfileTreeChanged`.
     void applyMotionProfileTree(const QVariantMap& treeJson);
+
+    /// Register the global animation Profile (`Settings::animationProfile()`)
+    /// at `ProfilePaths::Global`, the root of every chain.
+    ///
+    /// Without this a secondary process resolves every event from the family
+    /// seeds alone while the daemon resolves it against the user's global
+    /// values, so the settings app previews one timing and the compositor
+    /// plays another.
+    ///
+    /// @p explicitlySet is `Settings::hasExplicitAnimationProfile()`, and it
+    /// selects the LAYER, matching the daemon. An unset global is a shipped
+    /// default and belongs beneath the per-family seeds; a global the user
+    /// actually chose is an instruction to retime everything and belongs
+    /// above them. Passing the wrong value here silently makes the preview
+    /// disagree with the compositor, which is the whole reason the method
+    /// exists.
+    void applyGlobalProfile(const PhosphorAnimation::Profile& profile, bool explicitlySet);
 
 private:
     std::unique_ptr<PhosphorAnimation::CurveRegistry> m_curveRegistry;

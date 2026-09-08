@@ -138,9 +138,27 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
     // config layer has no curve registry and must not grow one, so it does not
     // parse. Callers assemble the tree from what they read here, and the write
     // side of the animations page is the only thing that builds one.
-    if (tree == motionProfileTree())
+    //
+    // The ONE normalisation applied here is dropping an empty `overrides` list
+    // (and, with it, an empty `baseline`). A tree carrying no overrides is the
+    // schema default, and storing it as `{"overrides": []}` would leave the key
+    // permanently unequal to its default: sparse persistence would never prune
+    // it, `isKeyModified` would report the page dirty forever, and the key would
+    // join every settings-profile delta captured afterwards. This touches only
+    // the empty case and never inspects a profile body, so the curve hazard
+    // above does not apply. Doing it here rather than only at the page's helper
+    // makes the persistence boundary canonical whoever builds the map —
+    // `setMotionProfileTreeJson`, a profile apply, or a future writer.
+    QVariantMap canonical = tree;
+    if (canonical.value(QLatin1String("overrides")).toList().isEmpty()) {
+        canonical.remove(QLatin1String("overrides"));
+        if (canonical.value(QLatin1String("baseline")).toMap().isEmpty()) {
+            canonical.remove(QLatin1String("baseline"));
+        }
+    }
+    if (canonical == motionProfileTree())
         return;
-    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey(), tree);
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey(), canonical);
     Q_EMIT motionProfileTreeChanged();
     Q_EMIT settingsChanged();
 }

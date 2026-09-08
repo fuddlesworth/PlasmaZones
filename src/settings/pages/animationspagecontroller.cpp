@@ -17,31 +17,13 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QFuture>
-#include <QFutureWatcher>
 #include <QLoggingCategory>
-#include <QSaveFile>
-#include <QScopeGuard>
 #include <QSet>
-#include <QtConcurrent/QtConcurrent>
 
 namespace PlasmaZones {
 
-namespace {
-
-/// Ceiling on a single snapshotted profile file. The snapshot map holds these
-/// in memory for the session, and the file is a filesystem boundary a user can
-/// hand-place anything at. Derived from the shared cap so it cannot drift
-/// from ShaderSetStore's set-file cap or the other profile readers.
-constexpr qint64 kMaxSnapshotBytes = animfileutil::kMaxJsonFileBytes;
-
-} // namespace
-
-/// `JsonNameKey`, `profileToVariantMap`, `readProfileJson`,
-/// `mergeMissingFields`, and `fillLibraryDefaults` live in
+/// `JsonNameKey`, `profileToVariantMap`, `mergeMissingFields`, and
+/// `fillLibraryDefaults` live in
 /// `animations_controller_detail.h` so the sibling TU that uses them
 /// (animationspagecontroller_overrides.cpp) shares the exact same
 /// implementations without relying on unity-build TU merging.
@@ -96,9 +78,24 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // default it carried into an explicit stored override, permanently
         // opting those events out of future default improvements — which is
         // exactly the failure the capture was meant to avoid.
+        //
+        // Compared against what the path would resolve to with its OWN
+        // override removed, not against the built-in default. Those differ
+        // wherever the pack comes from an ancestor: comparing to the built-in
+        // default would leave the de-seed unfired and store a direct leaf
+        // override that permanently shadows the recipient's own category
+        // assignment — the very shadowing this block exists to prevent, just
+        // one level up. This is the clear-then-regenerate-then-compare shape
+        // Settings::setDecorationProfileTree already uses.
         if (params.isEmpty() && shader.contains(JsonEffectIdKey)) {
             const QString id = shader.value(JsonEffectIdKey).toString();
-            if (!id.isEmpty() && id == PhosphorAnimation::ProfilePaths::defaultShaderEffectIdForPath(path)) {
+            QString inheritedId;
+            if (m_settings != nullptr) {
+                auto candidate = m_settings->shaderProfileTree();
+                candidate.clearOverride(path);
+                inheritedId = PhosphorAnimationShaders::resolveShaderWithDefault(candidate, path).effectiveEffectId();
+            }
+            if (!id.isEmpty() && id == inheritedId) {
                 // Drop any stored override so the path resolves through the
                 // default again. A path that carries no override is ALREADY in
                 // the requested state, and that is a success — clearShaderOverride
@@ -150,7 +147,23 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                                           [this]() {
                                               return motionTree();
                                           },
-                                          motionSetsDirFn, writeOverrideFn, readShadersFn, writeShaderFn),
+                                          motionSetsDirFn, writeOverrideFn, readShadersFn, writeShaderFn,
+                                          [this](const QString& path) {
+                                              // What the path RENDERS with:
+                                              // ancestor chain and built-in
+                                              // default included. readShaders
+                                              // above answers direct overrides
+                                              // only, which is the right shape
+                                              // for the entries a set stores
+                                              // and the wrong one for the
+                                              // self-containment sweep.
+                                              if (m_settings == nullptr) {
+                                                  return QString();
+                                              }
+                                              return PhosphorAnimationShaders::resolveShaderWithDefault(
+                                                         m_settings->shaderProfileTree(), path)
+                                                  .effectiveEffectId();
+                                          }),
                                       this);
     // Live-preview data source for the shader browser's detail dialog. Both
     // borrows are the controller's own, so the lifetimes already agree.
@@ -250,6 +263,24 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             [this]() {
                 m_treeDirtyCache.reset();
                 Q_EMIT pendingChangesChanged();
+
+                // Cards do not refresh on `pendingChangesChanged` (it is just
+                // the flag), so without a broadcast here every timing write
+                // this controller did NOT make — a Settings::load() on
+                // Discard, a settings-profile activation, a motion-set apply,
+                // the v8 migration — left every card showing its pre-change
+                // duration, curve, override toggle and inherit breadcrumb,
+                // with the next edit committing the stale value back. The
+                // shader tree's twin above already relays exactly this.
+                //
+                // Gated on the depth counter so a write this controller DID
+                // make keeps its per-path emissions and the prefix filter
+                // cards apply to them. Broadcasting unconditionally would
+                // defeat that filter and make every visible card re-walk its
+                // whole chain on every slider tick.
+                if (m_selfTreeWriteDepth == 0) {
+                    Q_EMIT overrideChanged(QString());
+                }
             },
             Qt::DirectConnection);
 
@@ -462,7 +493,7 @@ bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
     }
     if (restored.isEmpty())
         return true;
-    m_settings->setMotionProfileTree(live);
+    writeMotionTree(live);
     m_treeDirtyCache.reset();
     for (const QString& path : restored)
         Q_EMIT overrideChanged(path);

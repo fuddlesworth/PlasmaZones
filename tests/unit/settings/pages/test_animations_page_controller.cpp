@@ -468,13 +468,22 @@ private Q_SLOTS:
         auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Staged this session, so its snapshot is "was absent" and removing it
-        // drops the entry.
-        QVERIFY(c.setOverride(QStringLiteral("global"), {{QStringLiteral("duration"), 300}}));
-        // Written straight into the store, so clearing it is a real edit
-        // against the committed baseline.
+        // Written straight into the store and then COMMITTED, so clearing it is
+        // a real edit against the baseline and the batch genuinely ends dirty.
+        // The save is what makes that true: the raw helper only moves the live
+        // value, and without a committed baseline carrying this entry the batch
+        // would end with live == committed and the page legitimately clean,
+        // which exercises nothing. (This slot used to pass without the save,
+        // but only because clearing the last override left a `{"overrides":[]}`
+        // residue that could never compare equal to the empty baseline — it was
+        // pinning that bug rather than this behaviour.)
         TestHelpers::setRawMotionOverride(fx.settings, QStringLiteral("editor.snapIn"),
                                           QJsonObject{{QStringLiteral("duration"), 250}});
+        QVERIFY(fx.settings.save());
+        c.refreshDirtyState();
+        // Staged this session, so its snapshot is "was absent" and removing it
+        // drops the entry — the phantom half of the trap.
+        QVERIFY(c.setOverride(QStringLiteral("global"), {{QStringLiteral("duration"), 300}}));
 
         // pendingChangesChanged carries no payload, so record the state the
         // page would read at each emission and check the LAST one.

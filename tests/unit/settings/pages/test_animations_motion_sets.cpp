@@ -277,7 +277,19 @@ private Q_SLOTS:
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
         QVERIFY(c.hasPendingChanges());
 
-        c.revertPending();
+        // revertPending() is asserted on directly, not just called on the way
+        // to load(). The value restore below is done by `Settings::load()`, so
+        // on its own it holds even if revertPending's body were emptied — this
+        // slot named that function and tested nothing about it. What only
+        // revertPending produces is the empty-path broadcast that tells every
+        // card to re-read, so that is what is pinned.
+        QSignalSpy reloadSpy(&c, &AnimationsPageController::overrideChanged);
+        QVERIFY(c.revertPending());
+        QCOMPARE(reloadSpy.count(), 1);
+        QVERIFY2(reloadSpy.at(0).at(0).toString().isEmpty(),
+                 "revertPending must broadcast an EMPTY path — a per-path emission reaches only the cards it "
+                 "names, and a Discard moves paths no card is currently showing");
+
         fx.settings.load();
         c.refreshDirtyState();
         QVERIFY(!c.hasPendingChanges());

@@ -789,8 +789,9 @@ Q_SIGNALS:
     /// pageResetFailed. The animation branch reconciles value-based, so a
     /// refused revert leaves the page BADGED with no other word. The only
     /// refusal is a WRITE that could not complete, so `reason` is always
-    /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
-    /// first so a benign refusal during a global async discard never emits.
+    /// `ReasonOverridesNotCleared`. Since schema v8 the animation revert has
+    /// no failure mode a user can reach — it refuses only with no settings
+    /// object at all — so this is effectively a wiring-bug signal there.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
     void scopeScreenNameChanged();

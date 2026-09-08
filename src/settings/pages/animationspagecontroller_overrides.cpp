@@ -40,6 +40,7 @@
 
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QVariantList>
 
@@ -83,6 +84,22 @@ QVariantMap AnimationsPageController::motionTree() const
     if (m_settings == nullptr)
         return {};
     return m_settings->motionProfileTree();
+}
+
+void AnimationsPageController::writeMotionTree(const QVariantMap& tree)
+{
+    if (m_settings == nullptr)
+        return;
+    // Raised across the write so the nested motionProfileTreeChanged handler
+    // can tell this apart from an external mover. Every writer here announces
+    // its own paths, so the handler's card-wide broadcast would be redundant —
+    // and, on the continuous paths, would defeat the per-card path filter once
+    // per pointer move.
+    ++m_selfTreeWriteDepth;
+    const auto releaseDepth = qScopeGuard([this] {
+        --m_selfTreeWriteDepth;
+    });
+    m_settings->setMotionProfileTree(tree);
 }
 
 bool AnimationsPageController::hasOverride(const QString& path) const
@@ -223,7 +240,7 @@ AnimationsPageController::OverrideWrite AnimationsPageController::writeOverrideO
         // Round-trip with no real change — the caller emits nothing.
         return OverrideWrite::Unchanged;
     }
-    m_settings->setMotionProfileTree(treeWithOverrideForPath(tree, path, obj));
+    writeMotionTree(treeWithOverrideForPath(tree, path, obj));
     return OverrideWrite::Written;
 }
 
@@ -239,7 +256,7 @@ bool AnimationsPageController::writeOverridesBatch(const QList<QPair<QString, QV
         obj.remove(JsonNameKey);
         tree = treeWithOverrideForPath(tree, path, obj);
     }
-    m_settings->setMotionProfileTree(tree);
+    writeMotionTree(tree);
     return true;
 }
 
@@ -250,7 +267,7 @@ AnimationsPageController::OverrideRemoval AnimationsPageController::removeOverri
     const QVariantMap tree = motionTree();
     if (!treeHasOverrideForPath(tree, path))
         return OverrideRemoval::Absent;
-    m_settings->setMotionProfileTree(treeWithOverrideForPath(tree, path, QJsonObject{}));
+    writeMotionTree(treeWithOverrideForPath(tree, path, QJsonObject{}));
     return OverrideRemoval::Removed;
 }
 
@@ -298,7 +315,7 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
         cleared.append(path);
     }
     if (!cleared.isEmpty())
-        m_settings->setMotionProfileTree(tree);
+        writeMotionTree(tree);
 
     for (const QString& path : cleared)
         Q_EMIT overrideChanged(path);

@@ -290,6 +290,18 @@ int main(int argc, char* argv[])
                          [&animationBootstrap, appSettings]() {
                              animationBootstrap.applyMotionProfileTree(appSettings->motionProfileTree());
                          });
+
+        // The global profile is the other half of what the daemon resolves
+        // against. Registering only the tree left this process resolving
+        // every event from the family seeds while the compositor applied the
+        // user's global values on top, so the page previewed a timing the
+        // user would never see.
+        const auto applyGlobal = [&animationBootstrap, appSettings]() {
+            animationBootstrap.applyGlobalProfile(appSettings->animationProfile(),
+                                                  appSettings->hasExplicitAnimationProfile());
+        };
+        applyGlobal();
+        QObject::connect(appSettings, &PlasmaZones::Settings::animationProfileChanged, appSettings, applyGlobal);
     }
 
     QQmlApplicationEngine engine;

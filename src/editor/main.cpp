@@ -261,6 +261,10 @@ int main(int argc, char* argv[])
     // modal process, so there is nothing to keep live.
     PlasmaZones::Settings editorMotionSettings;
     animationBootstrap.applyMotionProfileTree(editorMotionSettings.motionProfileTree());
+    // The global profile too, or the editor animates from the family seeds
+    // while the compositor applies the user's global values on top.
+    animationBootstrap.applyGlobalProfile(editorMotionSettings.animationProfile(),
+                                          editorMotionSettings.hasExplicitAnimationProfile());
 
     // Publish the bootstrap-owned registries + a fresh clock manager as
     // the QML-side defaults. Phase A3 of the architecture refactor

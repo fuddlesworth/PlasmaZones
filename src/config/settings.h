@@ -1713,6 +1713,18 @@ public:
     /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
     /// returns a C++-only PhosphorAnimation::Profile value.
     PhosphorAnimation::Profile animationProfile() const;
+
+    /// Whether the user has actually written the global animation Profile,
+    /// as opposed to it being served from ConfigDefaults.
+    ///
+    /// `animationProfile()` cannot answer this: it substitutes the full
+    /// ConfigDefaults blob for an absent key, so a pristine config and a
+    /// deliberately-configured one are byte-identical there. Consumers that
+    /// rank the global profile against the per-family seeds need the
+    /// distinction, because a layer that is always fully engaged would
+    /// otherwise outrank the seeds unconditionally and make them dead.
+    bool hasExplicitAnimationProfile() const;
+
     void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;

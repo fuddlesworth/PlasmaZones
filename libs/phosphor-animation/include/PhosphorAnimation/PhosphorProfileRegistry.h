@@ -147,8 +147,22 @@ private:
     static std::atomic<PhosphorProfileRegistry*> s_defaultRegistry;
 
     mutable std::mutex m_mutex;
+
+    /// Non-seed entries: Settings publishes (empty owner) and loader/tree
+    /// entries (tagged owner). `m_owners` never holds
+    /// `m_lowPrecedenceOwnerTag` as a value — seeds live in their own store.
     QHash<QString, Profile> m_profiles;
     QHash<QString, QString> m_owners;
+
+    /// The low-precedence seed layer, kept in a SEPARATE store rather than
+    /// stamped into `m_owners`. One slot per path cannot hold both a seed
+    /// and a user override, so storing them together meant a user override
+    /// destroyed the seed outright, and clearing that override removed the
+    /// path instead of revealing the seed underneath. Two stores let both
+    /// layers coexist, which is what `resolveWithInheritance` has always
+    /// claimed to resolve over.
+    QHash<QString, Profile> m_seedProfiles;
+
     QString m_lowPrecedenceOwnerTag; ///< Layer-2 seed tag; see setLowPrecedenceOwnerTag.
 };
 

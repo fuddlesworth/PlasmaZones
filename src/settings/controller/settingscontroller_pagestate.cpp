@@ -486,10 +486,10 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Animation pages share one staging domain and one ShaderProfileTree key, but
     // dirty is value-based PER SCOPE so a revert on one surface never lights
     // another's badge (mirrors the decoration domain below). A surface leaf is
-    // dirty iff its own event subtree carries a staged override FILE or its shader
-    // tree diverges from baseline within scope; General is dirty iff its config
-    // keys diverge; the library leaves fall back to whole-tree (any file or key
-    // edit shows there).
+    // dirty iff its own event subtree carries a staged timing override or its
+    // shader tree diverges from baseline within scope; General is dirty iff its
+    // config keys diverge; the library leaves fall back to whole-tree (any edit to
+    // either tree or any animation key shows there).
     if (isAnimationPage(page)) {
         const AnimationPageScope scope = animationPageScope(page);
         if (scope.kind == AnimationPageScope::ConfigOnly) {

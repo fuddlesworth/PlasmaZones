@@ -210,28 +210,31 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     // `hasOverride` still reported true, until some later write repaired it.
     acceptedFields = boundedWrittenMap(acceptedFields, QLatin1String("setOverrideMergedOnPaths"));
 
-    // Every path's stored profile is read BEFORE the first write. `setOverride`
-    // invalidates the whole disk memo, so reading inside the write loop would
-    // miss the memo on every iteration after the first and cost one real file
-    // open per path per call — and this runs at drag rate. The paths are
-    // distinct files and none of the writes can affect another's stored
-    // content, so reading them all up front is equivalent.
+    // Every path's stored profile is read from ONE tree snapshot taken before
+    // the first write. `rawProfile` copies the whole override tree out of
+    // Settings on every call, and this runs at drag rate, so reading it once is
+    // both cheaper and the correct base: each edit touches only its own entry,
+    // so no write can change another path's stored content.
+    const QVariantMap baseTree = motionTree();
     QList<QVariantMap> bases;
     bases.reserve(paths.size());
     for (const QString& path : paths)
-        bases.append(rawProfile(path));
+        bases.append(sanitizedProfileMap(treeProfileForPath(baseTree, path)));
 
-    // Batched: write every path through the signal-free core, invalidate the
-    // disk memo ONCE, then emit. Going through per-path setOverride instead
-    // dropped the whole memo AND synchronously emitted overrideChanged on every
-    // iteration, so each sibling card re-walked resolvedProfile uncached mid-
-    // batch — O(paths x cards x depth) file opens per drag tick. Here the memo
-    // is invalidated once after all writes land, so a sibling's re-walk on the
-    // first emit reads settled state and re-warms the memo for the rest.
+    // ONE write for the whole group, not a loop of per-path writes. Each
+    // `setMotionProfileTree` refreshes the backend, writes the store and emits
+    // `motionProfileTreeChanged` synchronously, which this controller turns
+    // into `pendingChangesChanged`. Writing per path therefore let every card
+    // observe the group HALF-WRITTEN, N times per slider tick — the exact
+    // atomicity the shader side buys with its single write. Classification
+    // happens here rather than from the writer's return value, because
+    // `writeOverridesBatch` reports one bool for the whole batch.
     const QLatin1String curveKey(PhosphorAnimation::Profile::JsonFieldCurve);
     bool allWritten = true;
     QStringList written;
     QStringList unchanged;
+    QList<QPair<QString, QVariantMap>> edits;
+    edits.reserve(paths.size());
     for (int i = 0; i < paths.size(); ++i) {
         const QVariantMap& base = bases.at(i);
         QVariantMap merged = base;
@@ -266,11 +269,32 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
             }
         }
 
-        const OverrideWrite result = writeOverrideOnly(paths.at(i), merged);
-        if (result == OverrideWrite::Failed)
+        // Classify against the pre-write snapshot, mirroring what
+        // `writeOverrideOnly` would have decided per path: an invalid path is
+        // the only Failed cause once `m_settings` is non-null, and a stored
+        // profile already equal to the requested one is Unchanged and stays
+        // uncounted. The `name` strip must happen here so the comparison is
+        // against the object that will actually be stored.
+        const QString& path = paths.at(i);
+        if (!isValidEventPath(path)) {
             allWritten = false;
-        else if (result == OverrideWrite::Written)
-            written.append(paths.at(i));
+            continue;
+        }
+        QJsonObject obj = QJsonObject::fromVariantMap(merged);
+        obj.remove(JsonNameKey);
+        if (treeProfileForPath(baseTree, path) == obj) {
+            unchanged.append(path);
+            continue;
+        }
+        edits.append({path, obj.toVariantMap()});
+        written.append(path);
+    }
+
+    if (!edits.isEmpty() && !writeOverridesBatch(edits)) {
+        // The batch reports false only for a missing settings object, in which
+        // case nothing landed — so nothing may be announced as written.
+        allWritten = false;
+        written.clear();
     }
 
     // No `pendingChangesChanged` here. It arrives through the

@@ -691,7 +691,7 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overri
     // silently override the configured value with a zero.
     //
     // The three bools go through effectiveBoolOverride, the same reader the
-    // five behaviour toggles use: it takes the value only when it IS a bool,
+    // six behaviour toggles use: it takes the value only when it IS a bool,
     // so a hand-edited string cannot coerce to false and turn the indicator
     // off while every setting still reports it on. Two resolvers over one map
     // disagreeing about reject-vs-coerce is a bug in itself.

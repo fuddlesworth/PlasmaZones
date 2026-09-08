@@ -1,28 +1,26 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Motion-set domain closures for the shared ShaderSetStore. Motion sets
-// snapshot the per-event override FILES under the profiles directory; the
-// generic store handles the envelope (name / description / version), the
-// coverage summary, and every file operation.
+// Motion-set domain closures for the shared ShaderSetStore. A motion set
+// captures both halves of a per-event animation: the timing from
+// `Animations/MotionProfileTree` and the pack assignment from
+// `Animations/ShaderProfileTree`. Both are config keys since schema v8, so the
+// snapshot reads two config values and opens no file. The generic store handles
+// the envelope (name / description / version), the coverage summary, and the
+// set FILES themselves.
 
 #include "motionsetdomain.h"
 
 #include "core/platform/logging.h"
-#include "settings/utils/animationfileutils.h"
 
 #include "core/types/animationshadersupportedpaths.h"
 
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonParseError>
 #include <QList>
 #include <QLoggingCategory>
 #include <QSet>
@@ -43,7 +41,6 @@ namespace {
 /// shader half on parse and applying a silently halved look.
 constexpr int kSetFormatVersion = 2;
 
-constexpr QLatin1String kNameKey{"name"};
 constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
@@ -75,12 +72,6 @@ const QSet<QString>& knownTimingFields()
     };
     return fields;
 }
-
-/// Ceiling on one profile file read during the snapshot walk, which runs on the
-/// GUI thread on every setsChanged. The profiles dir is hand-editable, so it is
-/// a filesystem boundary like any other. Derived from the shared cap so it
-/// cannot drift from the store's set-file cap or the other profile readers.
-constexpr qint64 kMaxProfileFileBytes = animfileutil::kMaxJsonFileBytes;
 
 struct StagedEntry
 {
@@ -240,7 +231,8 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
                                   std::function<bool(const QString&, const QVariantMap&)> writeOverride,
                                   std::function<QVariantMap()> readShaders,
-                                  std::function<bool(const QString&, const QVariantMap&)> writeShader)
+                                  std::function<bool(const QString&, const QVariantMap&)> writeShader,
+                                  std::function<QString(const QString&)> resolvedShaderId)
 {
     // The domain cannot function without these: a missing callable is a wiring
     // bug, not a runtime condition. Assert in debug; the lambdas below still
@@ -263,7 +255,7 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     //    keeps the on-disk set stable across saves and so diffable.
     //    Active-detection does NOT depend on it: the store indexes live
     //    overrides by path into a hash.
-    config.snapshot = [readTimings = std::move(readTimings), readShaders]() -> QJsonObject {
+    config.snapshot = [readTimings = std::move(readTimings), readShaders, resolvedShaderId]() -> QJsonObject {
         using namespace PhosphorAnimation;
 
         if (!readTimings) {
@@ -339,12 +331,17 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
             if (emitted.contains(path)) {
                 continue;
             }
-            const QString defaultId = PhosphorAnimation::ProfilePaths::defaultShaderEffectIdForPath(path);
-            if (defaultId.isEmpty()) {
+            // The RESOLVED pack, not the built-in default: a leaf inheriting
+            // from a category ancestor renders that ancestor's pack, and
+            // capturing the default instead would describe a look the sender
+            // is not using while still reading as active, because the live
+            // side of the comparison is this same snapshot.
+            const QString resolvedId = resolvedShaderId ? resolvedShaderId(path) : QString();
+            if (resolvedId.isEmpty()) {
                 continue;
             }
             QJsonObject shader;
-            shader.insert(kEffectIdKey, defaultId);
+            shader.insert(kEffectIdKey, resolvedId);
             QJsonObject profile;
             profile.insert(kShaderKey, shader);
             QJsonObject entry;

@@ -34,10 +34,15 @@
 
 namespace PlasmaZones {
 
-// Paths that follow the user's `Settings.animationProfile` slider
-// directly. Every other PhosphorAnimation path is served by the family seeds
-// below, with the user's per-event overrides layered on top from
-// `Animations/MotionProfileTree` in config.
+// Paths that follow the user's `Settings.animationProfile` slider directly.
+//
+// `global` is the root of every other path's chain, so what this publish does
+// to the rest of the tree depends on WHICH LAYER it lands in, and that is
+// decided in publishActiveAnimationProfile by whether the user has actually
+// written the global blob. Unset, it joins the family seeds and the deeper
+// per-family seeds override it. Set, it outranks them, which is what a
+// "retime everything" control has to mean. Either way the user's per-event
+// overrides from `Animations/MotionProfileTree` sit above both.
 //
 // Keeping this list in a file-scope array lets us add another
 // settings-backed path (e.g., a second slider for snap-specific
@@ -261,6 +266,9 @@ void Daemon::publishActiveAnimationProfile()
     auto& reg = m_profileRegistry;
 
     const Profile settingsProfile = m_settings->animationProfile();
+    // Read once per publish, not per path: it is a backend key lookup and
+    // this runs at slider-drag rate.
+    const bool settingsExplicit = m_settings->hasExplicitAnimationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
         // OWNERSHIP, not existence. Asking whether the timing tree CONTAINS
         // this path answers the wrong question: it stays true even when the
@@ -345,7 +353,28 @@ void Daemon::publishActiveAnimationProfile()
             reg.registerProfile(*path, mergedProfile, pathOwner);
             continue;
         }
-        reg.registerProfile(*path, settingsProfile);
+
+        // `global` is the root of EVERY path's chain (ProfilePaths::parentPath
+        // answers "global" for every category root), so whichever layer this
+        // entry lands in applies to the whole tree.
+        //
+        // Published untagged it sits in the resolver's upper layer and, being
+        // fully engaged whether or not the user ever opened the page,
+        // overwrites every field of all 29 family seeds on every path —
+        // leaving the seed table inert and every surface animating with one
+        // uniform feel. Published under the seed tag it sits alongside the
+        // seeds at the chain root, where the deeper per-family seeds
+        // correctly override it.
+        //
+        // So the tag follows user intent: while the global blob is unset the
+        // shipped per-family character wins, and the moment the user actually
+        // sets a global value it outranks the seeds again, which is what a
+        // "retime everything" control has to mean.
+        if (settingsExplicit) {
+            reg.registerProfile(*path, settingsProfile);
+        } else {
+            reg.registerProfile(*path, settingsProfile, QString(kShellAnimationFamilySeedsOwnerTag));
+        }
     }
 }
 

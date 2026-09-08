@@ -431,13 +431,14 @@ private Q_SLOTS:
         QVERIFY2(card.contains(QStringLiteral("shaderPackNameIsExact: root._allWritePathsHoldShownPack")),
                  "the remove button's label is no longer gated on every path holding the shown pack");
 
-        // (3) The refusal latch releases on pendingChangesChanged and on
-        // nothing else. It has to be that signal: the discard's terminal
-        // handler emits overrideChanged only for the files it actually
-        // restored, so a card none of those reach would stay latched for the
-        // rest of the session.
-        QVERIFY2(card.contains(QStringLiteral("function onPendingChangesChanged() { root._writesRefused = false; }")),
-                 "the refusal latch no longer releases on pendingChangesChanged alone");
+        // (3) No refusal latch. It was removed with the async-discard machinery
+        // it existed for: since schema v8 no writer this card calls on a user
+        // gesture can return the -1 that armed it, and the repeat-toast problem
+        // it solved is handled controller-side by m_mergedWriteFailureToasted.
+        // Pinned as an ABSENCE so a reintroduction has to be deliberate — a
+        // latch that can never arm is dead code that reads as live safety.
+        QVERIFY2(!card.contains(QStringLiteral("_writesRefused")),
+                 "the refusal latch is back; it cannot arm, so it must not exist");
 
         // (4) The ownership caption's arms, in order. Ordering is the
         // contract: owning a pack outranks owning only parameters, the

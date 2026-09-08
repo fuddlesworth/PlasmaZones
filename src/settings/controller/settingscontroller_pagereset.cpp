@@ -343,7 +343,7 @@ void SettingsController::resetPage(const QString& page)
 
     // Animation pages: reset to defaults, scoped like the decoration domain
     // below. A SURFACE leaf clears only its own event subtree — its per-event
-    // override FILES and its shader-tree overrides — leaving the other surfaces,
+    // timing-tree entries and its shader-tree overrides — leaving the other surfaces,
     // General's config keys, and the library untouched. General resets only its
     // config keys (enable / motion Profile / filtering). A library leaf resets
     // the whole tree (every file + every animation key). All staged like ordinary
@@ -575,10 +575,11 @@ void SettingsController::discardPage(const QString& page)
 
     // Animation pages: discard reverts to the committed baseline, scoped like the
     // decoration domain below. A SURFACE leaf reverts only its own event subtree —
-    // its override FILES (revertPendingUnder) and its shader-tree paths (restored
-    // to baseline) — so discarding OSDs cannot drop a pending Windows edit.
-    // General reverts only its config keys. A library leaf reverts the whole tree
-    // (all files via revertPending + every animation key via discardKeys).
+    // its timing-tree entries (revertPendingUnder) and its shader-tree paths
+    // (restored to baseline) — so discarding OSDs cannot drop a pending Windows
+    // edit. General reverts only its config keys. A library leaf reverts the
+    // whole tree via discardKeys(animationConfigKeys()), which carries BOTH
+    // profile trees; revertPending alongside it only drops the page's memo.
     // Reverting the shader tree re-emits shaderProfileTreeChanged, which the
     // controller observes to refresh the cards.
     if (isAnimationPage(page)) {

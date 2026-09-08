@@ -49,6 +49,27 @@ void writeProfileFile(const QString& stem, const QJsonObject& body)
 }
 
 /// The migrated entry for @p path, or an empty object when the tree has none.
+/// Whether an entry for @p path exists at all, regardless of what it carries.
+///
+/// Distinct from `entryFor`, which returns the entry's `profile` and so cannot
+/// tell "no entry" from "an entry with an empty profile". Any assertion about
+/// a path being SKIPPED has to use this one.
+bool hasEntryFor(const QJsonObject& root, const QString& path)
+{
+    const QJsonArray overrides = root.value(ConfigKeys::animationsGroup())
+                                     .toObject()
+                                     .value(ConfigKeys::motionProfileTreeKey())
+                                     .toObject()
+                                     .value(QStringLiteral("overrides"))
+                                     .toArray();
+    for (const QJsonValue& v : overrides) {
+        if (v.toObject().value(QStringLiteral("path")).toString() == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QJsonObject entryFor(const QJsonObject& root, const QString& path)
 {
     const QJsonArray overrides = root.value(ConfigKeys::animationsGroup())
@@ -183,7 +204,79 @@ private Q_SLOTS:
         QJsonObject root;
         ConfigMigration::migrateV7ToV8(root);
 
-        QVERIFY(entryFor(root, QStringLiteral("osd.hide")).isEmpty());
+        // Asserted as the ABSENCE OF AN ENTRY, not through entryFor: that
+        // helper answers with the entry's `profile` object, so an entry that
+        // was appended carrying an empty profile reads identically to no entry
+        // at all. Written the old way this slot could not fail — deleting the
+        // skip left it green.
+        QVERIFY(!hasEntryFor(root, QStringLiteral("osd.hide")));
+    }
+
+    /// A hand-edited file cannot smuggle arbitrary keys or unbounded strings
+    /// into config.
+    ///
+    /// The profiles directory is a filesystem boundary, and everything that
+    /// survives the import is written verbatim into one shared config key that
+    /// every read of the timing tree copies. `Profile::fromJson` ignores keys
+    /// it does not know, so without the allowlist a stray field would be
+    /// invisible rather than harmless — and nothing downstream prunes it.
+    void ahandEditedFileCannotSmuggleFieldsIntoConfig()
+    {
+        const QString overlong(4096, QLatin1Char('x'));
+        writeProfileFile(QStringLiteral("osd.show"),
+                         QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")},
+                                     {QStringLiteral("duration"), 250},
+                                     {QStringLiteral("bogusKey"), QStringLiteral("nope")},
+                                     {QStringLiteral("presetName"), overlong}});
+
+        QJsonObject root;
+        ConfigMigration::migrateV7ToV8(root);
+
+        const QJsonObject stored = entryFor(root, QStringLiteral("osd.show"));
+        QCOMPARE(stored.value(QStringLiteral("duration")).toInt(), 250);
+        QVERIFY2(!stored.contains(QStringLiteral("bogusKey")), "an unrecognised field reached the config tree");
+        QVERIFY2(!stored.contains(QStringLiteral("presetName")), "an over-long string value reached the config tree");
+    }
+
+    /// A settings-profile delta must be stamped but NOT have this machine's
+    /// files folded into it.
+    ///
+    /// ProfileStore passes `ExternalImports::Disabled` precisely so a document
+    /// that never carried the migrating user's timings does not acquire them.
+    /// Nothing exercised that arm, so deleting the early return left the whole
+    /// suite green while every captured profile silently gained local timing.
+    void aProfileDeltaIsStampedButNotImported()
+    {
+        writeProfileFile(
+            QStringLiteral("osd.show"),
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 250}});
+
+        QJsonObject root;
+        ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/false);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 8);
+        QVERIFY(!root.value(ConfigKeys::animationsGroup()).toObject().contains(ConfigKeys::motionProfileTreeKey()));
+    }
+
+    /// Re-running the step on an already-migrated root must not re-import.
+    ///
+    /// Distinct from `anExistingTreeIsNeverOverwritten`, which enters at v7 and
+    /// stops at the key-present check. This one pins the version guard itself:
+    /// without it a later chain run would fold the (deliberately preserved)
+    /// files back in on top of whatever the user has since configured.
+    void anAlreadyMigratedRootIsLeftAlone()
+    {
+        writeProfileFile(
+            QStringLiteral("osd.show"),
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 250}});
+
+        QJsonObject root;
+        root.insert(QStringLiteral("_version"), 9);
+
+        ConfigMigration::migrateV7ToV8(root);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 9);
+        QVERIFY(!root.contains(ConfigKeys::animationsGroup()));
     }
 };
 

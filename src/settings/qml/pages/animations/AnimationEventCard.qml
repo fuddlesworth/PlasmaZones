@@ -11,8 +11,8 @@ import org.kde.kirigami as Kirigami
  * Each card edits one event in the `PhosphorAnimation::ProfilePaths`
  * taxonomy (e.g. `editor.snapIn`, `osd.show`). Overrides are PER FIELD:
  * editing the duration writes only the duration field and editing the
- * curve writes only the curve field into this event's Profile JSON file
- * in `Animations/MotionProfileTree`, so the untouched field keeps following
+ * curve writes only the curve field into this event's entry in the
+ * `Animations/MotionProfileTree` config key, so the untouched field keeps following
  * the parent chain and the Global defaults. Flipping the Override toggle ON
  * just opens the timing editor (nothing is written until a control is actually
  * edited); flipping it OFF removes the override. A reload of the whole config
@@ -95,34 +95,6 @@ Item {
     /// tree (_setShaderOverrideOnAll, _setShaderParamsOnAll and the two
     /// shader clears).
     property bool _committingShader: false
-
-    /// "The controller refused the last write, so stop re-issuing it."
-    ///
-    /// Every group writer returns whether its write landed, and the refusal
-    /// case is an async discard owning the tree. The controller TOASTS that
-    /// reason on every refusal, and a toast announces itself to assistive tech
-    /// on every show. Both continuous edit paths run at pointer rate — a
-    /// duration drag emits per move, and so does a shader parameter drag — so a
-    /// discard that overlapped a drag produced one refused write, one toast and
-    /// one screen-reader announcement per pointer move for the length of the
-    /// drag. The toast's own animation coalesces visually, which is why this
-    /// has to be fixed at the source of the repeat rather than at the toast.
-    ///
-    /// Cleared in two places, and it needs both. A refresh this card did not
-    /// drive itself covers an outside edit; `onPendingChangesChanged` below
-    /// covers the end of the discard. The second is NOT redundant: the
-    /// discard's terminal handler emits `overrideChanged` only for the profile
-    /// files it actually restored, so a card none of those paths reaches would
-    /// otherwise never refresh and would stay latched for the rest of the
-    /// session. A card's own writes refresh with `selfDriven` set, so the latch
-    /// survives the drag that tripped it.
-    property bool _writesRefused: false
-
-    /// Record whether a write landed. Takes the boolean every group writer
-    /// already returns and that every drag-rate caller used to discard.
-    function _noteWriteResult(landed) {
-        root._writesRefused = !landed;
-    }
 
     /// The declared mirrors minus any the controller rejects as an event path.
     /// A misspelled entry is refused by every writer, so it can never receive
@@ -531,14 +503,6 @@ Item {
     /// other caller (Component.onCompleted, the two signal handlers) leaves it
     /// undefined, which reads as external.
     function refreshFromTree(selfDriven) {
-        // A refresh this card did not cause means something else moved the
-        // store, which for a refusal-latched card is the discard that was
-        // holding it finishing. Retry from here. Own writes pass `selfDriven`,
-        // so a drag that trips the latch keeps it for the rest of the drag
-        // rather than re-arming on its own refusal refresh.
-        if (!selfDriven)
-            root._writesRefused = false;
-
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
         // Every caller that can MOVE the timing chain bumps _inheritRev before
         // calling — the three timing group writers and onOverrideChanged — so
@@ -765,25 +729,6 @@ Item {
         // harmless: a card still mid-drag re-arms the latch on its very next
         // refused tick, so this costs at most one extra toast per discard and
         // keeps the anti-repeat property that matters.
-        function onPendingChangesChanged() {
-            // Deliberately just the flag, with no refresh alongside it. A card
-            // whose writes were all refused never entered the pending-snapshot
-            // map, so the discard has nothing of its to restore and its working
-            // values are the ones the user dragged, not what is on disk.
-            //
-            // That residue is now drag-rate only: the discrete refusal paths
-            // (`_writeAllShaderParams`, `commitCurveOverride`) restore
-            // themselves, and the two continuous ones deliberately do not,
-            // because refreshing per tick would drag the control back out from
-            // under the user. What is left is a slider still showing the value
-            // the user dragged to. It does NOT correct itself on the next edit
-            // — the next accepted write commits that value — which is the
-            // reasonable outcome for a drag the user meant, so it is left
-            // alone. Refreshing here instead would also be defensible, but it
-            // would put a full timing refresh on a signal every card receives,
-            // for a property that is one bool.
-            root._writesRefused = false;
-        }
 
         target: settingsController.animationsPage
     }

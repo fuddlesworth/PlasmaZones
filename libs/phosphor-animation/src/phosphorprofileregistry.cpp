@@ -51,28 +51,35 @@ PhosphorProfileRegistry* PhosphorProfileRegistry::defaultRegistry()
 
 std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) const
 {
+    // Exact path, highest precedence first: a non-seed entry if one is
+    // registered here, otherwise the seed. Answering "nothing here" for a path
+    // that carries only a seed would be a lie — the seed is what that path
+    // resolves to, and a registry whose entire content is seeds (the shell
+    // tier's) would look empty.
     std::lock_guard<std::mutex> lock(m_mutex);
     auto it = m_profiles.constFind(path);
-    if (it == m_profiles.constEnd()) {
-        return std::nullopt;
+    if (it != m_profiles.constEnd()) {
+        return *it;
     }
-    return *it;
+    auto seed = m_seedProfiles.constFind(path);
+    if (seed != m_seedProfiles.constEnd()) {
+        return *seed;
+    }
+    return std::nullopt;
+}
+
+Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path,
+                                                        const QString& /*lowPrecedenceOwnerTag*/) const
+{
+    // The tag argument is ignored: seed-ness is now decided by which store an
+    // entry lives in, chosen at write time against the registry's configured
+    // tag. Passing a DIFFERENT tag here used to select a different layer;
+    // there is no longer any layer for it to select. Retained so existing
+    // callers keep compiling, and it simply forwards.
+    return resolveWithInheritance(path);
 }
 
 Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path) const
-{
-    // Read the low-precedence tag under the lock so a concurrent
-    // setLowPrecedenceOwnerTag can't tear; copy out before delegating
-    // so the inner overload doesn't double-lock.
-    QString tag;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        tag = m_lowPrecedenceOwnerTag;
-    }
-    return resolveWithInheritance(path, tag);
-}
-
-Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path, const QString& lowPrecedenceOwnerTag) const
 {
     // Build the chain root-first so the overlay walk runs shallow →
     // deep, with each engaged optional in a deeper entry replacing
@@ -118,34 +125,26 @@ Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path, con
     {
         std::lock_guard<std::mutex> lock(m_mutex);
 
-        // Pass 1: low-precedence (seed) layer — only entries owned
-        // by the configured tag. Skipped entirely when the tag is
-        // empty, in which case pass 2 below sees every entry and we
-        // degrade to single-pass deeper-wins (the original
-        // semantics).
-        if (!lowPrecedenceOwnerTag.isEmpty()) {
-            for (const QString& step : chain) {
-                const auto it = m_profiles.constFind(step);
-                if (it == m_profiles.constEnd()) {
-                    continue;
-                }
-                if (m_owners.value(step) != lowPrecedenceOwnerTag) {
-                    continue;
-                }
-                overlay(effective, *it);
+        // Pass 1: the low-precedence (seed) layer. Store membership IS
+        // the owner, so no tag lookup is needed and the pass runs even
+        // when no tag is configured — a registry with no seeds simply
+        // has an empty store and pass 1 contributes nothing.
+        for (const QString& step : chain) {
+            const auto it = m_seedProfiles.constFind(step);
+            if (it == m_seedProfiles.constEnd()) {
+                continue;
             }
+            overlay(effective, *it);
         }
 
-        // Pass 2: everything NOT in the low-precedence layer. These
-        // are Settings publishes (direct/empty owner) and user JSONs
-        // (loader-tagged owner). Always overlays after pass 1, so a
-        // user edit at any depth wins over any seed at any depth.
+        // Pass 2: everything NOT in the seed layer. These are Settings
+        // publishes (direct/empty owner) and user JSONs (loader-tagged
+        // owner). Always overlays after pass 1, so a user edit at any
+        // depth wins over any seed at any depth. No owner filter is
+        // needed: seeds are not in `m_profiles` at all.
         for (const QString& step : chain) {
             const auto it = m_profiles.constFind(step);
             if (it == m_profiles.constEnd()) {
-                continue;
-            }
-            if (!lowPrecedenceOwnerTag.isEmpty() && m_owners.value(step) == lowPrecedenceOwnerTag) {
                 continue;
             }
             overlay(effective, *it);
@@ -156,8 +155,61 @@ Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path, con
 
 void PhosphorProfileRegistry::setLowPrecedenceOwnerTag(const QString& tag)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_lowPrecedenceOwnerTag = tag;
+    // Migrate rather than just assign. Seed-ness is decided at WRITE time by
+    // comparing against this tag, so a caller that registers a seed before
+    // setting the tag would land it in `m_profiles`, where pass 1 can no
+    // longer see it. Moving entries on a tag change makes the ordering of
+    // the two calls irrelevant instead of a silent trap. All three
+    // composition roots set the tag first today; this keeps that from being
+    // load-bearing.
+    QStringList moved;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_lowPrecedenceOwnerTag == tag) {
+            return;
+        }
+
+        // Entries previously treated as seeds go back to the non-seed store
+        // under the OLD tag, which is what they would have been had the new
+        // tag been set from the start.
+        if (!m_lowPrecedenceOwnerTag.isEmpty() && !m_seedProfiles.isEmpty()) {
+            const QString oldTag = m_lowPrecedenceOwnerTag;
+            for (auto it = m_seedProfiles.constBegin(); it != m_seedProfiles.constEnd(); ++it) {
+                if (!m_profiles.contains(it.key())) {
+                    m_profiles.insert(it.key(), it.value());
+                    m_owners.insert(it.key(), oldTag);
+                    moved.append(it.key());
+                }
+            }
+            m_seedProfiles.clear();
+        }
+
+        m_lowPrecedenceOwnerTag = tag;
+
+        // Entries already stored under the new tag become seeds.
+        if (!tag.isEmpty()) {
+            QStringList promote;
+            for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
+                if (it.value() == tag) {
+                    promote.append(it.key());
+                }
+            }
+            for (const QString& path : std::as_const(promote)) {
+                m_seedProfiles.insert(path, m_profiles.value(path));
+                m_profiles.remove(path);
+                m_owners.remove(path);
+                moved.append(path);
+            }
+        }
+    }
+
+    // A migration changes what every affected path resolves to, so consumers
+    // must re-resolve exactly as they would after any other write.
+    for (const QString& path : std::as_const(moved)) {
+        emitThreadSafe(this, [this, path] {
+            Q_EMIT profileChanged(path);
+        });
+    }
 }
 
 void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile& profile)
@@ -180,16 +232,31 @@ void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        auto it = m_profiles.find(path);
-        const QString existingOwner = m_owners.value(path);
-        if (it == m_profiles.end() || !(*it == profile) || existingOwner != ownerTag) {
-            m_profiles.insert(path, profile);
-            if (ownerTag.isEmpty()) {
-                m_owners.remove(path);
-            } else {
-                m_owners.insert(path, ownerTag);
+
+        // A seed write goes to the seed store and must be compared against
+        // THAT store. Comparing it against `m_profiles` would report
+        // "changed" whenever a byte-identical user entry already sits at the
+        // path (same value, different owner) and write the seed into the
+        // non-seed store, putting it straight back into pass 2 — the exact
+        // shadowing the separate store exists to remove.
+        if (!m_lowPrecedenceOwnerTag.isEmpty() && ownerTag == m_lowPrecedenceOwnerTag) {
+            auto seed = m_seedProfiles.find(path);
+            if (seed == m_seedProfiles.end() || !(*seed == profile)) {
+                m_seedProfiles.insert(path, profile);
+                changed = true;
             }
-            changed = true;
+        } else {
+            auto it = m_profiles.find(path);
+            const QString existingOwner = m_owners.value(path);
+            if (it == m_profiles.end() || !(*it == profile) || existingOwner != ownerTag) {
+                m_profiles.insert(path, profile);
+                if (ownerTag.isEmpty()) {
+                    m_owners.remove(path);
+                } else {
+                    m_owners.insert(path, ownerTag);
+                }
+                changed = true;
+            }
         }
     }
     if (!changed) {
@@ -240,45 +307,64 @@ void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHa
     {
         std::lock_guard<std::mutex> lock(m_mutex);
 
-        // Paths previously owned by this tag but NOT in the new map —
-        // the user deleted their JSON file, so we must unregister.
-        for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
-            if (it.value() == ownerTag && !profiles.contains(it.key())) {
-                pathsRemoved.append(it.key());
+        // The seed layer lives in its own store, so a reload of it replaces
+        // that store wholesale. The direct-owner-wins rule below does not
+        // apply: it protects untagged entries from being clobbered by a
+        // loader, and seeds cannot collide with them any more.
+        if (!m_lowPrecedenceOwnerTag.isEmpty() && ownerTag == m_lowPrecedenceOwnerTag) {
+            for (auto it = m_seedProfiles.constBegin(); it != m_seedProfiles.constEnd(); ++it) {
+                if (!profiles.contains(it.key())) {
+                    pathsRemoved.append(it.key());
+                }
             }
-        }
-        for (const QString& path : std::as_const(pathsRemoved)) {
-            m_profiles.remove(path);
-            m_owners.remove(path);
-        }
+            for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+                const auto existing = m_seedProfiles.constFind(it.key());
+                if (existing == m_seedProfiles.constEnd() || !(*existing == it.value())) {
+                    pathsChanged.append(it.key());
+                }
+            }
+            m_seedProfiles = profiles;
+        } else {
+            // Paths previously owned by this tag but NOT in the new map —
+            // the user deleted their JSON file, so we must unregister.
+            for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
+                if (it.value() == ownerTag && !profiles.contains(it.key())) {
+                    pathsRemoved.append(it.key());
+                }
+            }
+            for (const QString& path : std::as_const(pathsRemoved)) {
+                m_profiles.remove(path);
+                m_owners.remove(path);
+            }
 
-        // Paths in the new map — insert / replace, claiming ownership.
-        //
-        // Direct-owner (empty `existingOwner`) always wins: a loader
-        // rescan does NOT overwrite paths the daemon (or any other
-        // untagged caller) registered via `registerProfile(path,
-        // profile)`. Without this guard, the user's Settings-slider
-        // Global value would be silently clobbered every time their
-        // `Global.json` was rescanned, then re-claimed on the next
-        // `publishActiveAnimationProfile`, producing a flap. Settings
-        // is the live tuning surface; file-based profiles are for
-        // paths Settings does NOT publish to. A loader entry
-        // colliding with a direct-owned path is silently skipped.
-        for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
-            const QString& path = it.key();
-            const Profile& p = it.value();
-            auto existing = m_profiles.find(path);
-            const QString existingOwner = m_owners.value(path);
-            if (existing != m_profiles.end() && existingOwner.isEmpty()) {
-                // Direct-owner has highest priority; loader steps aside.
-                continue;
+            // Paths in the new map — insert / replace, claiming ownership.
+            //
+            // Direct-owner (empty `existingOwner`) always wins: a loader
+            // rescan does NOT overwrite paths the daemon (or any other
+            // untagged caller) registered via `registerProfile(path,
+            // profile)`. Without this guard, the user's Settings-slider
+            // Global value would be silently clobbered every time their
+            // `Global.json` was rescanned, then re-claimed on the next
+            // `publishActiveAnimationProfile`, producing a flap. Settings
+            // is the live tuning surface; file-based profiles are for
+            // paths Settings does NOT publish to. A loader entry
+            // colliding with a direct-owned path is silently skipped.
+            for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+                const QString& path = it.key();
+                const Profile& p = it.value();
+                auto existing = m_profiles.find(path);
+                const QString existingOwner = m_owners.value(path);
+                if (existing != m_profiles.end() && existingOwner.isEmpty()) {
+                    // Direct-owner has highest priority; loader steps aside.
+                    continue;
+                }
+                if (existing == m_profiles.end() || !(*existing == p) || existingOwner != ownerTag) {
+                    m_profiles.insert(path, p);
+                    m_owners.insert(path, ownerTag);
+                    pathsChanged.append(path);
+                }
             }
-            if (existing == m_profiles.end() || !(*existing == p) || existingOwner != ownerTag) {
-                m_profiles.insert(path, p);
-                m_owners.insert(path, ownerTag);
-                pathsChanged.append(path);
-            }
-        }
+        } // non-seed branch
     }
 
     if (pathsRemoved.isEmpty() && pathsChanged.isEmpty()) {
@@ -325,14 +411,22 @@ void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
     QStringList removed;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
-            if (it.value() == ownerTag) {
-                removed.append(it.key());
+
+        // Seeds are not in `m_owners`, so the loop below would find nothing
+        // for the seed tag and clearing it would be a silent no-op.
+        if (!m_lowPrecedenceOwnerTag.isEmpty() && ownerTag == m_lowPrecedenceOwnerTag) {
+            removed = m_seedProfiles.keys();
+            m_seedProfiles.clear();
+        } else {
+            for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
+                if (it.value() == ownerTag) {
+                    removed.append(it.key());
+                }
             }
-        }
-        for (const QString& path : std::as_const(removed)) {
-            m_profiles.remove(path);
-            m_owners.remove(path);
+            for (const QString& path : std::as_const(removed)) {
+                m_profiles.remove(path);
+                m_owners.remove(path);
+            }
         }
     }
     if (removed.isEmpty()) {
@@ -359,11 +453,15 @@ void PhosphorProfileRegistry::reloadAll(const QHash<QString, Profile>& profiles)
     // direct/empty tag — this is intentional "wipe + replace" semantics.
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_profiles == profiles && m_owners.isEmpty()) {
+        // The seed store counts towards "is this already the whole content".
+        // Without it a reloadAll could early-return as a no-op while seeds
+        // were still resolving underneath.
+        if (m_profiles == profiles && m_owners.isEmpty() && m_seedProfiles.isEmpty()) {
             return;
         }
         m_profiles = profiles;
         m_owners.clear();
+        m_seedProfiles.clear();
     }
     emitThreadSafe(this, [this] {
         Q_EMIT profilesReloaded();
@@ -376,6 +474,7 @@ void PhosphorProfileRegistry::clear()
         std::lock_guard<std::mutex> lock(m_mutex);
         m_profiles.clear();
         m_owners.clear();
+        m_seedProfiles.clear();
     }
     emitThreadSafe(this, [this] {
         Q_EMIT profilesReloaded();
@@ -385,41 +484,57 @@ void PhosphorProfileRegistry::clear()
 QString PhosphorProfileRegistry::ownerOf(const QString& path) const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_owners.value(path);
+    // A non-seed entry answers with its own tag. A path that exists ONLY as
+    // a seed still answers with the seed tag, so the accessor keeps meaning
+    // what its name says even though seeds are no longer in `m_owners`.
+    const auto it = m_owners.constFind(path);
+    if (it != m_owners.constEnd()) {
+        return *it;
+    }
+    if (!m_profiles.contains(path) && m_seedProfiles.contains(path)) {
+        return m_lowPrecedenceOwnerTag;
+    }
+    return QString();
 }
 
 QHash<QString, Profile> PhosphorProfileRegistry::snapshot() const
 {
+    // Non-seed entries. Seeds are a resolution layer, not registered content,
+    // and every consumer of this wants what was explicitly registered.
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_profiles;
 }
 
 QHash<QString, Profile> PhosphorProfileRegistry::snapshotExcludingLowPrecedence() const
 {
+    // Identical to snapshot() by construction now that seeds live in their
+    // own store: `m_profiles` never contains one. Both names are kept — this
+    // one documents the intent at the D-Bus getter, which must not publish
+    // seeds as if they were user overrides.
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_lowPrecedenceOwnerTag.isEmpty()) {
-        return m_profiles;
-    }
-    QHash<QString, Profile> filtered;
-    filtered.reserve(m_profiles.size());
-    for (auto it = m_profiles.constBegin(); it != m_profiles.constEnd(); ++it) {
-        if (m_owners.value(it.key()) != m_lowPrecedenceOwnerTag) {
-            filtered.insert(it.key(), it.value());
-        }
-    }
-    return filtered;
+    return m_profiles;
 }
 
 int PhosphorProfileRegistry::profileCount() const
 {
+    // Distinct PATHS across both layers, matching resolve()/hasProfile(): a
+    // path carrying only a seed still resolves, so counting it as absent would
+    // contradict them.
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_profiles.size();
+    int count = m_profiles.size();
+    for (auto it = m_seedProfiles.constBegin(); it != m_seedProfiles.constEnd(); ++it) {
+        if (!m_profiles.contains(it.key())) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 bool PhosphorProfileRegistry::hasProfile(const QString& path) const
 {
+    // Either layer — see resolve().
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_profiles.contains(path);
+    return m_profiles.contains(path) || m_seedProfiles.contains(path);
 }
 
 } // namespace PhosphorAnimation

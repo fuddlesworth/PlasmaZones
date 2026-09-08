@@ -15,9 +15,9 @@ namespace PlasmaZones::motionset {
 /// Build the motion-set domain configuration for a ShaderSetStore.
 ///
 /// A motion set captures the WHOLE per-event unit, which is two stores: the
-/// timing override FILE in the profiles directory (curve / duration / ...) and
-/// the event's animation SHADER assignment, which lives in the config-backed
-/// `Animations.ShaderProfileTree`. Both halves are set on the same card in the
+/// timing override (curve / duration / ...) in the config-backed
+/// `Animations.MotionProfileTree`, and the event's animation SHADER assignment
+/// in `Animations.ShaderProfileTree`. Both halves are set on the same card in the
 /// Animations UI, so a set that carried only one of them captured half of what
 /// the user sees as one thing — and left the decoration domain, whose single
 /// tree carries pack ids and parameters together, doing strictly more.
@@ -47,7 +47,8 @@ namespace PlasmaZones::motionset {
 ///                        (`ISettings::motionProfileTree`), read once per
 ///                        snapshot.
 /// @param setsDir         Absolute path of the motion-sets directory.
-/// @param writeOverride   Commits one entry's TIMING half as a per-path file.
+/// @param writeOverride   Commits one entry's TIMING half into
+///                        `Animations/MotionProfileTree`.
 /// @param readShaders     Every direct shader override, keyed by event path
 ///                        (`AnimationsPageController::allRawShaderProfiles`).
 ///                        One call per snapshot, not one per path.
@@ -57,10 +58,21 @@ namespace PlasmaZones::motionset {
 ///                        / engaged-empty "no pack" / parameters-only over an
 ///                        inherited pack), because each state needs a different
 ///                        controller API.
+/// @param resolvedShaderId What @p path actually renders with, ancestor chain
+///                         and built-in default included
+///                         (`resolveShaderWithDefault(...).effectiveEffectId()`).
+///                         The self-containment sweep needs this rather than
+///                         the built-in default: a leaf whose pack comes from a
+///                         category ancestor would otherwise be captured as
+///                         something the sender is not using, and — because the
+///                         live snapshot it is compared against shares the same
+///                         mistake — the set would still read as active while
+///                         describing a different look.
 ShaderSetStore::Config
 makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
            std::function<QVariantMap()> readShaders,
-           std::function<bool(const QString& /*path*/, const QVariantMap& /*shader*/)> writeShader);
+           std::function<bool(const QString& /*path*/, const QVariantMap& /*shader*/)> writeShader,
+           std::function<QString(const QString& /*path*/)> resolvedShaderId);
 
 } // namespace PlasmaZones::motionset

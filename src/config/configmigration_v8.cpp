@@ -4,12 +4,13 @@
 #include "configmigration.h"
 
 #include "configkeys.h"
-#include "configmigration_util.h"
 #include "core/platform/logging.h"
 
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -106,9 +107,12 @@ void ConfigMigration::migrateV7ToV8(QJsonObject& root, bool importOverrideFiles)
     QJsonArray overrides;
     const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
     for (const QFileInfo& info : files) {
-        if (!info.isFile() || info.size() > kMaxOverrideFileBytes) {
-            qCWarning(lcConfig) << "migrateV7ToV8: skipping" << info.absoluteFilePath()
-                                << "— not a regular file, or over the" << kMaxOverrideFileBytes << "byte cap";
+        // Size only: `QDir::Files` has already excluded anything that is not a
+        // regular file, so an isFile() check here would be dead and its warning
+        // would name a condition that cannot occur.
+        if (info.size() > kMaxOverrideFileBytes) {
+            qCWarning(lcConfig) << "migrateV7ToV8: skipping" << info.absoluteFilePath() << "— over the"
+                                << kMaxOverrideFileBytes << "byte cap";
             continue;
         }
         QFile f(info.absoluteFilePath());
@@ -132,6 +136,40 @@ void ConfigMigration::migrateV7ToV8(QJsonObject& root, bool importOverrideFiles)
         if (!eventPaths().contains(name)) {
             continue;
         }
+        // Keep only the fields `Profile` actually round-trips, and bound what
+        // a string may carry.
+        //
+        // The profiles directory is a filesystem boundary a user can hand-edit,
+        // and everything that survives here is written verbatim into ONE shared
+        // config key that every read of the timing tree copies. The UI write
+        // path applies exactly this allowlist and bound (see
+        // animationspagecontroller_groupwrites.cpp); without it here a stray key
+        // or a 64 KB string entered through the migration door instead and then
+        // stayed, since nothing downstream prunes it. `Profile::fromJson`
+        // ignoring unknown keys makes that silent rather than harmless.
+        static const QSet<QString> kKnownProfileFields = {
+            QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve),
+            QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration),
+            QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance),
+            QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode),
+            QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval),
+            QLatin1String(PhosphorAnimation::Profile::JsonFieldPresetName),
+        };
+        constexpr int kMaxFieldStringLength = 512;
+        QJsonObject accepted;
+        for (auto it = profile.constBegin(); it != profile.constEnd(); ++it) {
+            if (!kKnownProfileFields.contains(it.key())) {
+                qCWarning(lcConfig) << "migrateV7ToV8: dropping unrecognised field" << it.key() << "from" << name;
+                continue;
+            }
+            if (it.value().isString() && it.value().toString().size() > kMaxFieldStringLength) {
+                qCWarning(lcConfig) << "migrateV7ToV8: dropping over-long value for" << it.key() << "in" << name;
+                continue;
+            }
+            accepted.insert(it.key(), it.value());
+        }
+        profile = accepted;
+
         if (profile.isEmpty()) {
             continue; // an override that overrides nothing
         }

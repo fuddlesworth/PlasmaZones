@@ -1300,11 +1300,11 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()
 {
-    // A per-event animation duration was edited (daemon rescanned a
-    // `profiles/*.json` override). Re-fetch so per-event durations apply
-    // live, without a logout/login. loadCachedSettings() also re-fetches
-    // it on settingsChanged; this dedicated path covers the profile-file
-    // edits that deliberately do NOT ride settingsChanged.
+    // A per-event animation timing override was edited: since schema v8 that
+    // is a write to the `Animations/MotionProfileTree` config key, which the
+    // daemon relays here. Re-fetch so per-event durations apply live, without
+    // a logout/login. loadCachedSettings() also re-fetches on settingsChanged;
+    // this dedicated path exists because the tree carries its own signal.
     loadMotionProfileTreeFromDbus();
 }
 

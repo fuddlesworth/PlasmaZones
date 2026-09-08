@@ -444,29 +444,18 @@ void SettingsController::defaults()
     if (hadStagedScroll)
         Q_EMIT stagedScrollingOrderChanged();
 
-    // Drop the animations page's in-memory staged edits so the page
-    // matches the reset settings (on-disk animation overrides in
-    // per-event JSON files are a separate concern — reset() doesn't
-    // touch them, and the user would need a dedicated "reset all
-    // animation customizations" entry point to clear those).
-    if (m_animationsPage && !m_animationsPage->revertPending()) {
-        // Refused because an async discard is still in flight. The reset leaves
-        // the per-event override files as they are, so say so rather than
-        // reporting defaults that are only half applied.
-        //
-        // Deliberately NOT the asyncRevertInFlight() shortcut load() takes: on
-        // the Discard path the worker owns the restore and finishing it IS the
-        // goal, but defaults() wants the files reset NOW, so treating a busy
-        // worker as clean would silently skip that work. Same posture as
-        // importAllSettings().
-        qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
-                               "flight, or a restore failed)";
-        // A log line is not a result. The two sibling paths (per-page Reset and
-        // per-page Discard) both raise a signal for exactly this refusal, and
-        // without one here the animation pages silently keep their overrides
-        // while the rest of the app reports a completed factory reset.
-        Q_EMIT pageResetFailed(QStringLiteral("animations"), QString(ReasonOverridesNotCleared));
-    }
+    // Drop the animations page's in-memory dirty memo so the page matches the
+    // reset settings. The per-event timing overrides themselves are config
+    // keys since schema v8, so `m_settings.reset()` above has already cleared
+    // them — there is nothing left for a separate "reset all animation
+    // customizations" entry point to do.
+    //
+    // The return is deliberately ignored: revertPending() drops a memo and
+    // cannot fail. It used to refuse while an async discard worker owned the
+    // per-event files, and this branch raised pageResetFailed for that; the
+    // worker and the files are both gone, so the branch was unreachable.
+    if (m_animationsPage)
+        m_animationsPage->revertPending();
 
     // Quick-layout slots are daemon-backed (mode-keyed LayoutRegistry), so
     // m_settings.reset() above did not touch them and clearAll() only dropped

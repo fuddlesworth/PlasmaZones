@@ -699,10 +699,9 @@ SettingsController::SettingsController(QObject* parent)
     registerXdgPackDirs(m_animationShaderRegistry, ConfigDefaults::userAnimationsSubdir());
 
     // Animations page sub-controller — Q_PROPERTY surface for the new
-    // animation-event drilldown. Per-event motion overrides persist as
-    // JSON files under `~/.local/share/plasmazones/profiles/`, picked up
-    // by the daemon's existing `PhosphorAnimation::ProfileLoader` watch;
-    // shader assignments persist via Settings::shaderProfileTree.
+    // animation-event drilldown. Both halves of an event persist as config
+    // keys since schema v8: timing via Settings::motionProfileTree and the
+    // pack assignment via Settings::shaderProfileTree.
     m_animationsPage = new AnimationsPageController(m_animationShaderRegistry, &m_settings, this);
     // Mark dirty whenever the user has unsaved animation changes the
     // Discard button could revert. We don't auto-clear when pending

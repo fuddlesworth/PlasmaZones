@@ -190,8 +190,12 @@ void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
                                   screen);
         return;
     }
-    const int activeCol = state->strip().activeColumnIndex();
-    const bool willExpel = activeCol >= 0 && state->strip().columns().at(activeCol).tiles.size() > 1;
+    // Through the guarded accessor rather than indexing with
+    // activeColumnIndex(): that index is returned unclamped, and the class's
+    // own activeColumn() checks BOTH ends, so a stale index past a shrunken
+    // column list would be an out-of-bounds read here and nowhere else.
+    const auto* activeColumn = state->strip().activeColumn();
+    const bool willExpel = activeColumn != nullptr && activeColumn->tiles.size() > 1;
     const QString action = willExpel ? QStringLiteral("expel") : QStringLiteral("consume");
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().consumeOrExpel(delta, params);
@@ -895,6 +899,7 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 }
 
 #undef P_SCROLL_VERB
+#undef P_SCROLL_TILE_FOCUS_VERB
 // P_SCROLL_RESOLVE deliberately NOT #undef'd — it comes from
 // scrollverbresolve_p.h, whose include guard would make an #undef here erase
 // it for the next file in a unity chunk.

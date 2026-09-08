@@ -173,8 +173,106 @@ private Q_SLOTS:
         QVERIFY(filtered.contains(QStringLiteral("window.movement.placeIn")));
         QVERIFY(filtered.contains(QStringLiteral("Global")));
 
-        // Full snapshot still carries the seed for in-process consumers.
-        QCOMPARE(m_registry.snapshot().size(), 3);
+        // Seeds are NOT in either snapshot: they live in their own layer, so
+        // the exclusion is structural rather than a filter. Both accessors
+        // answer with the non-seed entries only.
+        QCOMPARE(m_registry.snapshot().size(), 2);
+
+        // But they are still registered content — `resolve` and `hasProfile`
+        // answer across both layers, or a registry whose entire content is
+        // seeds (the shell tier's) would look empty.
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+        const auto seedEntry = m_registry.resolve(QStringLiteral("window"));
+        QVERIFY(seedEntry.has_value());
+        QCOMPARE(seedEntry->duration.value_or(0.0), 200.0);
+    }
+
+    /// A user override at a seeded path must WIN without destroying the seed,
+    /// and clearing it must reveal the seed again.
+    ///
+    /// This is the regression guard for the whole two-layer storage change.
+    /// Before it the registry held one slot per path, so the override
+    /// overwrote the seed outright and the later clear removed the path
+    /// entirely — dropping to library defaults for the rest of the session,
+    /// with nothing short of a restart to re-seed.
+    void testAnOverrideAtASeededPathDoesNotDestroyTheSeed()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 150.0;
+        m_registry.registerProfile(QStringLiteral("window.appearance.close"), seed, seedTag);
+
+        Profile override;
+        override.duration = 900.0;
+        m_registry.reloadFromOwner(QStringLiteral("tree"), {{QStringLiteral("window.appearance.close"), override}});
+        QCOMPARE(m_registry.resolveWithInheritance(QStringLiteral("window.appearance.close")).effectiveDuration(),
+                 900.0);
+
+        // The user clears it: the whole partition is replaced with an empty map.
+        m_registry.reloadFromOwner(QStringLiteral("tree"), {});
+        QCOMPARE(m_registry.resolveWithInheritance(QStringLiteral("window.appearance.close")).effectiveDuration(),
+                 150.0);
+    }
+
+    /// A user override at a SHALLOWER path beats a seed at a deeper one.
+    ///
+    /// The reason `resolveWithInheritance` is two passes at all: within one
+    /// layer the deeper entry wins, but across layers every user entry
+    /// outranks every seed regardless of depth. A single-pass deeper-wins walk
+    /// answers 500 here.
+    void testAParentOverrideBeatsALeafSeed()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile leafSeed;
+        leafSeed.duration = 500.0;
+        m_registry.registerProfile(QStringLiteral("widget.pulse.fast"), leafSeed, seedTag);
+
+        Profile parentOverride;
+        parentOverride.duration = 800.0;
+        m_registry.registerProfile(QStringLiteral("widget"), parentOverride, QStringLiteral("tree"));
+
+        QCOMPARE(m_registry.resolveWithInheritance(QStringLiteral("widget.pulse.fast")).effectiveDuration(), 800.0);
+    }
+
+    /// `clear()` must empty the seed layer too.
+    ///
+    /// It is the test fixture's own reset, so a seed surviving it would leak
+    /// into every later slot in this file and make their assertions depend on
+    /// execution order.
+    void testClearWipesTheSeedLayer()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 150.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+
+        m_registry.clear();
+        QVERIFY(!m_registry.hasProfile(QStringLiteral("window")));
+        QVERIFY(!m_registry.resolve(QStringLiteral("window")).has_value());
+    }
+
+    /// `clearOwner(seedTag)` must actually clear seeds.
+    ///
+    /// Seeds are not in the owner map, so a loop over it finds nothing for the
+    /// seed tag and the call would be a silent no-op.
+    void testClearOwnerRemovesSeeds()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 150.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        m_registry.clearOwner(seedTag);
+        QVERIFY(!m_registry.hasProfile(QStringLiteral("window")));
     }
 
     /// `ownerReloaded(tag)` fires exactly once per partitioned-reload
