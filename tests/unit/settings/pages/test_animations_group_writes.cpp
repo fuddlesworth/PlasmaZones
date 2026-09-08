@@ -642,6 +642,50 @@ private Q_SLOTS:
 
     // ─── Refusal parity across the group writers ──────────────────────────
 
+    /// The merged-write failure toast fires ONCE per run of failures and clears
+    /// on the first write that fully lands.
+    ///
+    /// The failure arm had no coverage at all. Since schema v8 its only
+    /// remaining cause is an invalid path in the caller's list, so this drives
+    /// it that way. Both halves matter and fail for different reasons: without
+    /// the latch this is reached from the duration slider's per-move commit and
+    /// re-toasts at pointer rate, restarting the pill's fade before it can be
+    /// read and queueing the same sentence into the screen reader over and
+    /// over; without the RESET the user is told nothing the next time a real
+    /// failure begins, because the latch from the previous one is still set.
+    void aMergedWriteFailureToastsOnceAndRearmsAfterASuccess()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c(nullptr, &settings);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        const QStringList mixed{kPrimary, QStringLiteral("not.an.event.path")};
+        const QVariantMap fields{{QStringLiteral("duration"), 400}};
+
+        // The valid path still lands, so this is a partial failure rather than
+        // a refusal: the return is the count that was written, never -1.
+        QCOMPARE(c.setOverrideMergedOnPaths(mixed, fields, QVariant()), 1);
+        QCOMPARE(toasts.count(), 1);
+
+        // A second failing tick, exactly as the slider produces. Latched.
+        QCOMPARE(c.setOverrideMergedOnPaths(mixed, QVariantMap{{QStringLiteral("duration"), 420}}, QVariant()), 1);
+        QVERIFY2(toasts.count() == 1, "the merged-write failure toast re-fired on a repeat failure");
+
+        // A write where every path lands clears the latch.
+        QVERIFY(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 440}},
+                                           QVariant())
+                >= 0);
+        QCOMPARE(toasts.count(), 1);
+
+        // …so the next failure is announced again.
+        QCOMPARE(c.setOverrideMergedOnPaths(mixed, QVariantMap{{QStringLiteral("duration"), 460}}, QVariant()), 1);
+        QCOMPARE(toasts.count(), 2);
+    }
+
     void divergenceCountsEachPathOnce()
     {
         IsolatedConfigGuard guard;

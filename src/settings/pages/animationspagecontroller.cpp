@@ -89,7 +89,13 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // assignment — the very shadowing this block exists to prevent, just
         // one level up. This is the clear-then-regenerate-then-compare shape
         // Settings::setDecorationProfileTree already uses.
-        if (params.isEmpty() && shader.contains(JsonEffectIdKey)) {
+        // The absence test is on the KEY, not on the map being empty. A set
+        // entry can carry an explicit `parameters: {}`, which means "this pack
+        // with no tuning" and is a real override the user chose. Keying off
+        // `params.isEmpty()` cannot tell that from "no parameters at all", so
+        // it de-seeded such an entry, leaving the path with nothing stored and
+        // the set's badge reading inactive right after a successful apply.
+        if (!shader.contains(JsonShaderParametersKey) && shader.contains(JsonEffectIdKey)) {
             const QString id = shader.value(JsonEffectIdKey).toString();
             QString inheritedId;
             if (m_settings != nullptr) {

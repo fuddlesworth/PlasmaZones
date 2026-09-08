@@ -256,10 +256,11 @@ public:
     Q_INVOKABLE bool setOverride(const QString& path, const QVariantMap& profileJson);
 
     /// Remove the stored override at @p path. Same path validation as
-    /// `setOverride`. Emits `overrideChanged(path)` when the file was removed
-    /// AND when it was found already gone (it existed a moment earlier, so the
-    /// registry may still hold the vanished entry); a FAILED removal emits
-    /// neither, the file being still there.
+    /// `setOverride`. Emits `overrideChanged(path)` once the path has passed
+    /// validation and was known to carry an override, whether this call did
+    /// the removing or found the entry already gone. Both mean the page's view
+    /// of the path has moved, and the entry may still be sitting in the
+    /// registry either way. A rejected path emits nothing.
     /// @return true only when this call did the removing.
     Q_INVOKABLE bool clearOverride(const QString& path);
 

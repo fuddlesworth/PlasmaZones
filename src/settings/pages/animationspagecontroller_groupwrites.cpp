@@ -341,6 +341,16 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
 
 int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, const QString& field)
 {
+    if (m_settings == nullptr) {
+        // -1 is "nothing was attempted", and with no settings object nothing
+        // can be. Without this the loop below reads an empty rawProfile for
+        // every path, builds an empty edit list, and reports 0 cleared — a
+        // refusal dressed as a no-op, and the reason the failure arm that used
+        // to live at the end of this function could never run.
+        qCWarning(lcConfig) << "clearFieldOnPaths: no settings object";
+        return -1;
+    }
+
     const QStringList paths = distinctPaths(rawPaths);
     // Allowlisted rather than passed through to the JSON: this removes a key
     // from a file, and the only two fields a card's revert links own are the
@@ -388,39 +398,18 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
     for (const auto& [path, raw] : toRewrite)
         edits.append({path, raw});
 
-    int changed = 0;
-    int failed = 0;
-    if (!edits.isEmpty()) {
-        if (writeOverridesBatch(edits))
-            changed = int(edits.size());
-        else
-            failed = int(edits.size());
-    }
-
-    QStringList touched;
-    touched.reserve(edits.size());
-    if (failed == 0) {
-        for (const auto& [path, raw] : std::as_const(edits))
-            touched.append(path);
-    }
+    // One tree write, so it either lands for every path or the settings object
+    // was missing, which the guard at the top of this function has already
+    // ruled out. There is no partial-failure state left to report here.
+    if (edits.isEmpty())
+        return 0;
+    writeOverridesBatch(edits);
 
     // As everywhere else on the timing side, pendingChangesChanged arrives
     // through the motionProfileTreeChanged handler rather than from here.
-    for (const QString& path : touched)
+    for (const auto& [path, raw] : std::as_const(edits))
         Q_EMIT overrideChanged(path);
-    if (failed > 0) {
-        qCWarning(lcConfig) << "clearFieldOnPaths:" << failed << "paths could not be updated";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reverted."));
-        // `changed`, NOT -1. A partial failure is not a refusal: earlier paths —
-        // including the primary — really were cleared, and the QML gates the
-        // "keep the timing editor open" latch on this return. Reporting -1 here
-        // collapsed the editor under the cursor of the user who had just clicked
-        // inside it, which is the exact regression this change exists to prevent,
-        // re-entering through the partial-failure door. -1 is reserved for
-        // "nothing was attempted"; the toast above is how a partial failure
-        // reaches the user.
-    }
-    return changed;
+    return int(edits.size());
 }
 
 bool AnimationsPageController::anyPathSupportsShaderLeg(const QStringList& rawPaths) const
