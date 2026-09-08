@@ -92,16 +92,6 @@ void writePointerSetFile(const QString& path, const QJsonObject& root)
     f.close();
 }
 
-/// One chain layer in the QVariantMap shape PointerPageController::setChain
-/// consumes.
-QVariantMap layerMap(const QString& effectId)
-{
-    QVariantMap m;
-    m.insert(QStringLiteral("effectId"), effectId);
-    m.insert(QStringLiteral("enabled"), true);
-    return m;
-}
-
 /// A hand-built set envelope carrying @p overrides verbatim, so each refusal
 /// test can hand the validator exactly the malformed shape it is pinning.
 QJsonObject setRoot(const QString& name, const QJsonValue& overrides, int version = 1)
@@ -185,7 +175,7 @@ private Q_SLOTS:
         ShaderSetStore* sets = c.setsBridge();
         QVERIFY(sets);
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet")), layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("comet"), QStringLiteral("halo")});
 
         QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("My Look"), QStringLiteral("a test look")));
@@ -203,7 +193,7 @@ private Q_SLOTS:
         QVERIFY2(set.value(QStringLiteral("active")).toBool(), "a just-saved set must read as active");
 
         // Any edit clears the badge: apply replaces, so live must equal the set.
-        c.addLayer(QStringLiteral("sparks"));
+        c.setChain(QStringList{QStringLiteral("comet"), QStringLiteral("halo"), QStringLiteral("sparks")});
         QVERIFY2(!rowFor(sets, QStringLiteral("My Look")).value(QStringLiteral("active")).toBool(),
                  "editing the live chain away from the set must clear its active flag");
 
@@ -228,11 +218,11 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("comet-only"), QString()));
 
         // A completely different chain, sharing no layer with the set.
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo")), layerMap(QStringLiteral("sparks"))});
+        c.setChain(QStringList{QStringLiteral("halo"), QStringLiteral("sparks")});
 
         QVERIFY(sets->applySet(QStringLiteral("comet-only")));
         // The load-bearing assertion: nothing of the old chain survived.
@@ -247,11 +237,11 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.addLayer(QStringLiteral("comet"));
-        c.setLayerParam(0, QStringLiteral("width"), 6);
+        c.setChain(QStringList{QStringLiteral("comet")});
+        c.setChainParam(QStringLiteral("comet"), QStringLiteral("width"), 6);
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Wide"), QString()));
 
-        c.setLayerParam(0, QStringLiteral("width"), 2);
+        c.setChainParam(QStringLiteral("comet"), QStringLiteral("width"), 2);
         QVERIFY(sets->applySet(QStringLiteral("Wide")));
         QCOMPARE(settings.pointerChain().layers.size(), 1);
         QCOMPARE(settings.pointerChain().layers.first().parameters.value(QStringLiteral("width")).toInt(), 6);
@@ -268,11 +258,11 @@ private Q_SLOTS:
         ShaderSetStore* sets = c.setsBridge();
 
         c.setEnabled(false);
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Off Look"), QString()));
 
         c.setEnabled(true);
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
         QVERIFY(sets->applySet(QStringLiteral("Off Look")));
         QCOMPARE(chainIds(settings), (QStringList{QStringLiteral("comet")}));
         QVERIFY2(c.enabled(), "applying a set must not switch the pointer feature off");
@@ -306,7 +296,7 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Live"), QString()));
 
         // Drain the notify the setChain above already queued. Without this the
@@ -317,7 +307,7 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         spy.clear();
 
-        c.addLayer(QStringLiteral("halo"));
+        c.setChain(QStringList{QStringLiteral("comet"), QStringLiteral("halo")});
         QVERIFY2(spy.wait(1000), "a live chain edit must refresh the set rows");
     }
 
@@ -332,9 +322,9 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Old Name"), QStringLiteral("keep me")));
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Other"), QString()));
 
         QVERIFY(sets->updateSet(QStringLiteral("Old Name"), QStringLiteral("New Name"), QStringLiteral("new words")));
@@ -372,21 +362,21 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Taken"), QString()));
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
         QCOMPARE(sets->existingSetName(QStringLiteral("taken")), QStringLiteral("Taken"));
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Taken"), QString()),
                  "an unconfirmed overwrite must be refused");
         QVERIFY(sets->applySet(QStringLiteral("Taken")));
         QCOMPARE(chainIds(settings), (QStringList{QStringLiteral("comet")}));
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
         QVERIFY2(sets->saveCurrentAsSet(QStringLiteral("Taken"), QString(), /*overwrite=*/true),
                  "a confirmed overwrite must be honoured");
         QCOMPARE(sets->availableSets().size(), 1);
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->applySet(QStringLiteral("Taken")));
         QCOMPARE(chainIds(settings), (QStringList{QStringLiteral("halo")}));
     }
@@ -403,7 +393,7 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("comet"))});
+        c.setChain(QStringList{QStringLiteral("comet")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Portable"), QString()));
 
         QTemporaryDir exportDir;
@@ -430,7 +420,7 @@ private Q_SLOTS:
         QCOMPARE(sets->availableSets().size(), 1);
         QVERIFY(!rowFor(sets, QStringLiteral("Portable")).isEmpty());
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
         QVERIFY(sets->applySet(QStringLiteral("Portable")));
         QCOMPARE(chainIds(settings), (QStringList{QStringLiteral("comet")}));
     }
@@ -447,7 +437,7 @@ private Q_SLOTS:
         c.setSetsDirOverride(pointerSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
 
         const QJsonObject root = setRoot(QStringLiteral("From the Future"),
                                          QJsonArray{entryWith(QStringLiteral("pointer"), validProfileJson())},
@@ -546,12 +536,104 @@ private:
         ShaderSetStore* sets = c.setsBridge();
 
         // A live chain that must survive the refusal.
-        c.setChain(QVariantList{layerMap(QStringLiteral("halo"))});
+        c.setChain(QStringList{QStringLiteral("halo")});
         writePointerSetFile(pointerSetsDir() + QLatin1Char('/') + slug + QStringLiteral(".json"), root);
 
         QVERIFY2(!sets->applySet(root.value(QStringLiteral("name")).toString()),
                  "a malformed pointer set must be refused");
         QCOMPARE(chainIds(settings), (QStringList{QStringLiteral("halo")}));
+    }
+
+    // ─── Chain semantics (the ChainEditor contract) ─────────────────────────
+    // The page hosts the shared ChainEditor, which addresses layers by pack id
+    // and hands back the WHOLE ordered id list on every add, remove and
+    // reorder. These pin what setChain has to preserve across that one write.
+
+    /// A reorder must carry each surviving layer's stored parameters and its
+    /// enabled flag with it. Losing either would silently reset a pack the user
+    /// only meant to drag.
+    void setChain_reorderPreservesParamsAndEnabled()
+    {
+        StubSettings settings;
+        PointerPageController c(nullptr, &settings);
+
+        c.setChain(QStringList{QStringLiteral("comet"), QStringLiteral("halo")});
+        c.setChainParam(QStringLiteral("comet"), QStringLiteral("width"), 6);
+        c.setChainLayerEnabled(QStringLiteral("halo"), false);
+
+        c.setChain(QStringList{QStringLiteral("halo"), QStringLiteral("comet")});
+
+        QCOMPARE(c.chain(), (QStringList{QStringLiteral("halo"), QStringLiteral("comet")}));
+        QCOMPARE(c.disabledPacks(), (QStringList{QStringLiteral("halo")}));
+        QCOMPARE(c.chainParams().value(QStringLiteral("comet")).toMap().value(QStringLiteral("width")).toInt(), 6);
+    }
+
+    /// Dropping a pack drops its stored overrides too, so re-adding it later
+    /// starts from the pack's declared defaults rather than resurrecting
+    /// settings the user removed.
+    void setChain_removedPackLosesItsParams()
+    {
+        StubSettings settings;
+        PointerPageController c(nullptr, &settings);
+
+        c.setChain(QStringList{QStringLiteral("comet")});
+        c.setChainParam(QStringLiteral("comet"), QStringLiteral("width"), 6);
+        QVERIFY(c.chainParams().contains(QStringLiteral("comet")));
+
+        c.setChain(QStringList{QStringLiteral("halo")});
+        QVERIFY2(!c.chainParams().contains(QStringLiteral("comet")), "a removed pack must not keep its overrides");
+
+        c.setChain(QStringList{QStringLiteral("halo"), QStringLiteral("comet")});
+        QVERIFY2(!c.chainParams().contains(QStringLiteral("comet")),
+                 "re-adding a pack must not resurrect its overrides");
+    }
+
+    /// A freshly added pack stores NO parameters. An empty override map means
+    /// "the pack's declared defaults", which is what lets a pack update carry
+    /// new defaults into a chain that already uses it.
+    void setChain_newPackStartsWithNoStoredParams()
+    {
+        StubSettings settings;
+        PointerPageController c(nullptr, &settings);
+
+        c.setChain(QStringList{QStringLiteral("comet")});
+
+        QCOMPARE(c.chain(), (QStringList{QStringLiteral("comet")}));
+        QVERIFY(c.chainParams().isEmpty());
+        QVERIFY(c.disabledPacks().isEmpty());
+        QVERIFY(settings.pointerChain().layers.first().parameters.isEmpty());
+    }
+
+    /// The chain holds a pack at most once: a repeated id keeps its first
+    /// occurrence and drops the rest, so no mutator can be handed an ambiguous
+    /// key.
+    void setChain_deduplicatesRepeatedIds()
+    {
+        StubSettings settings;
+        PointerPageController c(nullptr, &settings);
+
+        c.setChain(QStringList{QStringLiteral("comet"), QStringLiteral("halo"), QStringLiteral("comet")});
+
+        QCOMPARE(c.chain(), (QStringList{QStringLiteral("comet"), QStringLiteral("halo")}));
+    }
+
+    /// A pack that is not installed still round-trips and is still removable:
+    /// the controller never consults the registry to decide what stays in the
+    /// chain, so an uninstall cannot quietly delete the user's layer.
+    void setChain_keepsAnUninstalledPackRemovable()
+    {
+        StubSettings settings;
+        PointerPageController c(nullptr, &settings);
+
+        // The controller is built with a null registry, so NO id here is
+        // installed — exactly the uninstalled-pack case.
+        c.setChain(QStringList{QStringLiteral("gone"), QStringLiteral("halo")});
+        c.setChainParam(QStringLiteral("gone"), QStringLiteral("width"), 3);
+        QCOMPARE(c.chain(), (QStringList{QStringLiteral("gone"), QStringLiteral("halo")}));
+        QCOMPARE(c.chainParams().value(QStringLiteral("gone")).toMap().value(QStringLiteral("width")).toInt(), 3);
+
+        c.setChain(QStringList{QStringLiteral("halo")});
+        QCOMPARE(c.chain(), (QStringList{QStringLiteral("halo")}));
     }
 };
 

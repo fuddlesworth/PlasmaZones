@@ -11,6 +11,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
@@ -39,13 +40,13 @@ class PointerPreviewController;
 /// DecorationProfileTree — every window, OSD and popup override — for a user
 /// who only wanted to undo a cursor trail.
 ///
-/// ## Layers are addressed by INDEX
+/// ## Layers are addressed by PACK ID
 ///
-/// Unlike the decoration chain, which is keyed by pack id, a pointer chain may
-/// legitimately stack the same pack twice (two trails at different widths and
-/// colours is a real look), so a pack id is not a key here. Every mutator
-/// takes the layer's position in the list instead, and an out-of-range index
-/// is a no-op rather than an error.
+/// The chain surface mirrors DecorationPageController's, minus the surface
+/// path (there is exactly one pointer chain), so the page can host the shared
+/// ChainEditor rather than a bespoke lookalike. A pack therefore appears at
+/// most once in the chain, and every mutator keys on the pack id. An id that
+/// is not in the chain is a no-op rather than an error.
 ///
 /// ## Dirty tracking
 ///
@@ -122,48 +123,40 @@ public:
 
     // ── Chain readers ─────────────────────────────────────────────────────
 
-    /// The user's chain, one map per layer in paint order: `effectId`, `name`
-    /// (the pack's display name, falling back to the id for a pack that is not
-    /// installed), `enabled`, `parameters` (the layer's friendly overrides
-    /// merged over the pack's declared defaults, so the editor never renders a
-    /// blank control for a parameter the user has not touched) and `missing`
-    /// (true when the referenced pack is not installed, which the card shows
-    /// as a warning rather than silently dropping the layer).
-    Q_INVOKABLE QVariantList chain() const;
+    /// The user's chain as an ordered list of pack ids, in paint order. A pack
+    /// that is not installed keeps its slot: ChainEditor renders it as
+    /// "(missing: <id>)" so it stays visible and removable.
+    Q_INVOKABLE QStringList chain() const;
+
+    /// Per-pack parameter overrides, `packId -> { paramId: value }`. The
+    /// STORED overrides only, with no pack defaults merged in — ChainEditor
+    /// layers them over the schema defaults itself, and pre-merging here would
+    /// pin a layer to whatever the defaults were on the day it was added.
+    Q_INVOKABLE QVariantMap chainParams() const;
+
+    /// Pack ids in the chain whose layer is switched off.
+    Q_INVOKABLE QStringList disabledPacks() const;
 
     // ── Chain mutators ────────────────────────────────────────────────────
 
-    /// Replace the whole chain. Each entry is a map with the `effectId`,
-    /// `enabled` and `parameters` keys `chain()` returns; entries with an
-    /// empty effectId are dropped.
-    Q_INVOKABLE void setChain(const QVariantList& layers);
-
-    /// Append a layer for @p effectId, enabled, with no parameter overrides
-    /// (the pack's declared defaults apply). No-op for an empty id.
-    Q_INVOKABLE void addLayer(const QString& effectId);
-
-    /// Drop the layer at @p index.
-    Q_INVOKABLE void removeLayer(int index);
-
-    /// Move the layer at @p from to position @p to, shifting the rest. The
-    /// card's up / down buttons are the only callers, so @p to is always an
-    /// adjacent slot, but the general move is what the list model wants.
-    Q_INVOKABLE void moveLayer(int from, int to);
+    /// Replace the whole chain: add, remove and reorder in one write. A
+    /// surviving id keeps its stored parameters and its enabled flag; a newly
+    /// added id starts with no stored parameters, so the pack's declared
+    /// defaults apply and a pack update carries new ones. An id repeated in
+    /// @p packIds keeps its first occurrence and drops the rest, and empty ids
+    /// are dropped.
+    Q_INVOKABLE void setChain(const QStringList& packIds);
 
     /// Toggle one layer without touching its order or its parameters.
-    Q_INVOKABLE void setLayerEnabled(int index, bool enabled);
+    Q_INVOKABLE void setChainLayerEnabled(const QString& packId, bool enabled);
 
-    /// Set one friendly parameter override on the layer at @p index.
-    Q_INVOKABLE void setLayerParam(int index, const QString& paramId, const QVariant& value);
+    /// Set one friendly parameter override on @p packId's layer.
+    Q_INVOKABLE void setChainParam(const QString& packId, const QString& paramId, const QVariant& value);
 
-    /// Merge a whole map of friendly parameter overrides onto the layer at
-    /// @p index in one write. The editor's Randomize action is the caller, so
-    /// a single roll persists as one chain write instead of one per parameter.
-    Q_INVOKABLE void setLayerParams(int index, const QVariantMap& params);
-
-    /// Drop every parameter override on the layer at @p index so the pack's
-    /// declared defaults apply again.
-    Q_INVOKABLE void resetLayerParams(int index);
+    /// Merge a whole map of friendly parameter overrides onto @p packId's
+    /// layer in one write — the editor's Randomize and Reset actions, so a
+    /// roll persists as one chain write instead of one per parameter.
+    Q_INVOKABLE void setChainParams(const QString& packId, const QVariantMap& params);
 
     // ── Shader-browser bridge (ShaderBrowserPage contract) ────────────────
 

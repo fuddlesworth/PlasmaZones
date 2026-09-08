@@ -140,7 +140,6 @@ void TestPointerQmlContracts::everyBridgeCallFromThePointerPageIsReachable()
     // rename here is a control that silently does nothing rather than one that
     // visibly fails.
     const QStringList paths{kPointerQml + QStringLiteral("/PointerPage.qml"),
-                            kPointerQml + QStringLiteral("/PointerLayerCard.qml"),
                             kPointerQml + QStringLiteral("/PointerShadersPage.qml")};
 
     QString readError;

@@ -10,26 +10,30 @@ import org.kde.kirigami as Kirigami
  * @brief Appearance → Pointer → Chain.
  *
  * The master switch plus the pointer chain: an ordered list of pointer packs
- * that paint around the cursor, each one a PointerLayerCard.
+ * that paint around the cursor, edited through the shared ChainEditor.
  *
  * ## Not a decoration surface
  *
- * This page sits beside the decoration surface pages in the navigation because
- * that is where a user looks for it, but it is its own config domain: the two
- * keys `Pointer.Enabled` and `Pointer.Chain`, owned by this page alone. So a
- * Reset here resets the pointer and nothing else, where a decoration page's
- * Reset acts on its subtree of the shared profile tree.
+ * Pointer is its own section under Appearance, a peer of Animations and
+ * Decorations, and its own config domain: the two keys `Pointer.Enabled` and
+ * `Pointer.Chain`, owned by this page alone. So a Reset here resets the
+ * pointer and nothing else, where a decoration page's Reset acts on its
+ * subtree of the shared profile tree.
+ *
+ * ## The same chain editor as every other shader chain
+ *
+ * The chain is keyed by pack id and hosted by ChainEditor, wired exactly as
+ * DecorationSurfaceCard wires it minus the surface path (there is one pointer
+ * chain, so there is no path to pass). A pack therefore appears at most once,
+ * which is what lets drag-to-reorder, the per-layer switch and the parameter
+ * editor address a layer by id.
  *
  * ## Reactive-latch, not bindings over invokables
  *
  * The chain comes from a Q_INVOKABLE, which QML records no dependency on, so
  * the page refreshes imperatively from `chainChanged` and `shaderEffectsChanged`
  * rather than binding a function call that would never re-evaluate. Same
- * pattern as DecorationSurfaceCard.refreshFromTree.
- *
- * The whole list is rebuilt on every write rather than mutating one delegate,
- * because every card addresses its layer by INDEX and a reorder or a removal
- * moves every index after it.
+ * pattern as DecorationSurfaceCard.refresh.
  */
 SettingsFlickable {
     id: root
@@ -37,18 +41,17 @@ SettingsFlickable {
     readonly property var bridge: settingsController.pointerPage
 
     // ── Reactive model state ─────────────────────────────────────────────
-    property var chainLayers: []
-    property var availableEffects: []
-
-    /// True while the settings window is frontmost. Folded into every card's
-    /// preview clock, so a backgrounded window does not keep a 60 Hz tick and
-    /// a shader pass running for a page nobody is looking at.
-    readonly property bool appActive: Qt.application.state === Qt.ApplicationActive
+    property var _effects: []
+    property var _chain: []
+    property var _params: ({})
+    property var _disabledPacks: []
 
     function refreshChain() {
         if (!root.bridge)
             return;
-        root.chainLayers = root.bridge.chain();
+        root._chain = root.bridge.chain();
+        root._params = root.bridge.chainParams();
+        root._disabledPacks = root.bridge.disabledPacks();
     }
 
     // The pack catalogue moves only on install / uninstall, so it is not
@@ -57,7 +60,7 @@ SettingsFlickable {
     function refreshEffects() {
         if (!root.bridge)
             return;
-        root.availableEffects = root.bridge.availableShaderEffects();
+        root._effects = root.bridge.availableShaderEffects();
     }
 
     contentHeight: content.implicitHeight
@@ -116,6 +119,9 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
+                // Pointer-specific and true: the pointer chain paints its
+                // layers in list order, which no decoration surface card has an
+                // equivalent note for.
                 Kirigami.InlineMessage {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
@@ -125,65 +131,41 @@ SettingsFlickable {
                     text: i18n("Packs paint in list order, so a layer lower in the list paints over the ones above it.")
                 }
 
-                Label {
+                ChainEditor {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    visible: root.chainLayers.length === 0
-                    text: root.availableEffects.length > 0 ? i18n("No packs on the pointer yet. Add one below.") : i18n("No pointer packs installed.")
-                    font.italic: true
-                    color: Kirigami.Theme.disabledTextColor
-                    wrapMode: Text.WordWrap
-                }
-
-                Repeater {
-                    model: root.chainLayers
-
-                    delegate: PointerLayerCard {
-                        required property var modelData
-                        required property int index
-
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.largeSpacing
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        layerIndex: index
-                        layerData: modelData
-                        layerCount: root.chainLayers.length
-                        availableEffects: root.availableEffects
-                        animating: root.appActive
+                    availableShaders: root._effects
+                    chain: root._chain
+                    packParameters: root._params
+                    disabledPacks: root._disabledPacks
+                    // The component's defaults name decoration packs and "this
+                    // surface's chain", neither of which exists here.
+                    emptyChainText: i18n("No pointer packs.")
+                    emptyChainAddHintText: i18n("No pointer packs. Add one below.")
+                    addRowTitle: i18n("Add pointer pack")
+                    addRowDescription: i18n("Stack another pack onto the cursor")
+                    noPacksInstalledText: i18n("No pointer packs are installed")
+                    addComboAccessibleDescription: i18n("Add a pointer pack to the cursor's chain")
+                    onChainChangeRequested: function (newChain) {
+                        if (root.bridge)
+                            root.bridge.setChain(newChain);
                     }
-                }
-
-                // ── Add a pack ────────────────────────────────────────────
-                // Every installed pack stays offered, including ones already in
-                // the chain: stacking a pack twice at different settings is a
-                // real look here, which is also why the layers are addressed by
-                // index rather than by pack id.
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    spacing: Kirigami.Units.smallSpacing
-
-                    ComboBox {
-                        id: packPicker
-
-                        Layout.fillWidth: true
-                        model: root.availableEffects
-                        textRole: "name"
-                        valueRole: "id"
-                        enabled: root.availableEffects.length > 0
-                        Accessible.name: i18n("Pointer pack to add")
+                    onLayerEnabledChangeRequested: function (packId, enabled) {
+                        if (root.bridge)
+                            root.bridge.setChainLayerEnabled(packId, enabled);
                     }
-
-                    Button {
-                        icon.name: "list-add"
-                        text: i18nc("@action add a pack to the pointer chain", "Add pack")
-                        enabled: packPicker.enabled && packPicker.currentValue !== undefined
-                        onClicked: {
-                            if (root.bridge)
-                                root.bridge.addLayer(packPicker.currentValue);
-                        }
+                    onParamChangeRequested: function (packId, paramId, value) {
+                        if (root.bridge)
+                            root.bridge.setChainParam(packId, paramId, value);
+                    }
+                    onParamsRandomizeRequested: function (packId, rolled) {
+                        if (root.bridge)
+                            root.bridge.setChainParams(packId, rolled);
+                    }
+                    onParamsResetRequested: function (packId, defaults) {
+                        if (root.bridge)
+                            root.bridge.setChainParams(packId, defaults);
                     }
                 }
             }

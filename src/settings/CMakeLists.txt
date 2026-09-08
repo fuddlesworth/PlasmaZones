@@ -521,7 +521,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/decoration/DecorationSurfaceCard.qml
         # Pointer — the cursor-decoration chain page and its pack browser.
         qml/pages/pointer/PointerPage.qml
-        qml/pages/pointer/PointerLayerCard.qml
         qml/pages/pointer/PointerSetsPage.qml
         qml/pages/pointer/PointerShadersPage.qml
         qml/pages/tiling/ChainEditor.qml

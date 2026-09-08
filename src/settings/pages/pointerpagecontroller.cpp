@@ -11,7 +11,8 @@
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorPointer/PointerShaderRegistry.h>
 
-#include <QLatin1String>
+#include <QHash>
+#include <QSet>
 
 namespace PlasmaZones {
 
@@ -40,6 +41,18 @@ QVariantList parameterRows(const PointerShaderEffect& effect)
         rows.append(m);
     }
     return rows;
+}
+
+/// Index of @p packId in @p profile, or -1. The chain holds a pack at most
+/// once, so the first match is the only one.
+int indexOfPack(const PointerProfile& profile, const QString& packId)
+{
+    for (int i = 0; i < profile.layers.size(); ++i) {
+        if (profile.layers.at(i).effectId == packId) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 } // namespace
@@ -131,168 +144,133 @@ QVariantList PointerPageController::shaderParameters(const QString& effectId) co
     return parameterRows(m_registry->effect(effectId));
 }
 
-QVariantList PointerPageController::chain() const
+QStringList PointerPageController::chain() const
 {
-    QVariantList out;
+    QStringList out;
     if (!m_settings) {
         return out;
     }
     const PointerProfile profile = m_settings->pointerChain();
     out.reserve(profile.layers.size());
     for (const PointerLayer& layer : profile.layers) {
-        QVariantMap m;
-        m.insert(QStringLiteral("effectId"), layer.effectId);
-        m.insert(QStringLiteral("enabled"), layer.enabled);
-        const bool known = m_registry && m_registry->hasEffect(layer.effectId);
-        // The pack's defaults under the user's overrides, so the editor renders
-        // a live control for every declared parameter rather than a blank one
-        // for anything untouched. A layer whose pack is gone keeps its stored
-        // overrides verbatim, which is what lets it survive a reinstall.
-        QVariantMap params;
-        QString name = layer.effectId;
-        if (known) {
-            const PointerShaderEffect effect = m_registry->effect(layer.effectId);
-            name = effect.name.isEmpty() ? layer.effectId : effect.name;
-            params = effect.defaultParams();
-        }
-        for (auto it = layer.parameters.constBegin(); it != layer.parameters.constEnd(); ++it) {
-            params.insert(it.key(), it.value());
-        }
-        m.insert(QStringLiteral("name"), name);
-        m.insert(QStringLiteral("parameters"), params);
-        m.insert(QStringLiteral("missing"), !known);
-        out.append(m);
+        // A layer whose pack is gone keeps its slot: ChainEditor renders it as
+        // "(missing: <id>)", which is what makes it removable and what lets it
+        // survive a reinstall untouched.
+        out.append(layer.effectId);
     }
     return out;
 }
 
-void PointerPageController::setChain(const QVariantList& layers)
+QVariantMap PointerPageController::chainParams() const
+{
+    QVariantMap out;
+    if (!m_settings) {
+        return out;
+    }
+    const PointerProfile profile = m_settings->pointerChain();
+    for (const PointerLayer& layer : profile.layers) {
+        // STORED overrides only — the editor layers them over the pack's
+        // declared defaults itself. Merging the defaults in here would pin the
+        // layer to whatever they were when it was added.
+        if (!layer.parameters.isEmpty()) {
+            out.insert(layer.effectId, layer.parameters);
+        }
+    }
+    return out;
+}
+
+QStringList PointerPageController::disabledPacks() const
+{
+    QStringList out;
+    if (!m_settings) {
+        return out;
+    }
+    const PointerProfile profile = m_settings->pointerChain();
+    for (const PointerLayer& layer : profile.layers) {
+        if (!layer.enabled) {
+            out.append(layer.effectId);
+        }
+    }
+    return out;
+}
+
+void PointerPageController::setChain(const QStringList& packIds)
 {
     if (!m_settings) {
         return;
     }
+    const PointerProfile current = m_settings->pointerChain();
+    QHash<QString, PointerLayer> byId;
+    byId.reserve(current.layers.size());
+    for (const PointerLayer& layer : current.layers) {
+        byId.insert(layer.effectId, layer);
+    }
+
     PointerProfile profile;
-    profile.layers.reserve(layers.size());
-    for (const QVariant& entry : layers) {
-        const QVariantMap m = entry.toMap();
-        PointerLayer layer;
-        layer.effectId = m.value(QLatin1String("effectId")).toString();
-        if (layer.effectId.isEmpty()) {
+    profile.layers.reserve(packIds.size());
+    QSet<QString> seen;
+    for (const QString& id : packIds) {
+        if (id.isEmpty() || seen.contains(id)) {
             continue;
         }
-        // Absent reads as enabled, matching PointerProfile::fromJson.
-        layer.enabled = m.contains(QLatin1String("enabled")) ? m.value(QLatin1String("enabled")).toBool() : true;
-        layer.parameters = m.value(QLatin1String("parameters")).toMap();
-        profile.layers.append(layer);
+        seen.insert(id);
+        // A surviving id carries its stored parameters and its enabled flag
+        // through the reorder; a new one starts with neither, so the pack's
+        // declared defaults apply and a pack update carries the new ones.
+        const auto it = byId.constFind(id);
+        if (it != byId.constEnd()) {
+            profile.layers.append(*it);
+        } else {
+            PointerLayer layer;
+            layer.effectId = id;
+            profile.layers.append(layer);
+        }
     }
     m_settings->setPointerChain(profile);
 }
 
-void PointerPageController::addLayer(const QString& effectId)
-{
-    if (!m_settings || effectId.isEmpty()) {
-        return;
-    }
-    PointerProfile profile = m_settings->pointerChain();
-    PointerLayer layer;
-    layer.effectId = effectId;
-    // No parameters stored: an empty override map means "the pack's declared
-    // defaults", so a pack whose defaults change on update carries the new ones
-    // instead of being pinned to whatever they were on the day it was added.
-    profile.layers.append(layer);
-    m_settings->setPointerChain(profile);
-}
-
-void PointerPageController::removeLayer(int index)
+void PointerPageController::setChainLayerEnabled(const QString& packId, bool enabled)
 {
     if (!m_settings) {
         return;
     }
     PointerProfile profile = m_settings->pointerChain();
-    if (index < 0 || index >= profile.layers.size()) {
-        return;
-    }
-    profile.layers.removeAt(index);
-    m_settings->setPointerChain(profile);
-}
-
-void PointerPageController::moveLayer(int from, int to)
-{
-    if (!m_settings) {
-        return;
-    }
-    PointerProfile profile = m_settings->pointerChain();
-    const int count = profile.layers.size();
-    if (from < 0 || from >= count || to < 0 || to >= count || from == to) {
-        return;
-    }
-    profile.layers.move(from, to);
-    m_settings->setPointerChain(profile);
-}
-
-void PointerPageController::setLayerEnabled(int index, bool enabled)
-{
-    if (!m_settings) {
-        return;
-    }
-    PointerProfile profile = m_settings->pointerChain();
-    if (index < 0 || index >= profile.layers.size()) {
-        return;
-    }
-    if (profile.layers[index].enabled == enabled) {
+    const int index = indexOfPack(profile, packId);
+    if (index < 0 || profile.layers[index].enabled == enabled) {
         return;
     }
     profile.layers[index].enabled = enabled;
     m_settings->setPointerChain(profile);
 }
 
-void PointerPageController::setLayerParam(int index, const QString& paramId, const QVariant& value)
+void PointerPageController::setChainParam(const QString& packId, const QString& paramId, const QVariant& value)
 {
     if (!m_settings || paramId.isEmpty()) {
         return;
     }
     PointerProfile profile = m_settings->pointerChain();
-    if (index < 0 || index >= profile.layers.size()) {
-        return;
-    }
-    if (profile.layers[index].parameters.value(paramId) == value) {
+    const int index = indexOfPack(profile, packId);
+    if (index < 0 || profile.layers[index].parameters.value(paramId) == value) {
         return;
     }
     profile.layers[index].parameters.insert(paramId, value);
     m_settings->setPointerChain(profile);
 }
 
-void PointerPageController::setLayerParams(int index, const QVariantMap& params)
+void PointerPageController::setChainParams(const QString& packId, const QVariantMap& params)
 {
     if (!m_settings || params.isEmpty()) {
         return;
     }
     PointerProfile profile = m_settings->pointerChain();
-    if (index < 0 || index >= profile.layers.size()) {
+    const int index = indexOfPack(profile, packId);
+    if (index < 0) {
         return;
     }
     QVariantMap& target = profile.layers[index].parameters;
     for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
         target.insert(it.key(), it.value());
     }
-    m_settings->setPointerChain(profile);
-}
-
-void PointerPageController::resetLayerParams(int index)
-{
-    if (!m_settings) {
-        return;
-    }
-    PointerProfile profile = m_settings->pointerChain();
-    if (index < 0 || index >= profile.layers.size()) {
-        return;
-    }
-    if (profile.layers[index].parameters.isEmpty()) {
-        return;
-    }
-    // Cleared rather than filled with the pack's defaults, so the layer tracks
-    // the pack across an update the same way a freshly added one does.
-    profile.layers[index].parameters.clear();
     m_settings->setPointerChain(profile);
 }
 
