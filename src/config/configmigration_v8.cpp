@@ -3,6 +3,7 @@
 
 #include "configmigration.h"
 
+#include "configdefaults.h"
 #include "configkeys.h"
 #include "core/platform/logging.h"
 
@@ -44,10 +45,25 @@ const QSet<QString>& eventPaths()
     return paths;
 }
 
+/// The pre-v8 per-event override directory.
+///
+/// Derived from `ConfigDefaults::userProfilesSubdir()` rather than spelling the
+/// path again: the accessor exists so a rename is one edit, and the settings
+/// page's own `userProfilesDir()` already reads through it. Spelled twice, a
+/// rename would leave this migration reading an empty directory and silently
+/// importing nothing.
+///
+/// Note this is NOT `ConfigDefaults::profilesDir()`, which is the settings
+/// PROFILE store under `~/.config` — a different directory with a confusingly
+/// similar name.
+///
+/// Only the writable location, deliberately. v7's loader also scanned every
+/// `plasmazones/profiles` under `XDG_DATA_DIRS`, but a migration folding a
+/// system or packager drop-in into a user's own config would make that
+/// drop-in permanent and un-updatable. The repo ships none.
 QString userProfilesDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/profiles");
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + ConfigDefaults::userProfilesSubdir();
 }
 
 } // namespace
@@ -86,7 +102,16 @@ void ConfigMigration::migrateV7ToV8(QJsonObject& root, bool importOverrideFiles)
     const QString groupName = ConfigKeys::animationsGroup();
     const QString keyName = ConfigKeys::motionProfileTreeKey();
 
-    QJsonObject animations = root.value(groupName).toObject();
+    // `toObject()` yields an empty object for a group that is present but not
+    // an object, and the write below would then replace it. Nothing valid is
+    // lost — such a group is already unreadable to the Store — but say so
+    // rather than leaving a silent replacement to be discovered later.
+    const QJsonValue existingGroup = root.value(groupName);
+    if (!existingGroup.isUndefined() && !existingGroup.isObject()) {
+        qCWarning(lcConfig) << "migrateV7ToV8: the" << groupName
+                            << "group is not an object — replacing it, its previous content was unreadable";
+    }
+    QJsonObject animations = existingGroup.toObject();
     // Never overwrite an existing value. A config already carrying the key was
     // written by a v8 build, and a re-run of the chain (or a hand-restored
     // file) must not clobber it with whatever stale files remain on disk.
@@ -105,6 +130,7 @@ void ConfigMigration::migrateV7ToV8(QJsonObject& root, bool importOverrideFiles)
     // needs a CurveRegistry and this migration has no business constructing one
     // — the stored curve is a string spec that round-trips verbatim.
     QJsonArray overrides;
+    QSet<QString> seenPaths;
     const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
     for (const QFileInfo& info : files) {
         // Size only: `QDir::Files` has already excluded anything that is not a
@@ -129,13 +155,43 @@ void ConfigMigration::migrateV7ToV8(QJsonObject& root, bool importOverrideFiles)
         }
 
         QJsonObject profile = doc.object();
-        // The envelope's `name` IS the event path, and the loader requires it to
-        // equal the file stem. A name that is not a built-in event path is a
-        // user preset sharing the directory — leave it be.
+        // The envelope's `name` IS the event path. v7's loader ALSO required it
+        // to equal the file stem, and enforcing that here is not pedantry: a
+        // file whose name disagreed with its stem was inert under v7, so
+        // importing it on `name` alone would take something that had no effect
+        // and make it an active override at upgrade time.
         const QString name = profile.take(QLatin1String("name")).toString();
-        if (!eventPaths().contains(name)) {
+        if (name != info.completeBaseName()) {
             continue;
         }
+        if (!eventPaths().contains(name)) {
+            // Not a built-in event path. Usually a user PRESET sharing the
+            // directory, which must be left exactly where it is.
+            //
+            // It can also be an override at a path a later taxonomy retired —
+            // `window.movement.snapIn` / `.snapOut` / `.maximize`, renamed into
+            // placeIn / placeOut by v7. Those have been inert since that rename
+            // (nothing renamed the FILE, so the v7 resolver looked up the new
+            // path and found nothing), so this drops a value the user has not
+            // experienced for a release rather than losing a live one. Say so,
+            // because it is still the user's data going away.
+            if (name.startsWith(QLatin1String("window.movement."))) {
+                qCWarning(lcConfig) << "migrateV7ToV8: dropping" << info.absoluteFilePath()
+                                    << "— it names the retired event path" << name
+                                    << "and has had no effect since schema v7. The file is left on disk.";
+            }
+            continue;
+        }
+        // Two files can carry the same `name` (the stem check above makes that
+        // require two directories' worth of collision, but entryInfoList is
+        // ordered so it stays deterministic). Emitting both would put a
+        // duplicate path in the tree, a shape nothing else writes.
+        if (seenPaths.contains(name)) {
+            qCWarning(lcConfig) << "migrateV7ToV8: ignoring" << info.absoluteFilePath() << "— the path" << name
+                                << "was already migrated from an earlier file";
+            continue;
+        }
+        seenPaths.insert(name);
         // Keep only the fields `Profile` actually round-trips, and bound what
         // a string may carry.
         //

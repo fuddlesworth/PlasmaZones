@@ -18,6 +18,10 @@
  *   - do nothing gracefully when the directory is absent.
  */
 
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ProfileTree.h>
+
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -39,16 +43,43 @@ QString profilesDir()
         + QStringLiteral("/plasmazones/profiles");
 }
 
-void writeProfileFile(const QString& stem, const QJsonObject& body)
+/// @return false when the fixture could not be written.
+///
+/// Returns rather than QVERIFYing: QVERIFY expands to a `return` from the
+/// function it appears in, so failing inside a void helper abandons the HELPER
+/// and lets the slot carry on against a file that was never created — the real
+/// failure then surfaces as a confusing assertion further down. Callers
+/// QVERIFY the result.
+[[nodiscard]] bool writeProfileFile(const QString& stem, const QJsonObject& body)
 {
-    QVERIFY(QDir().mkpath(profilesDir()));
+    if (!QDir().mkpath(profilesDir())) {
+        return false;
+    }
     QFile f(profilesDir() + QLatin1Char('/') + stem + QStringLiteral(".json"));
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write(QJsonDocument(body).toJson());
+    if (!f.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    const QByteArray payload = QJsonDocument(body).toJson();
+    const bool ok = f.write(payload) == payload.size();
     f.close();
+    return ok;
 }
 
-/// The migrated entry for @p path, or an empty object when the tree has none.
+/// Plant a file whose bytes are not JSON at all.
+[[nodiscard]] bool writeRawProfileFile(const QString& stem, const QByteArray& bytes)
+{
+    if (!QDir().mkpath(profilesDir())) {
+        return false;
+    }
+    QFile f(profilesDir() + QLatin1Char('/') + stem + QStringLiteral(".json"));
+    if (!f.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    const bool ok = f.write(bytes) == bytes.size();
+    f.close();
+    return ok;
+}
+
 /// Whether an entry for @p path exists at all, regardless of what it carries.
 ///
 /// Distinct from `entryFor`, which returns the entry's `profile` and so cannot
@@ -114,10 +145,10 @@ private Q_SLOTS:
 
     void overrideFilesFoldIntoTheConfigTree()
     {
-        writeProfileFile(QStringLiteral("window.appearance.open"),
-                         QJsonObject{{QStringLiteral("name"), QStringLiteral("window.appearance.open")},
-                                     {QStringLiteral("duration"), 280},
-                                     {QStringLiteral("curve"), QStringLiteral("ink-settle")}});
+        QVERIFY(writeProfileFile(QStringLiteral("window.appearance.open"),
+                                 QJsonObject{{QStringLiteral("name"), QStringLiteral("window.appearance.open")},
+                                             {QStringLiteral("duration"), 280},
+                                             {QStringLiteral("curve"), QStringLiteral("ink-settle")}}));
 
         QJsonObject root;
         ConfigMigration::migrateV7ToV8(root);
@@ -144,12 +175,12 @@ private Q_SLOTS:
     /// a path that does not exist.
     void userPresetsAreLeftAlone()
     {
-        writeProfileFile(
+        QVERIFY(writeProfileFile(
             QStringLiteral("My Preset"),
-            QJsonObject{{QStringLiteral("name"), QStringLiteral("My Preset")}, {QStringLiteral("duration"), 400}});
-        writeProfileFile(
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("My Preset")}, {QStringLiteral("duration"), 400}}));
+        QVERIFY(writeProfileFile(
             QStringLiteral("osd.show"),
-            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 220}});
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 220}}));
 
         QJsonObject root;
         ConfigMigration::migrateV7ToV8(root);
@@ -171,9 +202,9 @@ private Q_SLOTS:
     /// clobber it with whatever files remain on disk.
     void anExistingTreeIsNeverOverwritten()
     {
-        writeProfileFile(
+        QVERIFY(writeProfileFile(
             QStringLiteral("osd.show"),
-            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 999}});
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 999}}));
 
         QJsonObject existing{{QStringLiteral("baseline"), QJsonObject{}}, {QStringLiteral("overrides"), QJsonArray{}}};
         QJsonObject root;
@@ -199,7 +230,8 @@ private Q_SLOTS:
     /// profile is a no-op the tree should not carry.
     void anEmptyOverrideIsSkipped()
     {
-        writeProfileFile(QStringLiteral("osd.hide"), QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.hide")}});
+        QVERIFY(writeProfileFile(QStringLiteral("osd.hide"),
+                                 QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.hide")}}));
 
         QJsonObject root;
         ConfigMigration::migrateV7ToV8(root);
@@ -223,11 +255,11 @@ private Q_SLOTS:
     void ahandEditedFileCannotSmuggleFieldsIntoConfig()
     {
         const QString overlong(4096, QLatin1Char('x'));
-        writeProfileFile(QStringLiteral("osd.show"),
-                         QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")},
-                                     {QStringLiteral("duration"), 250},
-                                     {QStringLiteral("bogusKey"), QStringLiteral("nope")},
-                                     {QStringLiteral("presetName"), overlong}});
+        QVERIFY(writeProfileFile(QStringLiteral("osd.show"),
+                                 QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")},
+                                             {QStringLiteral("duration"), 250},
+                                             {QStringLiteral("bogusKey"), QStringLiteral("nope")},
+                                             {QStringLiteral("presetName"), overlong}}));
 
         QJsonObject root;
         ConfigMigration::migrateV7ToV8(root);
@@ -247,9 +279,9 @@ private Q_SLOTS:
     /// suite green while every captured profile silently gained local timing.
     void aProfileDeltaIsStampedButNotImported()
     {
-        writeProfileFile(
+        QVERIFY(writeProfileFile(
             QStringLiteral("osd.show"),
-            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 250}});
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 250}}));
 
         QJsonObject root;
         ConfigMigration::migrateV7ToV8(root, /*importOverrideFiles=*/false);
@@ -264,11 +296,94 @@ private Q_SLOTS:
     /// stops at the key-present check. This one pins the version guard itself:
     /// without it a later chain run would fold the (deliberately preserved)
     /// files back in on top of whatever the user has since configured.
+    /// One unreadable file must not cost the user the others.
+    ///
+    /// The loop skips a file it cannot parse and carries on, which is the right
+    /// call — aborting would trade one lost override for all of them. That
+    /// choice is worth pinning because the failure is PERMANENT in a way the
+    /// others are not: `_version` is stamped before the loop, so a later run
+    /// short-circuits, and since schema v8 nothing rescans the directory. The
+    /// skipped file stays on disk but is never read again.
+    void aMalformedFileDoesNotAbortTheRest()
+    {
+        QVERIFY(writeRawProfileFile(QStringLiteral("osd.show"), QByteArrayLiteral("{ this is not json")));
+        QVERIFY(writeProfileFile(
+            QStringLiteral("osd.hide"),
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.hide")}, {QStringLiteral("duration"), 190}}));
+
+        QJsonObject root;
+        ConfigMigration::migrateV7ToV8(root);
+
+        QVERIFY2(!hasEntryFor(root, QStringLiteral("osd.show")), "an unparseable file must not produce an entry");
+        QCOMPARE(entryFor(root, QStringLiteral("osd.hide")).value(QStringLiteral("duration")).toInt(), 190);
+    }
+
+    /// A file over the size cap is skipped, and its neighbours still land.
+    void anOversizeFileIsSkipped()
+    {
+        QJsonObject big{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 200}};
+        // Comfortably past the 4 MiB cap, in a field the allowlist would drop
+        // anyway — the cap has to fire before any of that matters.
+        big.insert(QStringLiteral("filler"), QString(5 * 1024 * 1024, QLatin1Char('x')));
+        QVERIFY(writeProfileFile(QStringLiteral("osd.show"), big));
+        QVERIFY(writeProfileFile(
+            QStringLiteral("osd.pop"),
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.pop")}, {QStringLiteral("duration"), 240}}));
+
+        QJsonObject root;
+        ConfigMigration::migrateV7ToV8(root);
+
+        QVERIFY2(!hasEntryFor(root, QStringLiteral("osd.show")), "a file over the cap must not produce an entry");
+        QCOMPARE(entryFor(root, QStringLiteral("osd.pop")).value(QStringLiteral("duration")).toInt(), 240);
+    }
+
+    /// A file whose `name` disagrees with its stem was INERT under v7, whose
+    /// loader required the two to match. Importing it on `name` alone would
+    /// take something that had no effect and make it an active override at
+    /// upgrade time, which is a behaviour change the user never asked for.
+    void aFileWhoseNameDisagreesWithItsStemIsIgnored()
+    {
+        QVERIFY(writeProfileFile(
+            QStringLiteral("some-preset-name"),
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 900}}));
+
+        QJsonObject root;
+        ConfigMigration::migrateV7ToV8(root);
+
+        QVERIFY2(!hasEntryFor(root, QStringLiteral("osd.show")),
+                 "a file whose name disagrees with its stem was inert and must stay inert");
+    }
+
+    /// What the migration writes must be what the runtime can read.
+    ///
+    /// Every other slot here asserts on the JSON shape, which cannot catch a
+    /// migration that produces a well-formed tree the resolver then reads
+    /// differently. This one takes the exact output through the same
+    /// ProfileTree parse the daemon performs and asserts the resolved value.
+    void theMigratedTreeResolvesBackToWhatTheFileHeld()
+    {
+        QVERIFY(writeProfileFile(QStringLiteral("osd.show"),
+                                 QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")},
+                                             {QStringLiteral("duration"), 275},
+                                             {QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1")}}));
+
+        QJsonObject root;
+        ConfigMigration::migrateV7ToV8(root);
+
+        const QJsonObject treeJson =
+            root.value(ConfigKeys::animationsGroup()).toObject().value(ConfigKeys::motionProfileTreeKey()).toObject();
+        PhosphorAnimation::CurveRegistry curves;
+        const auto tree = PhosphorAnimation::ProfileTree::fromJson(treeJson, curves);
+        const auto resolved = tree.directOverride(QStringLiteral("osd.show"));
+        QCOMPARE(resolved.duration.value_or(0.0), 275.0);
+        QVERIFY2(resolved.curve != nullptr, "a bezier spec the migration copied verbatim must still parse");
+    }
+
     void anAlreadyMigratedRootIsLeftAlone()
     {
-        writeProfileFile(
+        QVERIFY(writeProfileFile(
             QStringLiteral("osd.show"),
-            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 250}});
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("osd.show")}, {QStringLiteral("duration"), 250}}));
 
         QJsonObject root;
         root.insert(QStringLiteral("_version"), 9);
