@@ -519,19 +519,28 @@ void SettingsController::buildApplicationController()
     // Everything about the zone overlay's LOOK lives here, including which
     // shader each layout draws. Only when the overlay appears while you drag
     // stayed under Snapping, because that is an activation decision.
+    // Icons follow the sibling trees rather than being picked per page: the
+    // tree parent is domain-specific and distinct (theme for decorations,
+    // playback for animations, colour here), the lead config page is
+    // `configure`, the Library bucket is `folder-open`, its sets page is
+    // `color-palette`, and its pack browser is `preferences-desktop-display`.
+    // A reader who has learnt one of these trees can then read the others.
     regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
-               QStringLiteral("preferences-desktop-display"));
+               QStringLiteral("preferences-desktop-color"));
     // Appearance leads, the way Decoration → General does, with the divider
     // closing the config block before the Library bucket.
     regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),
-               QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("preferences-desktop-color"),
+               QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("configure"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // "Assignments", not "Shaders": Library → Shaders below is the pack
     // browser, named the way the decoration tree names its own, and two
     // entries reading "Shaders" in one drill-down would be a coin flip.
+    // The per-LAYOUT page, so it carries the layouts icon rather than the
+    // shader one — `preferences-desktop-display` belongs to the pack browser in
+    // all three trees, and reusing it here would put the same glyph on two
+    // entries of one drill-down.
     regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Assignments"),
-               QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"),
-               QStringLiteral("preferences-desktop-display"),
+               QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
 
     regVirtual(QStringLiteral("overlays-library"), QStringLiteral("overlays"), PhosphorI18n::tr("Library"), QString(),
@@ -540,7 +549,7 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/overlays/OverlaySetsPage.qml"), QStringLiteral("color-palette"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regPage(m_overlaysPage.get(), QStringLiteral("overlays-library"), PhosphorI18n::tr("Shaders"),
-            QStringLiteral("pages/overlays/OverlaysLibraryPage.qml"), QStringLiteral("folder-templates"),
+            QStringLiteral("pages/overlays/OverlaysLibraryPage.qml"), QStringLiteral("preferences-desktop-display"),
             /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Every page declared its simple/advanced tier at registration above.
