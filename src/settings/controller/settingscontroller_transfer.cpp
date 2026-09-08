@@ -346,7 +346,11 @@ bool SettingsController::importAllSettings(const QString& filePath)
             // into rules.json and quicklayouts.json and strips the scratch keys.
             // Unpaired, the stashes sit orphaned in config.json and the next
             // launch strips them unported, dropping every imported assignment.
-            ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath)
+            // Imports disabled for the same reason as the JSON arm below: an
+            // imported INI is stamped v1, so the chain runs every step
+            // including the import-bearing ones, and the file is the sender's.
+            ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath,
+                                                                ConfigMigration::ExternalImports::Disabled)
                 && PlasmaZones::ConfigMigration::finalizeV4Conversion(configPath);
             if (!ok) {
                 qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << safeFilePath;
@@ -431,7 +435,15 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // Says what failed, not what the restore below will do:
                     // that runs after this and can fail too.
                     Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
-                } else if (!ConfigMigration::runMigrationChain(configPath)
+                    // Disabled because the bytes just written are the SENDER's,
+                    // not this machine's former config. With imports enabled a
+                    // pre-v8 export would pick up this machine's leftover
+                    // per-event timing files and stamp them into the imported
+                    // document, handing the user the sender's packs driven by
+                    // their own durations — a state neither machine ever had.
+                    // Every export in the wild today is pre-v8, so this is the
+                    // common path, not the edge case.
+                } else if (!ConfigMigration::runMigrationChain(configPath, ConfigMigration::ExternalImports::Disabled)
                            || !ConfigMigration::finalizeV4Conversion(configPath)) {
                     // An imported blob can be ANY older schema version, and
                     // ensureJsonConfig's one-shot latch has long since fired, so

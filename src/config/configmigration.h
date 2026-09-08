@@ -132,15 +132,39 @@ public:
     /// strictly one-way and this should never be called.
     static void resetMigrationGuardForTesting();
 
+    /// External state a migration step may read.
+    ///
+    /// `Disabled` is for a root that is NOT this machine's live config — a
+    /// settings profile's sparse delta, or a config blob imported from another
+    /// machine — where a step that imports from the filesystem would write the
+    /// migrating machine's own state into a document that never carried it.
+    /// Steps that are pure JSON→JSON transforms ignore this.
+    ///
+    /// Declared ahead of the runners below because they default an argument to
+    /// it.
+    enum class ExternalImports {
+        Enabled,
+        Disabled
+    };
+
     /// Convert an INI config file to JSON format. Produces v1 JSON.
     /// Used by ensureJsonConfig() for one-time INI migration,
     /// and by settings import for legacy INI files.
-    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath);
+    ///
+    /// Pass `Disabled` when @p iniPath is a foreign blob rather than this
+    /// machine's own former config: the chain this runs ends at the current
+    /// schema version, so it executes every import-bearing step.
+    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath,
+                                 ExternalImports imports = ExternalImports::Enabled);
 
     /// Run the schema migration chain on a JSON config file.
     /// Reads the file, applies all steps from current _version to
     /// ConfigSchemaVersion, writes atomically.
-    static bool runMigrationChain(const QString& jsonPath);
+    ///
+    /// @p imports is about the CONTENT, not the path. Settings import writes a
+    /// foreign export over the live config path and then migrates it, so the
+    /// path being the live one does not make the document this machine's.
+    static bool runMigrationChain(const QString& jsonPath, ExternalImports imports = ExternalImports::Enabled);
 
     /// Run the migration chain in-memory. Two callers: ensureJsonConfig's
     /// INI→JSON + upgrade single pass (a full nested config root), and
@@ -148,17 +172,6 @@ public:
     /// config delta translated into the nested shape — so a step must be
     /// correct for a sparse input too (write retired values' replacements
     /// explicitly; removal there means "inherit", not "default").
-    /// External state a migration step may read.
-    ///
-    /// `Disabled` is for a root that is NOT the live config — a settings
-    /// profile's sparse delta — where a step that imports from the filesystem
-    /// would write the migrating machine's own state into a document that never
-    /// carried it. Steps that are pure JSON→JSON transforms ignore this.
-    enum class ExternalImports {
-        Enabled,
-        Disabled
-    };
-
     static void runMigrationChainInMemory(QJsonObject& root, ExternalImports imports = ExternalImports::Enabled);
 
     // Schema migration functions (one per version bump).

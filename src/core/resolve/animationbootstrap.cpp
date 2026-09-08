@@ -318,10 +318,23 @@ void AnimationBootstrap::applyMotionProfileTree(const QVariantMap& treeJson)
 void AnimationBootstrap::applyGlobalProfile(const PhosphorAnimation::Profile& profile, bool explicitlySet)
 {
     // Same layer choice the daemon makes in publishActiveAnimationProfile, so
-    // a preview resolves through the same precedence the compositor will.
+    // a preview resolves through the same precedence the compositor will —
+    // including the eviction below, without which this process's own previews
+    // stay pinned to a cleared global for the life of the process.
     if (explicitlySet) {
         m_profileRegistry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profile);
     } else {
+        // registerProfile writes one store and never clears the other, so the
+        // demotion to the seed layer has to drop the untagged entry itself or
+        // the resolver keeps overlaying it above every seed. See the fuller
+        // rationale at the daemon's copy of this branch.
+        //
+        // Guarded on an empty owner: `global` is a real taxonomy path, so a
+        // motion-tree override can legitimately hold it under the secondary
+        // tag, and that entry is not ours to evict.
+        if (m_profileRegistry.ownerOf(PhosphorAnimation::ProfilePaths::Global).isEmpty()) {
+            m_profileRegistry.unregisterProfile(PhosphorAnimation::ProfilePaths::Global);
+        }
         m_profileRegistry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profile,
                                           QString(kShellAnimationFamilySeedsOwnerTag));
     }

@@ -373,6 +373,29 @@ void Daemon::publishActiveAnimationProfile()
         if (settingsExplicit) {
             reg.registerProfile(*path, settingsProfile);
         } else {
+            // Moving `global` down to the seed layer is a two-store MOVE, and
+            // registerProfile is not one: its seed branch writes only the seed
+            // store and leaves any untagged entry sitting in the upper store,
+            // where pass 2 of resolveWithInheritance keeps overlaying it over
+            // every seed on every path for the rest of the session. Dropping
+            // the untagged entry first is what makes the layer change take.
+            //
+            // Evicting inside registerProfile instead would be wrong: the two
+            // stores exist precisely so a user override and a seed can share a
+            // path (see PhosphorProfileRegistry.h), and evicting on every
+            // register would destroy the seed under any override.
+            //
+            // Guarded on an empty owner so this reclaims only the untagged
+            // entry THIS function publishes; an entry owned by another tag is
+            // not ours to drop. Idempotent, which matters on a ~30 Hz path:
+            // once the entry is gone unregisterProfile removes nothing and
+            // emits nothing. The emit on the first call is wanted — the seed
+            // register below is a no-op whenever the unset blob already equals
+            // the seed, so without it nothing would tell consumers to
+            // re-resolve out of the stale state.
+            if (pathOwner.isEmpty()) {
+                reg.unregisterProfile(*path);
+            }
             reg.registerProfile(*path, settingsProfile, QString(kShellAnimationFamilySeedsOwnerTag));
         }
     }

@@ -83,9 +83,9 @@ void ConfigMigration::runMigrationChainInMemory(QJsonObject& root, ExternalImpor
     PhosphorConfig::MigrationRunner(schema).runInMemory(root);
 }
 
-bool ConfigMigration::runMigrationChain(const QString& jsonPath)
+bool ConfigMigration::runMigrationChain(const QString& jsonPath, ExternalImports imports)
 {
-    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    const PhosphorConfig::Schema schema = makeMigrationSchema(imports);
     return PhosphorConfig::MigrationRunner(schema).runOnFile(jsonPath);
 }
 
@@ -496,7 +496,7 @@ void ConfigMigration::resetMigrationGuardForTesting()
 
 // ── INI → JSON ──────────────────────────────────────────────────────────────
 
-bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath)
+bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath, ExternalImports imports)
 {
     const QMap<QString, QVariant> flatMap = PhosphorConfig::QSettingsBackend::readConfigFromDisk(iniPath);
     if (flatMap.isEmpty()) {
@@ -505,8 +505,10 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
 
     QJsonObject root = iniMapToJson(flatMap);
     // INI migration produces v1 format; the chain upgrades to current version.
+    // Stamping v1 means EVERY step runs, including the import-bearing ones, so
+    // a foreign INI must say so — see the ExternalImports doc.
     root[ConfigKeys::versionKey()] = 1;
-    runMigrationChainInMemory(root);
+    runMigrationChainInMemory(root, imports);
 
     // Verify the chain ran to completion before persisting. The v1→v2
     // step has side-effect writes (session.json, assignments.json) and
