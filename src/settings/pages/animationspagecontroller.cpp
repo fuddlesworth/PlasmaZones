@@ -177,9 +177,23 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             &AnimationsPageController::pendingChangesChanged);
     connect(m_motionSets, &ShaderSetStore::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    // A set's `active` flag is derived from the live override files, so it
-    // goes stale whenever an event's profile is edited anywhere else.
+    // A set's `active` flag is derived from the live state of every event it
+    // covers, so it goes stale whenever one of those is edited anywhere else.
+    //
+    // BOTH halves, because a motion set carries both. The timing half moves on
+    // `overrideChanged` and the pack half on `shaderProfileChanged`, and only
+    // the first was wired: assigning a pack left every row's badge showing
+    // whatever it said before, so a set the user had just made current never
+    // lit up and one they had just edited away from stayed lit. Harmless while
+    // a set carried timing alone, which is why it survived — the pack half
+    // could not affect the flag it was missing from.
+    //
+    // The decoration domain has one signal for its whole tree
+    // (`DecorationPageController::profilesChanged`), so it has never had a
+    // half to forget. This is the animation side's two-signal tax.
     connect(this, &AnimationsPageController::overrideChanged, m_motionSets, &ShaderSetStore::notifyLiveStateChanged);
+    connect(this, &AnimationsPageController::shaderProfileChanged, m_motionSets,
+            &ShaderSetStore::notifyLiveStateChanged);
     // A set apply's per-path overrideChanged emissions ride through the
     // writeOverride callback (which the controller wires to its own
     // setOverride). ShaderSetStore therefore exposes no overrideChanged

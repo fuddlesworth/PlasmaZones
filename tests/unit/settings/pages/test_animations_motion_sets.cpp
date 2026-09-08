@@ -352,6 +352,56 @@ private Q_SLOTS:
     }
 
     // ─── Motion sets: active flag, metadata edit, portability, guard ───────
+    /// Assigning a PACK refreshes the set rows, the same way editing a timing
+    /// value does.
+    ///
+    /// A motion set carries both halves of an event, so both halves move the
+    /// `active` flag — but the flag is recomputed only when the store is told
+    /// the live state changed, and the pack half's signal was not wired to it.
+    /// Assigning a pack therefore left every row's badge showing whatever it
+    /// said before: a set the user had just made current never lit up, and one
+    /// they had just edited away from stayed lit. Invisible while a set carried
+    /// timing alone, because the pack half could not affect a flag it was
+    /// missing from.
+    void motionSets_activeTracksPackAssignmentsToo()
+    {
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        TestHelpers::PopulatedControllerFixture fx;
+        auto& c = fx.c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+        QVERIFY(sets);
+
+        const QString path = QStringLiteral("window.appearance.open");
+        const QStringList available = TestHelpers::pickerIdsFor(c, path);
+        QVERIFY2(!available.isEmpty(), "no pack is assignable to this path; pick a different fixture");
+        // Two DIFFERENT packs, so the second assignment is a real move away
+        // from what the set captured.
+        QVERIFY2(available.size() >= 2, "need two assignable packs to move between");
+
+        QVERIFY(c.setShaderOverride(path, available.at(0), QVariantMap{}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Packed"), QString()));
+        QSignalSpy changed(sets, &ShaderSetStore::setsChanged);
+        QVERIFY2(rowFor(sets, QStringLiteral("Packed")).value(QStringLiteral("active")).toBool(),
+                 "a just-saved set must read as active");
+
+        // Move the pack away: the row must stop reading as active, and the
+        // store must have been told without anything else poking it.
+        QVERIFY(c.setShaderOverride(path, available.at(1), QVariantMap{}));
+        // The store coalesces its refresh onto the next event-loop turn, so a
+        // synchronous read here would see the pre-edit rows even with the wire
+        // in place. QML re-reads on that same turn.
+        QTRY_VERIFY2(changed.count() > 0, "assigning a pack did not refresh the set rows");
+        QVERIFY2(!rowFor(sets, QStringLiteral("Packed")).value(QStringLiteral("active")).toBool(),
+                 "assigning a different pack must clear the set's active flag");
+
+        // And back: applying the set restores it.
+        QVERIFY(sets->applySet(QStringLiteral("Packed")));
+        QVERIFY2(rowFor(sets, QStringLiteral("Packed")).value(QStringLiteral("active")).toBool(),
+                 "the set must read as active again right after applying it");
+    }
 
     /// `active` measures the saved payload against the CURRENT override files.
     /// It must light up right after a save, clear once a covered path is edited
