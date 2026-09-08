@@ -556,6 +556,7 @@ qt_add_qml_module(plasmazones-settings
         qml/components/StayOpenMenuItem.qml
         qml/pages/shaders/PreviewCanvas.qml
         qml/pages/shaders/PackPreview.qml
+        qml/pages/shaders/PackEditorBody.qml
         qml/pages/shaders/PackPreviewGate.qml
         qml/pages/shaders/DecorationChainPreview.qml
         qml/pages/shaders/DecorationPreviewPane.qml
