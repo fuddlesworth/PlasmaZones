@@ -8,6 +8,7 @@
 // Split out of settingscontroller_session.cpp, which sits at its size
 // ceiling; same class, separate translation unit, no API change.
 
+#include "settings/utils/animationfileutils.h"
 #include "settingscontroller.h"
 
 #include "config/configdefaults.h"
@@ -204,9 +205,21 @@ bool SettingsController::importAllSettings(const QString& filePath)
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file path is not allowed."));
         return false;
     }
-    if (!QFile::exists(safeFilePath)) {
-        qCWarning(lcCore) << "importAllSettings: file not found" << filePath;
+    // isFile, not exists: a directory, a fifo or a device node all pass
+    // exists(), and the two readAll() calls below run on the GUI thread — a
+    // fifo would block the window outright. The size cap is the same boundary
+    // every sibling file reader in this app applies, for the same reason: a
+    // config export is a few kilobytes and the parse copy is unbounded without
+    // it.
+    const QFileInfo importInfo(safeFilePath);
+    if (!importInfo.isFile()) {
+        qCWarning(lcCore) << "importAllSettings: not a regular file" << filePath;
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That settings file is no longer there."));
+        return false;
+    }
+    if (importInfo.size() > animfileutil::kMaxJsonFileBytes) {
+        qCWarning(lcCore) << "importAllSettings: refusing" << importInfo.size() << "bytes from" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file is too large to be a settings file."));
         return false;
     }
 

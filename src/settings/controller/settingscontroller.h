@@ -545,7 +545,7 @@ public:
     }
     ProfilePageController* profilesPage() const
     {
-        return m_profilesPage;
+        return m_profilesPage.get();
     }
 
     PhosphorControl::ApplicationController* app() const
@@ -1069,10 +1069,6 @@ private:
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
-    /// Profiles page sub-controller. Parented to `this`; owns its ProfileStore
-    /// internally. Registered via regPage so its active-pointer staging
-    /// participates in the framework's Save/Discard.
-    ProfilePageController* m_profilesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.
@@ -1280,6 +1276,24 @@ private:
     // determinism: m_app unregisters its tracked domains against live objects
     // instead of leaving the teardown order to self-nulling handles.
     std::unique_ptr<PhosphorControl::ApplicationController> m_app;
+
+    /// Profiles page sub-controller. Owns its ProfileStore internally, and
+    /// that store holds closures over `m_rulesPage` (a RuleController&).
+    ///
+    /// Hence the `unique_ptr`, following the `m_tilingAlgorithmPage` idiom: a
+    /// member unique_ptr resets BEFORE ~QObject reaches the raw children, so
+    /// this is destroyed while the RuleController it borrows is still alive.
+    /// As a plain child it would have gone the other way — ~QObject deletes
+    /// children in construction order, m_rulesPage first, leaving the store
+    /// holding a dangling reference for the rest of teardown. Still
+    /// constructed with parent `this`, because regPage adopts a parentless
+    /// page to m_app, which is destroyed first and would double-free it.
+    /// Registered via regPage so its active-pointer staging participates in
+    /// the framework's Save/Discard, which is why it is declared AFTER m_app:
+    /// reverse member order then destroys this page first, with m_app still up
+    /// to unregister it, exactly as the old explicit delete at the top of the
+    /// destructor body did.
+    std::unique_ptr<ProfilePageController> m_profilesPage;
 
     void buildApplicationController();
 

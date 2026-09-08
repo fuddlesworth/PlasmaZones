@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shadersetstore.h"
+#include "core/utils/utils.h"
 #include "settings/utils/animationfileutils.h"
 
 #include "core/platform/logging.h"
@@ -562,8 +563,11 @@ bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath
     if (name.isEmpty()) {
         return false;
     }
-    if (destLocalPath.isEmpty()) {
-        // urlToLocalFile yields an empty string for a non-local save target.
+    // Every other user-path boundary in the settings app funnels through this
+    // before opening. urlToLocalFile yields an empty string for a non-local
+    // save target, and the sanitiser rejects a relative or traversing one.
+    const QString destPath = Utils::sanitizeIOPath(destLocalPath);
+    if (destPath.isEmpty()) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to that location."));
         return false;
     }
@@ -586,11 +590,11 @@ bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath
     }
     const QByteArray payload = source.readAll();
 
-    QSaveFile dest(destLocalPath);
+    QSaveFile dest(destPath);
     const bool written =
         dest.open(QIODevice::WriteOnly | QIODevice::Truncate) && dest.write(payload) == payload.size() && dest.commit();
     if (!written) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destLocalPath));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destPath));
         return false;
     }
     return true;
@@ -607,6 +611,11 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     const QUrl url(sourcePathOrUrl);
     if (url.isLocalFile()) {
         sourcePath = url.toLocalFile();
+    }
+    sourcePath = Utils::sanitizeIOPath(sourcePath);
+    if (sourcePath.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("That file is not a readable set."));
+        return false;
     }
 
     QJsonObject root;

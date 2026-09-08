@@ -272,14 +272,10 @@ void SettingsController::sortMergedLayoutList(QVariantList& list)
 
 SettingsController::~SettingsController()
 {
-    // The ProfilePageController's ProfileStore holds closures over m_rulesPage
-    // (a RuleController&). Both are children of `this`, and ~QObject deletes
-    // children in construction order — m_rulesPage first — which would leave
-    // the store holding a dangling reference for the remainder of teardown.
-    // Delete the profiles page up front so the reference holder is gone while
-    // the RuleController is still alive.
-    delete m_profilesPage;
-    m_profilesPage = nullptr;
+    // m_profilesPage is a unique_ptr member for the ordering it needs (see its
+    // declaration): its ProfileStore borrows m_rulesPage, and member resets run
+    // before ~QObject reaches the raw children, so it is gone while the
+    // RuleController it borrows is still alive.
 
     // Tear down the RuleController's label lookups while the
     // captured member containers (m_layouts, m_activities, m_screens,
@@ -814,7 +810,7 @@ SettingsController::SettingsController(QObject* parent)
     // staging path (owning pages badge value-based). Registered via regPage in
     // buildApplicationController(), which trackDomain()s it so its isDirty /
     // apply / discard participate in the framework's Save/Discard.
-    m_profilesPage = new ProfilePageController(m_settings, *m_rulesPage, this);
+    m_profilesPage = std::make_unique<ProfilePageController>(m_settings, *m_rulesPage, this);
 
     // The rule-list label lookups (screen / activity / desktop / zone / layout
     // / algorithm / shader / event / decoration) and the refreshes that keep

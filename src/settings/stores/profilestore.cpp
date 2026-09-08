@@ -3,6 +3,7 @@
 
 #include "profilestore.h"
 
+#include "core/utils/utils.h"
 #include "config/configkeys.h"
 #include "config/configmigration.h"
 #include "config/configmigration_util.h"
@@ -1222,8 +1223,11 @@ bool ProfileStore::activateProfile(const QString& id)
 
 bool ProfileStore::exportProfile(const QString& id, const QString& destLocalPath)
 {
-    if (destLocalPath.isEmpty()) {
-        // urlToLocalFile yields an empty string for a non-local save target.
+    // Every other user-path boundary in the settings app funnels through this
+    // before opening. urlToLocalFile yields an empty string for a non-local
+    // save target, and the sanitiser rejects a relative or traversing one.
+    const QString destPath = Utils::sanitizeIOPath(destLocalPath);
+    if (destPath.isEmpty()) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to that location."));
         return false;
     }
@@ -1245,10 +1249,10 @@ bool ProfileStore::exportProfile(const QString& id, const QString& destLocalPath
     }
     const QByteArray payload =
         QJsonDocument(recordToJson(all.value(uid), m_config.formatVersion)).toJson(QJsonDocument::Indented);
-    QSaveFile dest(destLocalPath);
+    QSaveFile dest(destPath);
     if (!(dest.open(QIODevice::WriteOnly | QIODevice::Truncate) && dest.write(payload) == payload.size()
           && dest.commit())) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destLocalPath));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destPath));
         return false;
     }
     return true;
@@ -1265,6 +1269,11 @@ QString ProfileStore::importProfile(const QString& sourcePathOrUrl)
     const QUrl url(sourcePathOrUrl);
     if (url.isLocalFile()) {
         sourcePath = url.toLocalFile();
+    }
+    sourcePath = Utils::sanitizeIOPath(sourcePath);
+    if (sourcePath.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("That file is not a readable profile."));
+        return QString();
     }
 
     Record rec;
