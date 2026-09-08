@@ -1032,8 +1032,8 @@ ColumnLayout {
                 // away, and clearing to None collapses the section. Derived
                 // from what actually LANDED rather than from what was asked
                 // for: the consumer refreshes `shaderEffectId` synchronously
-                // inside the signal, and a write it refused (an async discard
-                // owns the tree) leaves the id where it was. Reading `sid` here
+                // inside the signal, and a write the controller rejected (an
+                // unacceptable effect id) leaves the id where it was. Reading `sid` here
                 // left the old pack's description and parameters expanded under
                 // a row that had not changed.
                 root.shaderSectionExpanded = root.shaderEffectId.length > 0;

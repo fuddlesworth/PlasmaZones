@@ -224,6 +224,40 @@ private Q_SLOTS:
         QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
     }
 
+    /// `unregisterProfile` removes from the non-seed layer ONLY, and a
+    /// seed-only path is therefore untouched by it.
+    ///
+    /// That asymmetry is the mechanism the composition roots rely on when they
+    /// move the global profile between layers: the caller drops its own
+    /// untagged entry and registers under the seed tag, and this is what makes
+    /// the drop hit the right one. A seed-aware unregisterProfile would delete
+    /// the layer the move is aiming at.
+    void testUnregisterLeavesASeedOnlyPathAlone()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("widget"), seed, seedTag);
+
+        m_registry.unregisterProfile(QStringLiteral("widget"));
+
+        QVERIFY2(m_registry.hasProfile(QStringLiteral("widget")),
+                 "unregisterProfile removed a seed; clearing an override would then drop to library defaults "
+                 "instead of revealing the seed underneath");
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 200.0);
+
+        // And with an override on top, unregister reveals the seed rather than
+        // emptying the path — the reveal the two stores exist for.
+        Profile override;
+        override.duration = 900.0;
+        m_registry.registerProfile(QStringLiteral("widget"), override);
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 900.0);
+        m_registry.unregisterProfile(QStringLiteral("widget"));
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 200.0);
+    }
+
     /// A user override at a seeded path must WIN without destroying the seed,
     /// and clearing it must reveal the seed again.
     ///

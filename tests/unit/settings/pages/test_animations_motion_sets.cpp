@@ -160,6 +160,15 @@ private Q_SLOTS:
         // The timing half applied.
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 333);
 
+        // A floor before the all-negative loop below. Without it the loop is
+        // satisfied by a capture that carried no shader entries at all, which
+        // is the exact half of this matched pair the loop cannot see: the
+        // de-seed looks correct precisely when the sweep captured nothing.
+        const QVariantMap set = rowFor(c.setsBridge(), QStringLiteral("defaults-set"));
+        QVERIFY2(!set.isEmpty(), "the saved set is not listed");
+        QVERIFY2(set.value(QStringLiteral("coverageCount")).toInt() > 1,
+                 "the capture carried nothing to de-seed, so the loop below proves nothing");
+
         // The shader half did NOT become a stored override anywhere: every one
         // of those paths still resolves the same way it did before the apply,
         // so the de-seed stripped what the sweep had carried for
@@ -718,6 +727,15 @@ private Q_SLOTS:
         c.revertPending();
         fx.settings.load();
         QVERIFY2(!rowFor(sets, QStringLiteral("Keeper")).isEmpty(), "Discard removed a set it does not own");
+
+        // The other direction, which the save leg alone does not cover: a
+        // DELETED set must stay deleted. "Immediate" has to mean both, or
+        // Discard is still undoing set CRUD — just the half nobody checked.
+        QVERIFY(sets->removeSet(QStringLiteral("Keeper")));
+        QVERIFY(rowFor(sets, QStringLiteral("Keeper")).isEmpty());
+        c.revertPending();
+        fx.settings.load();
+        QVERIFY2(rowFor(sets, QStringLiteral("Keeper")).isEmpty(), "Discard brought back a set the user deleted");
     }
 
     /// Motion has no baseline, so a baseline-carrying file is a decoration set
