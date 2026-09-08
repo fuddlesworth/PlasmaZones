@@ -57,8 +57,14 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     auto motionSetsDirFn = [this]() {
         return userMotionSetsDir();
     };
-    auto writeOverrideFn = [this](const QString& path, const QVariantMap& profile) {
-        return setOverride(path, profile);
+    // One write for the whole timing half of a set, not one per path. See the
+    // apply closure in motionsetdomain for why the difference is observable.
+    auto writeOverrideFn = [this](const QList<QPair<QString, QVariantMap>>& edits) {
+        if (!writeOverridesBatch(edits))
+            return false;
+        for (const auto& [path, profile] : edits)
+            Q_EMIT overrideChanged(path);
+        return true;
     };
     // The SHADER half of a motion set. Both halves of an event are set on one
     // card in the UI, so a set has to carry both or it captures half of what

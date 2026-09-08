@@ -75,6 +75,6 @@ ShaderSetsPage {
         return i18np("%n Override", "%n Overrides", count);
     }
     applySubtitleFor: function (name) {
-        return i18n("“%1” will overwrite every per-event override it covers.", name);
+        return i18n("“%1” will overwrite every per-event override it covers. The change is not saved yet, so Discard still undoes it.", name);
     }
 }

@@ -329,7 +329,16 @@ bool ShaderSetStore::applySet(const QString& name)
         return false;
     }
     if (!m_config.apply || !m_config.apply(root)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not apply “%1”.").arg(name));
+        // A failure part-way through leaves some of the set's entries applied
+        // and the rest not, which on its own looks identical to "nothing
+        // happened" — the badge reads inactive either way. Say that the state
+        // may be partial and name the way back, rather than making the user
+        // guess from a badge. Which entries landed is in the log, at a level of
+        // detail a toast cannot carry.
+        Q_EMIT toastRequested(
+            PhosphorI18n::tr("Could not finish applying “%1”. Some of it may have been applied, and Discard "
+                             "undoes the whole thing.")
+                .arg(name));
         return false;
     }
     // An OLDER set applies, and should — it is a valid file this build can

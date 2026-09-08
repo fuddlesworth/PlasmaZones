@@ -5,6 +5,8 @@
 
 #include "settings/stores/shadersetstore.h"
 
+#include <QList>
+#include <QPair>
 #include <QString>
 #include <QVariantMap>
 
@@ -47,8 +49,14 @@ namespace PlasmaZones::motionset {
 ///                        (`ISettings::motionProfileTree`), read once per
 ///                        snapshot.
 /// @param setsDir         Absolute path of the motion-sets directory.
-/// @param writeOverride   Commits one entry's TIMING half into
-///                        `Animations/MotionProfileTree`.
+/// @param writeOverrides  Commits EVERY entry's TIMING half into
+///                        `Animations/MotionProfileTree` in ONE write. One
+///                        write per path was observable half-applied: each
+///                        `setMotionProfileTree` emits `motionProfileTreeChanged`
+///                        synchronously, so every card re-evaluated and the
+///                        whole set-row active sweep re-ran once per path, with
+///                        the tree in an intermediate state each time. Batched,
+///                        the tree moves from "before" to "after" in one step.
 /// @param readShaders     Every direct shader override, keyed by event path
 ///                        (`AnimationsPageController::allRawShaderProfiles`).
 ///                        One call per snapshot, not one per path.
@@ -85,7 +93,7 @@ namespace PlasmaZones::motionset {
 ///                        unscanned, so an early call cannot reject everything.
 ShaderSetStore::Config
 makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
-           std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
+           std::function<bool(const QList<QPair<QString, QVariantMap>>& /*edits*/)> writeOverrides,
            std::function<QVariantMap()> readShaders,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*shader*/)> writeShader,
            std::function<QVariantMap()> resolvedShaderIds,

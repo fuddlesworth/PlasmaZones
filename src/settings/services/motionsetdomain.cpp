@@ -242,7 +242,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged,
 } // namespace
 
 ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
-                                  std::function<bool(const QString&, const QVariantMap&)> writeOverride,
+                                  std::function<bool(const QList<QPair<QString, QVariantMap>>&)> writeOverrides,
                                   std::function<QVariantMap()> readShaders,
                                   std::function<bool(const QString&, const QVariantMap&)> writeShader,
                                   std::function<QVariantMap()> resolvedShaderIds,
@@ -253,7 +253,7 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     // check, so a release build degrades to "nothing to snapshot / refuse the
     // write" instead of throwing std::bad_function_call.
     Q_ASSERT(readTimings);
-    Q_ASSERT(writeOverride);
+    Q_ASSERT(writeOverrides);
     Q_ASSERT(readShaders);
     Q_ASSERT(writeShader);
     // Both of these degrade SILENTLY rather than loudly, which is why they are
@@ -415,29 +415,37 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     //    halves are config keys, so a mid-batch failure leaves the settings
     //    baseline untouched and Discard reverts the whole page in one
     //    `Settings::load()` — the same guarantee decoration has.
-    config.apply = [writeOverride = std::move(writeOverride), writeShader = std::move(writeShader),
+    config.apply = [writeOverrides = std::move(writeOverrides), writeShader = std::move(writeShader),
                     knowsEffectId](const QJsonObject& root) -> bool {
-        if (!writeOverride || !writeShader) {
+        if (!writeOverrides || !writeShader) {
             return false;
         }
         QList<StagedEntry> staged;
         if (!stageEntries(root, &staged, knowsEffectId)) {
             return false;
         }
+
+        // The whole timing half in ONE write. Per-path writes were observable
+        // half-applied: each one emits motionProfileTreeChanged synchronously,
+        // so every card rebound and the set-row active sweep re-ran once per
+        // path against an intermediate tree. Only entries that actually CARRY
+        // timing are included, so a shader-only entry does not write an empty
+        // override over timing the set never mentioned. Merge semantics apply
+        // within an entry as well as across paths.
+        QList<QPair<QString, QVariantMap>> timingEdits;
+        timingEdits.reserve(staged.size());
+        for (const StagedEntry& e : staged) {
+            if (!e.timing.isEmpty()) {
+                timingEdits.append({e.path, e.timing});
+            }
+        }
+        if (!timingEdits.isEmpty() && !writeOverrides(timingEdits)) {
+            qCWarning(lcConfig) << "motionset apply: timing write failed; nothing was committed";
+            return false;
+        }
+
         QStringList committedPaths;
         for (const StagedEntry& e : staged) {
-            // Timing first, and only when the entry actually carries one: an
-            // entry that is shader-only must not write an empty override file
-            // over timing the set never mentioned. Merge semantics apply
-            // WITHIN an entry as well as across paths.
-            if (!e.timing.isEmpty() && !writeOverride(e.path, e.timing)) {
-                qCWarning(lcConfig) << "motionset apply: timing write failed for path" << e.path;
-                if (!committedPaths.isEmpty()) {
-                    qCWarning(lcConfig) << "motionset apply: partial apply committed" << committedPaths.size()
-                                        << "paths before failure:" << committedPaths;
-                }
-                return false;
-            }
             // Which of the three states this is decides which controller API
             // applies it; the closure owns that dispatch.
             if (e.hasShader && !writeShader(e.path, e.shader)) {
