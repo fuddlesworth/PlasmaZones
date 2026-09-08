@@ -191,9 +191,6 @@ bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& ro
     if (!written) {
         qCWarning(lcConfig) << "ShaderSetStore: could not write" << filePath << ":" << file.errorString();
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write the set to disk."));
-        // landed, so the file is untouched. Un-stage it rather than leave the
-        // page claiming an unsaved change that does not exist. The rollback hook
-        // emits the dirty-state change itself, and only when it really dropped
         return false;
     }
     return true;
@@ -320,12 +317,31 @@ bool ShaderSetStore::applySet(const QString& name)
     // Skipping validation would apply an unvetted payload instead.
     if (!m_config.validate || !m_config.validate(root)) {
         qCWarning(lcConfig) << "ShaderSetStore::applySet: validation refused" << filePath;
-        Q_EMIT toastRequested(PhosphorI18n::tr("“%1” does not match this page.").arg(name));
+        // Deliberately not "wrong page": validation also refuses a set for THIS
+        // page that names something this build does not have — an event path a
+        // newer version added, or a pack that is not installed here. Telling a
+        // user they picked the wrong page when they did not sends them looking
+        // in the wrong place entirely.
+        Q_EMIT toastRequested(
+            PhosphorI18n::tr("“%1” could not be used here. It may be for another page, or it may need packs or "
+                             "events this version does not have.")
+                .arg(name));
         return false;
     }
     if (!m_config.apply || !m_config.apply(root)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not apply “%1”.").arg(name));
         return false;
+    }
+    // An OLDER set applies, and should — it is a valid file this build can
+    // read. But it carries less than a current one does, and applying it
+    // silently leaves the fields it never mentions on whatever the recipient
+    // already had, which looks like the set only half worked. The version gate
+    // above only guards the newer direction, so say something here.
+    if (root.value(kVersionKey).toDouble(m_config.formatVersion) < m_config.formatVersion) {
+        Q_EMIT toastRequested(
+            PhosphorI18n::tr("“%1” was saved by an older version, so it does not cover everything a set covers now. "
+                             "Anything it leaves out is unchanged.")
+                .arg(name));
     }
     // Live state moved, so every row's `active` flag is stale.
     Q_EMIT setsChanged();
@@ -604,7 +620,9 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     // decoration page is refused at the boundary instead of failing later. A
     // null validate closure refuses too (see applySet).
     if (!m_config.validate || !m_config.validate(root)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("That set does not match this page."));
+        Q_EMIT toastRequested(
+            PhosphorI18n::tr("That set could not be imported here. It may be for another page, or it may need packs "
+                             "or events this version does not have."));
         return false;
     }
 

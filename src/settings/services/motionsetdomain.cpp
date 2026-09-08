@@ -19,14 +19,14 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
 #include <QLoggingCategory>
 #include <QSet>
 
-#include <utility>
 #include <QStringList>
+
+#include <utility>
 
 namespace PlasmaZones::motionset {
 
@@ -54,8 +54,8 @@ constexpr QLatin1String kParametersKey{"parameters"};
 
 /// The timing fields `Profile` actually round-trips. A timing half whose keys
 /// are all unrecognised is a wrong-shaped or hand-edited entry: it is a
-/// non-empty object that changes nothing, and staging it writes a file the
-/// loader then ignores. Decoration refuses that class by parsing its payload
+/// non-empty object that changes nothing, and staging it writes a tree entry
+/// every reader then ignores. Decoration refuses that class by parsing its payload
 /// into a typed profile and judging the RESULT (decorationpagecontroller_sets.cpp);
 /// `Profile::fromJson` needs a CurveRegistry this domain has no handle on, so
 /// the same guarantee is had here by requiring a recognised field rather than
@@ -77,8 +77,9 @@ struct StagedEntry
 {
     QString path;
     /// The timing half, already stripped of the nested shader key, so it is
-    /// exactly what the per-event override file should contain. Empty when the
-    /// entry carries a shader assignment only.
+    /// exactly the shape one entry's `profile` takes in
+    /// `Animations/MotionProfileTree`. Empty when the entry carries a shader
+    /// assignment only.
     QVariantMap timing;
     /// True when the entry carried a `shader` object at all. Absent is not the
     /// same as empty: absent means "do not touch this event's pack", which is
@@ -111,8 +112,6 @@ const QSet<QString>& knownEventPaths()
 bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged,
                   const std::function<bool(const QString&)>& knowsEffectId)
 {
-    using namespace PhosphorAnimation;
-
     staged->clear();
     // Motion has no baseline: there is no global default profile to apply one
     // to. A file carrying the key at all is a foreign or hand-edited set, and
@@ -212,8 +211,8 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged,
             out.hasShader = true;
             out.shader = shader.toVariantMap();
         }
-        // Whatever is left is the timing half, in exactly the shape the
-        // per-event override file takes.
+        // Whatever is left is the timing half, in exactly the shape one
+        // entry's `profile` takes in the timing tree.
         out.timing = profile.toVariantMap();
         if (!out.timing.isEmpty()) {
             // Judge what the timing half actually SAYS, not merely that it is
@@ -278,8 +277,6 @@ ShaderSetStore::Config makeConfig(std::function<QVariantMap()> readTimings, std:
     //    Active-detection does NOT depend on it: the store indexes live
     //    overrides by path into a hash.
     config.snapshot = [readTimings = std::move(readTimings), readShaders, resolvedShaderIds]() -> QJsonObject {
-        using namespace PhosphorAnimation;
-
         if (!readTimings) {
             return QJsonObject{};
         }

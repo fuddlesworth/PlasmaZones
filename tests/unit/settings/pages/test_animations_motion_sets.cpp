@@ -753,7 +753,9 @@ private Q_SLOTS:
         QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY2(!sets->importSet(payload), "a motion set carrying a baseline must be refused");
         QCOMPARE(toastSpy.count(), 1);
-        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That set does not match this page."));
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("That set could not be imported here. It may be for another page, or it may need "
+                                  "packs or events this version does not have."));
 
         // The KEY is refused, not just a non-empty value: an empty `{}` is the
         // same foreign envelope, and tolerating it would let the two domains
