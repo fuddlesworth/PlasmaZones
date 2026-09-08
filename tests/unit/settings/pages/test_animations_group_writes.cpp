@@ -89,11 +89,8 @@ private Q_SLOTS:
     /// user nudged Duration.
     void mergePreservesTheFieldsTheCardDoesNotEdit()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // Stand in for what a motion set left on the leaf.
         QVERIFY(c.setOverride(kPrimary,
@@ -120,11 +117,8 @@ private Q_SLOTS:
     /// caused.
     void mergeWritesEveryPathInTheGroup()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 750}}, QVariant()), 2);
 
@@ -139,11 +133,8 @@ private Q_SLOTS:
     /// count misreports how many events were actually reverted.
     void aDuplicatedPathInTheGroupIsWrittenOnce()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy touched(&c, &AnimationsPageController::overrideChanged);
         // Two, not three: the repeated primary is deduplicated on entry.
@@ -168,11 +159,8 @@ private Q_SLOTS:
     /// prevent — the inheriting path would silently stop tracking its parent.
     void anAbsentCurveLeavesEachPathsOwnCurveAlone()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // Primary owns a curve; the mirror owns none.
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
@@ -189,11 +177,8 @@ private Q_SLOTS:
     /// overwriting whatever each held.
     void anEditedCurveTravelsToEveryPath()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
 
@@ -214,11 +199,8 @@ private Q_SLOTS:
     /// base can never carry one and a fixture built that way passes vacuously.
     void aCurveSuppliedThroughFieldsIsNotWritten()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 200}}));
 
@@ -238,11 +220,8 @@ private Q_SLOTS:
     /// its own, and `fields` cannot overwrite it either.
     void aCurveSuppliedThroughFieldsCannotOverwriteAPathsOwn()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
 
@@ -265,11 +244,8 @@ private Q_SLOTS:
     /// One field goes, the other stays. This is the per-field revert link.
     void clearingOneFieldLeavesTheOtherAndTheMotionSetFieldsPut()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         for (const QString& path : group()) {
             QVERIFY(c.setOverride(path,
@@ -302,11 +278,8 @@ private Q_SLOTS:
     /// file leaves the toggle stuck on with nothing behind it.
     void clearingTheLastFieldRemovesTheEntryOutright()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
         QVERIFY(c.hasOverride(kPrimary));
@@ -332,11 +305,8 @@ private Q_SLOTS:
     /// create override files for the rest.
     void clearingAFieldSkipsPathsThatDoNotCarryIt()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // The mirror carries a DIFFERENT field, which is the case that
         // distinguishes the skip from its absence: without it the mirror gets
@@ -363,11 +333,8 @@ private Q_SLOTS:
     /// all must not have one created for it.
     void clearingAFieldCreatesNoEntryForAPathWithoutOne()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
 
@@ -380,11 +347,8 @@ private Q_SLOTS:
     /// timing pair — honouring anything else could strip a motion set's fields.
     void clearingAnUnrecognisedFieldIsRefused()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary,
                               QVariantMap{{QStringLiteral("duration"), 600}, {QStringLiteral("minDistance"), 42}}));
@@ -402,11 +366,8 @@ private Q_SLOTS:
     /// Zero when the group agrees, so the banner never renders a stale count.
     void aConvergedGroupReportsNoDivergence()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 500}}, QVariant()), 2);
 
@@ -418,11 +379,8 @@ private Q_SLOTS:
     /// would under-report the number of events the next edit touches.
     void aDivergentGroupCountsTheMirrorsPlusThePrimary()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 500}}));
         QVERIFY(c.setOverride(kMirror, QVariantMap{{QStringLiteral("duration"), 900}}));
@@ -439,11 +397,8 @@ private Q_SLOTS:
         // rule is that a controller is never built pointing at the developer's
         // real profiles, and an exception to it is one refactor away from
         // reading them.
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{}, /*compareCurve=*/true), 0);
     }
 
@@ -452,11 +407,8 @@ private Q_SLOTS:
     /// the banner ON permanently over an axis nothing on the card can clear.
     void theCurveIsComparedOnlyWhenTheCallerCanConvergeIt()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // Same duration, different curves — the ONLY axis in disagreement.
         QVERIFY(c.setOverride(
@@ -475,11 +427,8 @@ private Q_SLOTS:
     /// counting them would latch the banner with no control able to clear it.
     void theMotionSetFieldsAreNeverCompared()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(kPrimary,
                               QVariantMap{{QStringLiteral("duration"), 500}, {QStringLiteral("minDistance"), 10}}));
@@ -496,11 +445,8 @@ private Q_SLOTS:
     /// banner on a group nobody has edited.
     void anAbsentOverrideComparesEqualToAnEmptyOne()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // Neither path has a file at all.
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{kMirror}, /*compareCurve=*/true), 0);
@@ -519,11 +465,8 @@ private Q_SLOTS:
     {
         // Pure taxonomy, so nothing here reads a file — isolated anyway, for
         // the reason the slot above gives.
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // Both window.appearance legs take a shader leg.
         QVERIFY(c.anyPathSupportsShaderLeg(group()));
@@ -558,11 +501,8 @@ private Q_SLOTS:
 
     void aMixedBatchDoesNotLeakTheRemovedPathsStaleValue()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
         TestHelpers::TimingControllerFixture fx;
         auto& c = fx.c;
-        c.setUserProfilesDirOverride(tmp.path());
 
         // A populated registry, so a stale entry has somewhere to be stale IN.
         // The controller reads the config tree ahead of the registry, so the
@@ -619,12 +559,9 @@ private Q_SLOTS:
     /// Unsaved-changes footer never appears.
     void aMixedBatchStillAnnouncesTheDirtyFlip()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        Settings& settings = fx.settings;
+        AnimationsPageController& c = fx.c;
 
         // Written, then COMMITTED, so the page starts clean: dirtiness is
         // live-versus-baseline, and an uncommitted write would leave the page
@@ -715,12 +652,9 @@ private Q_SLOTS:
     /// slot pins too.
     void aStoredPathOutsideTheTaxonomyIsStillReachableByScopedWalks()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        Settings& settings = fx.settings;
+        AnimationsPageController& c = fx.c;
 
         const QString stray = QStringLiteral("window.appearance.notabuiltin");
         QVERIFY2(!c.isValidEventPath(stray), "the fixture path is in the taxonomy after all");
@@ -758,12 +692,8 @@ private Q_SLOTS:
     /// failure begins, because the latch from the previous one is still set.
     void aMergedWriteFailureToastsOnceAndRearmsAfterASuccess()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        AnimationsPageController& c = fx.c;
 
         QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
         const QStringList mixed{kPrimary, QStringLiteral("not.an.event.path")};
@@ -791,12 +721,8 @@ private Q_SLOTS:
 
     void divergenceCountsEachPathOnce()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        AnimationsPageController& c = fx.c;
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 500}}));
         QVERIFY(c.setOverride(kMirror, QVariantMap{{QStringLiteral("duration"), 900}}));
@@ -823,12 +749,8 @@ private Q_SLOTS:
     /// here so a future change that starts counting self-comparisons is caught.
     void aGroupWhoseOnlyMirrorIsThePrimaryNeverDiverges()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        AnimationsPageController& c = fx.c;
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 500}}));
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{kPrimary}, /*compareCurve=*/true), 0);
@@ -844,12 +766,8 @@ private Q_SLOTS:
     /// card, which pre-filters its mirrors, but this is a Q_INVOKABLE.
     void anUnrecognisedMirrorIsNotCountedAsDivergent()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        AnimationsPageController& c = fx.c;
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 500}}));
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{QStringLiteral("not.a.real.event")},
@@ -860,12 +778,8 @@ private Q_SLOTS:
     /// An invalid PRIMARY path returns 0 rather than counting every mirror.
     void anInvalidPrimaryReportsNoDivergence()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, &settings);
-        c.setUserProfilesDirOverride(tmp.path());
+        TestHelpers::TimingControllerFixture fx;
+        AnimationsPageController& c = fx.c;
 
         QVERIFY(c.setOverride(kMirror, QVariantMap{{QStringLiteral("duration"), 900}}));
         QCOMPARE(c.divergentPathCount(QStringLiteral("not.a.real.event"), QStringList{kMirror},

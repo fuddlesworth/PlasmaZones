@@ -218,6 +218,14 @@ void ConfigMigration::migrateV7ToV8(QJsonObject& root, bool importOverrideFiles)
     // that already carries the key — and the runner ABORTS the whole chain if
     // a step returns without bumping the version, so an early return that
     // forgot to stamp would stall every later migration too.
+    //
+    // The cost is that a file the loop below cannot read or parse is skipped
+    // and never revisited: the stamp is already down, so nothing rescans, and
+    // the finalizer only runs when the config carries NO tree at all. That
+    // event's timing falls back to inherited. It is not lost though — the
+    // import READS, it never deletes — so the file is still sitting in the
+    // profiles directory, and clearing the config key makes the finalizer pick
+    // the whole directory up again on the next start.
     root[ConfigKeys::versionKey()] = 8;
 
     if (!importOverrideFiles) {

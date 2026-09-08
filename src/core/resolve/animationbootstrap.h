@@ -255,6 +255,15 @@ public:
     ///
     /// @param keepLive false for a short-lived modal process (the editor),
     ///        which reads once at start-up and has nothing to keep current.
+    ///
+    /// LIFETIME, when @p keepLive is true: the connections capture `this` and
+    /// take @p settings as their context object, so they die with @p settings.
+    /// That makes it a caller invariant that the bootstrap OUTLIVES the
+    /// settings object. In both composition roots this holds by declaration
+    /// order, the bootstrap being declared first and so destroyed last. A
+    /// callable cannot check that, so declaring them the other way round would
+    /// leave the connections holding a dangling `this` with nothing to catch
+    /// it.
     void bindToSettings(Settings& settings, bool keepLive);
 
 private:

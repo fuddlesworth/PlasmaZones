@@ -265,6 +265,9 @@ int main(int argc, char* argv[])
     // WRITE config.json. That is acceptable here — the chain is idempotent and
     // latches per process — but it is a side effect, not a lookup, and it is
     // why this is constructed once rather than on demand.
+    // Declared after the bootstrap for the reason bindToSettings documents,
+    // even though this call passes keepLive=false and wires no connections:
+    // the ordering is what makes a later change to true safe.
     PlasmaZones::Settings editorMotionSettings;
     // The same wiring the settings app does, through the same helper. keepLive
     // is false because this is a short-lived modal process: it reads once at

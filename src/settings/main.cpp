@@ -181,6 +181,11 @@ int main(int argc, char* argv[])
     // entirely by the Settings UI's per-node overrides, which are applied
     // from config further down. Must outlive the QML engine (Behavior
     // bindings keep registry handles).
+    // Declared BEFORE the controller, deliberately: bindToSettings below wires
+    // connections that capture this bootstrap and are scoped to the settings
+    // object the controller owns, so the bootstrap has to outlive it. Reverse
+    // these two declarations and those connections hold a dangling pointer
+    // through the controller's teardown, which nothing here can detect.
     PlasmaZones::AnimationBootstrap animationBootstrap;
 
     // Publish the bootstrap-owned registries + a fresh clock manager as
