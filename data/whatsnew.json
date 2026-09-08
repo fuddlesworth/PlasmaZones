@@ -1,6 +1,19 @@
 {
     "releases": [
         {
+            "version": "3.4.15",
+            "date": "2026-09-07",
+            "highlights": [
+                "Fixed: Tab indicators hold still when the pointer crosses them, instead of the whole band vanishing until something else repaints the screen (#1079)",
+                "Fixed: A window moved to another virtual desktop or another activity no longer leaves its slot occupied on the one it came from (#1078)",
+                "Fixed: Removing a virtual desktop keeps the tiled layouts on the desktops that are left, and keeps your per-desktop snapping, tiling and scrolling switches on the desktops you chose them for (#1078)",
+                "Fixed: Un-sticking a window while another desktop is in view puts it back in the layout of the desktop it is actually on (#1078)",
+                "Fixed: Windows follow the current desktop of the monitor they are on rather than the one the session as a whole is on (#1078)",
+                "Fixed: A window moved off a desktop stops occupying the zone it was snapped into there, so cycling or swapping in that zone no longer throws you onto another desktop (#1078)",
+                "Fixed: A window keeps its PlasmaZones decoration when it moves to another virtual desktop (#1078)"
+            ]
+        },
+        {
             "version": "3.4.14",
             "date": "2026-09-06",
             "highlights": [
