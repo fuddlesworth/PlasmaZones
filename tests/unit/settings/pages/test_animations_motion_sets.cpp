@@ -132,6 +132,47 @@ private Q_SLOTS:
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 333);
     }
 
+    /// The capture/de-seed round trip: a set captured while every path is on
+    /// its default must apply WITHOUT freezing those defaults as overrides.
+    ///
+    /// The two halves are a matched pair and neither is safe alone. The
+    /// snapshot bakes in what each path resolves to, so a set is self-contained
+    /// and a recipient reproduces the sender's look; the de-seed on the write
+    /// side strips anything that already resolves the same way locally, so
+    /// applying a set does not opt every event out of future default
+    /// improvements. Nothing exercised the pairing, so either half could have
+    /// been changed alone — and the sweep capturing a per-path built-in default
+    /// rather than the resolved pack was exactly that kind of drift.
+    void applySet_onDefaultsDoesNotFreezeThemAsOverrides()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // One real timing edit so the set has something of its own to carry;
+        // every shader assignment is left untouched, i.e. on its default.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 333}}));
+        QVERIFY(c.setsBridge()->saveCurrentAsSet(QStringLiteral("defaults-set"), QString()));
+
+        QVERIFY(c.setsBridge()->applySet(QStringLiteral("defaults-set")));
+
+        // The timing half applied.
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 333);
+
+        // The shader half did NOT become a stored override anywhere: every one
+        // of those paths still resolves the same way it did before the apply,
+        // so the de-seed stripped what the sweep had carried for
+        // self-containment.
+        const QVariantMap raw = c.allRawShaderProfiles();
+        for (auto it = raw.constBegin(); it != raw.constEnd(); ++it) {
+            QVERIFY2(
+                !it.value().toMap().contains(QStringLiteral("effectId")),
+                qPrintable(QStringLiteral("applying a set captured on defaults pinned a pack at %1").arg(it.key())));
+        }
+    }
+
     void applySet_mergesPreservesOtherPaths()
     {
         QTemporaryDir tmp;
