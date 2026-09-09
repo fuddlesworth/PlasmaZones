@@ -765,19 +765,32 @@ private Q_SLOTS:
     /// delta must load and apply unchanged under a current-version store. (A
     /// v6-stamped delta with no animation overrides crosses both remaining
     /// steps unchanged too — the second case pins that.)
+    /// A data table rather than a loop over the two seed versions. m_lastApplied
+    /// and the temp dir are reset in init(), which runs per SLOT, not per
+    /// iteration — so the second pass of a loop asserted against state the first
+    /// pass had left behind, over a directory that still held the first
+    /// profile. Both assertions would have passed even if the second version
+    /// applied nothing at all. QTest re-runs init()/cleanup() per row, so each
+    /// case gets its own fixture.
+    void olderProfileV7FileMigratesForward_data()
+    {
+        QTest::addColumn<int>("seedVersion");
+        QTest::newRow("v7 stamp-only step") << 7;
+        QTest::newRow("v6 crosses both steps") << 6;
+    }
+
     void olderProfileV7FileMigratesForward()
     {
-        for (int seedVersion : {7, 6}) {
-            const QUuid id = QUuid::createUuid();
-            QJsonObject delta;
-            delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
-            QVERIFY(writeProfileFileFixture(id, seedVersion, delta));
+        QFETCH(int, seedVersion);
+        const QUuid id = QUuid::createUuid();
+        QJsonObject delta;
+        delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+        QVERIFY(writeProfileFileFixture(id, seedVersion, delta));
 
-            ProfileStore store(makeCurrentVersionConfig());
-            QVERIFY(store.activateProfile(id.toString()));
-            QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
-            QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
-        }
+        ProfileStore store(makeCurrentVersionConfig());
+        QVERIFY(store.activateProfile(id.toString()));
+        QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
+        QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
     }
 
     /// A settings profile must never acquire the LOADING machine's own

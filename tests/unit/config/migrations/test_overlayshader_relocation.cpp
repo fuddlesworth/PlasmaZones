@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QTest>
 
 #include "config/configdefaults.h"
@@ -379,10 +380,19 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         // Unparseable sidecar: skipped with success, left untouched.
+        //
+        // The bytes must CONTAIN a shader key, or the cheap raw-bytes scan
+        // bails before the parse is ever attempted and this asserts nothing
+        // about the parse-error arm. Both bails return true leaving both files
+        // untouched, so the byte comparison alone cannot tell them apart —
+        // ignoreMessage is what pins which one ran, and it FAILS if the
+        // warning never arrives.
         QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
-        QVERIFY(writeRaw(ConfigDefaults::layoutSettingsFilePath(), QByteArrayLiteral("{not json")));
+        const QByteArray corruptWithKey = QByteArrayLiteral("{\"a\":{\"shaderId\": broken");
+        QVERIFY(writeRaw(ConfigDefaults::layoutSettingsFilePath(), corruptWithKey));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("relocation skipping unparseable")));
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
-        QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), QByteArrayLiteral("{not json"));
+        QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), corruptWithKey);
 
         // Unparseable CONFIG with a pending lift: the relocation fails
         // WITHOUT stripping the sidecar (a strip-before-lift regression
