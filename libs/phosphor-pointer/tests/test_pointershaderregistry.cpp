@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
@@ -308,11 +309,28 @@ void TestPointerShaderRegistry::testEntryPointScaffoldMatchesTheSharedContract()
 void TestPointerShaderRegistry::testIncludePathsResolveTheSharedDirectory()
 {
     // `#include <pointer_uniforms.glsl>` resolves against the pack root's
-    // shared/ dir, one level above the pack itself.
+    // shared/ dir, one level above the pack itself, and that pair comes FIRST
+    // so a pack shipping its own shared/ is served from it.
     const QStringList paths = PointerShaderRegistry::includePathsFor(QStringLiteral("/data/pointer/halo"));
-    QCOMPARE(paths.size(), 2);
+    QVERIFY(paths.size() >= 2);
     QCOMPARE(paths.at(0), QStringLiteral("/data/pointer/shared"));
     QCOMPARE(paths.at(1), QStringLiteral("/data/pointer"));
+
+    // The installed shared dir is appended too, which is the only way a pack
+    // outside the bundled tree can resolve the helpers the entry prologue
+    // includes unconditionally. Without it every user pack fails include
+    // expansion in the preview and the validator while rendering fine in the
+    // compositor, which builds its list from the registry's roots instead.
+    const QStringList dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    QVERIFY(!dataDirs.isEmpty());
+    bool sawInstalledShared = false;
+    for (const QString& dir : dataDirs) {
+        if (paths.contains(dir + QStringLiteral("/plasmazones/pointer/shared"))) {
+            sawInstalledShared = true;
+            break;
+        }
+    }
+    QVERIFY2(sawInstalledShared, "includePathsFor drops the installed shared dir, so no user pack can be previewed");
 
     QVERIFY(PointerShaderRegistry::includePathsFor(QString()).isEmpty());
 }

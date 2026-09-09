@@ -116,10 +116,12 @@ static_assert(PSC::kMaxTrailPoints == 32, "kTrailElementNames must grow to match
 
 /// The include paths a pointer pack resolves `#include <pointer_lib.glsl>`
 /// against: each registered search path's `shared` dir plus the search path
-/// root, which is exactly what PointerShaderRegistry::includePathsFor derives
-/// from a pack dir. Built from the registry's paths rather than from one
-/// pack's dir so a pack in the user dir can still include the bundled shared
-/// headers, matching the surface compile path.
+/// root. Built from the registry's paths rather than from one pack's dir so a
+/// pack in the user dir can still include the bundled shared headers, matching
+/// the surface compile path. PointerShaderRegistry::includePathsFor reaches
+/// the same set from the other direction — the pack's own neighbourhood plus
+/// the installed shared dirs — for the hosts that have a pack dir and no
+/// registry to walk.
 QStringList includePathsFrom(const PPS::PointerShaderRegistry& registry)
 {
     QStringList includePaths;

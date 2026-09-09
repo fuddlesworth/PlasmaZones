@@ -110,10 +110,19 @@ public:
     static QString pointerEntryPrologue();
     static QList<PhosphorShaders::EntryCandidate> pointerEntryCandidates();
 
-    /// Include search paths for a pack at @p packDir: `{<packRoot>/shared,
-    /// <packRoot>}` where packRoot is the parent of the pack dir, so
-    /// `#include <pointer_lib.glsl>` resolves against the sibling `shared/`
-    /// directory of whichever search root the pack lives in.
+    /// Include search paths for a pack at @p packDir: its own neighbourhood
+    /// `{<packRoot>/shared, <packRoot>}` where packRoot is the parent of the
+    /// pack dir, followed by the installed `plasmazones/pointer/shared` under
+    /// each XDG data dir.
+    ///
+    /// Both halves are needed. A bundled pack finds the helpers next door; a
+    /// user pack under `~/.local/share/plasmazones/pointer` has no sibling
+    /// `shared/` at all, and the entry prologue always emits
+    /// `#include <pointer_lib.glsl>`, so without the installed roots every
+    /// such pack fails include expansion in the preview and the validator
+    /// while rendering perfectly in the compositor, which builds its own list
+    /// from the registry's search roots. The pack's own directories come
+    /// first, so a pack shipping its own `shared/` is still served from it.
     static QStringList includePathsFor(const QString& packDir);
 
 Q_SIGNALS:

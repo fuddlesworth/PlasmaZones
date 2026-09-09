@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QRegularExpression>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <optional>
@@ -394,18 +395,39 @@ QStringList PointerShaderRegistry::includePathsFor(const QString& packDir)
     if (packDir.isEmpty()) {
         return {};
     }
-    // Purely lexical, deliberately. These two directories are a property of
-    // where the pack SITS, so the answer must not depend on what is on disk
-    // at the moment of the call: a pack removed between the scan and a
-    // recompile has to fail as a missing pack, not as a missing include,
-    // which is the confusing shape a filesystem walk gave it here before.
+    // The pack's own neighbourhood first, and that part stays purely lexical,
+    // deliberately: these two directories are a property of where the pack
+    // SITS, so the answer must not depend on what is on disk at the moment of
+    // the call. A pack removed between the scan and a recompile has to fail as
+    // a missing pack, not as a missing include, which is the confusing shape a
+    // filesystem walk gave it here before.
     const QString cleaned = QDir::cleanPath(packDir);
     const int lastSlash = cleaned.lastIndexOf(QLatin1Char('/'));
     if (lastSlash <= 0) {
         return {};
     }
     const QString packRoot = cleaned.left(lastSlash);
-    return {packRoot + QStringLiteral("/shared"), packRoot};
+    QStringList paths{packRoot + QStringLiteral("/shared"), packRoot};
+
+    // Then the installed shared helpers, because a pack outside the bundled
+    // tree has no sibling shared/ to find them in. The entry prologue always
+    // emits `#include <pointer_lib.glsl>`, so without this EVERY user pack
+    // under ~/.local/share/plasmazones/pointer fails include expansion — it
+    // renders in the compositor, which builds its search list from the
+    // registry's roots, and then shows a blank preview and fails the
+    // validator, both of which come through here.
+    //
+    // Appending roots does not reintroduce the walk the note above rules out:
+    // no file is probed, and the pack's own directories still come first, so a
+    // pack shipping its own shared/ is still served from it.
+    const QStringList dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    for (const QString& dir : dataDirs) {
+        const QString shared = dir + QStringLiteral("/plasmazones/pointer/shared");
+        if (!paths.contains(shared)) {
+            paths.append(shared);
+        }
+    }
+    return paths;
 }
 
 } // namespace PhosphorPointerShaders
