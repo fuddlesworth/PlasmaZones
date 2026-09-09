@@ -99,7 +99,12 @@ vec4 pPointer(vec2 uv) {
     if (blot > 0.0 && uPointerPress.w > 0.5 && since < lifetime) {
         float remain = 1.0 - since / lifetime;
         float wet = 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
-        float r = halfWidth * blot * 2.0 * (0.75 + 0.25 * (1.0 - wet)) * (1.0 + 0.15 * wet);
+        // Widest while WET, then held — the same direction as the stroke and
+        // as the pack's own "it never spreads again once dry". The spread is
+        // gated on Bleed for the same reason the stroke's is, so setting Bleed
+        // to zero really does keep one width everywhere.
+        float bleed = clamp(p_bleed, 0.0, 1.0);
+        float r = halfWidth * blot * 2.0 * (1.0 + 0.18 * bleed * wet);
         float d = length(px - uPointerPress.xy);
         float band = 1.0 - smoothstep(r - 0.75, r + 0.75, d);
         cover = max(cover, band * smoothstep(0.0, 0.30, remain));

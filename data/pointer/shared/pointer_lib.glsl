@@ -24,7 +24,11 @@ const int kPointerTrailCapacity = 32;
 // Logical-to-device scale. Multiply a pack's logical-px parameter by this to
 // reach the device-px canvas the position uniforms use.
 float pointerScale() {
-    return max(uPointerState.z, 0.001);
+    // Fall back to unscaled, not to a floor. Every use is a multiply, so there
+    // is no divide to protect, and a 0.001 answer would paint the whole pack at
+    // a thousandth of its size — invisible — where 1.0 merely means "no scale
+    // information", which is what an unset uniform actually is.
+    return uPointerState.z > 0.0 ? uPointerState.z : 1.0;
 }
 
 // This fragment's canvas position, TOP-DOWN device px. `uv` is the incoming
@@ -152,8 +156,12 @@ vec3 phosphorGradient(float t) {
 
 // Premultiplied output from a straight colour and coverage.
 vec4 premul(vec3 rgb, float a) {
+    // Both halves clamped. The blend is GL_ONE / GL_ONE_MINUS_SRC_ALPHA, which
+    // requires every channel to be at or below the alpha; a pack that hands in
+    // an over-bright colour would otherwise return a channel greater than its
+    // own coverage and add light it never claimed.
     a = clamp(a, 0.0, 1.0);
-    return vec4(rgb * a, a);
+    return vec4(clamp(rgb, 0.0, 1.0) * a, a);
 }
 
 // Pointer speed with the per-sample jitter filtered out, in px/s.

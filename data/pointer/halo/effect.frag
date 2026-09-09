@@ -22,7 +22,14 @@
 // here: this pack is a glow centred on the pointer, not a path trace, so
 // there is no curve for smoothing to act on.
 
-const float kIdleSeconds = 0.6;
+// How long the glow lingers after the pointer stops. Sized against
+// `trailSeconds` (0.9) so there is room for a whole breath before the fade,
+// and the breath rate below is matched to it — at the old 0.6 s, with the fade
+// starting halfway through, under a fifth of a cycle was ever on screen and
+// the "breathes while you hold still" the pack advertises was not visible.
+const float kIdleSeconds = 0.85;
+// One full cycle inside the visible window.
+const float kBreathRate = 7.4;
 const float kSwellSeconds = 0.55;
 
 vec4 pPointer(vec2 uv) {
@@ -50,9 +57,11 @@ vec4 pPointer(vec2 uv) {
         // while breathing, then fade out over the rest.
         float idle = pointerIdleSeconds();
         float settle = smoothstep(0.0, kIdleSeconds * 0.35, idle);
-        float breath = 1.0 + 0.08 * sin(iTime * 4.0);
+        float breath = 1.0 + 0.08 * sin(iTime * kBreathRate);
         float level = mix(1.0, clamp(p_idleDim, 0.0, 1.0) * breath, settle);
-        float out_ = 1.0 - smoothstep(kIdleSeconds * 0.5, kIdleSeconds, idle);
+        // Fade late, so the breath is a thing you watch rather than something
+        // the fade eats.
+        float out_ = 1.0 - smoothstep(kIdleSeconds * 0.75, kIdleSeconds, idle);
 
         alpha += body * intensity * gain * level * out_ * gate;
     }

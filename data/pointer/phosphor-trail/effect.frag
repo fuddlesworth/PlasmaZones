@@ -53,8 +53,14 @@ vec4 pPointer(vec2 uv) {
     }
 
     // Colour walk. A cycle of 0 holds the tube on one colour forever.
+    //
+    // Ping-pong rather than wrap: the brand gradient runs cyan to rose with no
+    // return leg, so a plain fract() would take the whole tube from rose back
+    // to cyan in a single frame once per cycle. Walking back down the ramp
+    // keeps it the continuous drift the pack advertises, at the cost of a
+    // period twice the setting.
     float cycle = max(p_colorCycle, 0.0);
-    float hueBase = cycle > 0.0 ? fract(iTime / cycle) : 0.35;
+    float hueBase = cycle > 0.0 ? abs(fract(iTime / (cycle * 2.0)) * 2.0 - 1.0) : 0.35;
 
     float core = 0.0;
     float halo = 0.0;
@@ -80,7 +86,10 @@ vec4 pPointer(vec2 uv) {
         }
         float age = clamp(mix(a.z, b.z, t) / lifetime, 0.0, 1.0);
         float fade = (1.0 - age) * (1.0 - age) * gate;
-        float c = (1.0 - smoothstep(halfWidth - 0.75 * scale, halfWidth + 0.75 * scale, d)) * fade;
+        // The antialias feather is DEVICE px and stays unscaled, the family
+        // convention: scaling it makes the stroke's edge twice as soft on a 2x
+        // display as every sibling pack's.
+        float c = (1.0 - smoothstep(halfWidth - 0.75, halfWidth + 0.75, d)) * fade;
         float h = exp(-(d * d) / (2.0 * sigma * sigma)) * fade * 0.45 * max(p_glow, 0.0);
         if (max(c, h) > max(core, halo)) {
             hueAge = age;
