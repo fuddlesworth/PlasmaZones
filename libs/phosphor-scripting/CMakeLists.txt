@@ -11,7 +11,7 @@
 # shared-library boundary.
 #
 # Luau is vendored as a committed source tarball (extern/luau-<ver>.tar.gz,
-# pinned to 0.723), extracted from that LOCAL file at configure time and built as
+# pinned to PHOSPHORSCRIPTING_LUAU_VERSION below), extracted from that LOCAL file at configure time and built as
 # part of this project by default; pass -DPLASMAZONES_SYSTEM_LUAU=ON to link a
 # system-provided Luau instead. Committing the tarball (not a submodule, not the
 # unpacked tree) keeps the repo to one ~2 MB blob while staying self-contained:
@@ -27,8 +27,8 @@ set(PHOSPHORSCRIPTING_VERSION "0.1.0")
 
 # Pinned vendored Luau. To bump: drop the new extern/luau-<ver>.tar.gz in,
 # update both lines, and delete the old tarball.
-set(PHOSPHORSCRIPTING_LUAU_VERSION "0.730")
-set(PHOSPHORSCRIPTING_LUAU_SHA256 "448d720df65d393f4c61c7d2b2ddde8c772de55c23760603a9ada43a752aef70")
+set(PHOSPHORSCRIPTING_LUAU_VERSION "0.737")
+set(PHOSPHORSCRIPTING_LUAU_SHA256 "767b872f084518ca9a79b021f83b40e6a051be4c1f91dd712a949417a4e979c6")
 
 if(NOT PROJECT_VERSION)
     project(PhosphorScripting VERSION ${PHOSPHORSCRIPTING_VERSION} LANGUAGES CXX)
@@ -110,7 +110,7 @@ else()
         # project's global exception settings. Luau also breaks under unity builds
         # (same-named file-local symbols collide), and is STATIC, so it must be
         # PIC to link into our shared lib. Override on the vendored targets only.
-        # Luau.Common is NOT header-only in 0.730: it is a compiled STATIC
+        # Luau.Common is NOT header-only (since 0.730): it is a compiled STATIC
         # library (BytecodeWire/StringUtils/TimeTrace TUs) inside the PUBLIC
         # link closure of both Luau.VM and Luau.Compiler, so it needs every
         # override below — most critically -fexceptions (its TUs sit in the
