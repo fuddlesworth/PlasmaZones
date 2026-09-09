@@ -371,9 +371,7 @@ private Q_SLOTS:
     /// The strip helpers must resolve through the bound axis uniform rather
     /// than through a hardcoded x.
     ///
-    /// Nothing else can catch this. Strip packs are compositor-only, so the
-    /// validator skips their stage compile entirely and the bundled-pack gate
-    /// never reads a line of their GLSL — a stripAxisOffset reverted to
+    /// Compilation alone cannot catch this: a stripAxisOffset reverted to
     /// `vec2(amount, 0.0)` compiles, links, bakes and ships, and each of the
     /// three packs that displace through it (jelly, chromatic, motion-blur;
     /// carousel builds its displacement from the axis directly) smears
@@ -567,12 +565,20 @@ private Q_SLOTS:
     /// bundled-pack gate cannot exercise this path at all — without this test
     /// the bake would be dead code that silently stops working.
     ///
-    /// This one really does compile, unlike the metadata-only tests above. It
-    /// bakes through QShaderBaker's vendored glslang and so needs no external
-    /// binary, which is why it carries no glslangValidatorPath guard — unlike
-    /// the compositor-only cases below, which shell out and do.
+    void multipassBufferShadersAreCompiled_data()
+    {
+        QTest::addColumn<QString>("eventClass");
+        QTest::newRow("appearance") << QStringLiteral("appearance");
+        QTest::newRow("geometry-preview") << QStringLiteral("geometry");
+    }
+
+    // Qt previews run the buffer passes even for compositor-only event classes.
     void multipassBufferShadersAreCompiled()
     {
+        QFETCH(QString, eventClass);
+        if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {
+            QSKIP("glslangValidator not on PATH");
+        }
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         if (!linkSharedIncludes(tmp))
@@ -594,6 +600,7 @@ private Q_SLOTS:
         };
 
         QJsonObject obj = basePack(QStringLiteral("mp-good"));
+        obj.insert(QStringLiteral("appliesTo"), toArray({eventClass}));
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
 
@@ -616,6 +623,7 @@ private Q_SLOTS:
         // The same pack with a syntax error in the buffer must be caught
         // HERE, not at the live daemon.
         QJsonObject bad = basePack(QStringLiteral("mp-bad"));
+        bad.insert(QStringLiteral("appliesTo"), toArray({eventClass}));
         bad.insert(QStringLiteral("multipass"), true);
         bad.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
         QVERIFY(writeBuffer(QStringLiteral("mp-bad"),
@@ -624,7 +632,9 @@ private Q_SLOTS:
                                            "void main() { fragColor = notADeclaredThing; }\n")));
         const PackResult r = validate(tmp, QStringLiteral("mp-bad"), bad);
         QVERIFY2(r.errors > 0, qPrintable(QStringLiteral("a broken buffer pass must fail the gate:\n") + r.report));
-        QVERIFY(r.report.contains(QStringLiteral("buffer0.frag")));
+        QVERIFY2(r.report.contains(QRegularExpression(QStringLiteral("buffer0\\.frag\\s+ERROR"))),
+                 qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("notADeclaredThing")), qPrintable(r.report));
     }
 
     /// A buffer pass gets NO p_<id> preamble, because
@@ -936,9 +946,8 @@ private Q_SLOTS:
     }
 
     /// A compositor-only pack's VERTEX stage is compiled too. It is the stage
-    /// the geometry packs do their per-vertex work in and the one the daemon
-    /// never touches, so it is both the likeliest to break and the least
-    /// covered. The p_<id> preamble is spliced here, matching the compositor
+    /// the geometry packs do their per-vertex work in. Both the compositor
+    /// and Qt preview compile it. The p_<id> preamble is spliced here, matching the compositor
     /// (and, these days, the daemon vertex bake too): a vertex-driven pack
     /// reading its params must compile, not fail on an undeclared identifier.
     void compositorOnlyVertexStageIsCompiledWithParams()
@@ -968,7 +977,11 @@ private Q_SLOTS:
             "#version 450\n"
             "#include <animation_uniforms.glsl>\n"
             "layout(location = 0) in vec2 position;\n"
+            "#ifdef PLASMAZONES_KWIN\n"
             "uniform mat4 modelViewProjectionMatrix;\n"
+            "#else\n"
+            "#define modelViewProjectionMatrix qt_Matrix\n"
+            "#endif\n"
             "void main() {\n"
             "    gl_Position = modelViewProjectionMatrix * vec4(position * p_amount, 0.0, 1.0);\n"
             "}\n");
@@ -984,6 +997,86 @@ private Q_SLOTS:
         QVERIFY2(!r.report.contains(QStringLiteral("SKIP")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("effect.vert")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("OK (compositor)")), qPrintable(r.report));
+    }
+
+    void animationStagesRequireBothUniformAbis_data()
+    {
+        QTest::addColumn<QString>("eventClass");
+        QTest::addColumn<bool>("vertex");
+        QTest::addColumn<bool>("breakPreview");
+        for (const QString& event : {QStringLiteral("geometry"), QStringLiteral("appearance")}) {
+            for (bool vertex : {false, true}) {
+                for (bool preview : {false, true}) {
+                    const QString row = event + (vertex ? QStringLiteral("-vert") : QStringLiteral("-frag"))
+                        + (preview ? QStringLiteral("-preview") : QStringLiteral("-compositor"));
+                    QTest::newRow(qPrintable(row)) << event << vertex << preview;
+                }
+            }
+        }
+    }
+
+    // A stage that compiles on one host must still fail when the other ABI
+    // is broken. The loose geometry uniforms reproduce Pressed Paper's
+    // original failure: valid classic GL, invalid/redeclared in the Qt UBO.
+    void animationStagesRequireBothUniformAbis()
+    {
+        QFETCH(QString, eventClass);
+        QFETCH(bool, vertex);
+        QFETCH(bool, breakPreview);
+        if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {
+            QSKIP("glslangValidator not on PATH");
+        }
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(linkSharedIncludes(tmp));
+        const QString name = QStringLiteral("dual-abi");
+        QJsonObject obj = basePack(name);
+        obj.insert(QStringLiteral("appliesTo"), toArray({eventClass}));
+        if (vertex) {
+            obj.insert(QStringLiteral("vertexShader"), QStringLiteral("effect.vert"));
+        }
+        const QString dir = tmp.filePath(name);
+        QVERIFY(QDir().mkpath(dir));
+        const QString stage = vertex ? QStringLiteral("effect.vert") : QStringLiteral("effect.frag");
+        const auto writeStage = [&](bool broken) {
+            QFile f(dir + QLatin1Char('/') + stage);
+            if (!f.open(QIODevice::WriteOnly)) {
+                return false;
+            }
+            QByteArray source;
+            if (vertex) {
+                source += "#version 450\n#include <animation_uniforms.glsl>\n";
+            }
+            if (!broken || !breakPreview) {
+                source += "#ifdef PLASMAZONES_KWIN\n";
+            }
+            source += "uniform vec4 iFromRect;\nuniform vec4 iToRect;\n";
+            if (broken && !breakPreview) {
+                source += "#define iFromRect missingCompositorRect\n";
+            }
+            if (!broken || !breakPreview) {
+                source += "#endif\n";
+            }
+            source += vertex ? "void main() { gl_Position = iFromRect + iToRect; }\n"
+                             : "vec4 pTransition(vec2 uv, float t) { return iFromRect + iToRect; }\n";
+            return f.write(source) == source.size();
+        };
+
+        QVERIFY(writeStage(true));
+        const PackResult bad = validate(tmp, name, obj, /*writeFragment=*/vertex);
+        QVERIFY2(bad.errors > 0, qPrintable(bad.report));
+        const QString failedStage = stage
+            + (breakPreview ? QStringLiteral(" (Qt-RHI preview) ERROR") : QStringLiteral("    ERROR (compositor)"));
+        QVERIFY2(bad.report.contains(failedStage), qPrintable(bad.report));
+        QVERIFY2(
+            bad.report.contains(breakPreview ? QStringLiteral("iFromRect") : QStringLiteral("missingCompositorRect")),
+            qPrintable(bad.report));
+
+        QVERIFY(writeStage(false));
+        const PackResult good = validate(tmp, name, obj, /*writeFragment=*/vertex);
+        QVERIFY2(good.errors == 0, qPrintable(good.report));
+        QVERIFY2(good.report.contains(stage + QStringLiteral(" (Qt-RHI preview) OK")), qPrintable(good.report));
+        QVERIFY2(good.report.contains(stage + QStringLiteral("    OK (compositor)")), qPrintable(good.report));
     }
 
     /// geometryGrid clamps to 0 at load, so a negative value disables the

@@ -22,10 +22,10 @@
 //     daemon Qt-RHI path.
 //   • animation/transition packs (--animation, data/animations/*):
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
-//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path.
-//     Compositor-only packs are baked out of process through glslang instead,
-//     since their kwin classic-GL source is a dialect the SPIR-V target
-//     rejects by design (see validateAnimationPack).
+//     + paramPreamble; validates every fragment and declared vertex on BOTH
+//     the Qt-RHI preview and compositor paths. All animation validation needs
+//     glslangValidator or glslang on PATH for the classic-GL compile. The
+//     default vertex and daemon multipass buffers also bake on Qt-RHI.
 //   • surface/decoration packs (--surface, data/surface/*):
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see
@@ -248,7 +248,9 @@ int main(int argc, char** argv)
                   << "  --surface, -s        force surface-layer packs (data/surface/*)\n"
                   << "  --pointer, -p        force pointer packs (data/pointer/*)\n"
                   << "  --quiet, -q          print only failing packs\n"
-                  << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
+                  << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n"
+                  << "Animation packs compile for Qt-RHI previews and the compositor. Install glslang for the "
+                     "compositor check.\n";
         return 2;
     }
 
