@@ -846,6 +846,15 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenGeometryChanged);
 
+    // The pointer trail is sampled in its output's device pixels, so a
+    // resolution, scale or layout change leaves every stored sample describing
+    // a canvas that is gone. The output object itself is unchanged, so neither
+    // outputRemoved nor notePointer's own identity check notices; without this
+    // the trail draws at the wrong offset and size until the ring ages out.
+    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
+        m_pointerPass.outputGeometryChanged();
+    });
+
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin
     // tells us an output appeared or disappeared. KWin fires screenAdded /
     // screenRemoved BEFORE the per-window outputChanged signals it emits for

@@ -399,6 +399,19 @@ void PointerDecorationPass::invalidateShaderCache()
     }
 }
 
+void PointerDecorationPass::outputGeometryChanged()
+{
+    if (!m_output) {
+        return;
+    }
+    // Only the samples. The output is still ours and a live chain stays live —
+    // what is stale is the canvas the ring was measured in, so the trail
+    // restarts from the pointer's next position instead of streaking across
+    // the rescaled screen.
+    m_history.reset();
+    m_hasTimeOrigin = false;
+}
+
 void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)
 {
     if (m_output != screen) {

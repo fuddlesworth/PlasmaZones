@@ -535,6 +535,14 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // skip the normal scene paint. Otherwise (no transition, or it just settled)
     // chain straight through to the standard scene — this override is a no-op for
     // every non-transitioning frame.
+    // Hand the pointer pass's hide back BEFORE the switch paints, not after.
+    // The desktop pass replaces the whole frame and draws no cursor of its
+    // own, so releasing below — once it has already painted — costs the first
+    // frame of every switch its cursor. Gated on the manager's own per-output
+    // check, the same shape the strip arm below uses.
+    if (m_desktopTransition.isRunningForOutput(screen)) {
+        m_pointerPass.releaseCursorHideForForeignPaint(screen);
+    }
     if (m_desktopTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         // A desktop switch replaces this output's frame and draws no cursor
         // of its own, and the strip pass below is never reached for it while
@@ -542,8 +550,9 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
         // leg on this output has to be given back here or the pointer stays
         // invisible for the whole switch.
         m_stripTransition.releaseCursorHideForForeignPaint(screen);
-        // Same for a hide the pointer pass took for a `layer: above` pack:
-        // its own paintOutput is never reached for this output either.
+        // The pointer pass's hide is normally already back by now (above), but
+        // a switch that became live inside paintOutput itself has not passed
+        // that gate, so release again — it is idempotent.
         m_pointerPass.releaseCursorHideForForeignPaint(screen);
         return;
     }

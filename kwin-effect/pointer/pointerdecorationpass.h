@@ -199,6 +199,17 @@ public:
     /// canvas, so an output going away invalidates it wholesale.
     void outputRemoved(KWin::LogicalOutput* screen);
 
+    /// Drop the sampled trail because the canvas it was measured against has
+    /// moved under it.
+    ///
+    /// Samples are stored as device pixels relative to the output's origin, so
+    /// a resolution, scale or virtual-layout change leaves every one of them
+    /// describing a canvas that no longer exists — the trail draws at the wrong
+    /// offset and the wrong size until the ring ages out. The output itself is
+    /// unchanged, so `outputRemoved` does not apply and the identity check in
+    /// `notePointer` cannot see it either.
+    void outputGeometryChanged();
+
     /// Drop all state and release GL resources (effect teardown / compositor
     /// reset). Null-safe against a torn-down `KWin::effects`.
     void reset();
