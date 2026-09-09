@@ -264,7 +264,7 @@ Item {
                     // it draws nothing.
                     var resolvedChain = (root._resolved && root._resolved.chain) ? root._resolved.chain : [];
                     if (root._undecorated || (root._baselineIsolated && resolvedChain.length === 0))
-                        return i18n("Not decorated. Add a decoration pack to style this surface.");
+                        return root._isPointer ? i18n("Not decorated. Add a pointer pack to style the cursor.") : i18n("Not decorated. Add a decoration pack to style this surface.");
                     if (root._parentChainText.length > 0)
                         return i18n("Inheriting from: %1", root._parentChainText);
                     return i18n("Using global defaults");
@@ -328,6 +328,18 @@ Item {
                     // controller.
                     previewKind: root._previewKind
                     previewController: root._previewController
+                    // The pointer chain takes pointer packs, so it cannot use
+                    // the editor's decoration wording. ChainEditor declares
+                    // these for exactly this case; the pointer card is the
+                    // first host in another family. Both branches are spelled
+                    // out because a string property bound to `undefined`
+                    // resolves to empty, not back to the declared default.
+                    emptyChainText: root._isPointer ? i18n("No pointer packs.") : i18n("No decoration packs.")
+                    emptyChainAddHintText: root._isPointer ? i18n("No pointer packs. Add one below.") : i18n("No decoration packs. Add one below.")
+                    addRowTitle: root._isPointer ? i18n("Add pointer pack") : i18n("Add decoration pack")
+                    addRowDescription: root._isPointer ? i18n("Stack another pack onto the pointer's chain") : i18n("Stack another pack onto this surface's chain")
+                    noPacksInstalledText: root._isPointer ? i18n("No pointer packs are installed") : i18n("No decoration packs are installed")
+                    addComboAccessibleDescription: root._isPointer ? i18n("Add a pointer pack to the pointer's chain") : i18n("Add a decoration pack to this surface's chain")
                     onChainChangeRequested: function (newChain) {
                         if (root.bridge)
                             root.bridge.setChain(root.surfacePath, newChain);

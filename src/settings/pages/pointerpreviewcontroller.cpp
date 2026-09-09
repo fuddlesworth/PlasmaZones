@@ -164,18 +164,22 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
         return;
     }
 
-    // A pack switch reuses this controller, so a stale ring would open the new
-    // pack with a trail streaking in from wherever the old one stopped.
-    if (m_historyItem != shaderItem) {
-        m_historyItem = shaderItem;
-        m_history.reset();
-        m_nowMs = 0;
-        m_pressed = false;
+    // One sampler per canvas. A first frame for this item default-constructs
+    // its state, which is what gives a newly opened pack a fresh ring rather
+    // than a trail streaking in from wherever another preview's pointer
+    // happened to be. Dropped again when the item goes away.
+    auto stateIt = m_states.find(shaderItem);
+    if (stateIt == m_states.end()) {
+        stateIt = m_states.insert(shaderItem, PointerState{});
+        connect(shaderItem, &QObject::destroyed, this, [this](QObject* gone) {
+            m_states.remove(gone);
+        });
     }
+    PointerState& st = *stateIt;
     // Clamped so a paused-then-resumed pane (or a first frame with no previous
     // timestamp) cannot jump the clock far enough to age the whole ring out in
     // one step, and never runs backwards.
-    m_nowMs += static_cast<qint64>(qBound(0.0, static_cast<double>(dtMs), 250.0));
+    st.nowMs += static_cast<qint64>(qBound(0.0, static_cast<double>(dtMs), 250.0));
 
     // The canvas is the item, in DEVICE px: iResolution is DPR-scaled on the
     // way to the GPU (the extension keeps requiresPhysicalResolution), and
@@ -184,27 +188,29 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
     // the same DPR as iResolution.
     const qreal dpr = shaderItem->window() ? shaderItem->window()->effectiveDevicePixelRatio() : 1.0;
     const QPointF devicePos(x * dpr, y * dpr);
-    m_history.notePointer(devicePos, m_nowMs);
+    st.history.notePointer(devicePos, st.nowMs);
 
     // A synthetic left button, so the press and release edges reach the history
     // through the same noteButtons the compositor calls on a real click.
-    if (pressed != m_pressed) {
-        const Qt::MouseButtons before = m_pressed ? Qt::MouseButtons(Qt::LeftButton) : Qt::MouseButtons(Qt::NoButton);
+    if (pressed != st.pressed) {
+        const Qt::MouseButtons before = st.pressed ? Qt::MouseButtons(Qt::LeftButton) : Qt::MouseButtons(Qt::NoButton);
         const Qt::MouseButtons now = pressed ? Qt::MouseButtons(Qt::LeftButton) : Qt::MouseButtons(Qt::NoButton);
-        m_history.noteButtons(now, before, devicePos, m_nowMs);
-        m_pressed = pressed;
+        st.history.noteButtons(now, before, devicePos, st.nowMs);
+        st.pressed = pressed;
     }
 
-    ext->apply(m_history.frameState(m_nowMs, dpr));
+    ext->apply(st.history.frameState(st.nowMs, dpr));
     shaderItem->setIMouse(QPointF(x, y));
 }
 
-void PointerPreviewController::resetPointer()
+void PointerPreviewController::resetPointer(QQuickItem* item)
 {
-    m_history.reset();
-    m_historyItem = nullptr;
-    m_nowMs = 0;
-    m_pressed = false;
+    // Only this canvas. Another preview may be mid-trail on the same
+    // controller, and dropping its ring here would be the very cross-canvas
+    // clobbering the per-item keying exists to prevent.
+    if (item) {
+        m_states.remove(item);
+    }
 }
 
 QString PointerPreviewController::wallpaperPath() const

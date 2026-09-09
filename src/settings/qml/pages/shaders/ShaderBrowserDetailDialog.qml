@@ -177,11 +177,24 @@ Kirigami.Dialog {
     // (packInfo); the zone and decoration controllers expose no such probe
     // yet, so those kinds keep the historical start-always behaviour — a
     // known cost, not an oversight, until their bridges grow one.
+    //
+    // The pointer controller is different again: it has no audio API at all,
+    // so there is nothing to start and asking would be a call into a method
+    // that does not exist.
     function _packWantsAudio() {
+        if (_previewKind === "pointer")
+            return false;
         if (_previewKind !== "animation")
             return true;
         var info = previewController.packInfo(effect ? (effect.id || "") : "");
         return info && info.audio === true;
+    }
+
+    // Paired with _packWantsAudio for the stop side, which has no per-pack
+    // question to ask and so cannot reuse it: a controller that never started
+    // capture also has nothing to stop, and only some of them expose the call.
+    function _canStopAudio() {
+        return previewController && typeof previewController.stopAudioCapture === "function";
     }
 
     on_AppActiveChanged: {
@@ -193,7 +206,7 @@ Kirigami.Dialog {
             _previewLastTime = Date.now() / 1000;
             if (_packWantsAudio())
                 previewController.startAudioCapture();
-        } else {
+        } else if (_canStopAudio()) {
             previewController.stopAudioCapture();
         }
     }
@@ -349,7 +362,7 @@ Kirigami.Dialog {
         // next _resetPreview rebuilds them fresh. Through the shared lifecycle,
         // not by writing one pane's flag here and forgetting the other's.
         _teardownPanes();
-        if (previewController)
+        if (_canStopAudio())
             previewController.stopAudioCapture();
     }
 

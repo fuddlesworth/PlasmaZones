@@ -5,6 +5,7 @@
 
 #include <PhosphorPointer/PointerHistory.h>
 
+#include <QHash>
 #include <QObject>
 #include <QVariantMap>
 
@@ -95,9 +96,11 @@ public:
     /// the previous pack's last position.
     Q_INVOKABLE void drivePointer(QQuickItem* item, qreal x, qreal y, qreal dtMs, bool pressed);
 
-    /// Forget the simulated pointer so the next drivePointer starts a fresh
-    /// trail. The pane calls it when the loop restarts or the pack changes.
-    Q_INVOKABLE void resetPointer();
+    /// Forget one canvas's simulated pointer so its next drivePointer starts a
+    /// fresh trail. The pane calls it when the loop restarts or the pack
+    /// changes. Takes the item because several canvases can be live at once
+    /// and clearing all of them would wipe a trail the user is still watching.
+    Q_INVOKABLE void resetPointer(QQuickItem* item);
 
     /// Absolute path to the user's current desktop wallpaper, or empty when it
     /// cannot be resolved. The preview draws it as the ground so a trail or a
@@ -119,17 +122,28 @@ private:
     PhosphorPointerShaders::PointerShaderRegistry* m_registry = nullptr;
     int m_previewRevision = 0;
 
-    /// The simulated pointer's sampler. One live preview at a time, so a
-    /// single history re-seeded on item change suffices; the QObject* is only
-    /// ever compared, never dereferenced.
-    PhosphorPointerShaders::PointerHistory m_history;
-    QObject* m_historyItem = nullptr;
-    /// Monotonic pane clock in ms, accumulated from the frame deltas the pane
-    /// reports. A pane clock rather than the wall clock, so a frozen preview
-    /// (the app loses focus and the pane stops calling) resumes without a gap
-    /// the history would read as a long idle and let the trail vanish.
-    qint64 m_nowMs = 0;
-    bool m_pressed = false;
+    /// One simulated pointer per live preview item. The chain editor expands
+    /// as many rows as the user likes and the browser's detail dialog draws
+    /// through this same controller, so several canvases can be driving at
+    /// once; a single shared sampler would have each one resetting the others'
+    /// ring every frame, and none of them would ever hold more than one
+    /// sample. Keyed on the item because that is what identifies a canvas —
+    /// the pointer is only ever compared and used as a key, never
+    /// dereferenced. Entries are dropped when their item is destroyed, which a
+    /// preview does on every collapse and every refresh pulse, so a stale ring
+    /// cannot outlive the canvas that owned it.
+    struct PointerState
+    {
+        PhosphorPointerShaders::PointerHistory history;
+        /// Monotonic pane clock in ms, accumulated from the frame deltas the
+        /// pane reports. A pane clock rather than the wall clock, so a frozen
+        /// preview (the app loses focus and the pane stops calling) resumes
+        /// without a gap the history would read as a long idle and let the
+        /// trail vanish.
+        qint64 nowMs = 0;
+        bool pressed = false;
+    };
+    QHash<QObject*, PointerState> m_states;
 };
 
 } // namespace PlasmaZones

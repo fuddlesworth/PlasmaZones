@@ -46,6 +46,11 @@ GridLayout {
     /// Gates the preview's EXISTENCE, so a collapsed host instantiates no
     /// shader item. Hosts pass their own expansion state.
     property bool previewActive: false
+    /// Freezes the preview's clock while the settings window is not in front.
+    /// Separate from `previewActive`, which destroys the item: an expanded row
+    /// on a backgrounded window should keep its composition and stop ticking,
+    /// not tear down and rebuild.
+    readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
 
     // ── The pack ─────────────────────────────────────────────────────────
     /// The pack being configured. Identifies it to both children.
@@ -122,5 +127,12 @@ GridLayout {
         packId: root.packId
         params: root.currentValues
         active: root._hasPreview && root.previewActive
+        // `active` covers "this row is collapsed" — it tears the shader item
+        // down. This covers "the window is not in front": a chain row left
+        // expanded on a page the user navigated away from stays instantiated
+        // (the page host keeps a visited page active and only hides it), so
+        // without this its 60 Hz clock keeps running against a preview nobody
+        // can see. Same lever the detail dialog already uses.
+        animating: root._appActive
     }
 }

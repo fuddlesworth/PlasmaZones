@@ -249,7 +249,7 @@ Item {
                     playing: root.animating
 
                     Component.onCompleted: {
-                        root.previewController.resetPointer();
+                        root.previewController.resetPointer(shaderItem);
                         stage.configured = root.previewController.configurePreviewItem(shaderItem, root.packId, root.params);
                     }
                 }
@@ -269,7 +269,7 @@ Item {
                         // while does not report one enormous frame delta.
                         lastMs = 0;
                         if (running)
-                            root.previewController.resetPointer();
+                            root.previewController.resetPointer(shaderItem);
                     }
                     onTriggered: {
                         var now = Date.now();
