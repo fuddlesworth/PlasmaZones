@@ -193,7 +193,17 @@ private Q_SLOTS:
         const QJsonObject afterFirst = readJson(ConfigDefaults::configFilePath());
 
         // Second run: nothing left to move, byte-identical config (pins the
-        // sidecarDirty short-circuit, not just content equality).
+        // raw-bytes bail, not just content equality: the stripped sidecar no
+        // longer contains the key bytes, so the second run never reaches the
+        // JSON parse at all).
+        //
+        // The field names below are deliberately literals rather than
+        // OverlayShaderTree's JsonField constants. Half the fixtures here are
+        // SIDECAR objects, whose "shaderId"/"shaderParams" are the migration's
+        // own pinned spellings and only coincidentally match the tree node's
+        // fields — the migration keeps kSidecarShaderId and kNodeShaderId
+        // separate for that reason, and using the tree's constants for the
+        // sidecar would tie the two together in exactly the way it avoids.
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
         QCOMPARE(readBytes(ConfigDefaults::configFilePath()), afterFirstBytes);
 

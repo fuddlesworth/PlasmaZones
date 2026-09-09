@@ -799,7 +799,6 @@ Q_SIGNALS:
     void outerGapLeftChanged();
     void outerGapRightChanged();
     void adjacentThresholdChanged();
-    void overlayShaderTreeChanged(); // zone-overlay shader assignments tree
 
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();
@@ -1041,6 +1040,9 @@ Q_SIGNALS:
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
     void motionProfileTreeChanged();
+
+    // Zone overlay settings
+    void overlayShaderTreeChanged(); // zone-overlay shader assignments tree
 
     // Surface decoration settings
     void decorationProfileTreeChanged();

@@ -62,6 +62,12 @@ bool OverlayShaderTree::isEmpty() const
 
 void OverlayShaderTree::setOverride(const QString& layoutId, const OverlayShaderProfile& profile)
 {
+    // Belt-and-braces: no current caller can reach this. fromJson rejects an
+    // empty key before inserting, and the schema sanitizer only forwards keys
+    // it took from overriddenLayouts(). Kept because "" is the BASELINE's path
+    // everywhere else in this API, so a future caller passing a baseline path
+    // here would otherwise create an override keyed on the empty string that
+    // resolve() could never return.
     if (layoutId.isEmpty())
         return;
     m_overrides.insert(layoutId, profile);

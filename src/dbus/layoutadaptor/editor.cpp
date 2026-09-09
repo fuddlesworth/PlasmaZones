@@ -189,7 +189,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         }
         // Start from the stored entry so keys this editor doesn't manage
         // (notably hiddenFromSelector, written via setLayoutHidden) survive a
-        // gaps/shader/allow-list save — autotile entries now share the unified
+        // gaps/allow-list save — autotile entries now share the unified
         // layout-settings.json sidecar. Editor-managed keys are set when present
         // in the incoming object and cleared when absent (reset-to-default).
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);

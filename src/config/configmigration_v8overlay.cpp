@@ -184,6 +184,11 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
     // its entries. On a re-run after a sidecar write failure the merge below
     // keeps an already-lifted (possibly since-edited) node — existing tree
     // entries always win over the stale sidecar copy.
+    // Nothing liftable (only empty-shaderId or autotile entries carried the
+    // keys) skips the whole config write, so the marker is not stamped even
+    // though the strip below still runs. That asymmetry is harmless: an empty
+    // lift has nothing to resurrect, and once the strip lands the raw-bytes
+    // bail at the top short-circuits every later run before it gets here.
     if (!lifted.isEmpty()) {
         if (!QFile::exists(jsonPath)) {
             // No config file yet (interrupted fresh install): leave the
