@@ -632,11 +632,19 @@ Item {
                             duration: 650
                         }
                     }
-                    // The simulation tick. Runs through the pauses too —
-                    // that is when the lattice visibly settles, which is
-                    // half of what wobble IS. ~60 Hz like the zone pane's
-                    // clock; the controller derives the trail cadence from
-                    // the accumulated delta, not the tick rate.
+                    // The frame tick. The class clocks above only sweep
+                    // iTime; the compositor also advances iTimeDelta and
+                    // iFrame on every paint, and packs in every class
+                    // integrate on those (vortex's spin, matrix and fire's
+                    // drift, the desktop packs' noise). So this runs for
+                    // every clock-driven class, and for move it also steps
+                    // the simulation — through the pauses too, since that
+                    // is when the lattice visibly settles, which is half of
+                    // what wobble IS. ~60 Hz like the zone pane's clock;
+                    // the controller derives the trail cadence from the
+                    // accumulated delta, not the tick rate. Strip is
+                    // excluded: its item free-runs through `playing`, whose
+                    // auto-tick already advances all three uniforms.
                     Timer {
                         // Measured wall-clock delta, like the zone pane's
                         // clock: under load the timer fires late, and
@@ -646,7 +654,7 @@ Item {
                         // suspended window) steps the spring stably.
                         property double lastTickMs: 0
 
-                        running: field.configured && root.animating && root._class === "move"
+                        running: field.configured && root.animating && root._class !== "strip"
                         interval: 16
                         repeat: true
                         onRunningChanged: lastTickMs = Date.now()
@@ -656,7 +664,9 @@ Item {
                             var now = Date.now();
                             var dt = Math.min(100, Math.max(1, now - lastTickMs));
                             lastTickMs = now;
-                            root.previewController.driveMoveState(shaderItem, cardHolder.x + field.canvasPad, cardHolder.y + field.canvasPad, field.innerW, field.innerH, dt);
+                            root.previewController.driveFrameClock(shaderItem, dt);
+                            if (root._class === "move")
+                                root.previewController.driveMoveState(shaderItem, cardHolder.x + field.canvasPad, cardHolder.y + field.canvasPad, field.innerW, field.innerH, dt);
                         }
                     }
 

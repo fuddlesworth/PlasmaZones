@@ -8,6 +8,7 @@
 #include "core/types/cavaoptions.h"
 #include "phosphor_i18n.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderItemConfig.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -465,6 +466,27 @@ void AnimationPreviewController::driveMoveState(QQuickItem* item, qreal x, qreal
     }
     ext->setIMoveMesh(mesh);
     m_moveLastOrigin = origin;
+}
+
+void AnimationPreviewController::driveFrameClock(QQuickItem* item, qreal dtMs)
+{
+    auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
+    if (!shaderItem) {
+        return;
+    }
+    if (m_clockItem != item) {
+        m_clockItem = item;
+        m_clockFrame = 0;
+    }
+    // Same cap as paint_shader_window and the SurfaceAnimator: a stalled
+    // pane (suspended window, dragged dialog) must not hand a dt-integrated
+    // pack one multi-second step.
+    const qreal deltaSecs =
+        qMin(qMax(0.0, dtMs) / 1000.0, static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
+    shaderItem->setITimeDelta(deltaSecs);
+    // Post-increment: the first push after a (re)configure reports 0,
+    // matching the compositor's `transition.frameCount++`.
+    shaderItem->setIFrame(m_clockFrame++);
 }
 
 void AnimationPreviewController::bindClassTextures(QQuickItem* item, const QString& eventClass) const

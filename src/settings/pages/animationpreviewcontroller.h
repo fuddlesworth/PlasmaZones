@@ -115,6 +115,20 @@ public:
     /// glide loop wrapping), so the wrap does not read as a violent yank.
     Q_INVOKABLE void driveMoveState(QQuickItem* item, qreal x, qreal y, qreal w, qreal h, qreal dtMs);
 
+    /// Advance the per-frame book-keeping uniforms by one pane frame:
+    /// `iTimeDelta` (seconds, capped at Limits::MaxShaderTimeDeltaSeconds
+    /// like every other push site) and `iFrame` (post-incremented, so the
+    /// first push after a (re)configure reports 0). The compositor advances
+    /// both on every paint of every transition regardless of class, and
+    /// packs in every class integrate on them (phosphor-vortex's spin,
+    /// matrix and fire's drift, the desktop packs' noise advance). The
+    /// pane's class clocks only sweep `iTime`, so without this pump those
+    /// packs sit still in the preview. Resets the frame counter when the
+    /// item changes. Not for the strip class: its item free-runs through
+    /// `playing`, whose auto-tick already advances all three and treats
+    /// manual writes as additive.
+    Q_INVOKABLE void driveFrameClock(QQuickItem* item, qreal dtMs);
+
     /// Push the transition-class scalars for the current clock frame onto
     /// an already-configured item's uniform extension. Recognised keys:
     /// `switchDelta` / `stripMotion` (vector4d), `stripAxis` (vector2d),
@@ -237,6 +251,11 @@ private:
     std::array<QPointF, 16> m_moveTrail{};
     QPointF m_moveLastOrigin;
     double m_moveTrailAccumMs = 0.0;
+
+    // driveFrameClock's per-leg frame counter. Same one-item-at-a-time
+    // shape as the move sim; the QObject* is only compared, never dereferenced.
+    QObject* m_clockItem = nullptr;
+    int m_clockFrame = 0;
 };
 
 } // namespace PlasmaZones
