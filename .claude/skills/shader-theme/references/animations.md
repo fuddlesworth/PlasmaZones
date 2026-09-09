@@ -76,9 +76,20 @@ Rules:
 - `resolutionSafe()` instead of raw `iResolution`. `iAnchorSize` = window logical px.
 - No `#ifdef PLASMAZONES_KWIN` in a fragment shader. It is only allowed in `effect.vert`
   (gl_Position + Y-flip arms) and for declaring a kwin-only uniform not in a shared module.
-- Compositor-only packs (appliesTo without `appearance`) are authored in plain kwin dialect
-  with no guards at all and use `desktop_transition.glsl` / `old_content.glsl` / `strip_transition.glsl`.
+- Every event class must also compile on the Qt-RHI preview ABI. Use
+  `desktop_transition.glsl` / `old_content.glsl` / `strip_transition.glsl` for their shared
+  samplers. Geometry `iFromRect` / `iToRect` and minimize `iIconRect` already exist in the
+  preview UBO; guard their standalone declarations with `#ifdef PLASMAZONES_KWIN`.
+- Drag deformation that must work in settings previews uses `iMoveMesh` or `iMoveTrail`.
+  Both hosts supply them. The Qt-RHI branch defines `iMoveVelocity`, `iMoveVelocity2` and
+  `iMoveOffset` as zero, so they cannot drive a preview.
 - Keep loops bounded and cheap; the compositor path is GPU-bound.
+- Preserve the full captured surface at visible endpoints, including asymmetric shadows.
+  `surfacePadRel()` assumes symmetric padding and only accounts for the layer rect. For
+  explicit clipping/reveal bounds, select the rect `surfaceColor()` actually samples
+  (`iLayerRectInTexture` when layered, otherwise `iAnchorRectInTexture`) and derive card
+  bounds `-rect.xy / rect.zw` through `(1.0 - rect.xy) / rect.zw`. Guard degenerate spans.
+  Test asymmetric insets and both layered/unlayered sampling; a centered fixture hides this bug.
 
 Useful helpers: `legProgress()`, `legTranslation(from,to)`, `legTravelShare`, `legDirection`,
 `premultiply(c)`, `surfacePadRel()`, `PZ_FINALIZE_COLOR` (applied by the scaffold, do not call).
@@ -119,17 +130,11 @@ is inherited by every child that has none.
 
 ## effect.vert (geometry / surface-extent packs)
 
-Pass-through shape (copy from `data/animations/morph/effect.vert`); grid-deforming shape
-(copy from `data/animations/genie/effect.vert` or `phosphor-stream/effect.vert`). Both keep the
-`#ifdef PLASMAZONES_KWIN` split: `modelViewProjectionMatrix` + `1.0 - texCoord.y` on kwin,
-`qt_Matrix` and px delta `* 2.0 / iResolution` on the daemon. Extra varyings use
+Choose pass-through or grid deformation as required by the implementation and host. Preserve
+the `#ifdef PLASMAZONES_KWIN` split: `modelViewProjectionMatrix` + `1.0 - texCoord.y` on
+kwin, `qt_Matrix` and px delta `* 2.0 / iResolution` on the daemon. Extra varyings use
 `layout(location = 1) out ...` and the matching `in` at file scope in the frag.
 
-## Reference packs to copy structure from
-
-- appearance, symmetric, colour-led: `phosphor-bloom`, `phosphor-condense`, `aretha-materialize`
-- appearance, physics/deform with vert + grid: `genie`, `phosphor-siphon`, `bounce`
-- geometry morph with grid: `phosphor-stream`, `fold`, `stretch`, `ripple-snap`
-- move: `phosphor-vortex`, `wobble`
-- desktop: `desktop-phosphor`, `desktop-slidefade`
-- strip: `phosphor-gate`, `strip-chromatic`; tab: `phosphor-iris`
+Read the shared uniforms and vertex scaffold/bake tests for the exact declarations. If a
+host detail remains unresolved, inspect only that plumbing in an existing vertex shader
+to resolve that contract detail.

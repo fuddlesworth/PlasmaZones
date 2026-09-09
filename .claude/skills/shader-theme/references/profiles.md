@@ -24,10 +24,9 @@ independent artefacts below. Generate all of them.
 Animation pack selection (`effectId`) lives in `Animations.ShaderProfileTree` in config.json,
 and per-event timing beside it in `Animations.MotionProfileTree`. A format-2 MOTION SET
 carries BOTH, so a set captures the whole per-event unit the way a decoration set captures the
-whole per-surface one. Writing the config trees directly is the route that needs no GUI, not
-the only route to assign a pack. The zone overlay pack is the one artefact no set carries: it
-is a per-LAYOUT property (`shaderId` + `shaderParams` in
-`~/.local/share/plasmazones/layouts/<uuid>.json`), never a config key.
+whole per-surface one. Overlay sets carry the global shader and optional per-layout overrides
+in `Overlays.OverlayShaderTree`. Use the set import and apply controls to assign the theme;
+the config trees also describe the resulting stored configuration.
 
 ## Set envelope (motion and decoration share it)
 
@@ -184,6 +183,14 @@ Since schema v8 the zone overlay shader is a set like the other two. It is no lo
 per-layout property of the layout file: the assignment lives in `Overlays.OverlayShaderTree`
 in config.json, as one global baseline plus a per-layout override keyed by layout UUID. An
 overlay set carries the baseline and every override together.
+
+Overlay `shaderId` is the registry's braced UUID, not the metadata slug used by animation
+and surface packs. The parser in `libs/phosphor-shaders/src/shaderregistry_parse.cpp`
+derives it with UUIDv5 from `shaderNamespaceUuid()` and the metadata `id`. Resolve it
+through the registry or that parser before writing a set. Encode the global default as
+an `overrides` entry with `path: "overlay:global"` and
+`profile: { "shaderId": "<registry UUID>", "parameters": {} }`, never an envelope
+`baseline` key.
 
 A per-layout override names a layout by UUID, and UUIDs are per-installation, so an overlay
 set generated without knowing the target machine's layout ids should carry the BASELINE only.

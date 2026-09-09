@@ -19,7 +19,7 @@ Source of truth: `data/overlays/shared/common.glsl`, `src/daemon/rendering/zonee
 | runtime | daemon only (Qt-RHI) | daemon AND KWin compositor, same source |
 | colour default | `#RRGGBB` | `#AARRGGBB` (Qt form, alpha FIRST) |
 | user dir | `~/.local/share/plasmazones/overlays/<id>` | `~/.local/share/plasmazones/surface/<id>` |
-| selection | per layout (`shaderId` in the layout JSON) or rule `OverrideOverlayShader` | `Decorations.DecorationProfileTree` chain per surface path |
+| selection | `Overlays.OverlayShaderTree` global/per-layout assignment, or rule override | `Decorations.DecorationProfileTree` chain per surface path |
 
 No `preview.png`. No `#version`, no in/out declarations, no `main()`: the scaffold prepends
 `#version 450`, the family lib include, `vTexCoord`/`vFragCoord`/`fragColor`, and appends the
@@ -43,7 +43,8 @@ copying this line into a surface pack makes the file invalid. `unit`, `slot`,
 writing one.
 Multipass: `"multipass": true, "bufferShaders": ["pass0.frag"], "bufferFeedback": true, "bufferWrap": "clamp"`;
 each `passN.frag` is a `pImage` body that samples only through `channelUv()`. Avoid multipass
-in a theme unless the reference pack you copy needs it.
+unless the chosen visual mechanism requires persistent state or intermediate sampling;
+account for the pass count and buffer scale.
 
 ### Contract (common.glsl is auto-included)
 
@@ -79,11 +80,9 @@ Helpers: `timeSin/timeCos`, `sdRoundedBox`, `sdSegment`, `rot`, `hash11/21/22`, 
 `blendOver`, `labelsUv`. Opt-in includes: `<audio.glsl>`, `<multipass.glsl>`, `<flow-noise.glsl>`
 (`curlNoise`), `<textures.glsl>`, `<wallpaper.glsl>`, `<depth.glsl>`, `<logo-drift.glsl>`.
 
-Catalogue conventions every overlay pack follows: params `speed`, `fillOpacity`, `glowStrength`,
-`showLabels` (bool), `labelBrightness`, `audioSensitivity`/`audioReactivity`; scalar getters with
-fallbacks (`float getSpeed() { return p_speed >= 0.0 ? p_speed : 1.0; }`); colour getters via
-`colorWithFallback(p_c.rgb, kConst)`; draw labels through `uZoneLabels` when `showLabels`.
-Highlighted zones must read clearly brighter/more alive than idle ones (`zoneVitality`).
+Declare only parameters the implementation uses. Use `colorWithFallback` for color defaults
+and `uZoneLabels` for labels when provided. Highlighted zones must be clearly distinguishable
+from idle ones; the user's brief determines how that state is expressed.
 
 ## Surface packs
 
@@ -141,13 +140,13 @@ Helpers: `surfacePixel(uv)` (device px, runtime Y handled), `surfaceTexel(uv)`,
 `pxToUv(v)`, `framePerimeter(p, center, halfSize)` (-0.5..0.5 around the frame, for travelling
 gleams).
 
-Three canonical shapes, copy the matching one:
-- border: `border-phosphor/effect.frag` (64 lines): texel, degenerate guard, `standardBorderBand`,
-  colour along `framePerimeter`, `focusDim(0.55)`, `borderComposite`.
-- glass: `phosphor-glass/effect.frag`: `surfaceSlabOpen`, `window *= p_contentOpacity`,
-  `uHasBackdrop` branch reading `iChannel1`, fallback slab, `slabComposite`.
-- margin effect: `glow/effect.frag` (57 lines) or `phosphor-motes/effect.frag` (particles in the
-  padding ring): `frameSdf`, draw outside `fs.d > 0`, `marginComposite`.
+Compositing contracts:
+- border: sample the texel, guard degenerate frames, use `standardBorderBand`, apply
+  `focusDim` and finish with `borderComposite`.
+- glass: use `surfaceSlabOpen`, preserve the intended content opacity, branch on
+  `uHasBackdrop`, provide a fallback slab and finish with `slabComposite`.
+- margin effect: use `frameSdf` to locate the outer region and `marginComposite` to preserve
+  the interior.
 
 Focus: `focusDim(0.30 .. 0.65)` on the effect's alpha or brightness. Every decoration pack dims
 when unfocused. Chains are serial filters: order in `chain` is bottom to top, so glass first,
@@ -155,7 +154,7 @@ border second, shadow/ambience after (they draw in the margin and pass the inter
 
 ## Zone overlay selection reminder
 
-The overlay pack is not chosen in config.json. It is the `shaderId` (+ `shaderParams`) of a
-layout file, or a window rule action. A theme therefore ships the overlay pack and tells the
-user to pick it in the layout editor (Shader settings dialog), or writes `shaderId` into the
-user's chosen layout JSON when `--into user` and the user named a layout.
+Since schema v8, overlay assignments live in `Overlays.OverlayShaderTree`, with a global
+default and optional per-layout overrides. Deliver an overlay set as described in
+`profiles.md`; use the registry UUID rather than the metadata slug for `shaderId`.
+Do not write a shader assignment into a layout JSON file.

@@ -17,7 +17,7 @@ With no args it validates every mapped file under `data/`.
 ## 2. Shader compile: `plasmazones-shader-validate`
 
 Binary: `build/bin/plasmazones-shader-validate` (built by the default target). Needs `glslang`
-or `glslangValidator` on PATH for compositor-only animation packs, and HARD-FAILS without it.
+or `glslangValidator` on PATH for animation packs, and HARD-FAILS without it.
 
 ```bash
 build/bin/plasmazones-shader-validate --animation data/animations/<id>
@@ -29,7 +29,12 @@ build/bin/plasmazones-shader-validate data/animations/<a> data/overlays/<b> data
 Exit 0 = all OK, 1 = errors, 2 = usage. It checks metadata parse, appliesTo tokens, param
 types/ids, texture paths, buffer shaders, and compiles frag (+vert, + buffer passes) with
 the same scaffold and preamble the runtime uses. It does NOT check prose, licence, categories,
-or previews.
+or visual output.
+
+For every animation class, this CLI compiles the fragment and declared vertex for both
+KWin and the Qt-RHI settings preview, plus the default preview vertex when applicable.
+Both branches must pass. The bundled bake tests below provide additional runtime coverage;
+compilation alone does not establish correct rendering or motion.
 
 `--emit-preamble` writes a `p_generated.glsl` sidecar for editor autocomplete. It is
 gitignored; delete it before committing anyway.
@@ -73,9 +78,12 @@ Also check: no rule-of-three flourish, no "not just X, but Y", no spaced hyphen,
 ## 5. Set and profile files
 
 - Filename equals `slugify(name).json`.
-- No `baseline` key in set files. `version: 1`. Non-empty `overrides`.
+- No `baseline` key in set files. Motion sets use `version: 2`; decoration and overlay
+  sets use `version: 1`. Non-empty `overrides`.
 - Every `path` exists in the domain taxonomy (`libs/phosphor-animation/src/profilepaths.cpp`,
   `libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`).
+  Overlay paths instead follow `src/settings/pages/overlayspagecontroller_sets.cpp`:
+  `overlay:global` or a layout override. Check registry UUIDs as described in `profiles.md`.
 - Every pack id in a chain or `effectId` exists in the generated set or the bundled tree.
 - Every parameter override names a declared param of that pack with a value inside min/max.
 - Every curve name referenced by a profile exists as a file or a built-in typeId. The
@@ -118,13 +126,15 @@ Then verify in `journalctl --user -f | grep -i plasmazones` that the pack loads 
 Animations, Settings > Decorations and Settings > Snapping > Overlay to see the live previews.
 A flat gray preview means the compile failed and Qt swallowed the log; re-run the validator.
 
-Then look at each pack AT ITS DEFAULTS, before touching a slider. This is the gate nothing
-else covers: a pack can compile, validate, load and preview and still draw nothing at the
-values it ships with. Open the pack, leave every control alone, and confirm the motif is
-there. If the session is not available, say in the report that the defaults were reasoned
-about but not seen.
+Check each pack at its declared defaults for parameter wiring, rendering, alpha, scaling,
+event endpoints and reverse-leg behaviour. If the session is unavailable, report which
+runtime checks could not be performed.
 
-## 7. Review pass
+## 7. Technical review pass
 
 Dispatch `pz-glsl-shader-reviewer` on the new pack directories and `pz-build-data-reviewer`
-on the metadata, curves and set files, then fix every finding and re-run gates 1 to 5.
+on the metadata, curves and set files. Scope their review to shader contracts, integration,
+runtime correctness and project rules. Fix technical findings and re-run gates 1 to 5.
+These reviewers establish technical correctness. The separate visual development loop in
+`visual-development.md` establishes whether rendered output meets the user's brief.
+Neither review uses existing shader implementations as an aesthetic standard.
