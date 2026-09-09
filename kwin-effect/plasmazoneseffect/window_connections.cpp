@@ -1028,6 +1028,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         refreshFullscreenSuppression();
     });
 
+    // The same gate's OTHER edges. A fullscreen window keeps isFullScreen()
+    // true while it is minimized, sent to another desktop, or moved to another
+    // output, so without these the covered set stays stale and a monitor with
+    // nothing on it goes on being undecorated. Each is pre-gated on the window
+    // actually being fullscreen because windowFrameGeometryChanged fires every
+    // frame of a drag and the sweep walks the whole stacking order; the
+    // refresh's own set comparison makes a no-change call cost one compare.
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
+        if (w && w->isFullScreen()) {
+            refreshFullscreenSuppression();
+        }
+    });
+    connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this, w]() {
+        if (w && w->isFullScreen()) {
+            refreshFullscreenSuppression();
+        }
+    });
+
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);

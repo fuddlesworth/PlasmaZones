@@ -286,7 +286,12 @@ void PlasmaZonesEffect::refreshFullscreenSuppression()
     if (m_suppressDecorationsWhileFullscreen && KWin::effects) {
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* w : windows) {
-            if (!w || w->isDeleted() || !w->isFullScreen() || !w->isOnCurrentDesktop()) {
+            // isFullScreen() stays true while a window is minimized or parked
+            // behind show-desktop, and desktop membership is activity-blind in
+            // KWin, so all four have to be asked separately: a window that is
+            // not actually on screen must not keep its monitor undecorated.
+            if (!w || w->isDeleted() || !w->isFullScreen() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
+                || w->isMinimized() || w->isHiddenByShowDesktop()) {
                 continue;
             }
             // windowOutput(), not w->screen(): KWin can assign a window the

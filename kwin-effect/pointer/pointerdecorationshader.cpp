@@ -324,8 +324,10 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
     // Pack-declared parameters: the metadata defaults merged with this
     // layer's overrides, resolved into the customParams[] / customColors[]
     // slot pools the generated p_<id> preamble addresses. Baked once at
-    // compile — the cache is pack-keyed, so a parameter edit arrives as a
-    // profile change, which drops the whole cache through the settings path.
+    // compile, and the cache is keyed on pack id alone, so these values would
+    // outlive an edit that changed only the parameters. setProfile() drops the
+    // whole cache on every real profile change for exactly that reason; if
+    // that call ever goes away, a parameter edit stops reaching the GPU.
     const QVariantMap translated = PPS::PointerShaderRegistry::translatePointerParams(eff, layer.parameters);
     for (int slot = 0; slot < PSC::kMaxCustomParams; ++slot) {
         auto pull = [&](char comp) -> float {

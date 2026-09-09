@@ -50,6 +50,15 @@ void PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationP
         return;
     }
     m_profile = profile;
+    // Parameter VALUES are baked into the compiled pack at first compile and
+    // the cache is keyed on pack id alone, so a chain whose ids are unchanged
+    // but whose parameters were edited would keep rendering the old values.
+    // Drop the compiled cache on every real profile change, exactly as the
+    // surface path does for its own pack cache when the same D-Bus reply
+    // lands. releaseGl() makes the context current itself and warns when it
+    // cannot, which is the right discipline for a call arriving between
+    // frames.
+    releaseGl();
     rebuildChain();
     if (!m_engaged) {
         // Emptying the chain mid-trail must not leave the pointer invisible

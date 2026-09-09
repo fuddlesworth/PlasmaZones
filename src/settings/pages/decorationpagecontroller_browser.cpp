@@ -78,6 +78,8 @@ QString surfacePathLabel(const QString& path)
             return PhosphorI18n::tr("Wallpaper Picker");
         if (token == QLatin1String("lock"))
             return PhosphorI18n::tr("Lock Screen");
+        if (token == QLatin1String("pointer"))
+            return PhosphorI18n::tr("Pointer");
         return token;
     };
     const QStringList tokens = path.split(QLatin1Char('.'), Qt::SkipEmptyParts);

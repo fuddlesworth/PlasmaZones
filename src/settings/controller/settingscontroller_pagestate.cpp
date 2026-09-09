@@ -526,9 +526,10 @@ bool SettingsController::isPageDirty(const QString& page) const
     }
 
     // Decoration pages share the single DecorationProfileTree key but are
-    // value-based per SURFACE ROOT: a surface page (windows/osds/popups) is dirty
-    // iff its own root subtree differs from the committed baseline, so a revert on
-    // one surface never lights another's badge. The non-surface leaves (sets
+    // value-based per SURFACE ROOT: a surface page (windows, osds, popups,
+    // shell, pointer) is dirty iff its own root subtree differs from the
+    // committed baseline, so a revert on one surface never lights another's
+    // badge. The non-surface leaves (sets
     // library, read-only shaders browser) have no root of their own, so they fall
     // back to whole-tree dirty — any decoration edit shows there. The
     // manifest-owned window-appearance leaf is handled by the manifest branch

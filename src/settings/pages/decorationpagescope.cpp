@@ -16,6 +16,7 @@ QString decorationSurfaceRoot(const QString& page)
         {QStringLiteral("decorations-osds"), QStringLiteral("osd")},
         {QStringLiteral("decorations-popups"), QStringLiteral("popup")},
         {QStringLiteral("decorations-shell"), QStringLiteral("shell")},
+        {QStringLiteral("decorations-pointer"), QStringLiteral("pointer")},
     };
     return roots.value(page);
 }
