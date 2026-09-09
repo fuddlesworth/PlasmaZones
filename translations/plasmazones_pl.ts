@@ -4234,7 +4234,7 @@
         <translation>Pod kolumną</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="511"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="512"/>
         <source>%1 %2</source>
         <comment>a number followed by its unit</comment>
         <translation>%1 %2</translation>
@@ -4355,7 +4355,7 @@
         <translation>Wł.</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="496"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="497"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
@@ -5556,8 +5556,9 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="144"/>
-        <location filename="../src/settings/pages/overlayspagecontroller.cpp" line="296"/>
+        <location filename="../src/settings/pages/overlayspagecontroller.cpp" line="322"/>
         <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="113"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="90"/>
         <source>Global default</source>
         <translation>Globalne domyślne</translation>
     </message>
@@ -14592,7 +14593,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="192"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="291"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="261"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="267"/>
         <source>Current: %1</source>
         <translation>Bieżące: %1</translation>
     </message>
@@ -15751,6 +15752,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="255"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="259"/>
         <source>Using global defaults</source>
         <translation>Używa globalnych wartości domyślnych</translation>
     </message>
@@ -17527,39 +17529,39 @@
         <translation>Wybierz shader…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="134"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="138"/>
         <source>None</source>
-        <translation type="unfinished">Brak</translation>
+        <comment>@item no overlay shader assigned</comment>
+        <translation>Brak</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="139"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="143"/>
         <source>Missing shader %1</source>
+        <comment>@item the assigned overlay shader pack is not installed</comment>
         <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="253"/>
-        <source>Using global default</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="279"/>
-        <source>Shader:</source>
-        <translation type="unfinished">Shader:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="287"/>
+        <source>Shader:</source>
+        <comment>@label</comment>
+        <translation>Shader:</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="298"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1039"/>
         <source>Choose an overlay shader…</source>
         <translation>Wybierz shader nakładki…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="288"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="299"/>
         <source>Global default overlay shader</source>
+        <comment>@label:listbox</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="288"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="299"/>
         <source>Overlay shader for %1</source>
+        <comment>@label:listbox overlay shader for a named layout</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -19688,7 +19690,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysLibraryPage.qml.cpp" line="23"/>
-        <source>Browse installed snapping overlay shaders. Assign a shader on the Shaders page, as a global default or per layout.</source>
+        <source>Browse the zone overlay shaders you have installed. To assign one, either as the global default or for a single layout, go to the Layouts page.</source>
+        <comment>@info banner on the overlay shader browser</comment>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
@@ -23645,21 +23648,17 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="81"/>
-        <source>The global default applies to every layout. Each layout card can override it. Install more packs from the Shader Library page.</source>
+        <source>The global default applies to every layout. Each layout card can override it. To install more packs, go to the Library&apos;s Shaders page.</source>
+        <comment>@info banner on the overlay shader assignments page</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="87"/>
-        <source>Global Default</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="104"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="107"/>
         <source>Deleted layout %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="104"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="107"/>
         <source>Unnamed layout</source>
         <translation type="unfinished"></translation>
     </message>
@@ -23670,7 +23669,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="284"/>
-        <source>%n layout(s) in this set are not on this computer, so they were skipped. Everything else was applied.</source>
+        <source>%n layouts in this set are not on this computer, so they were skipped. Everything else was applied.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>

@@ -134,6 +134,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("overlays-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
+    search->setPageKeywords(QStringLiteral("overlays-assignments"),
+                            {PhosphorI18n::tr("shader"), PhosphorI18n::tr("overlay"), PhosphorI18n::tr("layout"),
+                             PhosphorI18n::tr("assign"), PhosphorI18n::tr("default"), PhosphorI18n::tr("override")});
+    search->setPageKeywords(QStringLiteral("overlays-sets"),
+                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("bundle"),
+                             PhosphorI18n::tr("share"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
 
     // Tiling & scrolling
     search->setPageKeywords(QStringLiteral("tiling-behavior"),

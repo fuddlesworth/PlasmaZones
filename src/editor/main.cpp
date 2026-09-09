@@ -5,7 +5,6 @@
 #include "EditorLaunchController.h"
 #include "core/resolve/animationbootstrap.h"
 #include "config/settings.h"
-#include "core/types/constants.h"
 #include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
@@ -26,7 +25,6 @@
 
 #include "phosphor_i18n.h"
 #include "phosphor_qml_i18n.h"
-#include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
 

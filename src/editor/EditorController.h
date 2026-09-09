@@ -22,12 +22,10 @@
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
-#include <QImage>
 #include <QRectF>
 #include <QTimer>
 #include <QUuid>
 #include <QScreen>
-#include <QQuickItem>
 #include <QQuickWindow>
 #include <QSize>
 #include "core/types/constants.h"

@@ -183,7 +183,7 @@ ToolBar {
 
                 // PlasmaZones::MaxLayoutNameLength via the controller, same
                 // client-side cap as PropertyPanel's zone name field.
-                readonly property int maxLength: topBar.editorController.maxLayoutNameLength
+                readonly property int maxLength: topBar.editorController ? topBar.editorController.maxLayoutNameLength : 40
                 readonly property int currentLength: text ? text.length : 0
                 readonly property bool showCounter: currentLength > maxLength * 0.8
                 // The name as the controller last handed it over, latched before
