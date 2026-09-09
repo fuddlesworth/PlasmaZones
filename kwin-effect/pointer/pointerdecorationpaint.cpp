@@ -369,9 +369,13 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const PPS
 void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                         KWin::LogicalOutput* screen)
 {
-    // Cost rule: an unengaged chain, or the wrong output, costs one pointer
-    // comparison per output per frame and nothing else.
-    if (!m_engaged || !screen || screen != m_output || !KWin::effects) {
+    // Cost rule: an unengaged chain, the wrong output, or an output the
+    // fullscreen gate covers costs one pointer comparison per output per frame
+    // and nothing else. The suppression check is belt and braces on this path —
+    // setSuppressedOutputs already emptied the history and released any cursor
+    // hide when the gate closed, so the liveness test below would bail anyway —
+    // but it keeps the cost rule true by inspection rather than by inference.
+    if (!m_engaged || !screen || screen != m_output || suppressedOn(screen) || !KWin::effects) {
         return;
     }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();

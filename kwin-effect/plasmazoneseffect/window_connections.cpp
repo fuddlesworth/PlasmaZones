@@ -1015,6 +1015,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFullScreenChanged);
 
+    // Decorations.Performance.SuppressWhileFullscreen — the enter and exit edge
+    // of the gate. A SEPARATE connection rather than a line inside the tiling
+    // handler's slot above: that slot is scrolling-mode machinery with several
+    // early returns and a windowed-fullscreen branch, and the gate is a
+    // decoration concern that has to hold in every placement mode. Connected
+    // after it so the tiling handler has already reconciled its own state (and
+    // shed the fullscreen window's own decoration) by the time the sweep runs.
+    // refreshFullscreenSuppression re-derives the covered outputs and only
+    // sweeps when the answer actually moved.
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this]() {
+        refreshFullscreenSuppression();
+    });
+
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);

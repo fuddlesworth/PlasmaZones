@@ -524,6 +524,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),
                 PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("focus")},
                /*advancedOnly=*/true);
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationSuppressWhileFullscreen"),
+               PhosphorI18n::tr("Stop while a window is fullscreen"),
+               {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("gpu"),
+                PhosphorI18n::tr("fullscreen"), PhosphorI18n::tr("game"), PhosphorI18n::tr("video"),
+                PhosphorI18n::tr("pointer")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationPauseWhenIdle"),
                PhosphorI18n::tr("Pause while you are away"),
                {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),

@@ -371,6 +371,19 @@ public:
         return true;
     }
 
+    /// Draw no decoration at all on an output while a window on it is
+    /// fullscreen. Scoped to that output, so a game on one monitor leaves the
+    /// others decorated. Covers the whole decoration domain, the pointer chain
+    /// included: a fullscreen surface carries no frame to decorate, and a
+    /// pointer trail over a game is the case this exists to prevent. ON by
+    /// default, because that is what a user expects without ever finding this
+    /// setting, and because a fullscreen presentation is the one workload that
+    /// can least afford the decoration pass costing it frames.
+    static bool decorationSuppressWhileFullscreen()
+    {
+        return true;
+    }
+
     /// Stop animating the decoration chain once the session has been idle for
     /// decorationIdleTimeoutSec, and resume on the first input. On by default:
     /// nobody is looking at an animation they walked away from, and this is where

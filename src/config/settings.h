@@ -580,6 +580,8 @@ public:
                    decorationIdleTimeoutSecChanged)
     Q_PROPERTY(double decorationBlurScaleMultiplier READ decorationBlurScaleMultiplier WRITE
                    setDecorationBlurScaleMultiplier NOTIFY decorationBlurScaleMultiplierChanged)
+    Q_PROPERTY(bool decorationSuppressWhileFullscreen READ decorationSuppressWhileFullscreen WRITE
+                   setDecorationSuppressWhileFullscreen NOTIFY decorationSuppressWhileFullscreenChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -1807,6 +1809,8 @@ public:
     void setDecorationIdleTimeoutSec(int value) override;
     double decorationBlurScaleMultiplier() const override;
     void setDecorationBlurScaleMultiplier(double value) override;
+    bool decorationSuppressWhileFullscreen() const override;
+    void setDecorationSuppressWhileFullscreen(bool value) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

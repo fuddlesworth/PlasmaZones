@@ -14,6 +14,7 @@
 #include <QHash> // std::hash<QString> specialization for the unordered_map key below
 #include <QPointF>
 #include <QRectF>
+#include <QSet>
 #include <QSize>
 #include <QString>
 #include <QVariantMap>
@@ -130,6 +131,20 @@ public:
     /// unchanged, so a settings broadcast that touched something else does not
     /// restart a live chain.
     void setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile);
+
+    /// The outputs the effect's fullscreen gate
+    /// (Decorations.Performance.SuppressWhileFullscreen) currently covers. The
+    /// pass draws no chain over one of them, and — the part that matters — asks
+    /// for no frames while the pointer is on one: a suppressed pass that still
+    /// requested a repaint per frame and drew nothing would keep exactly the
+    /// cost the setting exists to remove. Empty means the gate is off or no
+    /// output is fullscreen, which is the common case and the fast path.
+    ///
+    /// Pushed rather than queried, so the per-frame path never walks the
+    /// stacking order. Entering suppression drops the trail and hands back any
+    /// cursor hide, the same tidy-up an emptied chain does: a pointer that
+    /// walked onto a game must not reappear mid-trail when it leaves.
+    void setSuppressedOutputs(const QSet<KWin::LogicalOutput*>& outputs);
 
     /// The pointer moved and/or its buttons changed. Called from
     /// PlasmaZonesEffect::slotMouseChanged, the only cursor-motion signal the
@@ -336,6 +351,15 @@ private:
     /// uPointerFlags.x is pushed as 0.
     KWin::GLTexture* cursorSpriteTexture();
 
+    /// Is @p screen covered by the effect's fullscreen gate? Inline and header-
+    /// resident because all three TUs of this pass consult it: every liveness,
+    /// damage and draw path funnels through this one expression, so no two of
+    /// them can disagree about whether the pass is suppressed.
+    bool suppressedOn(KWin::LogicalOutput* screen) const
+    {
+        return screen && m_suppressedOutputs.contains(screen);
+    }
+
     // ── pointerdecorationpass.cpp ───────────────────────────────────────────
 
     /// Rebuild m_engaged / m_engagedLayers / m_maxReachLogical /
@@ -380,6 +404,11 @@ private:
     bool m_engaged = false;
     std::vector<EngagedLayer> m_engagedLayers;
     bool m_anyAboveLayer = false;
+
+    /// Outputs the fullscreen gate covers. See setSuppressedOutputs. Compared
+    /// only, never dereferenced, and outputRemoved does not need to prune it:
+    /// the effect refreshes the set on the same signal.
+    QSet<KWin::LogicalOutput*> m_suppressedOutputs;
     double m_maxReachLogical = 0.0;
     double m_maxTrailSeconds = 0.0;
 

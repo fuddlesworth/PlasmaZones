@@ -148,6 +148,22 @@ void PlasmaZonesEffect::loadCachedSettings()
             repaintAllDecorations();
         }
     });
+    // Same variant-TYPE guard and the same default-true reason: read
+    // unguarded, an empty reply would invert the setting and leave decorations
+    // running over every fullscreen window. Flipping it re-derives the covered
+    // outputs, which is what sweeps the surfaces back into (or out of) their
+    // decorations — refreshFullscreenSuppression only acts on a real change, so
+    // a broadcast that touched something else costs one set comparison.
+    loadSettingAsync(QStringLiteral("decorationSuppressWhileFullscreen"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_suppressDecorationsWhileFullscreen != b) {
+            m_suppressDecorationsWhileFullscreen = b;
+            refreshFullscreenSuppression();
+        }
+    });
     loadSettingAsync(QStringLiteral("decorationPauseWhenIdle"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

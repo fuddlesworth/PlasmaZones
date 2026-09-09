@@ -260,6 +260,72 @@ bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
     return true;
 }
 
+// ── The fullscreen gate (Decorations.Performance.SuppressWhileFullscreen) ────
+//
+// The other gates in this file pause a chain that is still THERE. This one
+// removes it: while a window on an output is fullscreen, nothing on that output
+// is decorated at all — its windows, plasmashell's panels and applet popups, and
+// the pointer chain alike. A fullscreen presentation shows no frame to decorate,
+// and it is the one workload with no GPU headroom to lend the decoration pass.
+//
+// PER OUTPUT, never global. A game on one monitor must leave the other monitors
+// decorated, so the verdict is keyed on the output a window sits on rather than
+// on "is anything fullscreen anywhere".
+//
+// CURRENT DESKTOP ONLY. A fullscreen window parked on another virtual desktop
+// is not on screen and shades nothing, so it must not strip the desktop the
+// user is actually looking at. That is also why desktopChanged re-runs the
+// refresh.
+
+void PlasmaZonesEffect::refreshFullscreenSuppression()
+{
+    QSet<KWin::LogicalOutput*> covered;
+    // The empty set IS the off state, so a disabled setting costs one comparison
+    // rather than a stacking-order walk, and every consumer stays a set lookup
+    // with no second flag to keep in sync.
+    if (m_suppressDecorationsWhileFullscreen && KWin::effects) {
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : windows) {
+            if (!w || w->isDeleted() || !w->isFullScreen() || !w->isOnCurrentDesktop()) {
+                continue;
+            }
+            // windowOutput(), not w->screen(): KWin can assign a window the
+            // wrong one of two identical-model outputs, and the whole point of
+            // this gate is which MONITOR goes undecorated. Using the effect's
+            // own positional resolve keeps that answer the same one the rest of
+            // the effect and the daemon already agree on.
+            if (KWin::LogicalOutput* const out = windowOutput(w)) {
+                covered.insert(out);
+            }
+        }
+    }
+    if (covered == m_fullscreenSuppressedOutputs) {
+        return;
+    }
+    m_fullscreenSuppressedOutputs = covered;
+    // The pointer pass owns no window state and cannot be swept, so it is told
+    // directly. It stops requesting frames on a covered output rather than
+    // drawing nothing on them — drawing nothing every frame would keep exactly
+    // the cost this gate exists to remove.
+    m_pointerPass.setSuppressedOutputs(m_fullscreenSuppressedOutputs);
+    // Not repaintAllDecorations(): that WAKES paused chains, and what changed
+    // here is whether the surfaces should be decorated at all. The full sweep
+    // routes each one through updateWindowDecoration, whose gate now answers
+    // differently and which then undecorates through the ordinary teardown
+    // (remove the entry, release the GL, damage the padded band) — so a window
+    // the gate just covered sheds its decoration cleanly instead of being
+    // stranded half-torn-down, and one the gate just released gets it back.
+    updateAllDecorations();
+}
+
+bool PlasmaZonesEffect::decorationSuppressedByFullscreen(KWin::EffectWindow* w) const
+{
+    if (m_fullscreenSuppressedOutputs.isEmpty() || !w) {
+        return false;
+    }
+    return m_fullscreenSuppressedOutputs.contains(windowOutput(w));
+}
+
 // Is this window's focus cross-fade mid-ramp?
 //
 // The ramp clamps to exactly 0.0 / 1.0 at its ends, so a value strictly between them

@@ -807,6 +807,14 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
         return false;
     }
 
+    // FULLSCREEN GATE (Decorations.Performance.SuppressWhileFullscreen) — see
+    // refreshFullscreenSuppression in surface_gating.cpp. FIRST, ahead of the
+    // shell carve-out below, whose switch returns true before every other
+    // reject here and would otherwise keep a panel animating over a game.
+    if (decorationSuppressedByFullscreen(w)) {
+        return false;
+    }
+
     const QString windowClass = w->windowClass();
 
     // Always-wrong surfaces — never draw a border here regardless of any

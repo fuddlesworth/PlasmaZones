@@ -384,6 +384,13 @@ p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.c
 # PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
 p_add_test(test_settings_decoration_tree config/settings/test_settings_decoration_tree.cpp)
 
+# Companion test executable: the Decorations.Performance/SuppressWhileFullscreen
+# persistence chain — absent-key default (the key is default-true, so a reader
+# that skips the fallback inverts it rather than disabling it), change-gated
+# signal, save/reload in both directions, independence from its two same-typed
+# same-defaulted group-mates, reset(), and the schema entry itself.
+p_add_test(test_settings_fullscreen_suppression config/settings/test_settings_fullscreen_suppression.cpp)
+
 
 # Pins runtime palette tracking for system-colors mode (needs Qt6::Gui for
 # QGuiApplication palette events; p_add_test links Core only).
@@ -2216,7 +2223,7 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # The offline pack validator's metadata lints. The bundled-pack gate
 # (shader_validate_animations) only proves the shipped packs are clean; this
 # builds deliberately-broken packs in a temp dir and asserts the diagnostic.
-# Compiles the three validator arms straight in, the way the tool does, so it
+# Compiles the four validator arms straight in, the way the tool does, so it
 # links the same parsers and needs no glslang for the metadata paths it
 # exercises.
 #
@@ -2229,6 +2236,7 @@ add_executable(test_pack_validators shadervalidate/test_pack_validators.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
 target_include_directories(test_pack_validators PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_pack_validators
@@ -2239,6 +2247,7 @@ target_link_libraries(test_pack_validators
         PhosphorShaders::PhosphorShaders
         PhosphorAnimation::PhosphorAnimation
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
 )

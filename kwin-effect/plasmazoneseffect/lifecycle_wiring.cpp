@@ -877,6 +877,37 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         invalidateAllRuleCaches();
         scheduleBorderSweep();
     });
+
+    // Decorations.Performance.SuppressWhileFullscreen — keep the set of outputs
+    // the gate covers current. Every signal that could plausibly change the
+    // answer to "which monitors carry a fullscreen window on the current
+    // desktop" funnels into one refresh:
+    //   • the per-window windowFullScreenChanged (wired in
+    //     window_connections.cpp, next to the tiling handler's own connection),
+    //     which is the enter and exit edge;
+    //   • windowAdded, for a window that OPENS fullscreen, and windowClosed /
+    //     windowDeleted, for the fullscreen window going away without ever
+    //     emitting an exit;
+    //   • desktopChanged and currentActivityChanged, because the gate is scoped
+    //     to the CURRENT desktop and a fullscreen window parked elsewhere must
+    //     not strip the desktop being looked at;
+    //   • screenAdded / screenRemoved / virtualScreenGeometryChanged, because a
+    //     layout change re-resolves which output a window sits on and can
+    //     invalidate a LogicalOutput* held in the set.
+    // refreshFullscreenSuppression compares the rebuilt set against the stored
+    // one and returns on a match, so the bursts several of these arrive in cost
+    // a stacking-order walk apiece and drive no sweep.
+    const auto refreshSuppression = [this]() {
+        refreshFullscreenSuppression();
+    };
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, refreshSuppression);
 }
 
 } // namespace PlasmaZones
