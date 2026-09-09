@@ -1,0 +1,100 @@
+{
+    "id": "orbit",
+    "name": "Orbit",
+    "description": "A few small dots circle the pointer and nothing is drawn along the path behind it. The ring widens as the pointer picks up speed and eases back in as it slows, and it hangs a little behind the cursor while moving, as though the dots were being dragged along. At speed each dot can smear slightly along its own direction of travel. Clicking makes the ring scatter outward and spring back. The dots keep circling for a couple of seconds after the pointer stops, then fade out.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Glow",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reachParam": "radius",
+    "trailSeconds": 2.0,
+    "parameters": [
+        {
+            "id": "dots",
+            "name": "Dot count",
+            "type": "int",
+            "default": 3,
+            "min": 1,
+            "max": 6,
+            "description": "How many dots circle the pointer"
+        },
+        {
+            "id": "dotSize",
+            "name": "Dot size",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 10.0,
+            "description": "Radius of each dot (px)"
+        },
+        {
+            "id": "radius",
+            "name": "Orbit radius",
+            "type": "float",
+            "default": 34.0,
+            "min": 8.0,
+            "max": 160.0,
+            "description": "Widest the ring of dots can get (px)"
+        },
+        {
+            "id": "speedGrowth",
+            "name": "Speed growth",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much faster movement widens the ring, 0 to hold it at the full radius"
+        },
+        {
+            "id": "orbitRate",
+            "name": "Orbit rate",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.05,
+            "max": 4.0,
+            "description": "Turns per second the dots make around the pointer"
+        },
+        {
+            "id": "lag",
+            "name": "Lag",
+            "type": "float",
+            "default": 0.06,
+            "min": 0.0,
+            "max": 0.25,
+            "description": "How far behind the cursor the ring hangs while moving (seconds), 0 to keep it centred"
+        },
+        {
+            "id": "smear",
+            "name": "Smear",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much each dot stretches along its direction of travel at speed, 0 to keep it round"
+        },
+        {
+            "id": "clickPush",
+            "name": "Click push",
+            "type": "float",
+            "default": 18.0,
+            "min": 0.0,
+            "max": 80.0,
+            "description": "How far a click throws the dots outward before they spring back (px), 0 to disable"
+        },
+        {
+            "id": "colorA",
+            "name": "First colour",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Colour of the first dot"
+        },
+        {
+            "id": "colorB",
+            "name": "Last colour",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Colour the remaining dots shade toward"
+        }
+    ]
+}

@@ -10,6 +10,19 @@
 // is accumulated additively then clamped. Everything is gone once a
 // sample's age passes `life`, which stays within the metadata's
 // trailSeconds.
+//
+// A press throws an extra ring of sparks from the press point, `clickBurst`
+// of them, seeded from the press position so they hold their directions
+// while they fly. They use the same `life`, `gravity` and colours as the
+// path sparks, so the burst is the pack doing more of its own thing rather
+// than a new shape, and it is gone on the same schedule. The burst sits
+// outside the speed gate, so a click still answers when the pointer is
+// sitting still.
+//
+// `activationSpeed` and `smoothing` come from the shared pointerSpeedGate()
+// and pointerSmoothedAt(), the same two the other trail packs use, so every
+// pack in a chain thresholds and smooths identically. Both default to 0,
+// which is the no-threshold, raw-path behaviour the pack shipped with.
 
 #include <pointer_noise.glsl>
 
@@ -43,13 +56,23 @@ vec4 pPointer(vec2 uv) {
         if (s.z >= life) {
             break;
         }
-        vec2 rel = px - s.xy;
+        // Below the activation speed this sample sheds nothing at all.
+        float gate = pointerSpeedGate(s.w, p_activationSpeed);
+        if (gate <= 0.0) {
+            continue;
+        }
+        // Sparks launch from the smoothed path, but keep their seed on the
+        // raw sample position: the seed has to stay put from frame to frame
+        // or a spark would be re-rolled into a new direction as the smoothing
+        // window slides over it.
+        vec2 origin = pointerSmoothedAt(i, count, p_smoothing);
+        vec2 rel = px - origin;
         if (abs(rel.x) > reach || abs(rel.y) > reach) {
             continue;
         }
 
         // Spark budget for this sample scales with its speed.
-        float shed = budget * clamp(s.w / 1400.0, 0.0, 1.0);
+        float shed = budget * clamp(s.w / 1400.0, 0.0, 1.0) * gate;
         int sparks = int(ceil(shed));
         if (sparks < 1) {
             continue;
@@ -77,6 +100,39 @@ vec4 pPointer(vec2 uv) {
             float a = body * fade * ca;
             rgb += c * a;
             alpha += a;
+        }
+    }
+
+    float sincePress = pointerSincePress();
+    int burst = clamp(int(p_clickBurst + 0.5), 0, kMaxSparks);
+    if (burst > 0 && uPointerPress.w > 0.5 && sincePress < life) {
+        vec2 origin = uPointerPress.xy;
+        vec2 rel = px - origin;
+        if (abs(rel.x) <= reach && abs(rel.y) <= reach) {
+            vec2 seed = floor(origin * 0.5) + 91.0;
+            float age = sincePress;
+            float lifeT = age / life;
+            float remain = 1.0 - lifeT;
+            for (int k = 0; k < kMaxSparks; ++k) {
+                if (k >= burst) {
+                    break;
+                }
+                vec3 h = hash23(seed + vec2(float(k) * 5.77, float(k) * 2.19));
+                // Even fan around the press point, jittered so it does not
+                // read as a ring: that shape belongs to Click Ripple.
+                float angle = (float(k) + 0.35 * h.x) / float(burst) * TAU;
+                float speed = launch * 0.75 * (0.4 + 0.6 * h.y);
+                vec2 pos = vec2(cos(angle), sin(angle)) * speed * age + vec2(0.0, 0.5 * gravity * age * age);
+                float r = size * (0.5 + 0.5 * h.z) * (0.4 + 0.6 * remain);
+                float d = length(rel - pos);
+                float body = exp(-(d * d) / (2.0 * r * r));
+                float fade = remain * remain;
+                vec3 c = mix(p_colorA.rgb, p_colorB.rgb, lifeT);
+                float ca = mix(p_colorA.a, p_colorB.a, lifeT);
+                float a = body * fade * ca;
+                rgb += c * a;
+                alpha += a;
+            }
         }
     }
 

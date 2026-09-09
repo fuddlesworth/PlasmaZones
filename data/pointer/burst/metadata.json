@@ -1,0 +1,99 @@
+{
+    "id": "burst",
+    "name": "Burst",
+    "description": "Clicking throws a spray of small bits out of the pointer. They fan out from the press point, arc over under gravity and fade as they fall, and each button throws its own colour. Releasing the button throws a smaller, quicker spray after it. Nothing is drawn while the pointer is only moving.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Click",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 180,
+    "reachParam": "reach",
+    "trailSeconds": 0.9,
+    "parameters": [
+        {
+            "id": "count",
+            "name": "Count",
+            "type": "int",
+            "default": 18,
+            "min": 0,
+            "max": 48,
+            "description": "How many bits a press throws. Set it to 0 to turn the pack off"
+        },
+        {
+            "id": "size",
+            "name": "Bit size",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 10.0,
+            "description": "Radius of a single bit (px)"
+        },
+        {
+            "id": "speed",
+            "name": "Launch speed",
+            "type": "float",
+            "default": 340.0,
+            "min": 60.0,
+            "max": 900.0,
+            "description": "How fast a bit leaves the press point (px per second)"
+        },
+        {
+            "id": "gravity",
+            "name": "Gravity",
+            "type": "float",
+            "default": 900.0,
+            "min": 60.0,
+            "max": 2400.0,
+            "description": "Downward pull that bends the spray into an arc (px per second squared)"
+        },
+        {
+            "id": "life",
+            "name": "Life",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.15,
+            "max": 0.9,
+            "description": "How long a bit lives before it is gone (seconds)"
+        },
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 180.0,
+            "min": 32.0,
+            "max": 320.0,
+            "description": "Furthest a bit may travel from the press point. Launch speed and gravity are scaled down together to stay inside it (px)"
+        },
+        {
+            "id": "releaseSpray",
+            "name": "Release spray",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Size of the smaller spray thrown when the button comes back up. Set it to 0 for a press-only spray"
+        },
+        {
+            "id": "colorLeft",
+            "name": "Left button",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Bit colour for the left button"
+        },
+        {
+            "id": "colorRight",
+            "name": "Right button",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Bit colour for the right button"
+        },
+        {
+            "id": "colorMiddle",
+            "name": "Middle button",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Bit colour for the middle button"
+        }
+    ]
+}

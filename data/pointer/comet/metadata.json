@@ -1,7 +1,7 @@
 {
     "id": "comet",
     "name": "Comet",
-    "description": "A single-colour tail streams behind the pointer like a comet. The head is a bright, soft dot on the pointer and the tail thins and dims along the path, with a faint sparkle of grain drifting through it. The whole comet fades out shortly after the pointer stops.",
+    "description": "A single bright object moves with the pointer. The head is a round soft dot sitting on the pointer and behind it a one-colour tail narrows to a point along the path, with a faint sparkle of grain drifting through it. Clicking makes the head flare and throw out an extra handful of that sparkle. The whole comet fades out shortly after the pointer stops. It can be set to appear only once the pointer passes a chosen speed, and to follow a smoothed path so an unsteady hand still gets a clean curve.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Trail",
@@ -29,6 +29,24 @@
             "description": "How long a point on the path stays lit (seconds)"
         },
         {
+            "id": "activationSpeed",
+            "name": "Activation speed",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2000.0,
+            "description": "Pointer speed below which the comet is not drawn (px per second), 0 to always draw"
+        },
+        {
+            "id": "smoothing",
+            "name": "Smoothing",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much the path is smoothed before it is drawn, 0 to follow it exactly"
+        },
+        {
             "id": "color",
             "name": "Colour",
             "type": "color",
@@ -43,6 +61,15 @@
             "min": 0.0,
             "max": 1.0,
             "description": "Amount of twinkling grain along the tail, 0 to disable"
+        },
+        {
+            "id": "clickBurst",
+            "name": "Click burst",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How strongly the head flares and sheds extra sparkle on a click, 0 to disable"
         }
     ]
 }
