@@ -63,6 +63,15 @@ Item {
     // rescans (shaderEffectsChanged), leaving stale declarations.
     property var _paramDefs: []
 
+    // Each card fetches the pack list for itself, and availableShaderEffects
+    // rebuilds it from the registry uncached, so N cards means N rebuilds.
+    // Deliberate, and the same shape DecorationSurfaceCard uses, whose own
+    // comment reasons about the same cost. The list is fetched once per card at
+    // construction and again only when the registry actually rescans, not per
+    // repaint or per parameter edit. Hoisting it to a page-level shared model
+    // would couple every card's lifetime to the page's and buy nothing at the
+    // handful of layouts this page ever shows. If it is ever worth doing, do it
+    // for both card families at once rather than letting the two diverge.
     function _refreshEffects() {
         if (!root.bridge)
             return;
