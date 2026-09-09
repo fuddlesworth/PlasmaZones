@@ -4,7 +4,7 @@
 import QtQuick
 
 /**
- * @brief Appearance → Overlays → Library → Overlay Sets.
+ * @brief Appearance → Overlays → Library → Sets.
  *
  * An overlay set is a snapshot of the zone-overlay shader assignments — the
  * global default plus every per-layout override — persisted as one JSON file
@@ -32,12 +32,8 @@ ShaderSetsPage {
     importAnchor: "importOverlaySets"
     savedAnchor: "savedOverlaySets"
 
-    infoBannerText: i18n("Sets bundle your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn't cover are left unchanged.")
+    infoBannerText: i18n("A set bundles your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn't cover are left unchanged.")
     saveDescription: i18n("Capture the global default and every per-layout override as a named set.")
-    importDescription: i18n("Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
-    emptyStateText: i18n("No sets saved yet.")
-    nameFieldAccessibleName: i18n("Set name")
-    descriptionFieldAccessibleName: i18n("Set description")
 
     // Coverage tokens here are the reserved global-default token or a layout
     // id, neither of which is readable on its own, so the controller resolves

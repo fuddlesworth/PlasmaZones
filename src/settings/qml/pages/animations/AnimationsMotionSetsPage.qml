@@ -4,7 +4,7 @@
 import QtQuick
 
 /**
- * @brief Animations → Library → Motion Sets.
+ * @brief Animations → Library → Sets.
  *
  * A motion set is a snapshot of every per-event override active at a given
  * moment, persisted as one JSON file under
@@ -16,8 +16,8 @@ import QtQuick
  * assigned to that event from the shader profile tree. Both are config keys.
  * Carrying only the timing would
  * capture half of what the user sets in one place, and would leave this page
- * doing strictly less than its Decoration Sets counterpart, whose single tree
- * holds pack ids and parameters together.
+ * doing strictly less than the decoration-set page, whose single tree holds
+ * pack ids and parameters together.
  *
  * Saving captures the two trees' entries for the events it covers, plus the
  * pack each remaining event resolves to, so a set describes a whole look
@@ -33,12 +33,8 @@ ShaderSetsPage {
     importAnchor: "importMotionSets"
     savedAnchor: "savedMotionSets"
 
-    infoBannerText: i18n("Sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn't cover are left unchanged.")
+    infoBannerText: i18n("A set bundles your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn't cover are left unchanged.")
     saveDescription: i18n("Capture every per-event animation pack and its timing as a named set.")
-    importDescription: i18n("Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
-    emptyStateText: i18n("No sets saved yet.")
-    nameFieldAccessibleName: i18n("Set name")
-    descriptionFieldAccessibleName: i18n("Set description")
 
     // Coverage chips are keyed on the root segment of an event path
     // ("window.appearance.open" → "window").
@@ -75,6 +71,6 @@ ShaderSetsPage {
         return i18np("%n Override", "%n Overrides", count);
     }
     applySubtitleFor: function (name) {
-        return i18n("“%1” will overwrite every per-event override it covers. The change is not saved yet, so Discard still undoes it.", name);
+        return i18n("“%1” will replace every per-event override it covers. The change is not saved yet, so Discard still undoes it.", name);
     }
 }

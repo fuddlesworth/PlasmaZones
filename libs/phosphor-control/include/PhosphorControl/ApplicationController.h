@@ -169,6 +169,14 @@ public:
      *  "snapping-behavior", produces ["snapping"]). */
     Q_INVOKABLE QStringList parentChainFor(const QString& id) const;
 
+    /** The page's title path: every ancestor title root-first, then the
+     *  page's own title, joined with the same " › " separator the search
+     *  results use. A bare title is not enough to name a page in a toast
+     *  once several pages share one (three Library pages are titled Sets).
+     *  Unknown ids and ancestors with no title contribute nothing, so an
+     *  unregistered id yields an empty string. */
+    Q_INVOKABLE QString titlePathFor(const QString& id) const;
+
     /** Ids of every registered page whose controller is still dirty.
      *
      *  Lives here rather than as a QML walk over allPagesData() +

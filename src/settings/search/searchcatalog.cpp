@@ -16,8 +16,8 @@ using PhosphorControl::SearchEntry;
 
 namespace PlasmaZones {
 
-// addSetting / addSection live in searchcatalog_p.h, shared with the
-// animation-events TU (searchcatalog_animations.cpp).
+// addSetting / addSection live in searchcatalog_p.h, shared with the sibling
+// TUs (searchcatalog_animations.cpp, searchcatalog_simple.cpp).
 using SearchCatalogDetail::addSection;
 using SearchCatalogDetail::addSetting;
 
@@ -92,22 +92,26 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // (import / open folder) carries the manageLayouts anchor on every view.
     // Each list carries its own mode's words: every other leaf of a mode
     // section does, so without them a "snapping" / "tiling" / "scrolling"
-    // query reached the mode's config pages but never its library.
+    // query reached the mode's config pages but never its library. Each also
+    // carries "import" / "export": the manage card imports and each entry's
+    // menu exports.
     search->setPageKeywords(QStringLiteral("snapping-layouts"),
                             {PhosphorI18n::tr("layout"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("grid"),
                              PhosphorI18n::tr("preset"), PhosphorI18n::tr("aspect ratio"), PhosphorI18n::tr("snap"),
-                             PhosphorI18n::tr("snapping")});
+                             PhosphorI18n::tr("snapping"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
     addSection(search, QStringLiteral("snapping-layouts"), QStringLiteral("manageLayouts"),
                PhosphorI18n::tr("User layouts"));
     search->setPageKeywords(QStringLiteral("tiling-library"),
                             {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("script"), PhosphorI18n::tr("luau"),
                              PhosphorI18n::tr("autotile"), PhosphorI18n::tr("capability"), PhosphorI18n::tr("tile"),
-                             PhosphorI18n::tr("tiling"), PhosphorI18n::tr("library")});
+                             PhosphorI18n::tr("tiling"), PhosphorI18n::tr("library"), PhosphorI18n::tr("import"),
+                             PhosphorI18n::tr("export")});
     addSection(search, QStringLiteral("tiling-library"), QStringLiteral("manageLayouts"),
                PhosphorI18n::tr("User algorithms"));
     search->setPageKeywords(QStringLiteral("scrolling-templates"),
                             {PhosphorI18n::tr("template"), PhosphorI18n::tr("column"), PhosphorI18n::tr("width"),
-                             PhosphorI18n::tr("strip"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling")});
+                             PhosphorI18n::tr("strip"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"),
+                             PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
     // "User templates", matching the card title in LayoutManageCard.qml — the
     // catalog's own rule keeps section titles identical to the QML they open.
     addSection(search, QStringLiteral("scrolling-templates"), QStringLiteral("manageLayouts"),
@@ -138,8 +142,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("overlay"), PhosphorI18n::tr("layout"),
                              PhosphorI18n::tr("assign"), PhosphorI18n::tr("default"), PhosphorI18n::tr("override")});
     search->setPageKeywords(QStringLiteral("overlays-sets"),
-                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("bundle"),
-                             PhosphorI18n::tr("share"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
+                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("overlay set"), PhosphorI18n::tr("preset"),
+                             PhosphorI18n::tr("bundle"), PhosphorI18n::tr("share"), PhosphorI18n::tr("import"),
+                             PhosphorI18n::tr("export")});
 
     // Tiling & scrolling
     search->setPageKeywords(QStringLiteral("tiling-behavior"),
@@ -238,8 +243,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("animations-presets"),
                             {PhosphorI18n::tr("preset"), PhosphorI18n::tr("curve"), PhosphorI18n::tr("easing"),
                              PhosphorI18n::tr("profile")});
+    // The three Sets pages share a common core (set, bundle, share, import,
+    // export). Each also needs its kind-qualified phrase, because the ranker
+    // folds the whole query into ONE needle (see the drag-scroll note below),
+    // so "motion set" scores zero against "set".
     search->setPageKeywords(QStringLiteral("animations-motionsets"),
-                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("profile"), PhosphorI18n::tr("motion")});
+                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("motion set"), PhosphorI18n::tr("profile"),
+                             PhosphorI18n::tr("motion"), PhosphorI18n::tr("bundle"), PhosphorI18n::tr("share"),
+                             PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
     search->setPageKeywords(QStringLiteral("animations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect")});
 
@@ -263,9 +274,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("mouse"),
                              PhosphorI18n::tr("trail"), PhosphorI18n::tr("click"), PhosphorI18n::tr("ripple"),
                              PhosphorI18n::tr("halo"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("sparks")});
-    search->setPageKeywords(
-        QStringLiteral("decorations-sets"),
-        {PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
+    search->setPageKeywords(QStringLiteral("decorations-sets"),
+                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("preset"),
+                             PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack"), PhosphorI18n::tr("bundle"),
+                             PhosphorI18n::tr("share"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
     search->setPageKeywords(QStringLiteral("decorations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("surface"), PhosphorI18n::tr("pack"),
                              PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("border"),
@@ -1087,9 +1099,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("scrolling-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Scrolling Quick Shortcuts"));
 
-    // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
-    // decoration sets. Every page that hosts a ShaderBrowserPage carries its
-    // "userShaders" card, so each one registers the anchor.
+    // Shaders (shared ShaderBrowserPage) + animation presets + the three Sets
+    // pages (animations-motionsets / decorations-sets / overlays-sets). Every
+    // page that hosts a ShaderBrowserPage carries its "userShaders" card, so
+    // each one registers the anchor.
     addSection(search, QStringLiteral("overlays-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
