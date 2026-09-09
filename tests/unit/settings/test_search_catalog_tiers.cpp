@@ -1060,6 +1060,103 @@ private Q_SLOTS:
                                 .arg(unreachable.join(QLatin1String(", ")))));
     }
 
+    /// The MISSING DIRECTION. Every other slot here walks catalogue → app:
+    /// each registered entry must name a page that exists, and each anchor
+    /// must exist on its page. Nothing walked app → catalogue, so a page could
+    /// be registered, navigable, and rendered while contributing nothing to
+    /// search — unreachable by typing its own subject, with every existing
+    /// assertion still green. That is exactly how the overlay assignments page
+    /// shipped: registered, reachable by clicking, and invisible to search.
+    ///
+    /// Deliberately NOT a count floor. A floor is the vacuity shape that let
+    /// this through in the first place: the catalogue has hundreds of entries,
+    /// so one page contributing zero moves no total anyone would notice.
+    void everyNavigableLeafPageHasCatalogueContent()
+    {
+        const QString catalogSrc =
+            stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
+        const QString registration = stripLineComments(
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp")));
+        QVERIFY2(!catalogSrc.isEmpty(), "search catalogue sources unreadable");
+        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
+
+        // Pages that legitimately contribute nothing searchable. Empty today:
+        // every rendered leaf earns its way into the catalogue. Each future
+        // entry should carry its reason, and an entry that stops being a
+        // registered leaf FAILS below rather than silently exempting nothing,
+        // so a rename cannot quietly widen the exemption. Category headers
+        // need no entry here — they have no qmlFile and are filtered out
+        // above.
+        const QSet<QString> exempt{};
+
+        // Every id the catalogue mentions in any of its three registration
+        // forms. A page needs only one to be findable.
+        QSet<QString> covered;
+        static const QRegularExpression kEntry(
+            QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        auto eit = kEntry.globalMatch(catalogSrc);
+        while (eit.hasNext()) {
+            covered.insert(eit.next().captured(1));
+        }
+        static const QRegularExpression kKeywords(
+            QStringLiteral("\\bsetPageKeywords\\(\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        auto kit = kKeywords.globalMatch(catalogSrc);
+        while (kit.hasNext()) {
+            covered.insert(kit.next().captured(1));
+        }
+        QVERIFY2(covered.size() > 20,
+                 qPrintable(QStringLiteral("catalogue parse yielded only %1 page ids").arg(covered.size())));
+
+        QStringList silent;
+        QStringList staleExemptions;
+        QSet<QString> leaves;
+        const QList<QStringList> virtualCalls = callArgLists(registration, QStringLiteral("regVirtual"));
+        for (const QStringList& args : virtualCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            const QString id = stringLiteralIn(args.at(0));
+            const QString file = stringLiteralIn(args.at(3));
+            if (id.isEmpty() || file.isEmpty()) {
+                continue; // category header, not a rendered leaf
+            }
+            leaves.insert(id);
+        }
+        const QList<QStringList> pageCalls = callArgLists(registration, QStringLiteral("regPage"));
+        for (const QStringList& args : pageCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            static const QRegularExpression kMember(QStringLiteral("\\b(m_\\w+)"));
+            const auto m = kMember.match(args.at(0));
+            const QString id = regPageMemberToPageId().value(m.hasMatch() ? m.captured(1) : QString());
+            if (!id.isEmpty()) {
+                leaves.insert(id);
+            }
+        }
+        QVERIFY2(leaves.size() > 30,
+                 qPrintable(QStringLiteral("registration parse yielded only %1 leaf pages").arg(leaves.size())));
+
+        for (const QString& id : std::as_const(leaves)) {
+            if (!covered.contains(id) && !exempt.contains(id)) {
+                silent << id;
+            }
+        }
+        for (const QString& id : exempt) {
+            if (!leaves.contains(id)) {
+                staleExemptions << id;
+            }
+        }
+        silent.sort();
+        staleExemptions.sort();
+        QVERIFY2(staleExemptions.isEmpty(),
+                 qPrintable(QStringLiteral("exempt ids that are no longer registered leaves: %1")
+                                .arg(staleExemptions.join(QLatin1String(", ")))));
+        QVERIFY2(silent.isEmpty(),
+                 qPrintable(QStringLiteral("navigable pages with no search catalogue entry: %1")
+                                .arg(silent.join(QLatin1String(", ")))));
+    }
+
 private:
     QString m_qmlDir;
     QString m_catalog;

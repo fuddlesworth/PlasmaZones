@@ -254,6 +254,56 @@ private Q_SLOTS:
         QVERIFY(!readJson(ConfigDefaults::layoutSettingsFilePath()).contains(newcomer));
     }
 
+    /// An entry already in the tree wins over the sidecar's copy even when the
+    /// marker has never seen that id — the config is authoritative, so a
+    /// value the user edited is not overwritten by the stale sidecar it came
+    /// from. Distinct from the marker test below: this drives the
+    /// already-present check with an UNMARKED config, which is the only shape
+    /// that reaches it. A fixture whose marker is already stamped
+    /// short-circuits the whole merge loop and proves the marker instead.
+    void testLift_existingTreeEntryWinsOverTheSidecar()
+    {
+        IsolatedConfigGuard guard;
+        // Config carries an override for layoutA and a baseline, with NO
+        // marker: the state a hand-edited config, or one written by a newer
+        // settings app that never migrated, is in.
+        QJsonObject overrides{{layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("neon-city")}}}};
+        QJsonObject tree{
+            {QStringLiteral("baseline"), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("glow")}}},
+            {QStringLiteral("overrides"), overrides}};
+        QJsonObject group{{ConfigDefaults::overlayShaderTreeKey(), tree}};
+        QJsonObject root{{QStringLiteral("_version"), 8}};
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), withGroup(root, group)));
+
+        // Sidecar disagrees about layoutA and carries a genuinely new layoutB.
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(),
+                          QJsonObject{
+                              {layoutA(),
+                               QJsonObject{{QStringLiteral("zonePadding"), 8},
+                                           {QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}},
+                              {layoutB(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("aurora")}}},
+                          }));
+
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+
+        const QJsonObject after = treeFromConfig(readJson(ConfigDefaults::configFilePath()));
+        const QJsonObject afterOverrides = after.value(QStringLiteral("overrides")).toObject();
+        // The edited copy survives — this is the assertion that fails if the
+        // already-present check is deleted.
+        QCOMPARE(afterOverrides.value(layoutA()).toObject().value(QStringLiteral("shaderId")).toString(),
+                 QStringLiteral("neon-city"));
+        // ...and the loop still ran, so the guard is not masking a dead merge.
+        QCOMPARE(afterOverrides.value(layoutB()).toObject().value(QStringLiteral("shaderId")).toString(),
+                 QStringLiteral("aurora"));
+        // A pre-existing baseline is not discarded by the lift.
+        QCOMPARE(after.value(QStringLiteral("baseline")).toObject().value(QStringLiteral("shaderId")).toString(),
+                 QStringLiteral("glow"));
+        // Unrelated sidecar keys survive the strip.
+        const QJsonObject sidecar = readJson(ConfigDefaults::layoutSettingsFilePath());
+        QCOMPARE(sidecar.value(layoutA()).toObject().value(QStringLiteral("zonePadding")).toInt(), 8);
+        QVERIFY(!sidecar.value(layoutA()).toObject().contains(QStringLiteral("shaderId")));
+    }
+
     /// QUuid::fromString accepts an unbraced spelling while every reader asks
     /// with the braced one, so the lift must key the tree on the canonical
     /// form or the entry would sit there matching nothing.

@@ -4,8 +4,11 @@
 #pragma once
 
 #include "config/configdefaults.h"
+#include "config/settingsschema.h"
 #include "core/interfaces/interfaces.h"
 #include "core/types/overlayshadertree.h"
+
+#include <PhosphorConfig/Schema.h>
 
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
@@ -2175,10 +2178,30 @@ public:
     }
     void setOverlayShaderTree(const OverlayShaderTree& value) override
     {
-        if (m_overlayShaderTree == value) {
+        // Route through the SAME validator the production store applies to
+        // this key, rather than storing verbatim. The overlay tree is the one
+        // stubbed value with a real persistence boundary behind it (non-UUID
+        // override keys dropped, keys normalized to the braced form, string
+        // lengths and parameter/override counts bounded, nested parameter
+        // values refused), and a controller that writes something the
+        // sanitizer would alter must fail here rather than pass against a
+        // stub that is more permissive than the thing it stands in for.
+        //
+        // Sanitize BEFORE the changed-check, matching Store::write, which
+        // compares the already-coerced value. Comparing the raw argument
+        // would emit a second time on a repeat write of anything the
+        // sanitizer touches.
+        //
+        // Note the sanitizer round-trips parameters through QJsonObject, so a
+        // parameter that is not JSON-representable is dropped and an int comes
+        // back as a qlonglong. That is production behaviour, not stub
+        // weirdness, but it will surprise a future slot that stores a
+        // non-scalar parameter and compares it back.
+        const OverlayShaderTree sanitized = sanitizeThroughSchema(value);
+        if (m_overlayShaderTree == sanitized) {
             return;
         }
-        m_overlayShaderTree = value;
+        m_overlayShaderTree = sanitized;
         Q_EMIT overlayShaderTreeChanged();
         Q_EMIT settingsChanged();
     }
@@ -2977,6 +3000,22 @@ public:
     }
 
 private:
+    /// Apply the production schema's own validator for the overlay tree key.
+    /// Reached through cachedSettingsSchema() rather than by calling the
+    /// sanitizer directly: that function has internal linkage, and this is the
+    /// same functor the store wires onto the key, so the stub cannot drift
+    /// from production by construction.
+    static OverlayShaderTree sanitizeThroughSchema(const OverlayShaderTree& value)
+    {
+        const PhosphorConfig::KeyDef* def =
+            cachedSettingsSchema().findKey(ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey());
+        if (!def || !def->validator) {
+            return value;
+        }
+        const QVariant coerced = def->validator(QVariant(value.toJson().toVariantMap()));
+        return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(coerced.toMap()));
+    }
+
     QHash<QString, QVariantMap> m_perScreenAutotile;
     QHash<QString, QVariantMap> m_perScreenScrolling;
     QHash<QString, QVariantMap> m_perScreenZoneSelector;
