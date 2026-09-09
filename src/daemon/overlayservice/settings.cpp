@@ -201,10 +201,6 @@ void OverlayService::setSettings(ISettings* settings)
                             QMetaObject::invokeMethod(slot, "reloadShader");
                         }
                     }
-                    if (m_shaderPreviewWindow
-                        && m_shaderPreviewWindow->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
-                        QMetaObject::invokeMethod(m_shaderPreviewWindow, "reloadShader");
-                    }
                 });
             }
 
@@ -400,8 +396,7 @@ static constexpr int kIdleQuiesceGraceMs = 5000;
 
 bool OverlayService::isOverlayDisplaying() const
 {
-    const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
-    return (m_visible && !m_overlayIdled) || previewVisible;
+    return m_visible && !m_overlayIdled;
 }
 
 void OverlayService::syncCavaState()
@@ -460,10 +455,6 @@ void OverlayService::syncCavaState()
                         writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                     }
                 }
-            }
-            if (m_shaderPreviewWindow) {
-                writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::AudioSpectrum),
-                                 QVariantList());
             }
         }
     }
@@ -541,21 +532,6 @@ void OverlayService::scheduleIdleQuiesce()
                             qCWarning(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on slot"
                                                  << "(installed shell QML out of date?)";
                         }
-                    }
-                }
-            }
-            // The editor's shader-preview window rides the same render loop;
-            // when it is alive but not displaying (isOverlayDisplaying() was
-            // false above, so it is not visible), release its shader FBOs
-            // too rather than leaving it the one surface that pins them.
-            if (m_shaderPreviewWindow) {
-                if (!QMetaObject::invokeMethod(m_shaderPreviewWindow, "releaseIdleGraphicsResources")) {
-                    // Same once-per-process latch rationale as the slot loop.
-                    static bool warnedPreviewSkew = false;
-                    if (!warnedPreviewSkew) {
-                        warnedPreviewSkew = true;
-                        qCWarning(lcOverlay)
-                            << "idle quiesce: releaseIdleGraphicsResources not invokable on preview window";
                     }
                 }
             }

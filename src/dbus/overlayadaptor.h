@@ -75,13 +75,6 @@ public Q_SLOTS:
     int getMinimumZoneSizePx();
     int getMinimumZoneDisplaySizePx();
 
-    // Shader preview overlay (editor Shader Settings dialog)
-    void showShaderPreview(int x, int y, int width, int height, const QString& screenId, const QString& shaderId,
-                           const QString& shaderParamsJson, const QString& zonesJson);
-    void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
-                             const QString& zonesJson);
-    void hideShaderPreview();
-
     // Snap Assist overlay (window picker after snapping)
     bool showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                         const PhosphorProtocol::SnapAssistCandidateList& candidates);

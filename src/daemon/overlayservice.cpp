@@ -429,22 +429,6 @@ OverlayService::~OverlayService()
     // shell's, no separate cleanup here.
     // Picker post-shell-migration is also a slot in the per-screen
     // passive shell - no separate surface cleanup.
-    // COMPLETE hand-rolled subset of destroyShaderPreviewWindow: disconnect
-    // the screen-tracking signals and null the raw window pointer BEFORE the
-    // drain below destroys the window (the old dtor left
-    // m_shaderPreviewWindow dangling across the drain and skipped the
-    // disconnect). Deliberately NOT a call to destroyShaderPreviewWindow():
-    // its tail schedules the CAVA idle-quiesce, which allocates a QTimer and
-    // wires connections inside a destructor — legal but pointless teardown
-    // work.
-    if (m_shaderPreviewSurface) {
-        if (m_shaderPreviewScreen && m_shaderPreviewWindow) {
-            disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
-        }
-        m_shaderPreviewSurface->deleteLater();
-        m_shaderPreviewSurface = nullptr;
-        m_shaderPreviewWindow = nullptr;
-    }
 
     // Drain deferred-delete events NOW, while all OverlayService members are
     // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,
@@ -1231,18 +1215,13 @@ void OverlayService::onPrepareForSleep(bool goingToSleep)
     }
 
     // System waking up - restart shader timer to avoid large iTimeDelta.
-    // Gate on m_visible OR the editor's shader preview — the preview drives
-    // the same timer with m_visible == false, and a resume with only the
-    // preview on screen used to skip the restart and deliver exactly the
-    // giant-delta frame this handler exists to prevent. Deliberately NOT
-    // isOverlayDisplaying(): that helper excludes the warm-idled overlay
-    // (m_overlayIdled), whose timer stays valid across idle and would
-    // deliver the whole suspend duration as the first delta after un-idle —
-    // refreshFromIdle's ensureShaderTimerStarted is a no-op on an
-    // already-valid timer, so nothing downstream repairs it.
+    // Gate on m_visible rather than isOverlayDisplaying(): that helper
+    // excludes the warm-idled overlay (m_overlayIdled), whose timer stays
+    // valid across idle and would deliver the whole suspend duration as the
+    // first delta after un-idle — refreshFromIdle's ensureShaderTimerStarted
+    // is a no-op on an already-valid timer, so nothing downstream repairs it.
     QMutexLocker locker(&m_shaderTimerMutex);
-    const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
-    if ((m_visible || previewVisible) && m_shaderTimer.isValid()) {
+    if (m_visible && m_shaderTimer.isValid()) {
         m_shaderTimer.restart();
         m_lastFrameTime.store(0);
         qCInfo(lcOverlay) << "Shader timer restarted after system resume";

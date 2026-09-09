@@ -22,11 +22,10 @@
 
 namespace PlasmaZones {
 
-SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
-                                 PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
+SettingsAdaptor::SettingsAdaptor(ISettings* settings, PhosphorAnimation::PhosphorProfileRegistry* profileRegistry,
+                                 QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_settings(settings)
-    , m_shaderRegistry(shaderRegistry)
     , m_profileRegistry(profileRegistry)
     , m_saveTimer(new QTimer(this))
     , m_motionTreeNotifyTimer(new QTimer(this))
@@ -90,16 +89,6 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
         connect(m_profileRegistry, &PhosphorAnimation::PhosphorProfileRegistry::ownerReloaded, m_motionTreeNotifyTimer,
                 qOverload<>(&QTimer::start));
     }
-
-    // Drop shader caches whenever the registry reloads from disk. The
-    // registry is per-process and injected via constructor; unit tests
-    // that don't pass one get nullptr and skip this connection.
-    // ShaderRegistry::refresh() is always invoked from the main thread
-    // (D-Bus refreshShaders slot) so a direct connection is safe; if
-    // that invariant ever changes, switch to Qt::QueuedConnection here.
-    if (m_shaderRegistry) {
-        connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, &SettingsAdaptor::invalidateShaderCaches);
-    }
 }
 
 SettingsAdaptor::~SettingsAdaptor()
@@ -131,9 +120,6 @@ void SettingsAdaptor::detach()
     if (m_settings) {
         disconnect(m_settings, nullptr, this, nullptr);
     }
-    if (m_shaderRegistry) {
-        disconnect(m_shaderRegistry, nullptr, this, nullptr);
-    }
     if (m_profileRegistry) {
         disconnect(m_profileRegistry, nullptr, this, nullptr);
     }
@@ -152,13 +138,8 @@ void SettingsAdaptor::detach()
     // adaptor keep answering the full schema surface for keys getSetting
     // already reports as unknown.
     m_schemas.clear();
-    m_cachedAvailableShaders.clear();
-    m_cachedAvailableShadersValid = false;
-    m_cachedShaderInfo.clear();
-    m_cachedShaderDefaults.clear();
     m_cachedShaderSearchPaths.clear();
     m_settings = nullptr;
-    m_shaderRegistry = nullptr;
     m_profileRegistry = nullptr;
 }
 
@@ -650,121 +631,6 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     qCDebug(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
                             << "category" << category;
     return true;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Shader Registry D-Bus Methods
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QVariantList SettingsAdaptor::availableShaders()
-{
-    if (m_cachedAvailableShadersValid) {
-        return m_cachedAvailableShaders;
-    }
-    auto* registry = m_shaderRegistry;
-    if (!registry) {
-        return QVariantList();
-    }
-    m_cachedAvailableShaders = registry->availableShadersVariant();
-    m_cachedAvailableShadersValid = true;
-    return m_cachedAvailableShaders;
-}
-
-QVariantMap SettingsAdaptor::shaderInfo(const QString& shaderId)
-{
-    auto it = m_cachedShaderInfo.constFind(shaderId);
-    if (it != m_cachedShaderInfo.constEnd()) {
-        return it.value();
-    }
-    auto* registry = m_shaderRegistry;
-    if (!registry) {
-        return QVariantMap();
-    }
-    const QVariantMap info = registry->shaderInfo(shaderId);
-    // Memoize REGISTRY-KNOWN ids only. Both shader caches are keyed on a
-    // caller-supplied string reachable by any session-bus peer, so caching the
-    // empty answer for an unknown id would let a loop of fabricated ids grow
-    // these hashes without bound. An unknown id costs one registry lookup per
-    // call instead, which is the right trade for a boundary this open.
-    if (!info.isEmpty()) {
-        m_cachedShaderInfo.insert(shaderId, info);
-    }
-    return info;
-}
-
-QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
-{
-    auto it = m_cachedShaderDefaults.constFind(shaderId);
-    if (it != m_cachedShaderDefaults.constEnd()) {
-        return it.value();
-    }
-    auto* registry = m_shaderRegistry;
-    if (!registry) {
-        return QVariantMap();
-    }
-    const QVariantMap defaults = registry->defaultParams(shaderId);
-    // Same unbounded-growth guard as shaderInfo, but the emptiness of the
-    // RESULT cannot stand in for "unknown" here: a registered shader with no
-    // declared parameters legitimately has empty defaults. Ask the registry
-    // whether the id resolves instead.
-    if (!registry->shader(shaderId).id.isEmpty()) {
-        m_cachedShaderDefaults.insert(shaderId, defaults);
-    }
-    return defaults;
-}
-
-void SettingsAdaptor::invalidateShaderCaches()
-{
-    m_cachedAvailableShaders.clear();
-    m_cachedAvailableShadersValid = false;
-    m_cachedShaderInfo.clear();
-    m_cachedShaderDefaults.clear();
-    m_cachedShaderSearchPaths.clear();
-}
-
-QVariantMap SettingsAdaptor::translateShaderParams(const QString& shaderId, const QVariantMap& params)
-{
-    auto* registry = m_shaderRegistry;
-    return registry ? registry->translateParamsToUniforms(shaderId, params) : QVariantMap();
-}
-
-bool SettingsAdaptor::shadersEnabled()
-{
-    auto* registry = m_shaderRegistry;
-    return registry ? registry->shadersEnabled() : false;
-}
-
-bool SettingsAdaptor::userShadersEnabled()
-{
-    auto* registry = m_shaderRegistry;
-    return registry ? registry->userShadersEnabled() : false;
-}
-
-QString SettingsAdaptor::userShaderDirectory()
-{
-    auto* registry = m_shaderRegistry;
-    return registry ? registry->userShaderDirectory() : QString();
-}
-
-void SettingsAdaptor::openUserShaderDirectory()
-{
-    auto* registry = m_shaderRegistry;
-    if (registry) {
-        registry->openUserShaderDirectory();
-    }
-}
-
-void SettingsAdaptor::refreshShaders()
-{
-    // Drop our memoized view before asking the registry to reload — if
-    // the shadersChanged signal isn't connected (e.g. the registry was
-    // never injected in this composition root), we still guarantee the
-    // next D-Bus query hits the fresh registry.
-    invalidateShaderCaches();
-    auto* registry = m_shaderRegistry;
-    if (registry) {
-        registry->refresh();
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

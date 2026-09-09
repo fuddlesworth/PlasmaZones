@@ -581,13 +581,6 @@ public:
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
                            const QString& screenId = QString());
 
-    // Shader preview overlay (editor Shader Settings dialog - dedicated window avoids multi-pass clear issues)
-    void showShaderPreview(int x, int y, int width, int height, const QString& screenId, const QString& shaderId,
-                           const QString& shaderParamsJson, const QString& zonesJson) override;
-    void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
-                             const QString& zonesJson) override;
-    void hideShaderPreview() override;
-
     // Snap Assist overlay (window picker after snapping)
     void showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                         const PhosphorProtocol::SnapAssistCandidateList& candidates) override;
@@ -1140,13 +1133,6 @@ private:
     // (PassiveOverlayShell.qml) post-Phase-2 unification. No separate
     // per-mode window pointers.
 
-    // Shader preview overlay (editor dialog)
-    QPointer<PhosphorLayer::Surface> m_shaderPreviewSurface;
-    QQuickWindow* m_shaderPreviewWindow = nullptr;
-    QPointer<QScreen> m_shaderPreviewScreen;
-    QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
-    QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
-
     // Snap Assist (window picker after snapping). Post-shell-migration
     // snap-assist is an Item slot inside the per-screen passive shell;
     // these track *which* screen's shell currently shows it (singleton
@@ -1364,8 +1350,6 @@ private:
     void applyDecoration(QObject* slot, const QString& surfacePath);
 
     void destroyIfTypeMismatch(const QString& screenId);
-    void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
-    void destroyShaderPreviewWindow();
 
     /// Destroy all overlay, OSD, zone selector, snap assist, and layout picker windows
     /// backed by the given physical screen. Used by both virtualScreensChanged and handleScreenRemoved.

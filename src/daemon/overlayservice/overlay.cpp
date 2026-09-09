@@ -400,12 +400,7 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
                     startShaderAnimation();
                 }
             }
-        } else if (!(m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible())) {
-            // m_shaderUpdateTimer is the SHARED iTime clock: it also drives the
-            // editor's shader preview (updateShaderUniforms writes iTime to
-            // m_shaderPreviewWindow), and only showShaderPreview restarts it.
-            // Stopping it here with the preview open would freeze the preview's
-            // animation until the editor re-opens it.
+        } else {
             stopShaderAnimation();
         }
     }
@@ -738,11 +733,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         return;
 
     const bool wasVisible = m_visible;
-    // Same shared-clock guard as updateLayout: the editor preview rides
-    // m_shaderUpdateTimer, and the restart below is gated on
-    // anyScreenUsesShader(), which ignores the preview - so stopping with the
-    // preview open would freeze it when every screen flips to non-shader.
-    if (wasVisible && !(m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible()))
+    if (wasVisible)
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {

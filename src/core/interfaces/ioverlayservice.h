@@ -233,14 +233,6 @@ public:
         Q_UNUSED(windowId)
     }
 
-    // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
-    virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenId,
-                                   const QString& shaderId, const QString& shaderParamsJson,
-                                   const QString& zonesJson) = 0;
-    virtual void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
-                                     const QString& zonesJson) = 0;
-    virtual void hideShaderPreview() = 0;
-
     // Snap Assist overlay (window picker after snapping)
     virtual void showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                                 const PhosphorProtocol::SnapAssistCandidateList& candidates) = 0;
