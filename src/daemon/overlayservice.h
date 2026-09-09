@@ -1038,12 +1038,11 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    /// Cached copy of ISettings::overlayShaderTree(). The settings getter
-    /// re-reads the store and re-parses JSON on every call, and
-    /// effectiveOverlayShader() sits on the per-audio-frame path
-    /// (useShaderForScreen per screen at CAVA rate) plus twice per screen in
-    /// create/updateOverlayWindow. Refreshed in setSettings and on
-    /// overlayShaderTreeChanged.
+    /// Cached ISettings::overlayShaderTree(): the getter re-reads the store and
+    /// re-parses JSON per call, and effectiveOverlayShader() sits on the
+    /// per-audio-frame path (useShaderForScreen per screen at CAVA rate) plus
+    /// twice per screen in create/updateOverlayWindow. Refreshed in setSettings
+    /// and on overlayShaderTreeChanged.
     OverlayShaderTree m_overlayShaderTree;
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
@@ -1576,18 +1575,12 @@ private:
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
-    // Shader support methods
-    /**
-     * @brief The shader a screen's overlay should draw: rule override →
-     *        per-layout tree override → tree baseline.
-     *
-     * A context overlay rule wins BOTH id and params (an engaged rule id
-     * with no params falls back to the shader's defaults), preserving the
-     * pre-tree rule-wins-both semantics. Otherwise the OverlayShaderTree
-     * from settings resolves per layout UUID with baseline fallback. An
-     * empty shaderId in the result means "no shader"
-     * (ShaderRegistry::isNoneShader).
-     */
+    /// The shader a screen's overlay should draw: rule override → per-layout
+    /// tree override → tree baseline. A context overlay rule wins BOTH id and
+    /// params (an engaged rule id with no params falls back to the shader's
+    /// defaults), preserving the pre-tree rule-wins-both semantics. Otherwise
+    /// the settings OverlayShaderTree resolves per layout UUID with baseline
+    /// fallback. An empty shaderId means "no shader" (isNoneShader).
     OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                                 const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;

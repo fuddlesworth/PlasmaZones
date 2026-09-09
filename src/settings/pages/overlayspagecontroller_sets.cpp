@@ -245,12 +245,10 @@ void OverlaysPageController::initSetsStore()
             return true;
         if (!m_layoutRegistry)
             return false;
-        const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
-        for (PhosphorZones::Layout* layout : layouts) {
-            if (layout && layout->id().toString() == path)
-                return true;
-        }
-        return false;
+        // Keyed, not a scan: availableSets calls this once per entry per set,
+        // so a linear walk (plus the QVector copy layouts() hands back) makes
+        // the sets page O(sets x entries x layouts).
+        return m_layoutRegistry->layoutById(QUuid::fromString(path)) != nullptr;
     };
     config.entryApplicable = applicable;
 
