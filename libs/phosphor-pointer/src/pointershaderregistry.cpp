@@ -46,7 +46,17 @@ std::optional<PointerShaderEffect> parseEffect(const QString& effectDir, const Q
     // fromJson owns the schema, the path resolution and the traversal
     // guard; the strategy already ran the file-existence, size-cap and
     // JSON-root checks.
-    return PointerShaderEffect::fromJson(root, effectDir, isUserDir);
+    PointerShaderEffect e = PointerShaderEffect::fromJson(root, effectDir, isUserDir);
+    if (!e.isValid()) {
+        // A pack with no id or no fragment (including one whose fragment
+        // path was rejected by the traversal guard) can never render. Keep
+        // it out of the registry rather than listing an entry the settings
+        // page can pick and the compositor then compiles nothing from.
+        qCWarning(lcRegistry).noquote() << "Pointer pack at" << effectDir
+                                        << "has no usable id or fragment shader; not registered";
+        return std::nullopt;
+    }
+    return e;
 }
 
 /// Files the loader watches per pack beside its metadata.json.
@@ -183,22 +193,23 @@ QList<PointerShaderEffect> PointerShaderRegistry::availableEffects() const
     return result;
 }
 
+const PointerShaderEffect* PointerShaderRegistry::effectPtr(const QString& id) const
+{
+    // factory() hands back a shared_ptr the registry also holds, so the
+    // effect outlives this temporary for as long as the pack is registered.
+    const auto pack = m_registry.factory(id);
+    return pack ? &pack->effect() : nullptr;
+}
+
 PointerShaderEffect PointerShaderRegistry::effect(const QString& id) const
 {
-    const auto pack = m_registry.factory(id);
-    return pack ? pack->effect() : PointerShaderEffect{};
+    const PointerShaderEffect* e = effectPtr(id);
+    return e ? *e : PointerShaderEffect{};
 }
 
 bool PointerShaderRegistry::hasEffect(const QString& id) const
 {
     return m_registry.factory(id) != nullptr;
-}
-
-QStringList PointerShaderRegistry::effectIds() const
-{
-    QStringList ids = m_registry.ids();
-    std::sort(ids.begin(), ids.end());
-    return ids;
 }
 
 QVariantMap PointerShaderRegistry::translatePointerParams(const PointerShaderEffect& effect,
@@ -351,7 +362,11 @@ QVariantMap PointerShaderRegistry::translatePointerParams(const PointerShaderEff
 QVariantMap PointerShaderRegistry::translatePointerParams(const QString& effectId,
                                                           const QVariantMap& friendlyParams) const
 {
-    return translatePointerParams(effect(effectId), friendlyParams);
+    // By reference through the pack, not by value through effect(): this runs
+    // on every parameter change and a PointerShaderEffect is a deep copy of
+    // several lists.
+    const PointerShaderEffect* e = effectPtr(effectId);
+    return e ? translatePointerParams(*e, friendlyParams) : QVariantMap{};
 }
 
 QString PointerShaderRegistry::paramPreamble(const PointerShaderEffect& effect)
@@ -370,6 +385,25 @@ QString PointerShaderRegistry::paramPreamble(const PointerShaderEffect& effect)
         params.append(entry);
     }
     return PhosphorShaders::buildParamPreamble(params);
+}
+
+QString PointerShaderRegistry::compositorVertexSource()
+{
+    // Attribute slots match KWin::VA_Position (0) / VA_TexCoord (1), so the
+    // effect's GLVertex2D stream feeds position@0 and texcoord@1 directly.
+    // Buffer stages reuse it with an identity MVP: their quad is already in
+    // clip space, and one vertex source for the whole family costs a single
+    // uniform push per stage.
+    return QStringLiteral(
+        "#version 450\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "void main() {\n"
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
 }
 
 QString PointerShaderRegistry::pointerEntryPrologue()

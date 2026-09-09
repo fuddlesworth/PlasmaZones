@@ -894,9 +894,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     //   • the per-window windowFullScreenChanged (wired in
     //     window_connections.cpp, next to the tiling handler's own connection),
     //     which is the enter and exit edge;
-    //   • windowAdded, for a window that OPENS fullscreen, and windowClosed /
-    //     windowDeleted, for the fullscreen window going away without ever
-    //     emitting an exit;
+    //   • windowAdded, for a window that OPENS fullscreen, and windowDeleted,
+    //     for the fullscreen window going away without ever emitting an exit.
+    //     Not windowClosed: it fires while the window is still in the
+    //     stacking order, so the walk answers exactly as before and the set
+    //     can only change once windowDeleted has removed it;
     //   • desktopChanged and currentActivityChanged, because the gate is scoped
     //     to the CURRENT desktop and a fullscreen window parked elsewhere must
     //     not strip the desktop being looked at;
@@ -910,7 +912,6 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         refreshFullscreenSuppression();
     };
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, refreshSuppression);
-    connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, refreshSuppression);
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, refreshSuppression);
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, refreshSuppression);
     connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, refreshSuppression);

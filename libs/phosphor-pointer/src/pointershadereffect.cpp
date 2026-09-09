@@ -89,22 +89,34 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
     e.reach = clampedNumber(obj, "reach", 64.0, 0.0, kMaxReach, e.id);
     e.reachParam = obj.value(QLatin1String("reachParam")).toString();
     e.trailSeconds = clampedNumber(obj, "trailSeconds", 1.0, 0.0, 60.0, e.id);
+    if (e.trailSeconds == 0.0) {
+        // Kept as declared (the validator already reports it as an error),
+        // but the runtime has to say why nothing ever appears: liveness is a
+        // strict "younger than trailSeconds" test, so at 0 no event is ever
+        // young enough and the chain never requests a frame.
+        qCWarning(lcPointerEffect) << "Pointer effect" << e.id
+                                   << "declares trailSeconds 0, so it is never live and never draws";
+    }
     e.needsCursor = obj.value(QLatin1String("needsCursor")).toBool(false);
 
     e.isMultipass = obj.value(QLatin1String("multipass")).toBool(false);
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
+    QStringList ignoredBuffers;
     for (const QJsonValue& v : bufArr) {
         const QString bufName = v.toString();
         if (bufName.isEmpty()) {
             continue;
         }
         if (e.bufferShaderPaths.size() >= PointerShaderContract::kMaxBufferPasses) {
-            qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares more than"
-                                       << PointerShaderContract::kMaxBufferPasses << "buffer passes; ignoring"
-                                       << bufName;
+            ignoredBuffers.append(bufName);
             continue;
         }
         e.bufferShaderPaths.append(bufName);
+    }
+    if (!ignoredBuffers.isEmpty()) {
+        qCWarning(lcPointerEffect).noquote()
+            << "Pointer effect" << e.id << "declares more than" << PointerShaderContract::kMaxBufferPasses
+            << "buffer passes; ignoring" << ignoredBuffers.join(QLatin1String(", "));
     }
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
     e.bufferScale = clampedNumber(obj, "bufferScale", 1.0, kMinBufferScale, kMaxBufferScale, e.id);
@@ -135,6 +147,14 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
         seenParamIds.insert(p.id);
         p.name = pObj.value(QLatin1String("name")).toString();
         p.type = pObj.value(QLatin1String("type")).toString();
+        if (p.type == QLatin1String("image")) {
+            // Neither the slot translator nor the preamble maps an image
+            // parameter to anything, so the entry would be carried and
+            // silently inert. Say so and point at the mechanism that works.
+            qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares parameter" << p.id
+                                       << "with type image, which pointer packs do not support; declare the"
+                                       << "texture in the top-level textures array instead (it binds as uTexture<N>)";
+        }
         p.description = pObj.value(QLatin1String("description")).toString();
         p.group = pObj.value(QLatin1String("group")).toString();
         if (pObj.contains(QLatin1String("default"))) {
@@ -152,32 +172,37 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
         e.parameters.append(std::move(p));
     }
 
-    // Textures: capped at the contract budget; an empty path maps to nothing
-    // and is dropped (which shifts later slots, so it is logged).
+    // Textures: an empty path maps to nothing and is dropped (which shifts
+    // later slots, so it is logged), then the survivors are capped at the
+    // contract budget. The cap warning counts survivors, not raw entries, so
+    // a list that only exceeds the cap through empty entries is not reported
+    // as losing a texture it never had.
     const QJsonArray texArr = obj.value(QLatin1String("textures")).toArray();
-    if (texArr.size() > PointerShaderContract::kMaxUserTextureSlots) {
-        qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares" << texArr.size() << "textures; cap is"
-                                   << PointerShaderContract::kMaxUserTextureSlots << "; surplus dropped";
-    }
+    int declaredTextures = 0;
     for (const QJsonValue& v : texArr) {
-        if (e.textures.size() >= PointerShaderContract::kMaxUserTextureSlots) {
-            break;
-        }
         const QJsonObject tObj = v.toObject();
         TextureSlot t;
         t.path = tObj.value(QLatin1String("path")).toString();
         t.wrap = tObj.value(QLatin1String("wrap")).toString();
-        if (!t.wrap.isEmpty() && !PointerShaderContract::isValidWrapToken(t.wrap)) {
-            qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares unknown wrap value" << t.wrap
-                                       << "; reset to runtime default";
-            t.wrap.clear();
-        }
         if (t.path.isEmpty()) {
             qCWarning(lcPointerEffect) << "Pointer effect" << e.id
                                        << "has a texture entry with an empty path; dropped (later slots shift)";
             continue;
         }
+        ++declaredTextures;
+        if (e.textures.size() >= PointerShaderContract::kMaxUserTextureSlots) {
+            continue;
+        }
+        if (!t.wrap.isEmpty() && !PointerShaderContract::isValidWrapToken(t.wrap)) {
+            qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares unknown wrap value" << t.wrap
+                                       << "; reset to runtime default";
+            t.wrap.clear();
+        }
         e.textures.append(std::move(t));
+    }
+    if (declaredTextures > PointerShaderContract::kMaxUserTextureSlots) {
+        qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares" << declaredTextures << "textures; cap is"
+                                   << PointerShaderContract::kMaxUserTextureSlots << "; surplus dropped";
     }
 
     if (sourceDir.isEmpty()) {
@@ -260,17 +285,6 @@ QString PointerShaderEffect::layerToken(Layer layer)
     return layer == Layer::Above ? QStringLiteral("above") : QStringLiteral("below");
 }
 
-QVariantMap PointerShaderEffect::defaultParams() const
-{
-    QVariantMap out;
-    for (const auto& p : parameters) {
-        if (p.defaultValue.isValid() && !p.defaultValue.isNull()) {
-            out.insert(p.id, p.defaultValue);
-        }
-    }
-    return out;
-}
-
 double PointerShaderEffect::resolvedReach(const QVariantMap& params) const
 {
     double value = reach;
@@ -295,7 +309,10 @@ double PointerShaderEffect::resolvedReach(const QVariantMap& params) const
             }
         }
     }
-    return std::clamp(value, 0.0, kMaxReach);
+    // The floor is deliberate (see kMinReach): a reach of 0 leaves the damage
+    // rect of a single-sample burst with no area, so the pass would sit live
+    // painting nothing. The ceiling bounds the per-frame repaint region.
+    return std::clamp(value, kMinReach, kMaxReach);
 }
 
 } // namespace PhosphorPointerShaders

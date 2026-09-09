@@ -81,8 +81,8 @@ inline constexpr const char* kITextureResolution = "iTextureResolution";
 inline constexpr const char* kUPointerVelocity = "uPointerVelocity";
 
 /// `vec4 uPointerPress` — `.xy` canvas px of the last button press, `.z`
-/// seconds since it (1e6 when none this session), `.w` button (1 left, 2
-/// right, 3 middle, 0 none). UBO offset 688.
+/// seconds since it (`kNeverSeconds` when none this session), `.w` button
+/// (1 left, 2 right, 3 middle, 0 none). UBO offset 688.
 inline constexpr const char* kUPointerPress = "uPointerPress";
 
 /// `vec4 uPointerRelease` — same shape as `uPointerPress` for the last
@@ -110,7 +110,7 @@ inline constexpr const char* kUPointerFlags = "uPointerFlags";
 
 /// `vec4 uPointerTrail[32]` — newest first. `.xy` canvas px, `.z` age in
 /// seconds (0 = this frame), `.w` speed at that sample (device px/s).
-/// Entries past `uPointerState.w` are zero. UBO offset 768, 512 bytes.
+/// Entries at or past `uPointerState.w` are zero. UBO offset 768, 512 bytes.
 inline constexpr const char* kUPointerTrail = "uPointerTrail";
 
 // ── Samplers ─────────────────────────────────────────────────────────────
@@ -118,11 +118,20 @@ inline constexpr const char* kUPointerTrail = "uPointerTrail";
 /// `sampler2D uCursorSprite` — the cursor image, bound only for packs that
 /// declare `needsCursor`. Loose sampler on KWin, binding 7 on the UBO
 /// runtime. Gate every read on `uPointerFlags.x`.
+///
+/// A shader that samples this without declaring `needsCursor` reads whatever
+/// texture unit 0 holds on the compositor at that point of the frame, which
+/// is undefined content rather than a black or transparent texel. The same
+/// holds for a `uTexture<N>` slot the metadata `textures` list does not
+/// declare. The static gate for both lives in the pack validator
+/// (`plasmazones-shader-validate`), not in this contract or its runtimes.
 inline constexpr const char* kUCursorSprite = "uCursorSprite";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`). Slot N of the metadata list feeds `uTexture<N+1>` (bindings
 /// 8-10 on the UBO runtime) and `iTextureResolution[N].xy` carries its size.
+/// An undeclared slot is unbound and reads texture unit 0 on the compositor
+/// (see `kUCursorSprite`).
 inline constexpr const char* kUTexture1 = "uTexture1";
 inline constexpr const char* kUTexture2 = "uTexture2";
 inline constexpr const char* kUTexture3 = "uTexture3";
@@ -159,6 +168,15 @@ inline constexpr int kMaxBufferPasses = 2;
 
 /// Maximum number of declared parameters a pack may carry across both pools.
 inline constexpr int kMaxDeclaredParameters = 48;
+
+/// The "none this session" sentinel for the seconds-since lanes of
+/// `uPointerPress.z`, `uPointerRelease.z` and `uPointerState.y`: what the
+/// tail carries before the first press, release or motion. Large enough that
+/// any fade or gate a pack writes against an age has long expired, so a click
+/// pack does not fire a ring at session start because an elapsed time read
+/// as zero. Both hosts' frame state and the UBO extension's initial tail use
+/// this one constant.
+inline constexpr double kNeverSeconds = 1.0e6;
 
 /// Peak speed, in px per second, that the settings preview's simulated pointer
 /// ever reaches. The preview stage is PreviewCanvas.size (420x236) and its

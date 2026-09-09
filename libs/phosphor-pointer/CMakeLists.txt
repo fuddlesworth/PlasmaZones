@@ -12,8 +12,9 @@
 #   * PointerShaderEffect   — parsed metadata pack.
 #   * PointerShaderRegistry — Registry<PointerPack> + MetadataPackLoader with
 #     search paths, live reload, param translation and the p_<id> preamble.
+#   * PointerFrameState     — the per-frame tail snapshot both hosts share.
 #   * PointerUniformExtension — IUniformExtension writing the tail on the
-#     Qt-RHI preview runtime, plus the PointerFrameState both hosts share.
+#     Qt-RHI preview runtime.
 #   * PointerHistory        — the ring-buffer pointer sampler both hosts use.
 #
 # Mirrors libs/phosphor-surface. Rendering lives in the consumers.
@@ -63,6 +64,7 @@ set(phosphorpointer_public_HDRS
     include/PhosphorPointer/PointerShaderUniforms.h
     include/PhosphorPointer/PointerShaderEffect.h
     include/PhosphorPointer/PointerShaderRegistry.h
+    include/PhosphorPointer/PointerFrameState.h
     include/PhosphorPointer/PointerUniformExtension.h
     include/PhosphorPointer/PointerHistory.h
 )

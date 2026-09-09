@@ -48,14 +48,27 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
 {
     DecorationProfile p;
 
+    // An ENGAGED chain, even an empty one, is a statement: "this surface
+    // runs exactly these packs", which stops the seed defaults from being
+    // injected and overrides whatever an ancestor set (see the class doc).
+    // So a non-string entry must not coerce to "" and quietly engage that
+    // statement on the author's behalf: it is skipped, and an array holding
+    // only non-strings is treated as if the field were absent, which leaves
+    // the optional disengaged and the seeds in force.
     if (obj.contains(QLatin1String(JsonFieldChain))) {
         const QJsonValue v = obj.value(QLatin1String(JsonFieldChain));
         if (v.isArray()) {
             QStringList chain;
+            bool anyString = false;
             const QJsonArray arr = v.toArray();
-            for (const QJsonValue& entry : arr)
+            for (const QJsonValue& entry : arr) {
+                if (!entry.isString())
+                    continue;
+                anyString = true;
                 chain.append(entry.toString());
-            p.chain = std::move(chain);
+            }
+            if (arr.isEmpty() || anyString)
+                p.chain = std::move(chain);
         }
     }
 
@@ -74,12 +87,20 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
     // written before the per-layer toggle existed loads with every pack on.
     if (obj.contains(QLatin1String(JsonFieldDisabledPacks))) {
         const QJsonValue v = obj.value(QLatin1String(JsonFieldDisabledPacks));
+        // Same rule as the chain: non-string entries are skipped, and an
+        // array of nothing but non-strings leaves the field absent.
         if (v.isArray()) {
             QStringList disabled;
+            bool anyString = false;
             const QJsonArray arr = v.toArray();
-            for (const QJsonValue& entry : arr)
+            for (const QJsonValue& entry : arr) {
+                if (!entry.isString())
+                    continue;
+                anyString = true;
                 disabled.append(entry.toString());
-            p.disabledPacks = std::move(disabled);
+            }
+            if (arr.isEmpty() || anyString)
+                p.disabledPacks = std::move(disabled);
         }
     }
 

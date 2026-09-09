@@ -122,17 +122,24 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
     static constexpr double kMinBufferScale = PhosphorShaders::kMinBufferScale;
     static constexpr double kMaxBufferScale = PhosphorShaders::kMaxBufferScale;
 
-    /// Upper bound on `resolvedReach`, in logical px.
+    /// Bounds on `resolvedReach`, in logical px. The floor exists because a
+    /// reach of 0 is never what a pack means: the damage rect is the trail's
+    /// bounding box inflated by the reach, so at 0 a single-sample burst (one
+    /// event, no motion since) gives a rect with no area, the pass stays
+    /// live for `trailSeconds` and paints nothing into it. One logical px is
+    /// the smallest reach that still turns a point into a region.
+    static constexpr double kMinReach = 1.0;
     static constexpr double kMaxReach = 1024.0;
 
     /// Declared parameter. JSON keys are the bare `default` / `min` / `max`
     /// / `step`; the C++ fields carry a `Value` suffix because `default` is
-    /// a keyword.
+    /// a keyword. Textures are not parameters: they are declared through the
+    /// top-level `textures` array and reach the shader as `uTexture<N>`.
     struct ParameterInfo
     {
         QString id;
         QString name;
-        QString type; ///< "float", "int", "bool", "color", "image"
+        QString type; ///< "float", "int", "bool", "color"
         QString description;
         QString group;
         QVariant defaultValue;
@@ -173,13 +180,11 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
         return !id.isEmpty() && !fragmentShaderPath.isEmpty();
     }
 
-    /// Friendly-keyed map of every declared parameter's default value.
-    QVariantMap defaultParams() const;
-
     /// The pack's reach in logical px for the given friendly parameter map:
     /// the `reachParam` value when declared and present (falling back to
-    /// that parameter's default), else `reach`. Clamped to 0..`kMaxReach`.
-    double resolvedReach(const QVariantMap& params) const;
+    /// that parameter's default), else `reach`. Clamped to
+    /// `kMinReach`..`kMaxReach`.
+    [[nodiscard]] double resolvedReach(const QVariantMap& params) const;
 };
 
 } // namespace PhosphorPointerShaders

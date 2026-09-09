@@ -69,19 +69,24 @@ public:
     ~PointerShaderRegistry() override;
 
     // ── Search paths (forwarded to the internal MetadataPackLoader) ───
+    /// Single-path form of `addSearchPaths`. Exists for parity with the
+    /// other shader registries, which consumers construct generically.
     void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
     void addSearchPaths(
         const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
         PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
     [[nodiscard]] QStringList searchPaths() const;
+    /// Classify packs found under @p path as user-owned. Exists for parity
+    /// with the other shader registries, which consumers construct generically.
     void setUserPath(const QString& path);
+    /// Rescan the search paths now. Exists for parity with the other shader
+    /// registries, which consumers construct generically.
     void refresh();
 
     // ── Lookup ─────────────────────────────────────────────────────────
-    QList<PointerShaderEffect> availableEffects() const;
-    PointerShaderEffect effect(const QString& id) const;
-    bool hasEffect(const QString& id) const;
-    QStringList effectIds() const;
+    [[nodiscard]] QList<PointerShaderEffect> availableEffects() const;
+    [[nodiscard]] PointerShaderEffect effect(const QString& id) const;
+    [[nodiscard]] bool hasEffect(const QString& id) const;
 
     /// Translate a friendly parameter map into the slot keys both runtimes
     /// consume. Float / int / bool parameters fill `customParams<N>_<xyzw>`
@@ -93,22 +98,39 @@ public:
     /// the pack's declared slots, overridable through the same keys in
     /// @p friendlyParams with the same traversal guard the loader applies.
     /// Returns an empty map for an invalid effect.
-    static QVariantMap translatePointerParams(const PointerShaderEffect& effect, const QVariantMap& friendlyParams);
+    ///
+    /// The result is a snapshot baked per compile. It must be recomputed
+    /// whenever the engaged layer's parameters change, and the host, not
+    /// this function, owns that re-resolution.
+    [[nodiscard]] static QVariantMap translatePointerParams(const PointerShaderEffect& effect,
+                                                            const QVariantMap& friendlyParams);
 
-    /// Registry-keyed convenience overload.
-    QVariantMap translatePointerParams(const QString& effectId, const QVariantMap& friendlyParams) const;
+    /// Registry-keyed convenience overload. Empty map when @p effectId is
+    /// not registered.
+    [[nodiscard]] QVariantMap translatePointerParams(const QString& effectId, const QVariantMap& friendlyParams) const;
 
     /// The generated `#define p_<id> <glsl-accessor>` preamble for
     /// @p effect's declared parameters, spliced after `#version` by both
-    /// runtimes. Slot allocation mirrors `translatePointerParams` exactly.
-    static QString paramPreamble(const PointerShaderEffect& effect);
+    /// runtimes. Slot allocation mirrors `translatePointerParams` exactly,
+    /// and like it the result is baked per compile: the host recomputes it
+    /// whenever the engaged layer's parameters change.
+    [[nodiscard]] static QString paramPreamble(const PointerShaderEffect& effect);
 
     /// Entry-point scaffold: a pack defines `vec4 pPointer(vec2 uv)` and the
     /// harness prepends this prologue (`#version 450`, `#include
     /// <pointer_lib.glsl>`, the vTexCoord in and fragColor out) and appends a
     /// generated `main()` from the candidates.
-    static QString pointerEntryPrologue();
-    static QList<PhosphorShaders::EntryCandidate> pointerEntryCandidates();
+    [[nodiscard]] static QString pointerEntryPrologue();
+    [[nodiscard]] static QList<PhosphorShaders::EntryCandidate> pointerEntryCandidates();
+
+    /// The vertex stage the COMPOSITOR compiles for every pointer pack's main
+    /// pass and buffer stages (classic GL: positions in the viewport's device
+    /// space, projected by KWin's own matrix). Lives here rather than in the
+    /// effect so the KWin-branch bake test can compile the exact stage the
+    /// compositor uses. `data/pointer/shared/pointer.vert` is NOT this: that
+    /// is the preview's stage and reads `qt_Matrix` from the UBO, which the
+    /// compositor branch does not declare.
+    [[nodiscard]] static QString compositorVertexSource();
 
     /// Include search paths for a pack at @p packDir: its own neighbourhood
     /// `{<packRoot>/shared, <packRoot>}` where packRoot is the parent of the
@@ -123,12 +145,17 @@ public:
     /// while rendering perfectly in the compositor, which builds its own list
     /// from the registry's search roots. The pack's own directories come
     /// first, so a pack shipping its own `shared/` is still served from it.
-    static QStringList includePathsFor(const QString& packDir);
+    [[nodiscard]] static QStringList includePathsFor(const QString& packDir);
 
 Q_SIGNALS:
     void effectsChanged();
 
 private:
+    /// The registered effect for @p id without copying it out of its pack,
+    /// or null when unregistered. The pack stays alive for as long as the
+    /// registry holds it, which is the whole of a GUI-thread call.
+    [[nodiscard]] const PointerShaderEffect* effectPtr(const QString& id) const;
+
     // Declared before m_loader so it is destroyed after it: the loader holds
     // a borrowed Registry pointer for its whole lifetime.
     PhosphorRegistry::Registry<PointerPack> m_registry;

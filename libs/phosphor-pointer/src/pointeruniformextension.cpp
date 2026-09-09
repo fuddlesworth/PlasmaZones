@@ -16,10 +16,11 @@ PointerUniformExtension::PointerUniformExtension()
 {
     std::memset(&m_data, 0, sizeof(m_data));
     // No press or release yet: the contract's "none this session" sentinel.
-    m_data.uPointerPress[2] = 1.0e6f;
-    m_data.uPointerRelease[2] = 1.0e6f;
+    constexpr float never = static_cast<float>(PointerShaderContract::kNeverSeconds);
+    m_data.uPointerPress[2] = never;
+    m_data.uPointerRelease[2] = never;
     // No motion yet, unit scale.
-    m_data.uPointerState[1] = 1.0e6f;
+    m_data.uPointerState[1] = never;
     m_data.uPointerState[2] = 1.0f;
 }
 
@@ -56,39 +57,97 @@ void PointerUniformExtension::setVec4Locked(float (&dst)[4], float x, float y, f
     m_dirty.store(true, std::memory_order_release);
 }
 
-void PointerUniformExtension::setVelocity(const QVector2D& velocity)
+void PointerUniformExtension::setVelocityLocked(const QVector2D& velocity)
 {
-    QMutexLocker lock(&m_mutex);
     setVec4Locked(m_data.uPointerVelocity, velocity.x(), velocity.y(), velocity.length(), 0.0f);
 }
 
-void PointerUniformExtension::setPress(const QPointF& pos, double secondsSince, int button)
+void PointerUniformExtension::setPressLocked(const QPointF& pos, double secondsSince, int button)
 {
-    QMutexLocker lock(&m_mutex);
     setVec4Locked(m_data.uPointerPress, static_cast<float>(pos.x()), static_cast<float>(pos.y()),
                   static_cast<float>(secondsSince), static_cast<float>(button));
 }
 
-void PointerUniformExtension::setRelease(const QPointF& pos, double secondsSince, int button)
+void PointerUniformExtension::setReleaseLocked(const QPointF& pos, double secondsSince, int button)
 {
-    QMutexLocker lock(&m_mutex);
     setVec4Locked(m_data.uPointerRelease, static_cast<float>(pos.x()), static_cast<float>(pos.y()),
                   static_cast<float>(secondsSince), static_cast<float>(button));
 }
 
-void PointerUniformExtension::setState(int buttonsMask, double idleSeconds, double scale)
+void PointerUniformExtension::setStateLocked(int buttonsMask, double idleSeconds, double scale)
 {
-    QMutexLocker lock(&m_mutex);
     // .w is the trail count, owned by setTrail; keep it.
     setVec4Locked(m_data.uPointerState, static_cast<float>(buttonsMask), static_cast<float>(idleSeconds),
                   static_cast<float>(scale), m_data.uPointerState[3]);
 }
 
+void PointerUniformExtension::setCursorRectLocked(const QRectF& rect)
+{
+    setVec4Locked(m_data.uCursorRect, static_cast<float>(rect.x()), static_cast<float>(rect.y()),
+                  static_cast<float>(rect.width()), static_cast<float>(rect.height()));
+}
+
+void PointerUniformExtension::setFlagsLocked(bool hasSprite, double scale)
+{
+    // Both flag lanes in one write: the sprite flag from the frame, the reach
+    // from the pack, scaled by the frame's canvas scale.
+    const float s = scale > 0.0 ? static_cast<float>(scale) : 1.0f;
+    setVec4Locked(m_data.uPointerFlags, hasSprite ? 1.0f : 0.0f, static_cast<float>(m_reachLogicalPx) * s, 0.0f, 0.0f);
+}
+
+void PointerUniformExtension::setTrailLocked(std::span<const QVector4D> trail)
+{
+    const int count = static_cast<int>(std::min<size_t>(trail.size(), PointerShaderContract::kMaxTrailPoints));
+    bool changed = false;
+    for (int i = 0; i < PointerShaderContract::kMaxTrailPoints; ++i) {
+        const QVector4D v = i < count ? trail[static_cast<size_t>(i)] : QVector4D();
+        float* dst = m_data.uPointerTrail[i];
+        if (dst[0] != v.x() || dst[1] != v.y() || dst[2] != v.z() || dst[3] != v.w()) {
+            dst[0] = v.x();
+            dst[1] = v.y();
+            dst[2] = v.z();
+            dst[3] = v.w();
+            changed = true;
+        }
+    }
+    const float countF = static_cast<float>(count);
+    if (m_data.uPointerState[3] != countF) {
+        m_data.uPointerState[3] = countF;
+        changed = true;
+    }
+    if (changed) {
+        m_dirty.store(true, std::memory_order_release);
+    }
+}
+
+void PointerUniformExtension::setVelocity(const QVector2D& velocity)
+{
+    QMutexLocker lock(&m_mutex);
+    setVelocityLocked(velocity);
+}
+
+void PointerUniformExtension::setPress(const QPointF& pos, double secondsSince, int button)
+{
+    QMutexLocker lock(&m_mutex);
+    setPressLocked(pos, secondsSince, button);
+}
+
+void PointerUniformExtension::setRelease(const QPointF& pos, double secondsSince, int button)
+{
+    QMutexLocker lock(&m_mutex);
+    setReleaseLocked(pos, secondsSince, button);
+}
+
+void PointerUniformExtension::setState(int buttonsMask, double idleSeconds, double scale)
+{
+    QMutexLocker lock(&m_mutex);
+    setStateLocked(buttonsMask, idleSeconds, scale);
+}
+
 void PointerUniformExtension::setCursorRect(const QRectF& rect)
 {
     QMutexLocker lock(&m_mutex);
-    setVec4Locked(m_data.uCursorRect, static_cast<float>(rect.x()), static_cast<float>(rect.y()),
-                  static_cast<float>(rect.width()), static_cast<float>(rect.height()));
+    setCursorRectLocked(rect);
 }
 
 void PointerUniformExtension::setHasCursorSprite(bool has)
@@ -109,48 +168,26 @@ void PointerUniformExtension::setReachLogicalPx(double reach)
                   0.0f);
 }
 
-void PointerUniformExtension::setTrail(const QList<QVector4D>& trail)
+void PointerUniformExtension::setTrail(std::span<const QVector4D> trail)
 {
     QMutexLocker lock(&m_mutex);
-    const int count = static_cast<int>(qMin<qsizetype>(trail.size(), PointerShaderContract::kMaxTrailPoints));
-    bool changed = false;
-    for (int i = 0; i < PointerShaderContract::kMaxTrailPoints; ++i) {
-        const QVector4D v = i < count ? trail[i] : QVector4D();
-        float* dst = m_data.uPointerTrail[i];
-        if (dst[0] != v.x() || dst[1] != v.y() || dst[2] != v.z() || dst[3] != v.w()) {
-            dst[0] = v.x();
-            dst[1] = v.y();
-            dst[2] = v.z();
-            dst[3] = v.w();
-            changed = true;
-        }
-    }
-    const float countF = static_cast<float>(count);
-    if (m_data.uPointerState[3] != countF) {
-        m_data.uPointerState[3] = countF;
-        changed = true;
-    }
-    if (changed) {
-        m_dirty.store(true, std::memory_order_release);
-    }
+    setTrailLocked(trail);
 }
 
 void PointerUniformExtension::apply(const PointerFrameState& state)
 {
-    setVelocity(state.velocity);
-    setPress(state.pressPos, state.pressSecondsSince, state.pressButton);
-    setRelease(state.releasePos, state.releaseSecondsSince, state.releaseButton);
-    setState(state.buttons, state.idleSeconds, state.scale);
-    setCursorRect(state.cursorRect);
-    {
-        // Both flag lanes in one write: the sprite flag from the frame, the
-        // reach from the pack, scaled by this frame's canvas scale.
-        QMutexLocker lock(&m_mutex);
-        const float scale = state.scale > 0.0 ? static_cast<float>(state.scale) : 1.0f;
-        setVec4Locked(m_data.uPointerFlags, state.hasSprite ? 1.0f : 0.0f, static_cast<float>(m_reachLogicalPx) * scale,
-                      0.0f, 0.0f);
-    }
-    setTrail(state.trail);
+    // One lock for the whole frame. write() takes the same mutex, so the
+    // render thread can never copy a tail with this frame's velocity and the
+    // previous frame's trail: the frame lands atomically or not at all.
+    QMutexLocker lock(&m_mutex);
+    setVelocityLocked(state.velocity);
+    setPressLocked(state.pressPos, state.pressSecondsSince, state.pressButton);
+    setReleaseLocked(state.releasePos, state.releaseSecondsSince, state.releaseButton);
+    setStateLocked(state.buttons, state.idleSeconds, state.scale);
+    setCursorRectLocked(state.cursorRect);
+    setFlagsLocked(state.hasSprite, state.scale);
+    const int count = std::clamp(state.trailCount, 0, PointerShaderContract::kMaxTrailPoints);
+    setTrailLocked(std::span<const QVector4D>(state.trail.data(), static_cast<size_t>(count)));
 }
 
 } // namespace PhosphorPointerShaders

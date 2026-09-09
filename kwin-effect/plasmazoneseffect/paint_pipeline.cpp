@@ -531,10 +531,8 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // covers a retire that happens between a clear and the next pass.
     m_scrollTabPainter->drainRetiredTextures();
     // While a desktop-switch transition is live for this output, paintOutput
-    // draws the two-desktop blend into the screen target and returns true, so we
-    // skip the normal scene paint. Otherwise (no transition, or it just settled)
-    // chain straight through to the standard scene — this override is a no-op for
-    // every non-transitioning frame.
+    // draws the two-desktop blend into the screen target and returns true, so
+    // the normal scene paint is skipped; otherwise this chains straight through.
     // Hand the pointer pass's hide back BEFORE the switch paints, not after.
     // The desktop pass replaces the whole frame and draws no cursor of its
     // own, so releasing below — once it has already painted — costs the first
@@ -561,7 +559,10 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // pass's own hideCursorForPass refuses when KWin already reports the
     // cursor hidden, so a hide still held here would leave neither pass
     // drawing the pointer for the length of the leg. Gated on the strip
-    // pass's own entry check so a normal frame does not flap the hide.
+    // pass's entry check, which is broader than "will paint": the pass can
+    // still abandon the frame after it (a compile sentinel, a capture that
+    // failed to allocate), costing one frame with both cursors on that path.
+    // Accepted rather than plumbing a will-paint predicate through.
     if (m_stripTransition.isRunningForOutput(screen)) {
         m_pointerPass.releaseCursorHideForForeignPaint(screen);
     }
@@ -596,10 +597,9 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // is the last thing this override does on the normal path. Reached only
     // here: a desktop transition or a strip leg replaces the output's paint
     // and returns above, and the pass gives its cursor hide back at those
-    // sites rather than painting into a frame it does not own. Exempted
-    // during a window-rect offscreen capture, on the same defensive footing
-    // as the pill blit above: a snap-assist thumbnail must not carry a
-    // pointer trail baked into it.
+    // sites. The capture guard is defensive only: captures route through
+    // drawWindow and never nest a screen pass today, so the latch is always
+    // false here.
     if (!m_capturingSnapshot) {
         m_pointerPass.paintOutput(renderTarget, viewport, screen);
     }

@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <PhosphorPointer/PointerFrameState.h>
 #include <PhosphorPointer/PointerShaderContract.h>
-#include <PhosphorPointer/PointerUniformExtension.h>
 #include <PhosphorPointer/phosphorpointer_export.h>
 
 #include <QPointF>
@@ -29,8 +29,17 @@ namespace PhosphorPointerShaders {
 /// newest is at least 1 device px OR the time gap is at least
 /// `kMinSampleGapMs`; anything closer and sooner is dropped. Ages are
 /// computed at `frameState` time. Velocity is the finite difference over the
-/// newest two samples with a floor of `kVelocityMinDtSeconds` on dt, and
-/// decays to zero once the newest sample is older than `kVelocityHoldMs`.
+/// newest two samples with a floor of `kVelocityMinDtSeconds` on dt. A
+/// sample whose gap to the previous one is not a usable pairing records
+/// speed 0 instead of dividing: a timestamp at or before the newest sample
+/// (a clock that did not advance, or went backwards), and a gap of
+/// `kVelocityHoldMs` or more (the pointer was parked, so the first move
+/// after it starts the pairing fresh rather than being averaged over the
+/// idle time). Every recency window in this class is a strict `<`: velocity
+/// is reported while the newest sample is younger than `kVelocityHoldMs`,
+/// the chain is live while an event is younger than `trailSeconds`, and the
+/// damage rect includes a point while it is younger than `trailSeconds`. At
+/// exactly the bound the window has closed.
 class PHOSPHORPOINTER_EXPORT PointerHistory
 {
 public:
@@ -51,10 +60,11 @@ public:
     /// filter's job (pointerFilteredSpeed in pointer_lib.glsl), not this
     /// floor's.
     static constexpr double kVelocityMinDtSeconds = 0.001;
+    /// How long after the newest sample the velocity is still reported, and
+    /// the longest gap between two samples that still forms a speed pairing.
+    /// Past it the pointer is parked and the next sample starts fresh: a 5 px
+    /// move after ten idle seconds is a fresh move, not 0.5 px/s.
     static constexpr qint64 kVelocityHoldMs = 100;
-
-    /// The "none this session" sentinel for press / release / idle ages.
-    static constexpr double kNeverSeconds = 1.0e6;
 
     PointerHistory();
 
@@ -70,20 +80,20 @@ public:
     /// The contract tail for a frame at @p nowMs with canvas scale @p scale.
     /// `cursorRect` and `hasSprite` are left at their defaults for the host
     /// to fill.
-    PointerFrameState frameState(qint64 nowMs, double scale) const;
+    [[nodiscard]] PointerFrameState frameState(qint64 nowMs, double scale) const;
 
     /// True while a motion or button event is younger than @p trailSeconds.
-    bool isLive(qint64 nowMs, double trailSeconds) const;
+    [[nodiscard]] bool isLive(qint64 nowMs, double trailSeconds) const;
 
     /// Bounding box of the trail samples, press and release points younger
     /// than @p trailSeconds, inflated by @p reachDevicePx on every side.
     /// Null when not live.
-    QRectF damageRect(double reachDevicePx, qint64 nowMs, double trailSeconds) const;
+    [[nodiscard]] QRectF damageRect(double reachDevicePx, qint64 nowMs, double trailSeconds) const;
 
-    /// Newest sample position, or a null point when empty.
-    QPointF newestPosition() const;
-
-    int sampleCount() const
+    /// Number of motion samples in the ring (0..kCapacity). The compositor
+    /// seeds an empty ring from a buttons-only event so the first live frame
+    /// after a reset has a pointer position to hand out.
+    [[nodiscard]] int sampleCount() const
     {
         return m_count;
     }

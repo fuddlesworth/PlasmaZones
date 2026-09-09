@@ -344,11 +344,6 @@ private:
     /// normal scene paints. The one path that shows while a pass is still
     /// live is releaseCursorHideForForeignPaint.
     void updateCursorHiding();
-    /// Render the scene's own cursor item into the pass, at the pointer.
-    /// Only meaningful while hideCursorForPass has the cursor hidden: the
-    /// item is drawn explicitly (the renderer only honours visibility on
-    /// child items), so hiding it from KWin does not hide it from us.
-    void drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
 
     /// Draw @p windows sharp onto the current target, bottom to top, each

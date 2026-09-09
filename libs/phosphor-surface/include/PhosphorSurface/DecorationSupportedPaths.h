@@ -105,13 +105,16 @@ inline QString decorationPointerPath()
 }
 
 /// Leaf surface paths a per-surface decoration profile actually resolves
-/// against. Each names a concrete surface PlasmaZones decorates: the three
-/// window placement states (tiled / snapped / floating), the OSD, the
-/// four transient popups, and the foreign plasma-shell surfaces under
-/// `shell.*`. (The zone overlay is intentionally NOT a decoration target — it
-/// is a fullscreen, mostly-transparent zone canvas drawn by the separate
-/// overlay shader category, not a card to round/border.) When a future
-/// surface gains a decoration leg, append its leaf path here in lockstep.
+/// against. Each names something PlasmaZones decorates through this tree,
+/// most of them surfaces: the three window placement states (tiled /
+/// snapped / floating), the OSD, the four transient popups, the foreign
+/// plasma-shell surfaces under `shell.*`, the Phosphor shell's own surfaces
+/// under `shell.phosphor.*`, and `pointer`, the mouse cursor, which is not
+/// a surface at all but a compositor pass keyed off the same tree. (The zone
+/// overlay is intentionally NOT a decoration target — it is a fullscreen,
+/// mostly-transparent zone canvas drawn by the separate overlay shader
+/// category, not a card to round/border.) When a future surface gains a
+/// decoration leg, append its leaf path here in lockstep.
 ///
 /// Surface-state analogue of `PlasmaZones::shaderConsumedLeafEventPaths()` for the
 /// decoration concern: the SSOT for "which surfaces can carry a
@@ -213,8 +216,13 @@ inline QStringList decorationSupportedSurfacePaths()
 /// this exact path.
 inline bool decorationPathIsBaselineIsolated(const QString& path)
 {
-    if (path == decorationPointerPath())
+    // Prefix-guarded like the shell family, not matched by equality: a
+    // future `pointer.*` leaf would otherwise fail OPEN and inherit the
+    // surface baseline the paragraph above rules out.
+    const QString pointer = decorationPointerPath();
+    if (path == pointer || path.startsWith(pointer + QLatin1Char('.'))) {
         return true;
+    }
     const QString root = decorationShellRootPath();
     return path == root || path.startsWith(root + QLatin1Char('.'));
 }

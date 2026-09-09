@@ -2899,10 +2899,10 @@ private:
 
     // The POINTER decoration pass: the user's chain of data/pointer packs
     // (trails, halos, click ripples) drawn over the finished frame of the
-    // output the pointer is on. Same by-value + `this` ctor ownership shape
-    // and declaration-order rule as the transition managers above. Driven by
-    // pointer events alone (slotMouseChanged), so a chain with no live layer
-    // costs nothing per frame — see the class note.
+    // output the pointer is on. A default-constructed by-value member: it
+    // takes no owner pointer and has no ordering constraint, unlike the
+    // transition managers above (see the class note). Driven by pointer
+    // events alone (slotMouseChanged), so an idle chain costs nothing per frame.
     PointerDecorationPass m_pointerPass;
 
     // Shader transition methods — implementations in shader_transitions.cpp,

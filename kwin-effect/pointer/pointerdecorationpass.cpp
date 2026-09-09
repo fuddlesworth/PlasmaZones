@@ -180,13 +180,19 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
         // trail at an arbitrary offset on the new output for the length of
         // one trailSeconds window. Start clean.
         m_history.reset();
+        m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
         m_output = screen;
     }
     const qreal scale = screen->scale();
     const QPointF devicePx = (pos - screen->geometryF().topLeft()) * scale;
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    if (moved) {
+    // A buttons-only event (the early return above means !moved implies
+    // buttonsChanged) writes no motion sample, so after a reset (an output
+    // crossing, an un-suppress) the first live frame would hand packs
+    // iMouse == (0,0) while uPointerPress carries the real position. Seed the
+    // ring from the event when it is empty; a ring with samples keeps them.
+    if (moved || m_history.sampleCount() == 0) {
         m_history.notePointer(devicePx, nowMs);
     }
     if (buttonsChanged) {
@@ -214,7 +220,7 @@ bool PointerDecorationPass::isLive() const
 
 // ── Damage ──────────────────────────────────────────────────────────────────
 
-QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs) const
+QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs)
 {
     // Suppressed here too, not only in the callers: this rect is both the
     // repaint REQUEST and the draw quad, so an empty one is what actually
@@ -234,16 +240,24 @@ QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint
         // An `above` chain hides KWin's cursor and re-draws the sprite
         // itself, so the sprite's own rect has to be inside the damage or the
         // pointer would leave a hole wherever it drifts past the reach band.
+        // The PREVIOUS rect is unioned in too: a cursor shape change arrives
+        // with no pointer event, so a sprite that shrank (an arrow after a
+        // resize cursor) would otherwise leave its old band unrepainted for
+        // a frame, still showing the stale sprite this pass drew there.
         const QRectF sprite = cursorCanvasRect(screen);
         if (!sprite.isEmpty()) {
             rect = rect.united(sprite);
         }
+        if (!m_lastSpriteCanvasRect.isEmpty()) {
+            rect = rect.united(m_lastSpriteCanvasRect);
+        }
+        m_lastSpriteCanvasRect = sprite;
     }
     const QSizeF deviceSize = screen->geometryF().size() * scale;
     return rect.intersected(QRectF(QPointF(0.0, 0.0), deviceSize));
 }
 
-QRectF PointerDecorationPass::damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs) const
+QRectF PointerDecorationPass::damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs)
 {
     const QRectF device = damageDeviceRect(screen, nowMs);
     if (device.isEmpty()) {
@@ -316,22 +330,27 @@ void PointerDecorationPass::scheduleRepaints()
 
 bool PointerDecorationPass::cursorOnOutput(KWin::LogicalOutput* screen) const
 {
-    return screen && KWin::effects && screen->geometryF().contains(KWin::effects->cursorPos());
+    // The same exclusive rule notePointer keys the canvas on. QRectF::contains
+    // includes the right and bottom edges, so a pointer on a shared boundary
+    // would read as on BOTH outputs and the hide could be taken for one the
+    // history is not on. The strip pass resolves the same way.
+    return screen && KWin::effects && KWin::effects->screenAt(KWin::effects->cursorPos().toPoint()) == screen;
 }
 
-void PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
+bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
 {
     if (m_cursorHidden || !m_anyAboveLayer || suppressedOn(screen) || !KWin::effects || !cursorOnOutput(screen)) {
-        return;
+        return false;
     }
     // Another owner (the strip pass, KWin's zoom, a screen-edge peek) already
     // holds the hidden state and draws its own copy; taking a second hide
     // would leave the show/hide pair unbalanced and drawing the cursor twice.
     if (KWin::effects->isCursorHidden()) {
-        return;
+        return false;
     }
     KWin::effects->hideCursor();
     m_cursorHidden = true;
+    return true;
 }
 
 void PointerDecorationPass::updateCursorHiding()
@@ -423,6 +442,7 @@ void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)
     // and means nothing without it.
     m_output = nullptr;
     m_history.reset();
+    m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
     // The pointer is about to land somewhere else (or nowhere); a hide taken
     // for the dying output has no pass left to draw the cursor for it.
@@ -459,6 +479,7 @@ void PointerDecorationPass::reset()
     }
     releaseGl();
     m_history.reset();
+    m_lastSpriteCanvasRect = QRectF();
     m_output = nullptr;
     m_hasTimeOrigin = false;
 }

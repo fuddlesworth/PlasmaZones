@@ -1,13 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorPointer/PointerFrameState.h>
 #include <PhosphorPointer/PointerHistory.h>
 #include <PhosphorPointer/PointerShaderContract.h>
-#include <PhosphorPointer/PointerUniformExtension.h>
 
 #include <QtTest/QtTest>
 
 using namespace PhosphorPointerShaders;
+
+namespace {
+
+/// How many samples the ring holds, read the way a host reads it: through
+/// the frame state, which is the only public window onto the ring.
+int sampleCount(const PointerHistory& history, qint64 nowMs)
+{
+    return history.frameState(nowMs, 1.0).trailSize();
+}
+
+} // namespace
 
 /// PointerHistory is the shared sampler behind both hosts: the compositor
 /// feeds it real pointer events and the settings preview feeds it a scripted
@@ -25,6 +36,8 @@ private Q_SLOTS:
     void testLivenessExpiresAfterTrailSeconds();
     void testButtonEventKeepsPassLiveWithoutMotion();
     void testVelocityDecaysWhenPointerStops();
+    void testBackwardsTimestampReportsZeroSpeed();
+    void testFirstMoveAfterParkingStartsFresh();
     void testSpeedIsNotUnderReportedAtRealSamplingRates();
     void testDamageRectCoversTrailInflatedByReach();
     void testDamageRectIsEmptyWhenNotLive();
@@ -36,17 +49,18 @@ void TestPointerHistory::testFreshHistoryIsNotLive()
 {
     // Nothing has happened, so the pass must not request a single frame.
     const PointerHistory history;
-    QCOMPARE(history.sampleCount(), 0);
+    QCOMPARE(sampleCount(history, 1000), 0);
     QVERIFY(!history.isLive(1000, 1.0));
     QVERIFY(history.damageRect(64.0, 1000, 1.0).isEmpty());
 
     const PointerFrameState state = history.frameState(1000, 1.0);
-    QVERIFY(state.trail.isEmpty());
+    QVERIFY(state.trailIsEmpty());
     // The "never happened" sentinel keeps a click pack from firing a ring at
     // session start just because the elapsed time reads as zero.
-    QVERIFY(state.pressSecondsSince > 1000.0);
-    QVERIFY(state.releaseSecondsSince > 1000.0);
-    QVERIFY(state.idleSeconds > 1000.0);
+    QCOMPARE(state.pressSecondsSince, PointerShaderContract::kNeverSeconds);
+    QCOMPARE(state.releaseSecondsSince, PointerShaderContract::kNeverSeconds);
+    QCOMPARE(state.idleSeconds, PointerShaderContract::kNeverSeconds);
+    QVERIFY(PointerShaderContract::kNeverSeconds > 1000.0);
 }
 
 void TestPointerHistory::testRingHoldsAtMostCapacityAndIsNewestFirst()
@@ -58,21 +72,20 @@ void TestPointerHistory::testRingHoldsAtMostCapacityAndIsNewestFirst()
         // thresholds and lands in the ring.
         history.notePointer(QPointF(i * 20.0, 0.0), i * 16);
     }
-    QCOMPARE(history.sampleCount(), PointerHistory::kCapacity);
+    const qint64 nowMs = (overfill - 1) * 16;
+    QCOMPARE(sampleCount(history, nowMs), PointerHistory::kCapacity);
     QCOMPARE(PointerHistory::kCapacity, PointerShaderContract::kMaxTrailPoints);
 
-    const qint64 nowMs = (overfill - 1) * 16;
     const PointerFrameState state = history.frameState(nowMs, 1.0);
-    QCOMPARE(state.trail.size(), PointerHistory::kCapacity);
+    QCOMPARE(state.trailSize(), PointerHistory::kCapacity);
 
     // Newest first is the shader-facing convention: index 0 is the pointer.
-    QCOMPARE(state.trail.at(0).x(), static_cast<float>((overfill - 1) * 20.0));
-    QCOMPARE(state.trail.at(0).z(), 0.0f);
-    for (int i = 1; i < state.trail.size(); ++i) {
-        QVERIFY(state.trail.at(i).z() > state.trail.at(i - 1).z());
-        QVERIFY(state.trail.at(i).x() < state.trail.at(i - 1).x());
+    QCOMPARE(state.newestTrail().x(), static_cast<float>((overfill - 1) * 20.0));
+    QCOMPARE(state.trailAt(0).z(), 0.0f);
+    for (int i = 1; i < state.trailSize(); ++i) {
+        QVERIFY(state.trailAt(i).z() > state.trailAt(i - 1).z());
+        QVERIFY(state.trailAt(i).x() < state.trailAt(i - 1).x());
     }
-    QCOMPARE(history.newestPosition(), QPointF((overfill - 1) * 20.0, 0.0));
 }
 
 void TestPointerHistory::testStationarySamplesAreCoalesced()
@@ -86,21 +99,21 @@ void TestPointerHistory::testStationarySamplesAreCoalesced()
     for (qint64 t = 1; t < PointerHistory::kMinSampleGapMs; ++t) {
         history.notePointer(QPointF(100.0, 100.0), t);
     }
-    QCOMPARE(history.sampleCount(), 1);
+    QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs), 1);
 
     // A sub-pixel drift is still a drift the pack should not see as motion.
     history.notePointer(QPointF(100.4, 100.4), PointerHistory::kMinSampleGapMs - 1);
-    QCOMPARE(history.sampleCount(), 1);
+    QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs), 1);
 
     // Once the gap floor is cleared the sample lands even though nothing
     // moved. That floor is a minimum sampling rate, not a motion filter: it
     // is what gives a slow drag enough trail points to draw a line from.
     history.notePointer(QPointF(100.0, 100.0), PointerHistory::kMinSampleGapMs);
-    QCOMPARE(history.sampleCount(), 2);
+    QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs), 2);
 
     // Moving far enough lands immediately, without waiting for the gap.
     history.notePointer(QPointF(400.0, 100.0), PointerHistory::kMinSampleGapMs + 1);
-    QCOMPARE(history.sampleCount(), 3);
+    QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs + 1), 3);
 }
 
 void TestPointerHistory::testLivenessExpiresAfterTrailSeconds()
@@ -151,6 +164,66 @@ void TestPointerHistory::testVelocityDecaysWhenPointerStops()
     QCOMPARE(stopped.velocity.x(), 0.0f);
     QCOMPARE(stopped.velocity.y(), 0.0f);
     QVERIFY(stopped.idleSeconds > 0.9);
+
+    // The hold is a strict window, like liveness and damage inclusion: at
+    // exactly kVelocityHoldMs the velocity has already decayed.
+    QVERIFY(history.frameState(50 + PointerHistory::kVelocityHoldMs - 1, 1.0).velocity.x() > 0.0f);
+    QCOMPARE(history.frameState(50 + PointerHistory::kVelocityHoldMs, 1.0).velocity.x(), 0.0f);
+}
+
+void TestPointerHistory::testBackwardsTimestampReportsZeroSpeed()
+{
+    // A clock that steps back (or two events stamped identically) is not a
+    // pairing anything can be divided over. Before this the negative gap
+    // floored to 1 ms and a 5 px step read as 5000 px/s, which is exactly
+    // the kind of spike a speed-gated pack fires on.
+    PointerHistory history;
+    history.notePointer(QPointF(0.0, 0.0), 1000);
+    history.notePointer(QPointF(5.0, 0.0), 990);
+
+    const PointerFrameState state = history.frameState(1000, 1.0);
+    // The sample itself is kept (it moved), but with no speed.
+    QCOMPARE(state.trailSize(), 2);
+    QCOMPARE(state.newestTrail().w(), 0.0f);
+    QCOMPARE(state.velocity.x(), 0.0f);
+    QCOMPARE(state.velocity.y(), 0.0f);
+
+    // An identical stamp with a real move is the same case.
+    PointerHistory same;
+    same.notePointer(QPointF(0.0, 0.0), 1000);
+    same.notePointer(QPointF(5.0, 0.0), 1000);
+    const PointerFrameState sameState = same.frameState(1000, 1.0);
+    QCOMPARE(sameState.trailSize(), 2);
+    QCOMPARE(sameState.newestTrail().w(), 0.0f);
+    QCOMPARE(sameState.velocity.x(), 0.0f);
+}
+
+void TestPointerHistory::testFirstMoveAfterParkingStartsFresh()
+{
+    // Park the pointer for ten seconds, then move 5 px. Dividing over the
+    // idle gap reported 0.5 px/s for that first sample, so a pack gated on
+    // speed opened one sample late. The gap past the hold is not a pairing:
+    // the first move records speed 0 and the next pair carries the speed.
+    PointerHistory history;
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(5.0, 0.0), 10000);
+
+    const PointerFrameState first = history.frameState(10000, 1.0);
+    QCOMPARE(first.trailSize(), 2);
+    QCOMPARE(first.newestTrail().w(), 0.0f);
+    QCOMPARE(first.velocity.x(), 0.0f);
+
+    // The next sample pairs with the fresh start and reports the real speed.
+    history.notePointer(QPointF(15.0, 0.0), 10010);
+    const PointerFrameState second = history.frameState(10010, 1.0);
+    QCOMPARE(qRound(second.newestTrail().w()), 1000);
+    QCOMPARE(qRound(second.velocity.x()), 1000);
+
+    // A gap of exactly the hold is already outside the window.
+    PointerHistory edge;
+    edge.notePointer(QPointF(0.0, 0.0), 0);
+    edge.notePointer(QPointF(5.0, 0.0), PointerHistory::kVelocityHoldMs);
+    QCOMPARE(edge.frameState(PointerHistory::kVelocityHoldMs, 1.0).newestTrail().w(), 0.0f);
 }
 
 void TestPointerHistory::testSpeedIsNotUnderReportedAtRealSamplingRates()
@@ -191,11 +264,11 @@ void TestPointerHistory::testSpeedIsNotUnderReportedAtRealSamplingRates()
         // The per-sample speed the trail carries (`.w`, what a shader reads)
         // has to agree with the velocity, or a pack gating on one and drawing
         // with the other disagrees with itself.
-        QVERIFY2(!state.trail.isEmpty(), c.label);
-        QVERIFY2(qAbs(state.trail.first().w() - 1000.0f) < 1.0f,
+        QVERIFY2(!state.trailIsEmpty(), c.label);
+        QVERIFY2(qAbs(state.newestTrail().w() - 1000.0f) < 1.0f,
                  qPrintable(QStringLiteral("%1: trail sample speed %2")
                                 .arg(QLatin1String(c.label))
-                                .arg(static_cast<double>(state.trail.first().w()))));
+                                .arg(static_cast<double>(state.newestTrail().w()))));
     }
 }
 
@@ -255,14 +328,14 @@ void TestPointerHistory::testResetClearsEverything()
     QVERIFY(history.isLive(10, 1.0));
 
     history.reset();
-    QCOMPARE(history.sampleCount(), 0);
+    QCOMPARE(sampleCount(history, 10), 0);
     QVERIFY(!history.isLive(10, 1.0));
     QVERIFY(history.damageRect(40.0, 10, 1.0).isEmpty());
 
     const PointerFrameState state = history.frameState(10, 1.0);
-    QVERIFY(state.trail.isEmpty());
+    QVERIFY(state.trailIsEmpty());
     QCOMPARE(state.buttons, 0);
-    QVERIFY(state.pressSecondsSince > 1000.0);
+    QCOMPARE(state.pressSecondsSince, PointerShaderContract::kNeverSeconds);
 }
 
 QTEST_MAIN(TestPointerHistory)

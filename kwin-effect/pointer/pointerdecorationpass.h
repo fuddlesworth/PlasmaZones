@@ -271,7 +271,9 @@ private:
         std::array<int, 4> iChannelResolution = makeUnsetLocations<4>();
     };
 
-    /// One compiled multipass buffer stage of a pack.
+    /// One compiled multipass buffer stage of a pack. Buffer stages never
+    /// receive the cursor sprite: uCursorSprite is not bound for them and
+    /// uPointerFlags.x is 0 there, even for a `needsCursor` pack.
     struct CompiledBufferPass
     {
         std::unique_ptr<KWin::GLShader> shader;
@@ -305,6 +307,12 @@ private:
         std::vector<std::array<std::unique_ptr<KWin::GLFramebuffer>, 2>> bufferFbo;
         QSize bufferSize;
         int bufferFront = 0;
+        /// Set when the targets for `bufferSize` could not be allocated. The
+        /// stages are then abandoned rather than retried (and re-warned)
+        /// every frame, the same discipline the strip pass applies to its
+        /// capture. Cleared when the wanted size changes, and gone with the
+        /// entry when the cache is dropped (invalidateShaderCache/releaseGl).
+        bool bufferAllocFailed = false;
     };
 
     // ── pointerdecorationshader.cpp ─────────────────────────────────────────
@@ -322,8 +330,12 @@ private:
     CompiledPointerPack* compiledPack(const EngagedLayer& layer);
 
     /// Resolve the uniform locations shared by every stage of a pack onto
-    /// @p out. Called for the main shader and each buffer shader.
-    static void cacheUniformLocations(KWin::GLShader* shader, PointerUniformLocations& out);
+    /// @p out. Called for the main shader and each buffer shader. A sampler
+    /// the source references but @p eff does not declare (a uTextureN slot
+    /// past its `textures`, uCursorSprite without `needsCursor`) is warned
+    /// about and left at -1, so it is never bound and never fed unit 0.
+    static void cacheUniformLocations(KWin::GLShader* shader, const PhosphorPointerShaders::PointerShaderEffect& eff,
+                                      PointerUniformLocations& out);
 
     // ── pointerdecorationpaint.cpp ──────────────────────────────────────────
 
@@ -358,7 +370,10 @@ private:
     /// RenderViewport's device coordinate space, with BOTTOM-UP texcoords
     /// (see the class note on texcoord orientation). The caller must already
     /// have uploaded viewport.projectionMatrix() as the bound shader's MVP.
-    static void drawDamageQuad(const KWin::RenderViewport& viewport, const QRectF& deviceRect);
+    /// @p deviceSize is the canvas the texcoords are normalised against and
+    /// MUST be the size pushed as iResolution, since a pack reconstructs
+    /// canvas px as uv * iResolution.
+    static void drawDamageQuad(const KWin::RenderViewport& viewport, const QRectF& deviceRect, const QSize& deviceSize);
     /// Draw a unit NDC quad for a buffer stage (FBO to FBO, no projection).
     static void drawFullscreenQuad();
 
@@ -384,10 +399,11 @@ private:
     void rebuildChain();
 
     /// This frame's damage in @p screen's device-px canvas, already clipped
-    /// to the output. Empty when nothing is live.
-    QRectF damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs) const;
+    /// to the output. Empty when nothing is live. Not const: it records the
+    /// sprite rect it saw (m_lastSpriteCanvasRect) for the next call's union.
+    QRectF damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs);
     /// The same rect in GLOBAL LOGICAL px, the space addRepaint speaks.
-    QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs) const;
+    QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs);
 
     /// The cursor sprite's rect in @p screen's device-px canvas, hotspot
     /// applied. A null rect when the compositor reports no cursor image.
@@ -396,8 +412,9 @@ private:
     /// Take the compositor's cursor hide, if an `above` layer is engaged and
     /// the pointer is on @p screen. A no-op when something else already hides
     /// the cursor, so the pass never resurrects a cursor another effect (or
-    /// the strip pass) wanted gone.
-    void hideCursorForPass(KWin::LogicalOutput* screen);
+    /// the strip pass) wanted gone. Returns true only when THIS call took the
+    /// hide, which is the frame paintOutput must not blit the sprite on.
+    bool hideCursorForPass(KWin::LogicalOutput* screen);
     /// Give the hide back once no live `above` chain covers the pointer.
     void updateCursorHiding();
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
@@ -432,6 +449,10 @@ private:
     /// history (see the class note on coordinate space).
     KWin::LogicalOutput* m_output = nullptr;
     PhosphorPointerShaders::PointerHistory m_history;
+    /// The cursor sprite rect the last damage computation saw, in m_output's
+    /// canvas, unioned into the next one so a sprite that changed shape
+    /// without a pointer event still gets its old band repainted.
+    QRectF m_lastSpriteCanvasRect;
     /// Steady-clock origin of the pass's `iTime`, taken on the first live
     /// frame of a burst so a time-driven pack starts at zero rather than at
     /// the compositor's uptime. Cleared when the chain goes quiet.

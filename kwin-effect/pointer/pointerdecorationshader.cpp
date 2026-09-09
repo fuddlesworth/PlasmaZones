@@ -52,13 +52,11 @@ using ShaderInternal::kCustomParamsElementNames;
 
 namespace {
 
-// The vertex stage of BOTH the main pointer pass and every buffer stage.
-//
-// data/pointer/shared/pointer.vert is the PREVIEW's vertex stage: it reads
-// qt_Matrix out of the UBO, which does not exist on the compositor branch of
-// the contract (KWin::GLShader has no UBO bind path), so it is deliberately
-// never compiled here — the same split surface.vert and the surface compile
-// path already have.
+// The vertex stage of BOTH the main pointer pass and every buffer stage is
+// PPS::PointerShaderRegistry::compositorVertexSource(). It lives in the
+// library rather than here so the KWin-branch bake test compiles the exact
+// stage the compositor does; the pack-facing pointer.vert in shared/ is the
+// PREVIEW's stage and is deliberately never compiled by the effect.
 //
 // Positions arrive in the RenderViewport's device coordinate space and are
 // projected by KWin's own matrix, which encodes RenderTarget::transform() (the
@@ -66,25 +64,8 @@ namespace {
 // offset. Emitting clip-space directly is only equivalent on an unrotated
 // output with a zero offset, so the projection is applied unconditionally,
 // exactly as TransitionPass::outputQuadVertexSource explains for the
-// screen-level transition passes.
-//
-// The BUFFER stages reuse this with an identity MVP: their quad is already in
-// clip space, and setting the identity matrix costs one uniform push and
-// keeps a single vertex source for the whole family.
-//
-// Attribute slots match KWin::VA_Position (0) / VA_TexCoord (1) per
-// <opengl/glvertexbuffer.h>'s GLVertex2DLayout, so vbo->setVertices of
-// GLVertex2D feeds position@0 and texcoord@1 directly.
-constexpr const char* kPointerVertexSource =
-    "#version 450\n"
-    "layout(location = 0) in vec2 position;\n"
-    "layout(location = 1) in vec2 texCoord;\n"
-    "layout(location = 0) out vec2 vTexCoord;\n"
-    "uniform mat4 modelViewProjectionMatrix;\n"
-    "void main() {\n"
-    "    vTexCoord = texCoord;\n"
-    "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-    "}\n";
+// screen-level transition passes. The BUFFER stages reuse it with an identity
+// MVP: their quad is already in clip space.
 
 // Element names for the pointer contract's indexed uniforms. The literals
 // must match the declarations in data/pointer/shared/pointer_uniforms.glsl;
@@ -113,6 +94,13 @@ constexpr std::array<const char*, PSC::kMaxTrailPoints> kTrailElementNames = {
      "uPointerTrail[25]", "uPointerTrail[26]", "uPointerTrail[27]", "uPointerTrail[28]", "uPointerTrail[29]",
      "uPointerTrail[30]", "uPointerTrail[31]"}};
 static_assert(PSC::kMaxTrailPoints == 32, "kTrailElementNames must grow to match kMaxTrailPoints");
+// The customParams / customColors element names are the ANIMATION contract's
+// arrays, indexed here by the POINTER contract's budgets; the two are pinned
+// separately, so an unequal bump would otherwise read past the literal.
+static_assert(std::tuple_size_v<decltype(ShaderInternal::kCustomParamsElementNames)> >= PSC::kMaxCustomParams,
+              "kCustomParamsElementNames must cover the pointer contract's kMaxCustomParams");
+static_assert(std::tuple_size_v<decltype(ShaderInternal::kCustomColorsElementNames)> >= PSC::kMaxCustomColors,
+              "kCustomColorsElementNames must cover the pointer contract's kMaxCustomColors");
 
 /// The include paths a pointer pack resolves `#include <pointer_lib.glsl>`
 /// against: each registered search path's `shared` dir plus the search path
@@ -171,7 +159,8 @@ void PointerDecorationPass::ensureRegistryPaths()
     }
 }
 
-void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, PointerUniformLocations& out)
+void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, const PPS::PointerShaderEffect& eff,
+                                                  PointerUniformLocations& out)
 {
     out.iTime = shader->uniformLocation(PSC::kITime);
     out.iResolution = shader->uniformLocation(PSC::kIResolution);
@@ -204,6 +193,25 @@ void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, Pointe
         out.iChannel[static_cast<size_t>(i)] = shader->uniformLocation(kIChannelNames[static_cast<size_t>(i)]);
         out.iChannelResolution[static_cast<size_t>(i)] =
             shader->uniformLocation(kIChannelResNames[static_cast<size_t>(i)]);
+    }
+    // A sampler the source references but the metadata never declares gets
+    // nothing bound for it, so it stays at its default of unit 0 and reads
+    // whatever KWin's scene walk last left there. Dropped to -1 so
+    // bindPackTextures and the sprite bind skip it, and warned once per
+    // compile with the pack's name, since the fix is in its metadata.
+    for (int slot = 0; slot < PSC::kMaxUserTextureSlots; ++slot) {
+        int& samplerLoc = out.userTextures[static_cast<size_t>(slot)];
+        if (samplerLoc >= 0 && slot >= eff.textures.size()) {
+            qCWarning(lcEffect) << "Pointer pack" << eff.id << "references"
+                                << kUserTextureNames[static_cast<size_t>(slot)]
+                                << "but declares no texture for that slot — sampler left unbound";
+            samplerLoc = -1;
+        }
+    }
+    if (out.uCursorSprite >= 0 && !eff.needsCursor) {
+        qCWarning(lcEffect) << "Pointer pack" << eff.id << "references" << PSC::kUCursorSprite
+                            << "without needsCursor — sampler left unbound";
+        out.uCursorSprite = -1;
     }
 }
 
@@ -288,7 +296,7 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
     // the layout(location = N) qualifiers are illegal without the ARB
     // extensions the inject helper enables. Passing raw source here made
     // frag-only surface packs fail to link on NVIDIA (error C7548).
-    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kPointerVertexSource));
+    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(PPS::PointerShaderRegistry::compositorVertexSource());
     if (!eff.vertexShaderPath.isEmpty()) {
         // Every failure below warns and KEEPS the default vertex stage rather
         // than failing the whole pack for a vertex-only defect — the same
@@ -333,7 +341,7 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
         qCWarning(lcEffect) << "Failed to compile pointer shader pack" << eff.id << "— layer disabled until reload";
         return &packState;
     }
-    cacheUniformLocations(shader.get(), packState.loc);
+    cacheUniformLocations(shader.get(), eff, packState.loc);
 
     // Pack-declared parameters: the metadata defaults merged with this
     // layer's overrides, resolved into the customParams[] / customColors[]
@@ -448,7 +456,7 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
                 break;
             }
             CompiledBufferPass pass;
-            cacheUniformLocations(bufShader.get(), pass.loc);
+            cacheUniformLocations(bufShader.get(), eff, pass.loc);
             pass.shader = std::move(bufShader);
             passes.push_back(std::move(pass));
         }
@@ -456,6 +464,13 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
             qCWarning(lcEffect) << "Pointer pack" << eff.id
                                 << "has a failing buffer pass — layer disabled until reload";
             // Leave shader null on the cached entry: that IS the failure latch.
+            // The user textures were uploaded above, before this block, and a
+            // latched pack is never drawn, so free them and the locations now
+            // rather than hold GL for the session on a pack that cannot run.
+            for (auto& tex : packState.userTextures) {
+                tex.reset();
+            }
+            packState.loc = PointerUniformLocations{};
             return &packState;
         }
         packState.bufferPasses = std::move(passes);

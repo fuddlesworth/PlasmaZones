@@ -3,12 +3,12 @@
 
 #pragma once
 
+#include <PhosphorPointer/PointerFrameState.h>
 #include <PhosphorPointer/PointerShaderUniforms.h>
 #include <PhosphorPointer/phosphorpointer_export.h>
 
 #include <PhosphorShaders/IUniformExtension.h>
 
-#include <QList>
 #include <QMutex>
 #include <QPointF>
 #include <QRectF>
@@ -16,49 +16,9 @@
 #include <QVector4D>
 
 #include <atomic>
+#include <span>
 
 namespace PhosphorPointerShaders {
-
-/// Plain-data snapshot of everything the pointer contract's tail carries for
-/// one frame. `PointerHistory::frameState` produces it, and both hosts (the
-/// compositor pushing loose uniforms and the preview driving the UBO through
-/// `PointerUniformExtension::apply`) consume the same type. Positions are in
-/// canvas px (device px, top-down, origin at the output's top-left).
-struct PHOSPHORPOINTER_EXPORT PointerFrameState
-{
-    /// Pointer velocity in device px/s.
-    QVector2D velocity;
-
-    /// Last press: position, seconds since (1e6 when none), button code
-    /// (1 left, 2 right, 3 middle, 0 none).
-    QPointF pressPos;
-    double pressSecondsSince = 1.0e6;
-    int pressButton = 0;
-
-    /// Last release, same shape.
-    QPointF releasePos;
-    double releaseSecondsSince = 1.0e6;
-    int releaseButton = 0;
-
-    /// Pressed-button bitmask (1 left, 2 right, 4 middle).
-    int buttons = 0;
-
-    /// Seconds since the last motion (1e6 when none).
-    double idleSeconds = 1.0e6;
-
-    /// Logical-to-device scale of the canvas.
-    double scale = 1.0;
-
-    /// Cursor sprite rect in canvas px, hotspot applied. Null when unknown.
-    QRectF cursorRect;
-
-    /// Whether `uCursorSprite` is bound this frame.
-    bool hasSprite = false;
-
-    /// Trail samples, newest first, at most `kMaxTrailPoints`: `.xy` canvas
-    /// px, `.z` age seconds, `.w` speed at the sample (device px/s).
-    QList<QVector4D> trail;
-};
 
 /// IUniformExtension that appends `PointerUniformsTail` after
 /// `PhosphorShaders::BaseUniforms` in the preview runtime's UBO. Modelled on
@@ -105,14 +65,27 @@ public:
     void setReachLogicalPx(double reach);
 
     /// `uPointerTrail` (truncated to `kMaxTrailPoints`, the rest zeroed) and
-    /// `uPointerState.w` = the count actually filled.
-    void setTrail(const QList<QVector4D>& trail);
+    /// `uPointerState.w` = the count actually filled. @p trail is newest
+    /// first, as `PointerFrameState::trail` holds it.
+    void setTrail(std::span<const QVector4D> trail);
 
-    /// Push a whole frame at once.
+    /// Push a whole frame at once. Atomic with respect to `write`: the mutex
+    /// is held for the whole frame, so the render thread copies either the
+    /// previous frame's tail or this one, never a mix of the two.
     void apply(const PointerFrameState& state);
 
 private:
+    // The *Locked helpers carry the setter bodies and expect m_mutex held.
+    // The public setters lock around one of them; apply() locks once around
+    // all of them.
     void setVec4Locked(float (&dst)[4], float x, float y, float z, float w);
+    void setVelocityLocked(const QVector2D& velocity);
+    void setPressLocked(const QPointF& pos, double secondsSince, int button);
+    void setReleaseLocked(const QPointF& pos, double secondsSince, int button);
+    void setStateLocked(int buttonsMask, double idleSeconds, double scale);
+    void setCursorRectLocked(const QRectF& rect);
+    void setFlagsLocked(bool hasSprite, double scale);
+    void setTrailLocked(std::span<const QVector4D> trail);
 
     PointerUniformsTail m_data;
     double m_reachLogicalPx = 0.0;

@@ -115,15 +115,6 @@ void drawOutputQuad(const KWin::RenderViewport& viewport);
 /// (ShaderInternal::injectKwinDefineAfterVersion).
 const char* outputQuadVertexSource();
 
-/// Resolve p_<name> parameter values into the customParams[] / customColors[]
-/// slot pools. translateAnimationParams fills the metadata defaults when the
-/// profile carries no override — WITHOUT this the shaders run at
-/// customParams == 0 (slide has no direction, dissolve no speckle scale,
-/// etc.) and appear broken. Color params land as normalised rgba, exactly as
-/// the per-window transition path uploads them (see shader_transitions.cpp);
-/// translateAnimationParams coerces every color to a valid QColor (default →
-/// Qt::transparent), so the isValid guard is defence-in-depth against a
-/// caller that bypasses the registry encoder.
 /// Render the scene's own cursor item into the CURRENT target, at the live
 /// pointer position. Only meaningful while the caller holds the compositor's
 /// cursor hidden (EffectsHandler::hideCursor): a screen-level pass that
@@ -148,6 +139,15 @@ const char* outputQuadVertexSource();
 /// drift apart.
 void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
 
+/// Resolve p_<name> parameter values into the customParams[] / customColors[]
+/// slot pools. translateAnimationParams fills the metadata defaults when the
+/// profile carries no override — WITHOUT this the shaders run at
+/// customParams == 0 (slide has no direction, dissolve no speckle scale,
+/// etc.) and appear broken. Color params land as normalised rgba, exactly as
+/// the per-window transition path uploads them (see shader_transitions.cpp);
+/// translateAnimationParams coerces every color to a valid QColor (default →
+/// Qt::transparent), so the isValid guard is defence-in-depth against a
+/// caller that bypasses the registry encoder.
 void translatePackParams(
     const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QVariantMap& params,
     std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>& customParams,

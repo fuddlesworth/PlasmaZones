@@ -78,8 +78,16 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
         if (dist < kMinSampleDistancePx && gapMs < kMinSampleGapMs) {
             return;
         }
-        const double dt = std::max(secondsBetween(nowMs, newest.timeMs), kVelocityMinDtSeconds);
-        speed = dist / dt;
+        // Speed only over a usable pairing. A gap of zero or less is a clock
+        // that stalled or stepped back, and dividing by the dt floor would
+        // turn a few px into thousands of px/s. A gap at or past the hold is
+        // the pointer coming back from parked, and dividing over the idle
+        // time would report the first move as a crawl and open a speed-gated
+        // pack one sample late. Both record 0 and let the next pair speak.
+        if (gapMs > 0 && gapMs < kVelocityHoldMs) {
+            const double dt = std::max(secondsBetween(nowMs, newest.timeMs), kVelocityMinDtSeconds);
+            speed = dist / dt;
+        }
     }
     m_head = m_count > 0 ? (m_head + 1) % kCapacity : 0;
     m_ring[static_cast<size_t>(m_head)] = Sample{devicePx, nowMs, speed};
@@ -113,12 +121,18 @@ PointerFrameState PointerHistory::frameState(qint64 nowMs, double scale) const
     s.scale = scale;
     s.buttons = m_buttonsMask;
 
-    if (m_count >= 2 && nowMs - sampleAt(0).timeMs <= kVelocityHoldMs) {
+    // Strict `<` on the hold, like every other window here (see the header's
+    // sampling contract). The pairing test mirrors notePointer's: a pair the
+    // sampler recorded as speed 0 must not become a velocity here.
+    if (m_count >= 2 && nowMs - sampleAt(0).timeMs < kVelocityHoldMs) {
         const Sample& a = sampleAt(0);
         const Sample& b = sampleAt(1);
-        const double dt = std::max(secondsBetween(a.timeMs, b.timeMs), kVelocityMinDtSeconds);
-        s.velocity = QVector2D(static_cast<float>((a.pos.x() - b.pos.x()) / dt),
-                               static_cast<float>((a.pos.y() - b.pos.y()) / dt));
+        const qint64 pairGapMs = a.timeMs - b.timeMs;
+        if (pairGapMs > 0 && pairGapMs < kVelocityHoldMs) {
+            const double dt = std::max(secondsBetween(a.timeMs, b.timeMs), kVelocityMinDtSeconds);
+            s.velocity = QVector2D(static_cast<float>((a.pos.x() - b.pos.x()) / dt),
+                                   static_cast<float>((a.pos.y() - b.pos.y()) / dt));
+        }
     }
 
     if (m_hasPress) {
@@ -135,12 +149,14 @@ PointerFrameState PointerHistory::frameState(qint64 nowMs, double scale) const
         s.idleSeconds = std::max(0.0, secondsBetween(nowMs, m_lastMotionMs));
     }
 
-    s.trail.reserve(m_count);
+    // Filled in place: the frame state's storage is fixed at the contract
+    // capacity, which the ring never exceeds, so no allocation per frame.
+    s.trailCount = m_count;
     for (int i = 0; i < m_count; ++i) {
         const Sample& sample = sampleAt(i);
-        s.trail.append(QVector4D(static_cast<float>(sample.pos.x()), static_cast<float>(sample.pos.y()),
-                                 static_cast<float>(std::max(0.0, secondsBetween(nowMs, sample.timeMs))),
-                                 static_cast<float>(sample.speed)));
+        s.trail[static_cast<size_t>(i)] = QVector4D(
+            static_cast<float>(sample.pos.x()), static_cast<float>(sample.pos.y()),
+            static_cast<float>(std::max(0.0, secondsBetween(nowMs, sample.timeMs))), static_cast<float>(sample.speed));
     }
     return s;
 }
@@ -195,11 +211,6 @@ QRectF PointerHistory::damageRect(double reachDevicePx, qint64 nowMs, double tra
     }
     const double r = std::max(0.0, reachDevicePx);
     return QRectF(QPointF(minX, minY), QPointF(maxX, maxY)).adjusted(-r, -r, r, r);
-}
-
-QPointF PointerHistory::newestPosition() const
-{
-    return m_count > 0 ? sampleAt(0).pos : QPointF();
 }
 
 void PointerHistory::reset()

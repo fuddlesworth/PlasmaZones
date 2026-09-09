@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorPointer/PointerHistory.h>
+#include <PhosphorPointer/PointerFrameState.h>
 #include <PhosphorPointer/PointerShaderContract.h>
 #include <PhosphorPointer/PointerShaderUniforms.h>
 #include <PhosphorPointer/PointerUniformExtension.h>
@@ -12,8 +12,37 @@
 
 #include <array>
 #include <cstring>
+#include <span>
+#include <vector>
 
 using namespace PhosphorPointerShaders;
+
+namespace {
+
+/// A frame state whose every lane is set to something other than its
+/// default, so a setter that ignores its argument shows up as a stale lane.
+PointerFrameState fullFrame()
+{
+    PointerFrameState state;
+    state.velocity = QVector2D(3.0f, 4.0f);
+    state.pressPos = QPointF(100.0, 200.0);
+    state.pressSecondsSince = 0.25;
+    state.pressButton = 2;
+    state.releasePos = QPointF(110.0, 210.0);
+    state.releaseSecondsSince = 0.10;
+    state.releaseButton = 1;
+    state.buttons = 5;
+    state.idleSeconds = 0.5;
+    state.scale = 2.0;
+    state.cursorRect = QRectF(50.0, 60.0, 24.0, 24.0);
+    state.hasSprite = true;
+    state.trail[0] = QVector4D(1.0f, 2.0f, 0.0f, 900.0f);
+    state.trail[1] = QVector4D(3.0f, 4.0f, 0.016f, 850.0f);
+    state.trailCount = 2;
+    return state;
+}
+
+} // namespace
 
 /// The pointer UBO is a wire contract shared by the C++ mirror struct here and
 /// the GLSL block in data/pointer/shared/pointer_uniforms.glsl. A field that
@@ -31,6 +60,7 @@ private Q_SLOTS:
     void testTrailIsTruncatedAndCountReported();
     void testUnusedTrailSlotsAreZeroed();
     void testDirtyFlagTracksRealChangesOnly();
+    void testApplyingAnIdenticalFrameLeavesTheTailClean();
 
 private:
     /// Read the vec4 at @p tailByteOffset out of a buffer written by the
@@ -91,21 +121,7 @@ void TestPointerUniformExtension::testWriteLandsAtTheDeclaredTailOffset()
 void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
 {
     // apply() is the path both hosts use, so it is what has to be complete.
-    PointerFrameState state;
-    state.velocity = QVector2D(3.0f, 4.0f);
-    state.pressPos = QPointF(100.0, 200.0);
-    state.pressSecondsSince = 0.25;
-    state.pressButton = 2;
-    state.releasePos = QPointF(110.0, 210.0);
-    state.releaseSecondsSince = 0.10;
-    state.releaseButton = 1;
-    state.buttons = 5;
-    state.idleSeconds = 0.5;
-    state.scale = 2.0;
-    state.cursorRect = QRectF(50.0, 60.0, 24.0, 24.0);
-    state.hasSprite = true;
-    state.trail.append(QVector4D(1.0f, 2.0f, 0.0f, 900.0f));
-    state.trail.append(QVector4D(3.0f, 4.0f, 0.016f, 850.0f));
+    const PointerFrameState state = fullFrame();
 
     PointerUniformExtension ext;
     ext.setReachLogicalPx(48.0);
@@ -153,13 +169,13 @@ void TestPointerUniformExtension::testTrailIsTruncatedAndCountReported()
 {
     // A host feeding more points than the array holds must be clamped rather
     // than overrunning the tail into whatever follows the UBO.
-    QList<QVector4D> overlong;
+    std::vector<QVector4D> overlong;
     for (int i = 0; i < PointerShaderContract::kMaxTrailPoints + 10; ++i) {
-        overlong.append(QVector4D(static_cast<float>(i), 0.0f, 0.0f, 0.0f));
+        overlong.emplace_back(static_cast<float>(i), 0.0f, 0.0f, 0.0f);
     }
 
     PointerUniformExtension ext;
-    ext.setTrail(overlong);
+    ext.setTrail(std::span<const QVector4D>(overlong));
 
     std::vector<char> buffer(1280, char{0});
     ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
@@ -180,15 +196,14 @@ void TestPointerUniformExtension::testUnusedTrailSlotsAreZeroed()
     // reads the array directly, so the setter clears the remainder.
     PointerUniformExtension ext;
 
-    QList<QVector4D> full;
+    std::vector<QVector4D> full;
     for (int i = 0; i < PointerShaderContract::kMaxTrailPoints; ++i) {
-        full.append(QVector4D(99.0f, 99.0f, 99.0f, 99.0f));
+        full.emplace_back(99.0f, 99.0f, 99.0f, 99.0f);
     }
-    ext.setTrail(full);
+    ext.setTrail(std::span<const QVector4D>(full));
 
-    QList<QVector4D> shortened;
-    shortened.append(QVector4D(1.0f, 1.0f, 0.0f, 0.0f));
-    ext.setTrail(shortened);
+    const std::array<QVector4D, 1> shortened{QVector4D(1.0f, 1.0f, 0.0f, 0.0f)};
+    ext.setTrail(std::span<const QVector4D>(shortened));
 
     std::vector<char> buffer(1280, char{0});
     ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
@@ -223,6 +238,56 @@ void TestPointerUniformExtension::testDirtyFlagTracksRealChangesOnly()
 
     ext.setVelocity(QVector2D(2.0f, 0.0f));
     QVERIFY(ext.isDirty());
+}
+
+void TestPointerUniformExtension::testApplyingAnIdenticalFrameLeavesTheTailClean()
+{
+    // The same rule across the whole frame: apply() crosses every setter,
+    // including the trail's per-slot compare and the reach lane it derives,
+    // and none of them may raise dirty for a value already in the tail.
+    PointerUniformExtension ext;
+    ext.setReachLogicalPx(48.0);
+    const PointerFrameState state = fullFrame();
+    ext.apply(state);
+    QVERIFY(ext.isDirty());
+
+    ext.clearDirty();
+    ext.apply(state);
+    QVERIFY(!ext.isDirty());
+
+    // And each lane still flips it when it really changes, so the clean
+    // result above is a compare, not a setter that stopped writing.
+    const auto expectDirtyAfter = [&](auto mutate) {
+        ext.clearDirty();
+        PointerFrameState changed = fullFrame();
+        mutate(changed);
+        ext.apply(changed);
+        return ext.isDirty();
+    };
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.velocity = QVector2D(9.0f, 4.0f);
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.pressSecondsSince = 0.5;
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.releaseButton = 3;
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.idleSeconds = 0.75;
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.cursorRect = QRectF(0.0, 0.0, 1.0, 1.0);
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.hasSprite = false;
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.trail[1].setX(30.0f);
+    }));
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.trailCount = 1;
+    }));
 }
 
 QTEST_MAIN(TestPointerUniformExtension)

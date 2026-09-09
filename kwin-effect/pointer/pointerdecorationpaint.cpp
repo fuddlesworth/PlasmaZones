@@ -46,7 +46,8 @@ namespace PSC = PhosphorPointerShaders::PointerShaderContract;
 
 // ── Geometry primitives ─────────────────────────────────────────────────────
 
-void PointerDecorationPass::drawDamageQuad(const KWin::RenderViewport& viewport, const QRectF& deviceRect)
+void PointerDecorationPass::drawDamageQuad(const KWin::RenderViewport& viewport, const QRectF& deviceRect,
+                                           const QSize& deviceSize)
 {
     // Positions live in the viewport's DEVICE coordinate space (y-down, the
     // same space scaledRenderRect reports), projected by the MVP the caller
@@ -65,9 +66,10 @@ void PointerDecorationPass::drawDamageQuad(const KWin::RenderViewport& viewport,
     // top-down uv for the transition packs' own Y-flipping samplers — see the
     // header note. Sub-rect texcoords, so the fragment stage runs only over
     // the damage band while every pack still sees the full-canvas uv it
-    // expects.
-    const float w = float(sr.width());
-    const float h = float(sr.height());
+    // expects. Normalised against deviceSize, the very QSize iResolution was
+    // pushed from, so uv * iResolution lands on the pixel the quad covers.
+    const float w = float(deviceSize.width());
+    const float h = float(deviceSize.height());
     const float u0 = w > 0.0f ? float(deviceRect.left()) / w : 0.0f;
     const float u1 = w > 0.0f ? float(deviceRect.right()) / w : 1.0f;
     const float v0 = h > 0.0f ? 1.0f - float(deviceRect.top()) / h : 1.0f;
@@ -125,7 +127,7 @@ void PointerDecorationPass::pushFrameUniforms(KWin::GLShader* shader, const Poin
     if (loc.iMouse >= 0) {
         // The pointer IS the newest trail sample; the contract's .zw lane is
         // that position normalised against the canvas.
-        const QVector4D newest = state.trail.isEmpty() ? QVector4D() : state.trail.first();
+        const QVector4D newest = state.trailIsEmpty() ? QVector4D() : state.newestTrail();
         const float px = newest.x();
         const float py = newest.y();
         shader->setUniform(loc.iMouse, QVector4D(px, py, w > 0.0f ? px / w : 0.0f, h > 0.0f ? py / h : 0.0f));
@@ -146,7 +148,7 @@ void PointerDecorationPass::pushFrameUniforms(KWin::GLShader* shader, const Poin
     }
     // Entries at or past this count read as zero by contract, which is what
     // the zero-fill in the trail loop below guarantees.
-    const int filled = std::min(int(state.trail.size()), PSC::kMaxTrailPoints);
+    const int filled = std::min(state.trailSize(), PSC::kMaxTrailPoints);
     if (loc.uPointerState >= 0) {
         shader->setUniform(
             loc.uPointerState,
@@ -172,7 +174,7 @@ void PointerDecorationPass::pushFrameUniforms(KWin::GLShader* shader, const Poin
         if (location < 0) {
             continue;
         }
-        shader->setUniform(location, i < filled ? state.trail.at(i) : QVector4D());
+        shader->setUniform(location, i < filled ? state.trailAt(i) : QVector4D());
     }
     for (int slot = 0; slot < PSC::kMaxCustomParams; ++slot) {
         const int location = loc.customParams[static_cast<size_t>(slot)];
@@ -267,6 +269,21 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
                                     PPS::PointerShaderEffect::kMaxBufferScale);
     const QSize wantSize(std::max(1, int(std::lround(deviceSize.width() * scale))),
                          std::max(1, int(std::lround(deviceSize.height() * scale))));
+    if (pack.bufferAllocFailed) {
+        // Abandoned at this size rather than retried per frame: a persistent
+        // allocation failure would otherwise cost the texture and FBO attempt
+        // plus a warning on every frame of every burst. A size change is a
+        // new question and lifts the latch, as the strip pass does for its
+        // capture; a registry reload drops the whole entry.
+        if (pack.bufferSize == wantSize) {
+            return false;
+        }
+        pack.bufferAllocFailed = false;
+    }
+    // Every clear below must reach the whole target. The scene walk can leave
+    // the scissor test enabled and the guard paintOutput holds restores it,
+    // so disabling here cannot leak past the pass.
+    glDisable(GL_SCISSOR_TEST);
     if (pack.bufferSize != wantSize || pack.bufferTex.size() != passCount) {
         // Reallocate on a size change (an output resize, a scale change) or on
         // a first run. Both slots of every pair go, because the feedback
@@ -277,6 +294,17 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
         pack.bufferFbo.resize(passCount);
         pack.bufferSize = wantSize;
         pack.bufferFront = 0;
+        // Latch the failure against wantSize (left in bufferSize so the size
+        // comparison above can see a change) and warn ONCE, here, not per
+        // frame from the caller.
+        const auto abandon = [&pack, &layer]() {
+            pack.bufferTex.clear();
+            pack.bufferFbo.clear();
+            pack.bufferAllocFailed = true;
+            qCWarning(lcEffect) << "Pointer pack" << layer.effectId << "could not allocate its buffer targets at"
+                                << pack.bufferSize << "— layer skipped until the size changes or the pack reloads";
+            return false;
+        };
         for (size_t i = 0; i < passCount; ++i) {
             for (int slot = 0; slot < 2; ++slot) {
                 // GL_RGBA8, not the on-screen target's format: a buffer stage
@@ -285,17 +313,11 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
                 // inherit and no alpha-precision trap to dodge.
                 auto tex = TransitionPass::allocateOutputTexture(wantSize, GL_RGBA8);
                 if (!tex) {
-                    pack.bufferTex.clear();
-                    pack.bufferFbo.clear();
-                    pack.bufferSize = QSize();
-                    return false;
+                    return abandon();
                 }
                 auto fbo = std::make_unique<KWin::GLFramebuffer>(tex.get());
                 if (!fbo->valid()) {
-                    pack.bufferTex.clear();
-                    pack.bufferFbo.clear();
-                    pack.bufferSize = QSize();
-                    return false;
+                    return abandon();
                 }
                 // Fresh targets start transparent, so a feedback pack's first
                 // frame reads zero rather than driver garbage.
@@ -395,7 +417,13 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     if (damage.isEmpty()) {
         return;
     }
-    const QSize deviceSize = viewport.deviceSize();
+    // The ONE canvas size of the frame: pushed as iResolution, used to size
+    // the buffer stages, and the divisor drawDamageQuad normalises its
+    // texcoords with. Taken from scaledRenderRect because that is the space
+    // the quad's positions are placed in; a second source (deviceSize()) that
+    // rounded differently would put uv * iResolution a pixel off the quad.
+    const KWin::Rect scaledRect = viewport.scaledRenderRect();
+    const QSize deviceSize(scaledRect.width(), scaledRect.height());
     if (deviceSize.isEmpty()) {
         return;
     }
@@ -415,6 +443,11 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     // that draws inside someone else's frame. Taken BEFORE the framebuffer
     // push so it outlives every draw below.
     const ShaderInternal::ScopedGlState glStateGuard;
+    // Both draws below use the no-region vbo->render() overload, so a scissor
+    // box the scene walk left enabled would silently clip them (the quad IS
+    // the clip here). Same discipline as the surface fold, the backdrop and
+    // the capture paths; the guard above restores the test on exit.
+    glDisable(GL_SCISSOR_TEST);
 
     // Draw into the framebuffer KWin handed us, sized to that target — the
     // same shape as the strip and desktop pass tails (see their comments for
@@ -455,9 +488,7 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         // on-screen bracket's viewport and blend state and restore both after.
         if (!pack->bufferPasses.empty()) {
             if (!runBufferPasses(*pack, layer, state, deviceSize, cursorRect, timeSeconds)) {
-                qCWarning(lcEffect) << "Pointer pack" << layer.effectId
-                                    << "could not allocate its buffer targets — layer skipped this frame";
-                continue;
+                continue; // targets unallocatable; warned and latched in runBufferPasses
             }
             // runBufferPasses pushed and popped its own targets, which
             // restores KWin's framebuffer binding but neither the viewport
@@ -516,7 +547,7 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
             ++unit;
         }
 
-        drawDamageQuad(viewport, damage);
+        drawDamageQuad(viewport, damage, deviceSize);
 
         // ScopedGlState restores the active-unit ENUM, not the BINDINGS, and a
         // name still bound when a later reset deletes it survives as a
@@ -535,12 +566,15 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
 
     // An `above` chain paints OVER the pointer, so KWin's own cursor has to go
     // and this pass owns drawing it. Taken AFTER the draws, at the point where
-    // the frame is otherwise complete: KWin's cursor for THIS frame was
-    // already composited by the scene walk that ran before us, so the hide
-    // takes effect from the next frame and the sprite below covers this one.
+    // the frame is otherwise complete. On the frame the hide is FIRST taken
+    // KWin's cursor was already composited by the scene walk that ran before
+    // us, so the sprite is NOT blitted then: source-over on top of the same
+    // sprite doubles the alpha at its antialiased edge for that one frame.
+    // The hide takes effect from the next frame, and from then on this pass
+    // is the only thing drawing the cursor.
     if (m_anyAboveLayer) {
-        hideCursorForPass(screen);
-        if (m_cursorHidden) {
+        const bool newlyTaken = hideCursorForPass(screen);
+        if (m_cursorHidden && !newlyTaken) {
             // Last draw of the pass: the cursor, above everything, where
             // KWin's overlay item would have put it.
             TransitionPass::drawSceneCursor(renderTarget, viewport);

@@ -27,3 +27,7 @@ endfunction()
 phosphorpointer_add_test(test_pointershaderregistry)
 phosphorpointer_add_test(test_pointeruniformextension)
 phosphorpointer_add_test(test_pointerhistory)
+
+# The registry test checks the entry prologue against the shared helper it
+# includes, which lives in the top-level data tree rather than in this lib.
+target_compile_definitions(test_pointershaderregistry PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")

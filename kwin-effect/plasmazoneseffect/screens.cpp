@@ -132,7 +132,9 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
 // mid-reconfigure).
 KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) const
 {
-    if (!w) {
+    // Guarded here so every caller is: the gates in surface_gating.cpp reach
+    // this on teardown paths where KWin::effects can already be null.
+    if (!w || !KWin::effects) {
         return nullptr;
     }
     const QPointF cf = w->frameGeometry().center();
