@@ -132,6 +132,11 @@ class SettingsController : public QObject
     Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
+    // Whether this build carries the Phosphor shell (BUILD_PHOSPHOR_SHELL).
+    // Pages that list the shell's own surfaces (the `shell.phosphor.*`
+    // decoration cards) bind their model on this so a plain build never shows
+    // a tree no surface reads.
+    Q_PROPERTY(bool hasPhosphorShell READ hasPhosphorShell CONSTANT)
 
     // What's New — see loadWhatsNew() for the baseline snapshot contract.
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
@@ -358,6 +363,15 @@ public:
         return m_advancedMode;
     }
     void setAdvancedMode(bool advanced);
+
+    bool hasPhosphorShell() const
+    {
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
+        return true;
+#else
+        return false;
+#endif
+    }
 
     Settings* settings()
     {

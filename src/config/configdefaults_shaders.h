@@ -299,6 +299,7 @@ public:
         tree.setOverride(::PhosphorSurfaceShaders::decorationPopupZoneSelectorPath(), card);
         tree.setOverride(::PhosphorSurfaceShaders::decorationPopupCheatsheetPath(), card);
 
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
         // The Phosphor shell's chrome (docs/phosphor-shell-design/identity/A1
         // §2.4): every surface is a decoration host like a window frame, and
         // the same packs a focused window wears run on the chrome. The bar,
@@ -306,6 +307,10 @@ public:
         // border at 1 px; the OSD band a cyan halo; the lock clock the motes.
         // The shell.* subtree is baseline-isolated, so these are the only
         // way a shell surface is decorated until the user edits it.
+        //
+        // Compiled out with the shell (BUILD_PHOSPHOR_SHELL): without it no
+        // surface reads these paths, and seeding them would put a Phosphor
+        // subtree into every config the plain build writes.
         const auto phosphorBorder = [](int cornerRadius, double flowSpeed) {
             ::PhosphorSurfaceShaders::DecorationProfile p;
             p.chain = QStringList{QStringLiteral("border-phosphor")};
@@ -344,6 +349,7 @@ public:
             lock.chain = QStringList{QStringLiteral("phosphor-motes")};
             tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorLockPath(), lock);
         }
+#endif
         return tree;
     }
 

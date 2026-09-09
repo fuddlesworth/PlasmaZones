@@ -173,6 +173,18 @@ if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
         "Kirigami for icon rendering and has no Qt-only fallback.")
 endif()
 
+# App-tier compile-time gate for the shell. The Phosphor shell's own surfaces
+# (the `shell.phosphor.*` decoration subtree: bar, popouts, OSD bands, toasts,
+# picker, lock) only exist when the shell is built, so the seeds in
+# ConfigDefaults, the settings cards and their breadcrumb labels compile out
+# with it. Defined at directory scope here, before any add_subdirectory, so
+# every TU that includes the inline ConfigDefaults headers sees the same
+# value (a per-target definition would split the ODR across core / daemon /
+# settings / tests).
+if(BUILD_PHOSPHOR_SHELL)
+    add_compile_definitions(PLASMAZONES_HAVE_PHOSPHOR_SHELL)
+endif()
+
 if(USE_KDE_FRAMEWORKS)
     add_compile_definitions(USE_KDE_FRAMEWORKS)
 

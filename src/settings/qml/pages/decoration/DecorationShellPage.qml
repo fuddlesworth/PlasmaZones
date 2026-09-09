@@ -18,8 +18,12 @@ import QtQuick
 // walk-up.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Shell decoration surfaces")
-    headerText: i18n("Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start with the decoration the Phosphor shell ships.")
-    surfaceModel: [
+    headerText: settingsController.hasPhosphorShell ? i18n("Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start with the decoration the Phosphor shell ships.") : i18n("Decoration for surfaces the Plasma shell owns: the panels and the applet popups. The global default decoration never applies to them, so they stay undecorated until a decoration is enabled here.")
+    // The Phosphor cards ride behind the build's shell gate: a plain build
+    // has no surface that reads `shell.phosphor.*`, so the subtree is not
+    // offered (its seeds are compiled out of ConfigDefaults the same way).
+    surfaceModel: settingsController.hasPhosphorShell ? plasmaSurfaces.concat(phosphorSurfaces) : plasmaSurfaces
+    readonly property var plasmaSurfaces: [
         {
             "surfacePath": "shell",
             "cardLabel": i18nc("@item the category root card that every shell surface inherits from", "All Shell Surfaces"),
@@ -37,7 +41,9 @@ DecorationSurfaceCardList {
             "cardLabel": i18n("Applet Popups"),
             "alwaysEnabled": false,
             "isParentNode": false
-        },
+        }
+    ]
+    readonly property var phosphorSurfaces: [
         {
             "surfacePath": "shell.phosphor",
             "cardLabel": i18nc("@item the category root card that every Phosphor shell surface inherits from", "All Phosphor Shell Surfaces"),
