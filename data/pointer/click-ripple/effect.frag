@@ -8,6 +8,10 @@
 // rings are gone by `duration`, which stays within trailSeconds.
 
 const float kTrailSeconds = 0.9;
+// Mirrors "reach" in metadata.json, in logical px. The host derives the damage
+// rect from that number and the shader has no uniform for it, so the two are
+// kept in step by hand: change one and change this.
+const float kReachPx = 160.0;
 
 vec4 buttonColour(float button) {
     if (button > 2.5) {
@@ -39,8 +43,14 @@ vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
     float duration = clamp(p_duration, 0.05, kTrailSeconds);
-    float maxRadius = 0.5 * max(p_size, 2.0) * scale;
     float thickness = max(p_thickness, 0.5) * scale;
+    // The ring is drawn as a BAND around `radius`, so the painted edge is half
+    // a thickness plus the antialias feather beyond it. `reach` in the metadata
+    // covers the radius alone, which is exact at Size's maximum and leaves the
+    // band hanging outside the damage rect the host buys — a flat-cut ring edge
+    // at large sizes. Take the band out of the budget rather than out of the
+    // user's Size.
+    float maxRadius = min(0.5 * max(p_size, 2.0) * scale, kReachPx * scale - 0.5 * thickness - 0.75);
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;

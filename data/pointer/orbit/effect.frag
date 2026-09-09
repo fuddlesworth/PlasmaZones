@@ -116,8 +116,14 @@ vec4 pPointer(vec2 uv) {
         radius += push * exp(-4.5 * k) * sin(k * 14.0) * (1.0 - k);
     }
     // Keep the dots and their glow inside the damage rect the host derives
-    // from `radius`.
-    radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize, 0.0)) * scale;
+    // from `radius`, without letting the reservation eat the ring.
+    //
+    // The reservation alone is not safe at the extremes: Dot size runs to 10
+    // and Orbit radius starts at 8, so `radiusMax - 3*dotSize` goes negative
+    // and every dot stacks on the centre — a legal pair of settings that turns
+    // the pack into a single blob. Floor it at a fraction of the requested
+    // radius so a large dot narrows the ring instead of deleting it.
+    radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize, radiusMax * 0.4)) * scale;
 
     vec2 centre = orbitLaggedCentre(count, max(p_lag, 0.0));
     vec2 drift = uPointerVelocity.xy;
@@ -151,8 +157,15 @@ vec4 pPointer(vec2 uv) {
         }
         float da = along / (dotPx * stretch);
         float db = across / dotPx;
-        float body = exp(-(da * da + db * db) * 0.5);
-        float halo = exp(-(da * da + db * db) / 8.0) * 0.35;
+        float q = da * da + db * db;
+        float body = exp(-q * 0.5);
+        // Compact support, like the shapes in Halo and Flash. A bare gaussian
+        // is still around a tenth of a unit of coverage where the reservation
+        // above runs out, so it met the damage rect's edge at a visible level
+        // and was cut off square. Taking it to exactly zero just inside that
+        // edge trades an invisible amount of glow for losing the straight line.
+        float r = sqrt(q);
+        float halo = exp(-q / 8.0) * 0.35 * (1.0 - smoothstep(2.0, 3.0, r));
         float cover = clamp(body + halo, 0.0, 1.0) * live;
         if (cover <= 0.0) {
             continue;

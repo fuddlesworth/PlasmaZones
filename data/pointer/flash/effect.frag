@@ -18,9 +18,9 @@
 // of the life, so it snaps rather than lingering, and it is exactly zero at
 // t = 1.
 //
-// Coloured per button, following the Click Ripple convention. Layer "above":
-// the host hides the cursor and paints the sprite after this pass, so the
-// flash reads on top of it.
+// Coloured per button, following the Click Ripple convention. Layer "below",
+// like every pack here except Click Ripple: the flash reads fine under the
+// cursor, and staying below keeps the pointer on the hardware plane.
 //
 // REACH. Both shapes use compact-support falloffs that are exactly zero at
 // their outer edge, and both edges are clamped to `spikeLength` (the parameter

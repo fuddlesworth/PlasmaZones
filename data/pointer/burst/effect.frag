@@ -16,9 +16,9 @@
 // from iTime, so one click throws the same spray for the whole of its life
 // instead of boiling from frame to frame.
 //
-// Coloured per button, following the Click Ripple convention. Layer "above":
-// the host hides the cursor and paints the sprite after this pass, so the
-// spray reads on top of it.
+// Coloured per button, following the Click Ripple convention. Layer "below",
+// like every pack here except Click Ripple: the spray reads fine under the
+// cursor, and staying below keeps the pointer on the hardware plane.
 //
 // REACH. A bit's displacement from its origin is |v|t + 0.5*g*t^2, which over
 // a life L is at most speed*L + 0.5*gravity*L*L. `speed` and `gravity` are
