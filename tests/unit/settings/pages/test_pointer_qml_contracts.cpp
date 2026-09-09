@@ -108,6 +108,7 @@ class TestPointerQmlContracts : public QObject
 
 private Q_SLOTS:
     void everyPreviewControllerCallFromThePointerQmlIsReachable();
+    void thePointerDrivingCallsKeepTheirArgumentCount();
     void theBrowserDialogRoutesThePointerPreviewKind();
 };
 
@@ -129,6 +130,38 @@ void TestPointerQmlContracts::everyPreviewControllerCallFromThePointerQmlIsReach
              qPrintable(QStringLiteral("the pointer preview QML calls these on previewController, but "
                                        "PointerPreviewController lacks them: %1")
                             .arg(unreachable.join(QStringLiteral(", ")))));
+}
+
+void TestPointerQmlContracts::thePointerDrivingCallsKeepTheirArgumentCount()
+{
+    // Name reachability is not enough for the calls that carry the simulated
+    // pointer. QML resolves an invokable by name and coerces whatever it was
+    // handed, so dropping or reordering an argument compiles, resolves, and
+    // then feeds the sampler silently wrong values — the preview simply stops
+    // matching the compositor with nothing failing. Pin the shapes the QML
+    // actually calls with.
+    const QMetaObject* mo = &PointerPreviewController::staticMetaObject;
+    const QHash<QString, int> expected{
+        {QStringLiteral("drivePointer"), 5}, // item, x, y, dtMs, pressed
+        {QStringLiteral("resetPointer"), 1}, // item
+        {QStringLiteral("configurePreviewItem"), 3}, // item, packId, params
+        {QStringLiteral("updatePreviewParams"), 3}, // item, packId, params
+        {QStringLiteral("packInfo"), 1}, // packId
+    };
+
+    for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
+        int found = -1;
+        for (int i = mo->methodOffset(); i < mo->methodCount(); ++i) {
+            const QMetaMethod m = mo->method(i);
+            if (QString::fromLatin1(m.name()) == it.key()) {
+                found = m.parameterCount();
+                break;
+            }
+        }
+        QVERIFY2(found >= 0,
+                 qPrintable(QStringLiteral("PointerPreviewController has no invokable named %1").arg(it.key())));
+        QCOMPARE(found, it.value());
+    }
 }
 
 void TestPointerQmlContracts::theBrowserDialogRoutesThePointerPreviewKind()

@@ -37,10 +37,12 @@ namespace PlasmaZones {
  * with the same sampling rule and the same velocity model, as the trail the
  * compositor will draw.
  *
- * One live preview at a time (the detail dialog previews one pack), so a
- * single history re-seeded on item change is enough. The registry is borrowed
- * and may be null (the unit-test / degraded construction path), in which case
- * every accessor returns an empty result rather than crashing.
+ * Several previews can be live at once — the chain editor expands one per
+ * open layer row and the browser's detail dialog draws through this same
+ * instance — so the simulated pointer is kept per canvas rather than shared.
+ * The registry is borrowed and may be null (the unit-test / degraded
+ * construction path), in which case every accessor returns an empty result
+ * rather than crashing.
  */
 class PointerPreviewController : public QObject
 {
@@ -91,9 +93,9 @@ public:
     /// coordinates and @p dtMs the frame delta. @p pressed drives a synthetic
     /// left button, so a click pack's ring fires on the press edge and its
     /// release ring on the release edge, exactly as the compositor's
-    /// noteButtons produces them. The history is re-seeded whenever the item
-    /// changes, so a pack switch does not open with a trail streaking in from
-    /// the previous pack's last position.
+    /// noteButtons produces them. Each canvas gets its own history, created on
+    /// its first frame, so a newly opened pack starts empty instead of
+    /// inheriting wherever another preview's pointer happened to be.
     Q_INVOKABLE void drivePointer(QQuickItem* item, qreal x, qreal y, qreal dtMs, bool pressed);
 
     /// Forget one canvas's simulated pointer so its next drivePointer starts a
