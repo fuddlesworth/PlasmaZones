@@ -285,6 +285,27 @@ jobs:
               mv ../*.ddeb dist/
           fi
 
+      # KWin baseline for the kwin-rebuild-watch workflow: the upstream KWin
+      # version this .deb was compiled against. The effect plugin's IID embeds
+      # it, so the package is inert the moment the distro ships a different
+      # one. Only the published suite is recorded — see kwin-rebuild-watch.yml
+      # for the channel list, which must match the names used here.
+      - name: Record KWin build baseline
+        if: matrix.suite == 'unstable'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p baseline
+          dpkg-query -W -f='${source:Upstream-Version}\n' kwin-dev \
+            | tee baseline/debian-unstable
+      - name: Upload KWin build baseline
+        if: matrix.suite == 'unstable'
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-baseline-debian-unstable
+          path: baseline/debian-unstable
+          retention-days: 30
+
       # Only unstable's build is published. Both suites produce a .deb with the
       # identical name plasmazones_<version>-<rev>_amd64.deb, and a GitHub
       # release asset is keyed by its basename, so uploading both would leave
@@ -400,6 +421,19 @@ jobs:
         with:
           name: rpm-fedora-${{ matrix.fedora }}
           path: dist/*.rpm
+          retention-days: 30
+
+      # KWin baseline for kwin-rebuild-watch.yml — see the Debian job.
+      - name: Record KWin build baseline
+        run: |
+          set -euo pipefail
+          mkdir -p baseline
+          rpm -q --qf '%{VERSION}\n' kwin-devel | tee baseline/fedora-${{ matrix.fedora }}
+      - name: Upload KWin build baseline
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-baseline-fedora-${{ matrix.fedora }}
+          path: baseline/fedora-${{ matrix.fedora }}
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -551,6 +585,19 @@ jobs:
         with:
           name: rpm-opensuse-tumbleweed
           path: dist/*.rpm
+          retention-days: 30
+
+      # KWin baseline for kwin-rebuild-watch.yml — see the Debian job.
+      - name: Record KWin build baseline
+        run: |
+          set -euo pipefail
+          mkdir -p baseline
+          rpm -q --qf '%{VERSION}\n' kwin6-devel | tee baseline/opensuse-tumbleweed
+      - name: Upload KWin build baseline
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-baseline-opensuse-tumbleweed
+          path: baseline/opensuse-tumbleweed
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -756,6 +803,23 @@ jobs:
           path: dist/*.pkg.tar.zst
           retention-days: 30
 
+      # KWin baseline for kwin-rebuild-watch.yml — see the Debian job. The
+      # generic tarball is built on the same image with the same package set,
+      # so this one entry covers the Arch package, the tarball and the AUR
+      # plasmazones-bin package that wraps it. Epoch and pkgrel are stripped:
+      # the IID tracks the upstream version only.
+      - name: Record KWin build baseline
+        run: |
+          set -euo pipefail
+          mkdir -p baseline
+          pacman -Q kwin | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//' | tee baseline/arch
+      - name: Upload KWin build baseline
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-baseline-arch
+          path: baseline/arch
+          retention-days: 30
+
   # ═══════════════════════════════════════════════════════════════════════════
   # Verify Nix Build
   # ═══════════════════════════════════════════════════════════════════════════
@@ -816,6 +880,38 @@ jobs:
 
       - name: List artifacts
         run: find artifacts -type f
+
+      # Merge the per-channel KWin baselines into one release asset. The
+      # kwin-rebuild-watch workflow reads this back from the latest release,
+      # probes each channel's current KWin, and dispatches a rebuild (pkgrel +
+      # 1) when any of them has moved. pkgrel is recorded so the watcher
+      # knows what to bump from. Every channel must be present: a missing one
+      # would silently drop that distro from the watch.
+      - name: Assemble KWin baseline manifest
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
+        run: |
+          set -euo pipefail
+          for channel in arch debian-unstable fedora-44 opensuse-tumbleweed; do
+              f="artifacts/kwin-baseline-$channel/$channel"
+              if [[ ! -s "$f" ]]; then
+                  echo "Error: no KWin baseline recorded for channel '$channel'" >&2
+                  exit 1
+              fi
+              v="$(tr -d '[:space:]' <"$f")"
+              if [[ ! "$v" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+                  echo "Error: KWin baseline for '$channel' is '$v', not a dotted version" >&2
+                  exit 1
+              fi
+              printf '%s\t%s\n' "$channel" "$v"
+          done > baseline.tsv
+          jq -Rn --arg version "$VERSION" --argjson pkgrel "$PKGREL" '
+              [inputs | split("\t") | {key: .[0], value: .[1]}]
+              | from_entries
+              | {version: $version, pkgrel: $pkgrel, kwin: .}
+          ' baseline.tsv > artifacts/kwin-baseline.json
+          cat artifacts/kwin-baseline.json
 
       - name: Generate release notes from CHANGELOG.md
         run: |
@@ -924,6 +1020,10 @@ jobs:
           while IFS= read -r f; do
             ASSETS+=("$f")
           done < <(find artifacts -type f \( -name '*.deb' -o -name '*.ddeb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*linux-x86_64.tar.gz' \))
+          # The KWin baseline rides along as an asset so the watcher can read
+          # it without any repo-side state. --clobber below replaces it on a
+          # rebuild, which is exactly when it changes.
+          ASSETS+=("artifacts/kwin-baseline.json")
 
           echo "Uploading ${#ASSETS[@]} assets:"
           printf '  %s\n' "${ASSETS[@]}"
