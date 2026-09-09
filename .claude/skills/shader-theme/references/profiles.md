@@ -24,10 +24,9 @@ independent artefacts below. Generate all of them.
 Animation pack selection (`effectId`) lives in `Animations.ShaderProfileTree` in config.json,
 and per-event timing beside it in `Animations.MotionProfileTree`. A format-2 MOTION SET
 carries BOTH, so a set captures the whole per-event unit the way a decoration set captures the
-whole per-surface one. Writing the config trees directly is the route that needs no GUI, not
-the only route to assign a pack. The zone overlay pack is the one artefact no set carries: it
-is a per-LAYOUT property (`shaderId` + `shaderParams` in
-`~/.local/share/plasmazones/layouts/<uuid>.json`), never a config key.
+whole per-surface one. Overlay sets carry the global shader and optional per-layout overrides
+in `Overlays.OverlayShaderTree`. Use the set import and apply controls to assign the theme;
+the config trees also describe the resulting stored configuration.
 
 ## Set envelope (motion and decoration share it)
 
@@ -49,15 +48,18 @@ Hard rules (validated on apply and import, whole file refused on any failure):
 - Filename MUST equal `slugify(name) + ".json"`. slugify = lowercase letters/digits, every other
   run becomes one `-`, trimmed. "Jelly Theme" -> `jelly-theme.json`. A file whose name does not
   slugify back to its stem is silently skipped by the list.
-- `version` is 1 for decoration, 2 for motion (missing = 1). A `baseline` key, even empty, is REFUSED.
+- `version` is 1 for decoration, 2 for motion. A missing key reads as the domain's CURRENT
+  version (so an omitted key on a motion set is read as 2); write it explicitly anyway. A
+  `baseline` key, even empty, is REFUSED.
 - A set is SELF-CONTAINED: it captures the whole look of what it covers, including
   values that come from a built-in default rather than from something the user
   changed. A decoration set carries its seeded surfaces; a motion set carries the
   per-path animation defaults (window-morph on the placement legs, a fade on the
   OSD and popup legs). Applying one de-seeds on the way in, so a default is
   reproduced rather than frozen as a user override.
-- Set files are written IMMEDIATELY. Saving, renaming, deleting or importing a set
-  is not staged and Discard does not undo it, in either domain.
+- Set files are written IMMEDIATELY. Saving, renaming, deleting or importing a set is not
+  staged in any of the three domains. Applying one is a pending settings change in all three,
+  so Apply rides Settings Apply/Discard.
 - `overrides` must be a non-empty array of `{path, profile}` objects. Every path must be valid
   for the domain. Apply is a MERGE: paths not in the set keep their live values.
 - The store writes 4-space indented JSON with alphabetically sorted keys. Match that.
@@ -65,7 +67,9 @@ Hard rules (validated on apply and import, whole file refused on any failure):
 ### Motion set profile fields
 
 Timing, at the top of `profile`: `duration` (ms int), `curve` (string), `minDistance`,
-`sequenceMode`, `staggerInterval`, `presetName`.
+`sequenceMode`, `staggerInterval`, `presetName`. That list is the allowlist: any other key
+beside a real one is dropped with a journal warning, and an entry whose timing half holds
+ONLY unknown keys refuses the whole set.
 
 The animation pack, under a nested `shader` key (format 2, `version: 2`):
 ```json
@@ -83,6 +87,36 @@ means. An entry may carry the shader half alone, with no timing keys.
 All optional (omit = inherit from parent path). Paths: any built-in event path from
 `libs/phosphor-animation/src/profilepaths.cpp` (see animations.md table; parents like
 `window.appearance`, `window.movement`, `desktop`, `popup`, `osd` are real cascade parents).
+
+### Motion set: rules that bite
+
+A motion set that carries only timing is the single most likely thing to go wrong, and it
+fails silently: the set applies, the durations change, and every animation keeps whatever
+pack it had. Format 1 (timing only) is still READ for old files, so nothing warns you. The
+rules that actually bite:
+
+- **`"version": 2` is mandatory** when any entry carries a `shader` key. A build older than
+  format 2 refuses a v2 set outright, which is the correct clean failure. Do not write
+  version 1 with shader keys hoping for the best.
+- **A `shader` key is only legal on a path the daemon consumes as a shader leg.** The SSOT is
+  `shaderConsumedLeafEventPaths()` in `src/core/types/animationshadersupportedpaths.h`, plus
+  every ancestor of those leaves. `eventPathSupportsShaderLeg()` refuses anything else, and
+  the refusal is of the WHOLE SET on apply and import (`motionsetdomain.cpp`), with a
+  `motionset: path carries a shader half but supports no shader leg` warning in the journal.
+  Likewise a `shader.effectId` naming a pack this build lacks refuses the whole set. Read that
+  header; do not infer the list from the event taxonomy.
+- **The pack's `appliesTo` must cover the path's class.** Nothing validates this: an
+  `appliesTo: ["desktop"]` pack on `window.appearance.open` is accepted and then never plays.
+- **The format permits the pack half ALONE**, which preserves existing timing. For a new
+  theme, supply both halves so its reviewed pacing survives application. Use shader-only
+  entries when the user asks to retain timing, and record that dependency in the report.
+- **No `baseline` key**, at any version.
+- Filename MUST be `slugify(name) + ".json"`, 4-space indent, alphabetically sorted keys.
+
+Then VERIFY the file rather than reading it back: for every entry carrying a `shader`, confirm
+the path appears in the SSOT header and that the named pack's `metadata.json` `appliesTo`
+covers that path's class. A one-off script over the set file is the right amount of effort;
+eyeballing a sixteen-entry file is not.
 
 Curve string forms: `"x1,y1,x2,y2"` inline cubic-bezier (what the UI writes),
 `"spring:omega,zeta"`, or a bare curve NAME (`"jelly-settle"`) which resolves to a curve file
@@ -116,10 +150,14 @@ read once on the upgrade and ignored afterwards.
 }
 ```
 `chain` is ordered (first = bottom). A profile must engage at least one of the three fields.
+Every pack id in a chain must exist AND belong to the surface family: an unknown id, or a
+pointer pack on a surface path, refuses the whole decoration set on apply and import
+(`decorationpagecontroller_sets.cpp`), unlike a parameter typo, which is ignored.
 Supported surface paths (`libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`,
 verified 2026-09-07). Leaves: `window.tiled`, `window.snapped`, `window.floating`, `osd`,
 `popup.snapAssist`, `popup.zoneSelector`, `popup.layoutPicker`, `popup.cheatsheet`,
-`shell.panel`, `shell.appletPopup`, `shell.phosphor.{bar,popout,osd,notification,picker,lock}`.
+`shell.panel`, `shell.appletPopup`, `shell.phosphor.{bar,popout,osd,notification,picker,lock}`,
+and `pointer` (baseline-isolated, pointer packs only; never written by a theme set).
 Cascade parents: `window`, `popup`, `shell`, `shell.phosphor`. A theme set writes `window`
 (covers all three placement states), `osd`, `popup` or the four popup leaves, `shell.panel`,
 `shell.appletPopup`. Re-read that header before writing paths. There are no focused/unfocused
@@ -139,9 +177,14 @@ leaves the default in place with no warning.
   "parameters": { "omega": 14, "zeta": 0.55 }
 }
 ```
-- `name` == file stem, and must NOT collide with a built-in typeId (`spring`, `cubic-bezier`,
-  `elastic-*`, `bounce-*`, ...).
-- `typeId` `spring` needs `omega`, `zeta`; `cubic-bezier` needs `x1,y1,x2,y2`. Params numeric only.
+- `name` == file stem, and must NOT collide with a built-in typeId. The built-ins are exactly
+  `bezier`, `cubic-bezier`, `spring`, `elastic-in`, `elastic-out`, `elastic-in-out`,
+  `bounce-in`, `bounce-out`, `bounce-in-out`.
+- `typeId` `spring` takes `omega`, `zeta`; `cubic-bezier` takes `x1,y1,x2,y2`. Params numeric
+  only, and EVERY one is optional with a silent default (spring omega 12 / zeta 0.8;
+  cubic-bezier 0.33, 1, 0.68, 1). A misspelled key is ignored without a warning and the curve
+  becomes the default, so after writing a curve confirm each intended key by name (grep), or
+  check that the produced curve differs from the default.
 - Bundled curves go in `data/curves/`; two per theme is the phosphor convention
   (`<theme>-settle` for arrivals, `<theme>-release` for departures).
 
@@ -176,14 +219,24 @@ and a decoration set has always carried a whole surface. So the normal route is 
 and no file surgery:
 
 1. Write the set files to `~/.local/share/plasmazones/{motionsets,decorationsets,overlaysets}/`.
-2. Settings → Appearance → Animations → Library → Sets → Apply, Settings →
-   Appearance → Decorations → Library → Sets → Apply, and Settings → Appearance → Overlays → Library →
-   Sets → Apply.
+2. Settings → Appearance → Animations → Library → Sets → Apply, Settings → Appearance →
+   Decorations → Library → Sets → Apply, and Settings → Appearance → Overlays → Library →
+   Sets → Apply. Apply is a pending settings change in each of the three, so it needs the
+   page's Apply button as well.
 
 Since schema v8 the zone overlay shader is a set like the other two. It is no longer a
 per-layout property of the layout file: the assignment lives in `Overlays.OverlayShaderTree`
 in config.json, as one global baseline plus a per-layout override keyed by layout UUID. An
 overlay set carries the baseline and every override together.
+
+Overlay `shaderId` is the registry's braced UUID, not the metadata slug used by animation
+and surface packs. The parser in `libs/phosphor-shaders/src/shaderregistry_parse.cpp`
+derives it with UUIDv5 from `shaderNamespaceUuid()` and the metadata `id`. Resolve it
+through the registry or that parser before writing a set. Encode the global default as
+an `overrides` entry with `path: "overlay:global"` and
+`profile: { "shaderId": "<registry UUID>", "parameters": {} }`, never an envelope
+`baseline` key. No two overrides may name the same path. A profile that omits `shaderId`
+is the legal "suppress the inherited shader" node, not an error.
 
 A per-layout override names a layout by UUID, and UUIDs are per-installation, so an overlay
 set generated without knowing the target machine's layout ids should carry the BASELINE only.
@@ -204,7 +257,8 @@ The settings app owns config.json while it is open.
    ```bash
    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones --method org.plasmazones.Settings.reloadSettings
    ```
-   The daemon then pushes the decoration tree to the KWin effect over D-Bus. Confirm with
-   `journalctl --user -f | grep -i plasmazones` before claiming the theme is applied.
+   The daemon then broadcasts `settingsChanged`, and the KWin effect re-reads the decoration
+   tree over D-Bus on that signal. Confirm with `journalctl --user -f | grep -i plasmazones`
+   before claiming the theme is applied.
 
 Report which route you used, and say plainly if you could not run it.

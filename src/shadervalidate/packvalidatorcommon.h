@@ -60,26 +60,40 @@ enum class PackModel {
 /// validator logic, and only the flag-override policy on top of it is CLI.
 std::optional<PackModel> detectPackModel(const QString& packDir);
 
-/// The `shared/` include roots for @p packDir, in resolution order: the pack's
-/// own sibling `shared/` first, then the XDG data chain for its family.
+/// The `shared/` include roots for @p packDir, in resolution order.
 ///
-/// The second half is what lets the tool work on an INSTALLED pack. A pack in
-/// `~/.local/share/plasmazones/<family>/<id>` has no sibling `shared/` — the
-/// helpers ship once into the system prefix — so a sibling-only lookup fails
-/// on exactly the third-party and user packs this validator exists to check,
-/// reporting every include as missing. The widened list is the same set of
-/// roots the runtime registries resolve includes against, so what the
-/// validator compiles is still what the runtime will compile.
+/// A pack in the INSTALLED layout, `<data root>/plasmazones/<family>/<id>`,
+/// gets its sibling `shared/` first (always listed, whether or not it exists)
+/// and then the XDG data chain for its family. That is what lets the tool
+/// work on an installed pack: one in `~/.local/share/plasmazones/<family>/<id>`
+/// usually has no sibling `shared/` at all, since the helpers ship once into
+/// the system prefix, and when it has one it may be a partial user override of
+/// a header or two beside the system copy. The widened list is the same SET of
+/// roots the runtime registries resolve includes against. The ORDER differs
+/// for an installed pack: the runtime walks its search paths user-first, while
+/// this list puts the sibling first and then `QStandardPaths::locateAll`,
+/// which is also user-first, so a user override of a shared header shadows the
+/// system copy in both. Only a pack that sits in the system prefix itself and
+/// has a user override of the same header sees a different winner here (the
+/// sibling, i.e. the system copy) than at runtime (the user copy).
 ///
-/// The sibling entry is always first and always present, so a source tree
-/// resolves exactly as before and never consults the system.
+/// Every other layout (the source tree's `data/<family>/<id>`, a scratchpad
+/// laid out like it, a vendored pack set) is self-contained and resolves
+/// against its sibling `shared/` and NOTHING else, so an installed copy of the
+/// helpers can never satisfy an include the tree itself lacks: a header
+/// missing from `data/<family>/shared` fails here the way it fails in CI,
+/// rather than resolving from a stale `/usr/share` copy on a developer machine.
 QStringList packSharedRoots(const QString& packDir);
 
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
-// path, or nullopt when the path is empty or escapes the pack dir. See the
-// definition for the canonical-vs-lexical domain rules and why this gate is
-// deliberately stricter than the runtime.
+// path, or nullopt when the path is empty or escapes the pack dir. The
+// definition explains the canonical-vs-lexical comparison.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel);
+
+// The report column for a stage label: labels shorter than the column are
+// padded to it, longer ones (`effect.frag (Qt-RHI preview)`) get one space so
+// the OK/ERROR word never runs into the label.
+QString padLabel(const QString& label);
 
 // In-place confinement: rewrites @p path to its confined absolute form and
 // returns true, or returns false when the path escapes the pack dir. An EMPTY

@@ -19,7 +19,9 @@ namespace PlasmaZones::ShaderValidate {
 int validatePack(const QString& packDir, QTextStream& out);
 
 // animation/transition packs (data/animations/*): AnimationShaderEffect + the
-// animation entry scaffold (pTransition / pIn+pOut) + paramPreamble.
+// animation entry scaffold (pTransition / pIn+pOut) + paramPreamble. Every pack's
+// fragment and declared vertex compile for Qt-RHI previews and classic GL.
+// Requires glslangValidator or glslang on PATH for the compositor branch.
 int validateAnimationPack(const QString& packDir, QTextStream& out);
 
 // surface/decoration packs (data/surface/*): SurfaceShaderEffect + paramPreamble;

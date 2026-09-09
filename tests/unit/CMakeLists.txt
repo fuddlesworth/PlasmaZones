@@ -2337,42 +2337,53 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # shadervalidate/ - Offline Pack Validator Tests
-#   test_pack_validators: metadata lints, authoring-model detection, and the
-#   multipass + compositor-only bakes
+#   test_pack_validators:      metadata lints across three of the four authoring
+#                              models (animation, overlay, pointer)
+#   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
+#                              multipass buffer passes
+#   test_pack_model_detection: the shared/ marker lookup and include roots
 # ═══════════════════════════════════════════════════════════════════════════════
-# The offline pack validator's metadata lints. The bundled-pack gate
-# (shader_validate_animations) only proves the shipped packs are clean; this
-# builds deliberately-broken packs in a temp dir and asserts the diagnostic.
-# Compiles the four validator arms straight in, the way the tool does, so it
-# links the same parsers and needs no glslang for the metadata paths it
-# exercises.
+# The bundled-pack gates (shader_validate_*) only prove the shipped packs are
+# clean; these build deliberately-broken packs in a temp dir and assert the
+# diagnostic. Each compiles the four validator arms straight in, the way the
+# tool does, so it links the same parsers. The three share the fixture helpers
+# in shadervalidate/packvalidatortesthelpers.h (header-only).
 #
-# The compositor-only bake cases DO need glslang and QSKIP without it, so this
-# target stays runnable on a machine that has none. That is the opposite of the
-# shader_validate_animations gate, which fails instead: the gate is what must
-# never silently lose coverage, while this target is also a developer's
-# inner-loop test.
-add_executable(test_pack_validators shadervalidate/test_pack_validators.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
-target_include_directories(test_pack_validators PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_pack_validators
-    PRIVATE
-        Qt6::Test
-        plasmazones_rendering
-        PhosphorRendering::PhosphorRendering
-        PhosphorShaders::PhosphorShaders
-        PhosphorAnimation::PhosphorAnimation
-        PhosphorSurface::PhosphorSurface
-        PhosphorPointer::PhosphorPointer
-        Qt6::GuiPrivate
-        Qt6::ShaderToolsPrivate
-)
-target_compile_definitions(test_pack_validators PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-add_test(NAME test_pack_validators COMMAND test_pack_validators)
+# glslang: the validator bakes EVERY animation pack's fragment for the
+# compositor through glslang, and the pointer arm does the same. The animation
+# slots QSKIP without the tool (REQUIRE_ANIMATION_FIXTURE), and the pointer
+# slots tolerate the tool-missing error because they assert only on lint text,
+# so the targets stay runnable on a machine that has none. That is the opposite
+# of the shader_validate_animations and shader_validate_pointer gates, which
+# fail instead: the gates are what must never silently lose coverage, while
+# these targets are also a developer's inner-loop tests.
+set(_pack_validator_arms
+    ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
+    ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp
+    ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
+    ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
+    ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
+foreach(_pv_test IN ITEMS test_pack_validators test_animation_pack_bakes test_pack_model_detection)
+    add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
+                   shadervalidate/packvalidatortesthelpers.h
+                   ${_pack_validator_arms})
+    target_include_directories(${_pv_test} PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(${_pv_test}
+        PRIVATE
+            Qt6::Test
+            plasmazones_rendering
+            PhosphorRendering::PhosphorRendering
+            PhosphorShaders::PhosphorShaders
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorSurface::PhosphorSurface
+            PhosphorPointer::PhosphorPointer
+            Qt6::GuiPrivate
+            Qt6::ShaderToolsPrivate
+    )
+    target_compile_definitions(${_pv_test} PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    add_test(NAME ${_pv_test} COMMAND ${_pv_test})
+endforeach()
+unset(_pack_validator_arms)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # editor/ - Zone z-order

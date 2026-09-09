@@ -22,10 +22,10 @@
 //     daemon Qt-RHI path.
 //   • animation/transition packs (--animation, data/animations/*):
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
-//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path.
-//     Compositor-only packs are baked out of process through glslang instead,
-//     since their kwin classic-GL source is a dialect the SPIR-V target
-//     rejects by design (see validateAnimationPack).
+//     + paramPreamble; validates every fragment and declared vertex on BOTH
+//     the Qt-RHI preview and compositor paths. All animation validation needs
+//     glslangValidator or glslang on PATH for the classic-GL compile. The
+//     default vertex and daemon multipass buffers also bake on Qt-RHI.
 //   • surface/decoration packs (--surface, data/surface/*):
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see
@@ -60,6 +60,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -83,11 +84,6 @@ bool isPackDir(const QString& dir)
     return QFile::exists(QDir(dir).filePath(QStringLiteral("metadata.json")));
 }
 
-// Write the generated `p_<id>` autocomplete sidecar for one pack (T2.2). The
-// sidecar (p_generated.glsl) is an editor-only aid: an author #includes it for
-// glslls / glsl-language-server autocomplete, and the include resolver skips it
-// at load (ShaderIncludeResolver::GeneratedPreambleInclude), so it neither ships
-// nor affects the compiled shader. Returns 0 on success, 1 on error.
 // The three effect-struct families share one open / parse / isValid / preamble
 // sequence and differ only in the struct and registry involved, so it lives
 // here once. Returns the pack's `p_<id>` preamble, or nullopt after printing
@@ -119,6 +115,11 @@ std::optional<QString> preambleFromEffectMetadata(const QString& packDir, const 
     return Registry::paramPreamble(eff);
 }
 
+// Write the generated `p_<id>` autocomplete sidecar for one pack (T2.2). The
+// sidecar (p_generated.glsl) is an editor-only aid: an author #includes it for
+// glslls / glsl-language-server autocomplete, and the include resolver skips it
+// at load (ShaderIncludeResolver::GeneratedPreambleInclude), so it neither ships
+// nor affects the compiled shader. Returns 0 on success, 1 on error.
 int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStream& out, QTextStream& errStream)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -173,16 +174,17 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
     s.flush();
 
     const QString sidecarPath = QDir(packDir).filePath(sidecarName);
-    QFile f(sidecarPath);
+    // QSaveFile: the sidecar is replaced atomically on commit, so an editor
+    // that #includes it never reads a half-written file, and a failed run
+    // leaves the previous sidecar in place rather than a truncated one.
+    QSaveFile f(sidecarPath);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
         errStream << name << ": cannot write " << sidecarPath << ": " << f.errorString() << "\n";
         return 1;
     }
-    // Checked: a short write leaves a TRUNCATED sidecar that the line below
-    // would still report as "wrote".
     const QByteArray encoded = sidecar.toUtf8();
-    if (f.write(encoded) != encoded.size()) {
-        errStream << name << ": short write to " << sidecarPath << ": " << f.errorString() << "\n";
+    if (f.write(encoded) != encoded.size() || !f.commit()) {
+        errStream << name << ": cannot write " << sidecarPath << ": " << f.errorString() << "\n";
         return 1;
     }
     if (!quiet) {
@@ -233,6 +235,13 @@ int main(int argc, char** argv)
             forcedModel = PackModel::Overlay;
         } else if (a == QLatin1String("--emit-preamble")) {
             emitMode = true;
+        } else if (a.startsWith(QLatin1Char('-')) && a.size() > 1) {
+            // A misspelled flag would otherwise be tried as a path and
+            // reported as "not a directory", which sends the reader after
+            // the filesystem instead of the spelling. A bare `-` stays a path.
+            errStream << "unknown option: " << a << "\n";
+            args.clear();
+            break;
         } else {
             args << a;
         }
@@ -248,13 +257,23 @@ int main(int argc, char** argv)
                   << "  --surface, -s        force surface-layer packs (data/surface/*)\n"
                   << "  --pointer, -p        force pointer packs (data/pointer/*)\n"
                   << "  --quiet, -q          print only failing packs\n"
-                  << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
+                  << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n"
+                  << "Animation packs compile for Qt-RHI previews and the compositor. Install glslang for the "
+                     "compositor check.\n";
         return 2;
     }
 
     // Expand each argument into a list of pack directories: a pack dir is taken as
     // itself; anything else is treated as a root and scanned one level deep.
+    // Deduplicated on the absolute path, so a pack named twice (or once on its
+    // own and once through its root) is validated and counted once.
     QStringList packs;
+    const auto addPack = [&packs](const QString& dir) {
+        const QString abs = QDir(dir).absolutePath();
+        if (!packs.contains(abs)) {
+            packs << abs;
+        }
+    };
     for (const QString& arg : args) {
         const QFileInfo fi(arg);
         if (!fi.exists() || !fi.isDir()) {
@@ -262,14 +281,14 @@ int main(int argc, char** argv)
             return 2;
         }
         if (isPackDir(arg)) {
-            packs << QDir(arg).absolutePath();
+            addPack(arg);
             continue;
         }
         const QStringList subdirs = QDir(arg).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& sub : subdirs) {
             const QString subPath = QDir(arg).filePath(sub);
             if (isPackDir(subPath)) {
-                packs << QDir(subPath).absolutePath();
+                addPack(subPath);
             }
         }
     }

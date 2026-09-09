@@ -1137,15 +1137,16 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # they pin each test to one model regardless of what a tree grows later.)
 #
 # REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
-# accepted) on PATH for shader_validate_animations.
-# Compositor-only animation packs (35 of the bundled 94, every desktop-* and the
-# geometry set) are classic-GL, which QShaderBaker's SPIR-V target rejects by
-# design, so they are compiled out of process through glslang's default
-# GLSL-semantics mode. That invocation FAILS rather than skips when the binary
-# is absent: those packs are compiled nowhere else in a headless run (the
-# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip
-# would put the gate back to lints-only for a third of the set. The other two
-# invocations need no such tool.
+# accepted) on PATH for shader_validate_animations and shader_validate_pointer.
+# Every animation pack's fragment and declared vertex, and every pointer pack's
+# stages, are compiled for the compositor's classic-GL branch (default-block
+# uniforms, which QShaderBaker's SPIR-V target rejects by design), so they go
+# out of process through glslang's default GLSL-semantics mode. Those two
+# invocations FAIL rather than skip when the binary is absent: the compositor
+# branch is compiled nowhere else in a headless run (the GPU bake test QSKIPs
+# without a desktop GL 4.5 context), so a silent skip would put the gate back
+# to lints-only. The overlay and surface invocations bake through QShaderBaker
+# alone and need no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)
@@ -1164,13 +1165,16 @@ if(BUILD_TESTING)
     # target name is the only way to fold this in.
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
-    # the explicit --overlay/--animation/--surface/--pointer directory arguments
-    # and derives include paths from them (the packvalidator_* arms). The one host
-    # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
-    # `builtin:` buffer fallback resolves through QStandardPaths when a pack
-    # names a builtin buffer whose sibling `../shared/` copy is missing —
-    # never the case for the bundled packs today, so this is a
-    # belt-and-braces pin rather than a live-failure fix.
+    # the explicit --overlay/--animation/--surface/--pointer directory arguments.
+    # Include roots come from packSharedRoots: a bundled pack sits in the
+    # self-contained `data/<family>/<id>` layout and resolves against its
+    # sibling shared/ only, so the XDG chain is never consulted for these runs
+    # either; the widening to QStandardPaths::locateAll is reserved for the
+    # installed `plasmazones/<family>/<id>` layout. What this sandbox pins is
+    # the residue: SurfaceShaderRegistry's `builtin:` buffer fallback resolves
+    # through QStandardPaths when a pack names a builtin buffer whose sibling
+    # `../shared/` copy is missing — never the case for the bundled packs
+    # today, so this is a belt-and-braces pin rather than a live-failure fix.
     # The bus half is not needed: the validator never touches D-Bus.
     set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
     file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"

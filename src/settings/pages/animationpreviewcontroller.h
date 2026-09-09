@@ -164,7 +164,8 @@ public:
     /// the shared animation.vert fallback, mirroring SurfaceAnimator's
     /// runLeg), seed iTime / isReversed for a show leg, and upload the
     /// translated parameters. Returns false — leaving the item unconfigured
-    /// — for an unknown, invalid or compositor-only pack. Either way the
+    /// — for an unknown or invalid pack; a compositor-only pack is staged
+    /// like any other, since every class has a preview. Either way the
     /// call restarts driveFrameClock's frame counter: a configure is a leg
     /// boundary.
     Q_INVOKABLE bool configurePreviewItem(QQuickItem* item, const QString& packId, const QVariantMap& friendlyParams);

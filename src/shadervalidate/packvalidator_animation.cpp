@@ -4,16 +4,10 @@
 // The animation/transition arm of plasmazones-shader-validate — see
 // packvalidators.h. Reproduces the animation runtime's GLSL assembly
 // (pTransition / pIn+pOut entry scaffold + generated p_<id> preamble + include
-// expansion). Daemon-capable packs bake through headless QShaderBaker;
-// compositor-only packs take the out-of-process glslang bake below, because
-// the branch that actually runs for them is the kwin classic-GL one (the bake
-// splices the PLASMAZONES_KWIN define block), whose default-block uniforms
-// the strict SPIR-V target rejects. Their UBO branch compiles under SPIR-V
-// too (the bake tests pin it), but that branch never runs for these classes.
-//
-// The two compositor-bake helpers live here rather than in
-// packvalidatorcommon because this is their only caller: the zone and surface
-// runtimes have no compositor-only class.
+// expansion). Every animation pack runs in the Qt-RHI settings preview and
+// can attach in KWin, so validate both uniform ABIs independently. QShaderBaker
+// checks the preview's SPIR-V path. External glslang checks the compositor's
+// classic-GL branch after injecting PLASMAZONES_KWIN.
 
 #include "packvalidators.h"
 
@@ -24,8 +18,8 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorRendering/ShaderCompiler.h>
-#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QDir>
@@ -34,13 +28,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QRegularExpression>
-#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
 
 #include <rhi/qshader.h>
+
+#include <cmath>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
@@ -48,114 +42,167 @@ using PhosphorRendering::ShaderCompiler;
 
 namespace PlasmaZones::ShaderValidate {
 
-// Which of the compositor-only shared-helper samplers the (include-expanded)
-// fragment source references. shared/old_content.glsl,
-// shared/desktop_transition.glsl and shared/strip_transition.glsl declare
-// these binding-less, which the strict
-// SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
-// the binding-less-sampler diagnostic AND its source pulls one of these in,
-// the likely root cause is a metadata bug (missing compositor-only
-// appliesTo), not a GLSL bug, and deserves a hint that says so. The source
-// scan alone is NOT a lint: daemon-capable packs legitimately reference these
-// samplers inside `#ifdef PLASMAZONES_KWIN` branches, which the preprocessor
-// strips before they can fail the bake — hence the hint is gated on the
-// compile actually failing with glslang's binding diagnostic (which does not
-// echo the offending identifier, so the source scan supplies the name). The
-// combination is still heuristic — a pack whose OWN binding-less sampler
-// fails while a guarded compositor-sampler reference coexists would draw the
-// hint spuriously — which is why this stays an advisory hint appended to the
-// real compile error, never an error of its own.
-static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
+namespace {
+
+// One stage file read for both arms. Prints under @p label and returns false
+// on a read failure or an empty file, so neither arm reports an empty file as
+// a failed include expansion (the compositor refuses an empty stage before
+// assembly with its own message, and so does this).
+bool readStage(QTextStream& out, const QString& label, const QString& path, QString& raw)
 {
-    struct SamplerMatcher
-    {
-        QString name;
-        // Word-boundary match so a longer identifier (e.g.
-        // "uOldWindowFallback") can't count as a use of the sampler.
-        QRegularExpression wordRe;
-    };
-    static const auto kCompositorOnlySamplers = [] {
-        QList<SamplerMatcher> matchers;
-        for (const QString& name : {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
-                                    QStringLiteral("uToDesktop"), QStringLiteral("uStrip"), QStringLiteral("uBelow")}) {
-            matchers.append({name, QRegularExpression(QStringLiteral("\\b") + name + QStringLiteral("\\b"))});
-        }
-        return matchers;
-    }();
-    QStringList used;
-    for (const SamplerMatcher& sampler : kCompositorOnlySamplers) {
-        if (expandedSource.contains(sampler.wordRe)) {
-            used << sampler.name;
-        }
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        out << "  " << padLabel(label) << "ERROR\n    cannot read " << path << "\n";
+        return false;
     }
-    return used;
+    raw = QString::fromUtf8(f.readAll());
+    if (raw.isEmpty()) {
+        out << "  " << padLabel(label) << "ERROR\n    shader file is empty\n";
+        return false;
+    }
+    return true;
 }
 
-// COVERAGE BOUNDARY, so this is not read as more than it is: the source is
-// handed to glslang with the pack's own `#version 450` intact, while KWin's
-// generateCustomShader recompiles at the GL context's core version (140 on the
-// 6.7 path this dialect exists for). So a construct legal at 450 and illegal
-// at 140 still passes here and still fails live — which is the class the ARB
-// extension block in kwinDefineBlock was added to fix. Rewriting the version
-// line before the bake would close it, and would need a trial run against
-// every bundled compositor-only pack first, since it can only make the gate
-// stricter. What this gate does cover is everything a wrong version would not
-// have caught anyway: undeclared identifiers, type errors, bad swizzles, a
-// p_<id> the preamble never emitted.
+// The compositor's HDR colour-management block declares `pzFinalizeColor` and
+// routes the generated main()'s fragColor write through it. The real block
+// includes KWin's `colormanagement.glsl` from a resource path glslang cannot
+// see, so the bake splices an identity stand-in that declares the SAME symbol
+// and macro: a pack that defines its own `pzFinalizeColor`, or redefines
+// `PZ_FINALIZE_COLOR`, collides here the way it collides live.
+QString finalizeColorStub()
+{
+    return QStringLiteral(
+        "vec4 pzFinalizeColor(vec4 c) { return c; }\n"
+        "#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)\n");
+}
+
+// A shader body with its `//` line comments removed, for the textual lints
+// that ask whether a pack CALLS something. GLSL has no string literals, so a
+// line-wise strip is exact for line comments; a block comment is not handled,
+// which only makes those lints more lenient, never stricter.
+QString withoutLineComments(const QString& source)
+{
+    QString code;
+    for (const QString& line : source.split(QLatin1Char('\n'))) {
+        code += line.section(QLatin1String("//"), 0, 0) + QLatin1Char('\n');
+    }
+    return code;
+}
+
+} // namespace
+
+// COVERAGE BOUNDARY, so this is not read as more than it is. Three things the
+// live compositor does that this bake cannot reproduce:
 //
-// Assemble one stage of a COMPOSITOR-ONLY animation pack exactly as the
-// kwin-effect does (entry scaffold for the fragment, include expansion, the
-// p_<id> preamble, then the shared KWin define block after #version) and
-// compile it through glslangValidator. Returns 1 on failure, 0 on success.
+// 1. The source is handed to glslang with the pack's own `#version 450`
+//    intact, while KWin's generateCustomShader recompiles at the GL context's
+//    core version (140 on the 6.7 path this dialect exists for). So a
+//    construct legal at 450 and illegal at 140 still passes here and still
+//    fails live — which is the class the ARB extension block in
+//    kwinDefineBlock was added to fix. Rewriting the version line before the
+//    bake would close it, and would need a trial run against every bundled
+//    compositor-only pack first, since it can only make the gate stricter.
+// 2. The per-window path splices KWin's colour-management block, which
+//    `#include`s a KWin resource. The bake splices an identity stand-in
+//    (finalizeColorStub) that declares the same symbols, so a symbol collision
+//    is caught but the HDR transfer itself is not compiled.
+// 3. The strip pass refuses a linked program that never samples `uStrip`
+//    (optimised out at link). Whether a pack samples it is a link-time
+//    property; the textual lint over `getStripColor` below catches the
+//    common case, and a pack that calls it only from dead code still fails
+//    live.
+// 4. A main() pack with no `#version` line is linted below, and the bake
+//    then still runs: spliceAfterVersion prepends its blocks to such a
+//    source, where the compositor's injectKwinDefineAfterVersion synthesizes
+//    `#version 450` and warns. The compile errors that follow the lint on
+//    that pack describe the missing line, not a second defect.
+//
+// What this gate does cover is everything a wrong version would not have
+// caught anyway: undeclared identifiers, type errors, bad swizzles, a p_<id>
+// the preamble never emitted.
+//
+// Assemble one stage of an animation pack exactly as the kwin-effect does
+// (entry scaffold for the fragment, include expansion through the SAME
+// resolver the compositor uses, the p_<id> preamble, the colour-management
+// stand-in on the per-window path, then the shared KWin define block after
+// #version) and compile it through glslangValidator. Returns 1 on failure, 0
+// on success.
+//
+// The include resolver matters: the compositor calls
+// ShaderIncludeResolver::expandIncludes with the pack's shared roots only and
+// searches the pack's own directory for `"..."` includes alone, whereas the
+// Qt-RHI preview goes through ShaderCompiler::expandSource, which also
+// searches the shader's directory for `<...>`. A pack-local `<x.glsl>` include
+// therefore resolves on the preview and not on the compositor, and this arm
+// has to see that.
 //
 // The splice order matters and mirrors the runtime: each spliceAfterVersion
-// lands its block immediately below #version, so splicing the preamble first
-// and the define block second leaves the define block ABOVE the preamble,
-// which is what the compositor produces (the preamble, then
-// injectKwinDefineAfterVersion).
-static int bakeCompositorStage(QTextStream& out, const QString& packDir,
-                               const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QString& path,
-                               const QString& label, const QString& stage, bool scaffold)
+// lands its block immediately below #version, so splicing the preamble first,
+// the finalize block second and the define block last leaves the define block
+// ABOVE the other two, which is what the compositor produces.
+static int bakeCompositorStage(QTextStream& out, const QString& raw, const QStringList& includePaths,
+                               const AnimationShaderEffect& eff, const QString& path, const QString& label,
+                               const QString& stage, bool scaffold, bool finalizeColor)
 {
-    // The absent-stage bail comes FIRST so the two arms agree on the same
-    // input: a pack whose declared stage file is missing is already linted by
-    // the caller, and reporting a missing tool for it would describe the
-    // machine rather than the pack, on a machine without glslang only.
-    if (!QFile::exists(path)) {
-        return 0; // an absent stage is already linted by the caller
-    }
     const QString tool = glslangValidatorPath();
     if (tool.isEmpty()) {
         // Hard failure rather than a skip. The point of this gate is that a
         // pack cannot reach a release uncompiled, and a quiet "no tool, no
         // coverage" degrade is how 35 packs went unchecked in the first place.
-        // Only compositor-only packs reach here, so a pack tree containing
-        // none of them still validates on a machine without glslang.
-        out << "  " << label.leftJustified(15)
-            << "ERROR\n    neither glslangValidator nor glslang found on PATH. One of them is required to "
-               "compile compositor-only packs (install the glslang package)\n";
+        // The explanation is printed once per run; every stage still counts
+        // the error, so a tree of a hundred packs fails a hundred times but
+        // says why once.
+        static bool explained = false;
+        out << "  " << padLabel(label) << "ERROR (compositor)\n";
+        if (!explained) {
+            explained = true;
+            out << "    neither glslangValidator nor glslang found on PATH. One of them is required to "
+                   "compile animation packs for the compositor (install the glslang package)\n";
+        }
         return 1;
     }
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << path << "\n";
-        return 1;
-    }
-    const QString raw = QString::fromUtf8(f.readAll());
     const QString assembled = scaffold
         ? PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
                                               AnimationShaderRegistry::animationEntryCandidates())
         : raw;
-    const QStringList includePaths = packSharedRoots(packDir);
     QString err;
-    QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
-    if (src.isEmpty()) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+    QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
+                                                                         includePaths, &err);
+    if (!err.isEmpty() || src.isEmpty()) {
+        // Tagged like the compile outcome: the preview arm resolves includes
+        // differently, so the report has to say which arm failed to expand.
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed: " << err << "\n";
         return 1;
     }
     src = PhosphorShaders::spliceAfterVersion(src, AnimationShaderRegistry::paramPreamble(eff));
+    if (finalizeColor) {
+        src = PhosphorShaders::spliceAfterVersion(src, finalizeColorStub());
+    }
     src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
     return reportCompositorCompile(out, label, stage, src, tool);
+}
+
+// The Qt-RHI preview arm of one stage: the same scaffold, the preview's include
+// resolver, the p_<id> preamble when @p preamble is non-empty, then
+// QShaderBaker. @p declared feeds the did-you-mean hint and is empty for a
+// stage that receives no preamble. Returns 1 on failure, 0 on success.
+static int bakePreviewStage(QTextStream& out, const QString& raw, const QStringList& includePaths, const QString& path,
+                            const QString& label, QShader::Stage stage, bool scaffold, const QString& preamble,
+                            const QStringList& declared)
+{
+    const QString assembled = scaffold
+        ? PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
+                                              AnimationShaderRegistry::animationEntryCandidates())
+        : raw;
+    QString err;
+    const QString expanded =
+        ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
+    if (expanded.isEmpty()) {
+        out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
+        return 1;
+    }
+    const QString spliced = PhosphorShaders::spliceAfterVersion(expanded, preamble);
+    return reportCompile(out, label, ShaderCompiler::compile(spliced.toUtf8(), stage), declared);
 }
 
 // Validate one ANIMATION pack directory (data/animations/*). Reproduces the
@@ -164,15 +211,9 @@ static int bakeCompositorStage(QTextStream& out, const QString& packDir,
 // p_<id> preamble, and include expansion — then bakes through headless glslang.
 // Returns the number of errors found.
 //
-// The kwin-effect classic-GL path (`#define PLASMAZONES_KWIN`, default-block
-// uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
-// rejects default-block uniforms, so the kwin branch needs a separate
-// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move /
-// strip / tab classes — see shaderEffectIsCompositorOnly) are authored against that kwin
-// dialect directly and never run on the daemon, so their stages are baked out
-// of process by bakeCompositorStage instead, through glslang in DEFAULT mode.
+// QShaderBaker rejects KWin's default-block uniforms, so bakeCompositorStage
+// independently checks that branch through an OpenGL-target compiler.
 // test_animation_shader_kwin_bake remains the additional driver-level check.
-// Daemon-capable packs get the full stage compile below.
 int validateAnimationPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -243,6 +284,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     static const QStringList kAnimParamTypes = {QStringLiteral("float"), QStringLiteral("int"), QStringLiteral("bool"),
                                                 QStringLiteral("color")};
     QStringList lints;
+    int scalarParams = 0;
+    int colorParams = 0;
     for (const AnimationShaderEffect::ParameterInfo& p : eff.parameters) {
         if (!kAnimParamTypes.contains(p.type)) {
             lints << QStringLiteral(
@@ -254,13 +297,38 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             lints
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
         }
+        // The same split translateAnimationParams makes: colour or scalar,
+        // nothing else, so an unknown type still consumes a scalar lane.
+        if (p.type == QLatin1String("color")) {
+            ++colorParams;
+        } else {
+            ++scalarParams;
+        }
     }
-    // Lint appliesTo tokens from the RAW metadata (fromJson silently drops
-    // unknown tokens with only a runtime journal warning). A typo matters
-    // doubly here: a compositor-only pack whose every token is misspelled
-    // degrades to universal, escapes the compositor-only skip below, and
-    // fails the daemon stage compile with an opaque GLSL error instead of
-    // a metadata diagnostic. Token handling mirrors fromJson exactly:
+    // Slot budget. The registry drops every scalar past kMaxParameterSlots
+    // and every colour past kMaxCustomColors at load with a journal warning,
+    // and buildParamPreamble emits no p_<id> for them. A pack that reads such
+    // a parameter fails its bake with a bare undeclared-identifier error the
+    // did-you-mean hint cannot explain (the name IS declared); one that does
+    // not read it ships green and warns on every leg. The texture and buffer
+    // caps below have had this lint all along.
+    if (scalarParams > PhosphorAnimationShaders::AnimationShaderContract::kMaxParameterSlots) {
+        lints << QStringLiteral(
+                     "too many scalar params: %1 declared, budget is %2 (surplus get no p_<id> and "
+                     "are dropped at load)")
+                     .arg(scalarParams)
+                     .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxParameterSlots);
+    }
+    if (colorParams > PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors) {
+        lints << QStringLiteral(
+                     "too many color params: %1 declared, budget is %2 (surplus get no p_<id> and "
+                     "are dropped at load)")
+                     .arg(colorParams)
+                     .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors);
+    }
+    // Lint appliesTo tokens from RAW metadata: fromJson drops unknown tokens,
+    // so a misspelled class silently changes the pack's runtime eligibility.
+    // Token handling mirrors fromJson exactly:
     // trimmed comparison against the ProfilePaths vocabulary constants,
     // empty / whitespace-only tokens skipped silently.
     {
@@ -310,9 +378,18 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // silently drops these from the in-memory struct, so read the RAW metadata
     // textures array (same as parseEffect) rather than eff.textures.
     const QJsonArray declaredTextures = doc.object().value(QLatin1String("textures")).toArray();
-    if (declaredTextures.size() > PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots) {
+    // The cap counts the entries the loader KEEPS, as parseEffect does: an
+    // empty-path entry is dropped before it can occupy a slot and is linted on
+    // its own below.
+    int keptTextures = 0;
+    for (const QJsonValue& v : declaredTextures) {
+        if (!v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+            ++keptTextures;
+        }
+    }
+    if (keptTextures > PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots) {
         lints << QStringLiteral("too many textures: %1 declared, cap is %2 (surplus dropped at load)")
-                     .arg(static_cast<int>(declaredTextures.size()))
+                     .arg(keptTextures)
                      .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots);
     }
     for (const QJsonValue& v : declaredTextures) {
@@ -434,8 +511,40 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (coerced at load)").arg(singleFilter);
         }
     }
+    // The fragment and vertex sources are read ONCE here, for the textual
+    // lints below and for both bake arms after them. An unreadable or empty
+    // stage leaves the string empty; the bakes then call readStage to report
+    // it under the stage label, so the lints stay quiet about it.
+    QString fragRaw;
+    QString vertRaw;
     if (!QFile::exists(eff.fragmentShaderPath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);
+    } else if (QFile frag(eff.fragmentShaderPath); frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        fragRaw = QString::fromUtf8(frag.readAll());
+    }
+    if (!eff.vertexShaderPath.isEmpty() && QFile::exists(eff.vertexShaderPath)) {
+        if (QFile vert(eff.vertexShaderPath); vert.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            vertRaw = QString::fromUtf8(vert.readAll());
+        }
+    }
+    // A pack that ships its own main() is passed through both scaffolds
+    // unchanged, so everything the generated main() would have done for it is
+    // its own responsibility. The checks that follow are the runtime's own
+    // refusals and degradations for such a pack, applied statically.
+    const bool fragDefinesMain = !fragRaw.isEmpty() && PhosphorShaders::definesMain(fragRaw);
+    // A `#version` line is the scaffold's job for an entry-only pack and the
+    // author's for a main() pack. The compositor synthesizes `#version 450`
+    // for a main() pack that lacks one and warns; the preview's baker and this
+    // gate's glslang run would otherwise compile it at the default dialect
+    // and report errors about `in`/`out`/`texture` the author's file does not
+    // contain. Say what is missing instead.
+    if (fragDefinesMain && PhosphorShaders::versionDirectiveEnd(fragRaw) < 0) {
+        lints << QStringLiteral(
+            "fragment shader defines main() but no #version directive (declare `#version 450`; the compositor "
+            "synthesizes one with a warning, the preview does not)");
+    }
+    if (!vertRaw.isEmpty() && PhosphorShaders::versionDirectiveEnd(vertRaw) < 0) {
+        lints << QStringLiteral("vertex shader has no #version directive (declare `#version 450`)");
     }
     // A declared-but-absent vertexShader falls back to a shared/default vertex
     // stage at runtime (shared/animation.vert on the daemon; the built-in kwin
@@ -448,10 +557,12 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // their own vertex stage, so a vertexShader or a geometryGrid declared by
     // a desktop / strip pack is loaded, kept, and then never used. Say so
     // rather than let the author wonder why their vertex stage does nothing.
+    // The predicate is reused by the bakes: those two passes also splice no
+    // colour-management block.
+    const bool screenLevel = eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassDesktop)
+        || eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassStrip);
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        const bool screenLevel =
-            eff.appliesTo.contains(PP::EventClassDesktop) || eff.appliesTo.contains(PP::EventClassStrip);
         if (screenLevel && !eff.vertexShaderPath.isEmpty()) {
             lints << QStringLiteral(
                 "vertexShader is ignored for desktop/strip packs (the pass draws its own "
@@ -473,24 +584,69 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                 "textures are ignored for desktop/strip packs (the pass binds only its own "
                 "scene captures, which alias uTexture1/uTexture2 on the preview branch)");
         }
+        // The strip pass abandons a pack that ships its own main() before it
+        // compiles anything (striptransitionshader.cpp): the generated main's
+        // PZ_FINALIZE_COLOR call is the re-composite of the pack's output over
+        // the undisplaced below-strip content, and a hand-rolled main() skips
+        // it, blacking out every gap between the columns. Both bakes pass
+        // such a pack, so this is the only place it can be caught offline.
+        const bool stripPack = eff.appliesTo.contains(PP::EventClassStrip);
+        if (stripPack && fragDefinesMain) {
+            lints << QStringLiteral(
+                "strip packs must not define main() (the strip pass abandons the pack at load; write "
+                "pTransition or pIn+pOut)");
+        }
+        // The strip pass also abandons a linked program that never samples
+        // uStrip, and only getStripColor() reads it (the generated main's
+        // re-composite samples uBelow). Whether the sampler survives the link
+        // cannot be seen here, but a body that never mentions either name
+        // cannot possibly keep it, so say so. A call kept only in dead code
+        // still links it out live; that residual is the runtime's to report.
+        if (stripPack && !fragRaw.isEmpty() && !fragDefinesMain) {
+            const QString code = withoutLineComments(fragRaw);
+            if (!code.contains(QLatin1String("getStripColor")) && !code.contains(QLatin1String("uStrip"))) {
+                lints << QStringLiteral(
+                    "strip packs must sample the strip through getStripColor() (a program that never reads "
+                    "uStrip is abandoned by the strip pass at link)");
+            }
+        }
+        // On the per-window path the compositor routes the generated main's
+        // fragColor write through PZ_FINALIZE_COLOR, its HDR colour
+        // management. A main() pack writes fragColor itself, and unless it
+        // calls the macro (or bmw_compat's setOutputColor, which does) its
+        // output skips that transfer and renders dim on an HDR output with
+        // no diagnostic anywhere. The two screen-level passes keep the
+        // identity macro on purpose, so they are exempt.
+        if (!screenLevel && fragDefinesMain) {
+            const QString code = withoutLineComments(fragRaw);
+            if (!code.contains(QLatin1String("PZ_FINALIZE_COLOR")) && !code.contains(QLatin1String("setOutputColor"))) {
+                lints << QStringLiteral(
+                    "fragment shader defines main() but never routes fragColor through PZ_FINALIZE_COLOR "
+                    "(renders without HDR colour management on the compositor; write an entry-only pack, or "
+                    "assign `fragColor = PZ_FINALIZE_COLOR(color)`)");
+            }
+        }
     }
     // geometryGrid is qBound(0, raw, cap) at load, so a negative value
     // silently becomes 0 — indistinguishable from not declaring it, and the
     // vertex stage the author wanted never subdivides. A fractional or
     // non-numeric value is just as quiet: QJsonValue::toInt returns 0 for
-    // both, so lint on the double reading. The over-cap side already warns
-    // on the journal at load; this is the quiet side.
+    // both, so each gets its own message. The over-cap side already warns on
+    // the journal at load; this is the quiet side.
     {
         const QJsonValue gridVal = doc.object().value(QLatin1String("geometryGrid"));
         if (!gridVal.isUndefined()) {
-            const double rawGrid = gridVal.toDouble();
-            const bool wholeNumber = gridVal.isDouble() && rawGrid == static_cast<double>(gridVal.toInt(-1));
-            if (rawGrid < 0.0) {
-                lints << QStringLiteral("geometryGrid is negative (%1); it clamps to 0 at load, disabling the grid")
-                             .arg(rawGrid);
-            } else if (!wholeNumber) {
-                lints << QStringLiteral(
-                    "geometryGrid is not a whole number; it reads as 0 at load, disabling the grid");
+            if (!gridVal.isDouble()) {
+                lints << QStringLiteral("geometryGrid is not a number (reads as 0 at load, disabling the grid)");
+            } else {
+                const double rawGrid = gridVal.toDouble();
+                if (rawGrid < 0.0) {
+                    lints << QStringLiteral("geometryGrid is negative (%1); it clamps to 0 at load, disabling the grid")
+                                 .arg(rawGrid);
+                } else if (rawGrid != std::floor(rawGrid)) {
+                    lints << QStringLiteral(
+                        "geometryGrid is not a whole number; it reads as 0 at load, disabling the grid");
+                }
             }
         }
     }
@@ -505,60 +661,32 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         }
     }
 
-    // ── stage compile (reproduce the daemon runtime fragment assembly) ──
-    // Compositor-only packs take the out-of-process glslang bake instead of
-    // the SPIR-V one: the branch that runs for them is the kwin classic-GL
-    // one (the bake splices the PLASMAZONES_KWIN define block), whose
-    // default-block uniforms and unbound samplers the strict SPIR-V target
-    // rejects — and the daemon never loads these packs, so validating their
-    // UBO branch here would prove nothing about the branch that runs.
-    if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
-        errors += bakeCompositorStage(out, packDir, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"),
-                                      /*scaffold=*/true);
-    } else if (QFile::exists(eff.fragmentShaderPath)) {
-        QFile frag(eff.fragmentShaderPath);
-        if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+    // Every class has a Qt-RHI preview, including compositor-only events
+    // (the settings preview stages every class through a ShaderEffect and
+    // never gates on shaderEffectIsCompositorOnly). Check both branches
+    // rather than allowing appliesTo to bypass either one. The roots are
+    // resolved once per pack: every stage of it bakes against the same set.
+    const QStringList includePaths = packSharedRoots(packDir);
+    const QString preamble = AnimationShaderRegistry::paramPreamble(eff);
+    const QStringList declared = declaredParamNames(eff.parameters);
+
+    // ── fragment stage ──
+    // Read once for both arms; an unreadable or empty fragment is one error
+    // under the compositor label rather than two under both. An absent
+    // fragment is already linted above.
+    if (QFile::exists(eff.fragmentShaderPath)) {
+        QString raw = fragRaw;
+        if (raw.isEmpty() && !readStage(out, fragLabel, eff.fragmentShaderPath, raw)) {
             ++errors;
         } else {
-            const QString raw = QString::fromUtf8(frag.readAll());
-            // An entry-only pack (pTransition / pIn+pOut) gets a generated main();
-            // a traditional main() pack passes through — exactly as both runtimes do.
-            const QString assembled =
-                PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
-                                                    AnimationShaderRegistry::animationEntryCandidates());
-            // Animation runtime include paths are `shared`-only (see
-            // surfaceanimator.cpp animIncludePaths, which appends only each
-            // search path's `/shared` subdir), so the animation gate matches it.
-            const QStringList includePaths = packSharedRoots(packDir);
-            QString err;
-            const QString expanded = ShaderCompiler::expandSource(
-                assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
-            if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
-                ++errors;
-            } else {
-                const QString spliced =
-                    PhosphorShaders::spliceAfterVersion(expanded, AnimationShaderRegistry::paramPreamble(eff));
-                const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
-                errors += reportCompile(out, fragLabel, result, declaredParamNames(eff.parameters));
-                // A binding-less-sampler failure in a pack that pulls in the
-                // compositor-only shared helpers is a metadata bug in disguise
-                // — point the author at the real fix instead of leaving the
-                // opaque GLSL error. (glslang's diagnostic does not name the
-                // sampler, so match the failure mode + the source reference.)
-                if (!result.success && result.error.contains(QLatin1String("requires layout(binding"))) {
-                    const QStringList kwinOnly = compositorOnlySamplersUsed(expanded);
-                    if (!kwinOnly.isEmpty()) {
-                        out << "    (hint: " << kwinOnly.join(QStringLiteral(", "))
-                            << " is declared by the compositor-only shared/old_content.glsl / "
-                               "shared/desktop_transition.glsl / shared/strip_transition.glsl helpers; "
-                               "packs that use them outside "
-                               "a PLASMAZONES_KWIN guard must declare a compositor-only appliesTo — "
-                               "omit \"appearance\")\n";
-                    }
-                }
-            }
+            // The per-window path splices KWin's colour-management block; the
+            // desktop and strip passes keep the header's identity macro.
+            errors += bakeCompositorStage(out, raw, includePaths, eff, eff.fragmentShaderPath, fragLabel,
+                                          QStringLiteral("frag"), /*scaffold=*/true,
+                                          /*finalizeColor=*/!screenLevel);
+            errors += bakePreviewStage(out, raw, includePaths, eff.fragmentShaderPath,
+                                       fragLabel + QStringLiteral(" (Qt-RHI preview)"), QShader::FragmentStage,
+                                       /*scaffold=*/true, preamble, declared);
         }
     }
 
@@ -574,18 +702,17 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // <animation_uniforms.glsl> itself and read customParams directly.
     // Splicing a preamble the runtime does not splice would be worse than no
     // coverage: the gate would pass sources that fail live and fail sources
-    // that work.
+    // that work. For the same reason the did-you-mean hint gets no declared
+    // names here: an unscaffolded stage cannot see any p_<id>.
     //
-    // Skipped for compositor-only packs for the same reason the fragment
-    // stage takes the glslang route instead: what runs for them is the
-    // kwin-define branch the strict SPIR-V target rejects.
-    // Unlike the fragment and vertex stages these do NOT take the glslang
-    // bake either, so a compositor-only multipass pack's buffer passes are
-    // compiled nowhere. No bundled pack is both, and closing it means
-    // teaching bakeCompositorStage the per-pass uniform contract, which is a
-    // larger change than the stage bake was.
-    if (eff.isMultipass && !PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
-        const QStringList includePaths = packSharedRoots(packDir);
+    // Qt previews configure multipass buffers for every event class through
+    // applyEffectStaticConfig. The compositor executes only the final stage
+    // (shader_textures.cpp logs "buffer passes skipped"), so the report says
+    // so: a multipass pack is a daemon-and-preview feature, and its final
+    // stage runs alone wherever the compositor attaches it.
+    if (eff.isMultipass) {
+        out << "  note           multipass buffer passes run on the daemon and the preview only; the compositor "
+               "runs the final stage alone\n";
         for (const QString& declaredBuf : eff.bufferShaderPaths) {
             // fromJson leaves these RELATIVE (unlike the fragment path, which
             // the block at the top of this function resolves), so resolve
@@ -601,24 +728,13 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             }
             const QString buf = *confinedBuf;
             const QString label = QFileInfo(buf).fileName();
-            QFile bufFile(buf);
-            if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
+            QString rawBuf;
+            if (!readStage(out, label, buf, rawBuf)) {
                 ++errors;
                 continue;
             }
-            const QString rawBuf = QString::fromUtf8(bufFile.readAll());
-            QString bufErr;
-            const QString expandedBuf =
-                ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), includePaths, &bufErr);
-            if (expandedBuf.isEmpty()) {
-                out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << bufErr << "\n";
-                ++errors;
-                continue;
-            }
-            const ShaderCompiler::Result bufResult =
-                ShaderCompiler::compile(expandedBuf.toUtf8(), QShader::FragmentStage);
-            errors += reportCompile(out, label, bufResult, declaredParamNames(eff.parameters));
+            errors += bakePreviewStage(out, rawBuf, includePaths, buf, label, QShader::FragmentStage,
+                                       /*scaffold=*/false, QString(), QStringList());
         }
     }
 
@@ -628,65 +744,49 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // animation vert — or a regression in the shared vert every pack inherits —
     // passes the shader_validate_bundled CI gate and only fails at runtime. The
     // sibling zone and surface validators have always baked their vert stage.
-    if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
-        // A compositor-only pack's vert is the stage most likely to break: it
-        // is where the geometry-morph packs do their per-vertex work, and it
-        // is compiled on the KWin path ONLY, so nothing else in a headless run
-        // looks at it. Unlike the daemon vertex bake below, the p_<id> preamble
-        // IS spliced, because the compositor splices it for the vertex stage
-        // too (shader_textures.cpp) and vertex-driven packs read their params
-        // inside the PLASMAZONES_KWIN branch this bake takes.
-        if (!eff.vertexShaderPath.isEmpty() && QFile::exists(eff.vertexShaderPath)) {
-            errors += bakeCompositorStage(out, packDir, eff, eff.vertexShaderPath,
-                                          QFileInfo(eff.vertexShaderPath).fileName(), QStringLiteral("vert"),
-                                          /*scaffold=*/false);
+    //
+    // The p_<id> preamble IS spliced into the vertex stage on both arms,
+    // mirroring the runtime: ShaderNodeRhi's vertex compile, the warm bake and
+    // the compositor all splice it (added alongside the vertex-parameter work,
+    // for parity with the kwin path's one-preamble-both-stages splice), so
+    // vertex-driven packs can read p_<id> on both branches. Baking without it
+    // would reject sources the runtime accepts.
+    if (!eff.vertexShaderPath.isEmpty() && QFile::exists(eff.vertexShaderPath)) {
+        // The declared vert: both arms. The compositor never splices the
+        // colour-management block into a vertex stage.
+        const QString vertLabel = QFileInfo(eff.vertexShaderPath).fileName();
+        QString raw = vertRaw;
+        if (raw.isEmpty() && !readStage(out, vertLabel, eff.vertexShaderPath, raw)) {
+            ++errors;
+        } else {
+            errors += bakeCompositorStage(out, raw, includePaths, eff, eff.vertexShaderPath, vertLabel,
+                                          QStringLiteral("vert"), /*scaffold=*/false, /*finalizeColor=*/false);
+            errors += bakePreviewStage(out, raw, includePaths, eff.vertexShaderPath,
+                                       vertLabel + QStringLiteral(" (Qt-RHI preview)"), QShader::VertexStage,
+                                       /*scaffold=*/false, preamble, declared);
         }
-    } else {
-        const QStringList animIncludeDirs = packSharedRoots(packDir);
-        QString vertPath = eff.vertexShaderPath;
-        if (vertPath.isEmpty()) {
-            // The default vertex stage lives beside the family's shared
-            // helpers, so it has to be looked up across the same roots: an
-            // installed pack finds it in the system prefix, not next to
-            // itself.
-            for (const QString& dir : animIncludeDirs) {
-                const QString sharedVert = dir + QStringLiteral("/animation.vert");
-                if (QFile::exists(sharedVert)) {
-                    vertPath = sharedVert;
-                    break;
-                }
+    } else if (eff.vertexShaderPath.isEmpty()) {
+        // No declared vert: the preview falls back to the family's shared
+        // animation.vert, which lives beside the shared helpers and so has to
+        // be looked up across the same roots (an installed pack finds it in
+        // the system prefix, not next to itself). The compositor uses its own
+        // built-in vertex source in that case, so only the preview arm bakes.
+        QString vertPath;
+        for (const QString& dir : includePaths) {
+            const QString sharedVert = dir + QStringLiteral("/animation.vert");
+            if (QFile::exists(sharedVert)) {
+                vertPath = sharedVert;
+                break;
             }
         }
-        if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
-            const QString vertLabel = QFileInfo(vertPath).fileName();
-            QFile vertFile(vertPath);
-            if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << vertLabel.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
+        if (!vertPath.isEmpty()) {
+            const QString vertLabel = QFileInfo(vertPath).fileName() + QStringLiteral(" (Qt-RHI preview)");
+            QString raw;
+            if (!readStage(out, vertLabel, vertPath, raw)) {
                 ++errors;
             } else {
-                const QString rawVert = QString::fromUtf8(vertFile.readAll());
-                QString vertErr;
-                const QString expandedVert = ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(),
-                                                                          animIncludeDirs, &vertErr);
-                if (expandedVert.isEmpty()) {
-                    out << "  " << vertLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << vertErr
-                        << "\n";
-                    ++errors;
-                } else {
-                    // The p_<id> preamble IS spliced here, mirroring the
-                    // runtime: ShaderNodeRhi's vertex compile and the warm
-                    // bake both splice m_paramPreamble into the vertex
-                    // stage (added alongside the vertex-parameter work, for
-                    // parity with the kwin path's one-preamble-both-stages
-                    // splice), so vertex-driven packs can read p_<id> on
-                    // both branches. Baking without it would reject sources
-                    // the runtime accepts.
-                    const QString splicedVert =
-                        PhosphorShaders::spliceAfterVersion(expandedVert, AnimationShaderRegistry::paramPreamble(eff));
-                    const ShaderCompiler::Result vertResult =
-                        ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
-                    errors += reportCompile(out, vertLabel, vertResult, declaredParamNames(eff.parameters));
-                }
+                errors += bakePreviewStage(out, raw, includePaths, vertPath, vertLabel, QShader::VertexStage,
+                                           /*scaffold=*/false, preamble, declared);
             }
         }
     }
