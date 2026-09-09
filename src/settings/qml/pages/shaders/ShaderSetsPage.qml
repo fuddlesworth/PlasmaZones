@@ -8,8 +8,9 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Domain-agnostic "Sets" page, shared by Decoration Sets and Motion
- *        Sets (the ShaderBrowserPage pattern, one component + thin wrappers).
+ * @brief Domain-agnostic "Sets" page, shared by the Sets pages under
+ *        Animations, Decorations and Overlays (the ShaderBrowserPage pattern,
+ *        one component + thin wrappers).
  *
  * A set bundles the user's pack chains into one shareable JSON file.
  * Applying a set MERGES: paths it covers are replaced, paths it does not
@@ -44,17 +45,19 @@ SettingsFlickable {
 
     required property var bridge
 
-    // ── Domain-tuned copy. Every wrapper sets these, so the defaults are
-    //    only the fallback for a host that forgets one.
+    // ── Page copy. The banner and save description are domain-worded, so
+    //    every wrapper sets them. The rest reads the same on all three pages
+    //    and is served from these defaults.
     property string infoBannerText: ""
     property string saveDescription: ""
-    property string importDescription: ""
+    property string importDescription: i18n("Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
     property string emptyStateText: i18n("No sets saved yet.")
     property string nameFieldAccessibleName: i18n("Set name")
     property string descriptionFieldAccessibleName: i18n("Set description")
     /// token (e.g. "window") → translated coverage-chip label.
     required property var coverageLabel
-    /// count → translated "%n Surfaces" / "%n Overrides" badge label.
+    /// count → translated "%n Surfaces" / "%n Overrides" / "%n Assignments"
+    /// badge label.
     required property var coverageCountLabel
     /// name → translated apply-confirmation subtitle.
     required property var applySubtitleFor

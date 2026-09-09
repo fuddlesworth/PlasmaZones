@@ -27,8 +27,10 @@ actions too faint or quick to communicate the intended behavior. Keep pointer-dr
 feedback responsive and account for the different purpose of a desktop transition.
 
 Contact sheets establish shape and sampled continuity; they do not establish pacing or
-stiffness in playback. If timed playback cannot be inspected, mark those criteria
-unverified. Diagnostic slow motion cannot stand in for normal-speed evidence.
+stiffness in playback. No available tool plays a video: when only a clip is supplied,
+ask for timestamped frames or extract them yourself, review those with the image reader,
+and mark the pacing criteria unverified. Diagnostic slow motion cannot stand in for
+normal-speed evidence.
 
 Return criterion verdicts (met/unmet/unverified) and evidence-based findings: clip/frame/time,
 observation, brief criterion, proposed change to mechanism or timing, and follow-up capture.
@@ -37,6 +39,6 @@ geometry/endpoint checks does not offset a structural failure such as a fabric a
 reading only as a mask wipe. Route that failure back to art direction; do not keep tuning
 pacing or the same boundary curve when the visible mechanism needs to change. If it persists
 after one repair, request a different approach within the user's brief for the next round.
-Label source-level causal guesses as hypotheses. Keep technical ABI issues for the GLSL
-reviewer and subjective preferences separate from defects. Do not borrow bundled effects
+Label source-level causal guesses as hypotheses. Keep technical ABI issues for
+`pz-glsl-shader-reviewer` and subjective preferences separate from defects. Do not borrow bundled effects
 as the visual standard or claim that smooth interpolation alone makes appealing motion.

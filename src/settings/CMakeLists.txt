@@ -100,7 +100,7 @@ set(plasmazones_settings_SRCS
     # child QObject.
     stores/animationpresetlibrary.h
     stores/animationpresetlibrary.cpp
-    # Shared set store (motion sets + decoration sets) and the motion-set
+    # Shared set store (motion, decoration and overlay sets) and the motion-set
     # domain closures that specialise it.
     stores/shadersetstore.h
     stores/shadersetstore.cpp
@@ -520,9 +520,10 @@ qt_add_qml_module(plasmazones-settings
         # bridge.
         qml/pages/shaders/ShaderBrowserPage.qml
         qml/pages/shaders/ShaderBrowserCard.qml
-        # Domain-agnostic sets page + rich set card — shared by the Decoration
-        # Sets and Motion Sets pages. Both are thin wrappers that pass the
-        # right ShaderSetStore bridge plus their domain copy.
+        # Domain-agnostic sets page + rich set card — shared by the Sets pages
+        # under Animations, Decorations and Overlays. All three are thin
+        # wrappers that pass the right ShaderSetStore bridge plus their
+        # domain copy.
         qml/pages/shaders/ShaderSetsPage.qml
         qml/pages/shaders/ShaderSetCard.qml
         # Shared drag-and-drop import band (shader packs, layouts /

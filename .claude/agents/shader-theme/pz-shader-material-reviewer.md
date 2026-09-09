@@ -30,7 +30,8 @@ and device scale before judging subtle detail: absent at the intended size is un
 unknown scale or an unsuitable capture is unverified. Before judging transparent images, verify their compositing
 background; ask the parent for contextual renders if it is missing. A dark alpha viewer
 background is not evidence of a dark shader fill. Report missing evidence to the parent
-and return a provisional verdict; the parent owns capture and re-dispatch.
+and return a visual verdict marked provisional; the parent owns capture and re-dispatch.
+Contract and ABI questions belong to `pz-glsl-shader-reviewer`, not to this review.
 
 Ground aesthetic findings in the user's brief. Do not compare with bundled themes or
 substitute your preferred palette, motif or intensity. Source inspection may support a

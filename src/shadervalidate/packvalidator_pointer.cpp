@@ -229,14 +229,20 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
         // Hard failure rather than a skip, for the reason the animation arm
         // gives: a pack cannot reach a release with the branch it ships on
         // uncompiled, and a quiet degrade is how that happened before.
-        out << "  " << label.leftJustified(15)
-            << "ERROR\n    neither glslangValidator nor glslang found on PATH. One of them is required to "
-               "compile the compositor dialect every pointer pack ships on (install the glslang package)\n";
+        // Explained once per run, as the animation arm does; every stage
+        // still counts the error.
+        static bool explained = false;
+        out << "  " << padLabel(label) << "ERROR (compositor)\n";
+        if (!explained) {
+            explained = true;
+            out << "    neither glslangValidator nor glslang found on PATH. One of them is required to "
+                   "compile the compositor dialect every pointer pack ships on (install the glslang package)\n";
+        }
         return 1;
     }
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << path << "\n";
+        out << "  " << padLabel(label) << "ERROR\n    cannot read " << path << "\n";
         return 1;
     }
     const QString raw = QString::fromUtf8(f.readAll());
@@ -247,7 +253,7 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
     QString err;
     QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
     if (src.isEmpty()) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+        out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
         return 1;
     }
     if (scaffold) {
@@ -763,7 +769,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << padLabel(fragLabel) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -776,7 +782,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << padLabel(fragLabel) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
@@ -800,7 +806,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         const QString label = QFileInfo(buf).fileName();
         QFile bufFile(buf);
         if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
+            out << "  " << padLabel(label) << "ERROR\n    cannot read " << buf << "\n";
             ++errors;
             continue;
         }
@@ -809,7 +815,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         const QString expanded =
             ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), includePaths, &err);
         if (expanded.isEmpty()) {
-            out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+            out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
             ++errors;
         } else {
             const ShaderCompiler::Result result = ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
@@ -850,7 +856,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(vertPath).fileName();
             QFile vertFile(vertPath);
             if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
+                out << "  " << padLabel(label) << "ERROR\n    cannot read " << vertPath << "\n";
                 ++errors;
             } else {
                 const QString rawVert = QString::fromUtf8(vertFile.readAll());
@@ -858,7 +864,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 const QString expanded =
                     ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(), includePaths, &err);
                 if (expanded.isEmpty()) {
-                    out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+                    out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
                     ++errors;
                 } else {
                     const ShaderCompiler::Result result =
