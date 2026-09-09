@@ -91,10 +91,8 @@ generate_debian() {
     local filter_version="${1:-}"
     local revision="${2:-1}"
     local outfile="$SCRIPT_DIR/debian/changelog"
-    local current_version="" current_date="" first_entry=1
+    local current_version="" current_date=""
     local current_version_seen=""
-    local tmpfile
-    tmpfile=$(mktemp)
 
     while IFS='|' read -r version date bullet; do
         if [[ -n "$filter_version" && "$version" != "$filter_version" ]]; then
