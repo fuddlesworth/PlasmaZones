@@ -333,6 +333,51 @@ QSet<QString> allAnchorsIn(const QString& qmlPath)
     return out;
 }
 
+/// Every page id inside SettingsController::validPageNames()'s body, or an
+/// empty set with @p why set when the slice could not be taken.
+///
+/// Sliced to the FUNCTION BODY rather than scanned whole-file: the same file
+/// also holds the category-id tables and reveal-target maps, so non-navigable
+/// ids (placement, snapping, animations, the *-cat headers) would count as
+/// known — and a catalogue entry addressed at a category also passes hasPage()
+/// at runtime, then navigates into an empty page body, which is the exact dead
+/// result class the callers catch. Comments are stripped BEFORE the slice, so a
+/// commented-out id cannot count as navigable.
+///
+/// One helper rather than the two verbatim copies the two slots below used to
+/// carry, because a fix applied to one copy and not the other is the way this
+/// kind of parse rots.
+QSet<QString> validPageIds(QString* why)
+{
+    const QString topology = stripLineComments(
+        readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
+    if (topology.isEmpty()) {
+        *why = QStringLiteral("settingscontroller_pagetopology.cpp unreadable");
+        return {};
+    }
+    const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
+    const int braceStart = bodyStart >= 0 ? topology.indexOf(QLatin1Char('{'), bodyStart) : -1;
+    const int bodyEnd = braceStart >= 0 ? topology.indexOf(QStringLiteral("};"), braceStart) : -1;
+    if (bodyEnd <= braceStart) {
+        *why = QStringLiteral("could not slice validPageNames() body");
+        return {};
+    }
+    QSet<QString> out;
+    static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
+    auto it = kValid.globalMatch(topology.mid(braceStart, bodyEnd - braceStart));
+    while (it.hasNext()) {
+        out.insert(it.next().captured(1));
+    }
+    // Guard against the slice silently collapsing: validPageNames has about 50
+    // entries, so a near-zero count means the parse broke, not that the
+    // catalogue is clean.
+    if (out.size() <= 20) {
+        *why = QStringLiteral("validPageNames slice yielded only %1 ids").arg(out.size());
+        return {};
+    }
+    return out;
+}
+
 /// Top-level argument list of every `name(...)` call in @p src. Quote- and
 /// nesting-aware, because the registration calls this reads carry both
 /// (`PhosphorI18n::tr("Scrolling", "tiling mode name")` is ONE argument, and
@@ -932,41 +977,9 @@ private Q_SLOTS:
     {
         const QString catalogSrc =
             stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
-        const QString registration =
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp"));
-        // stripLineComments BEFORE slicing, like every other source read in
-        // this file: a commented-out id inside validPageNames() would
-        // otherwise count as navigable, defeating the exact regression this
-        // slice exists to catch.
-        const QString topology = stripLineComments(
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
-        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
-        QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
-
-        // Slice to validPageNames()'s BODY before matching. Scanning the whole
-        // file also picks up the category-id tables and reveal-target maps, so
-        // non-navigable ids (placement, snapping, animations, the *-cat
-        // headers) would count as known — and a catalogue entry addressed at a
-        // category also passes hasPage() at runtime, then navigates into an
-        // empty page body. That is the exact dead-result class this catches.
-        const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
-        QVERIFY2(bodyStart >= 0, "validPageNames() definition not found in pagetopology");
-        const int braceStart = topology.indexOf(QLatin1Char('{'), bodyStart);
-        const int bodyEnd = topology.indexOf(QStringLiteral("};"), braceStart);
-        QVERIFY2(braceStart >= 0 && bodyEnd > braceStart, "could not slice validPageNames() body");
-        const QString validBody = topology.mid(braceStart, bodyEnd - braceStart);
-
-        QSet<QString> known;
-        static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
-        auto vit = kValid.globalMatch(validBody);
-        while (vit.hasNext()) {
-            known.insert(vit.next().captured(1));
-        }
-        // Guard against the slice silently collapsing: validPageNames has
-        // about 50 entries, so a near-zero count means the parse broke, not
-        // that the catalogue is clean.
-        QVERIFY2(known.size() > 20,
-                 qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(known.size())));
+        QString why;
+        const QSet<QString> known = validPageIds(&why);
+        QVERIFY2(!known.isEmpty(), qPrintable(why));
 
         static const QRegularExpression kCall(
             QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
@@ -1017,29 +1030,10 @@ private Q_SLOTS:
     {
         const QString registration = stripLineComments(
             readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp")));
-        // stripLineComments BEFORE slicing, like every other source read in
-        // this file: a commented-out id inside validPageNames() would
-        // otherwise count as navigable, defeating the exact regression this
-        // slice exists to catch.
-        const QString topology = stripLineComments(
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
         QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
-        QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
-
-        const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
-        QVERIFY2(bodyStart >= 0, "validPageNames() definition not found in pagetopology");
-        const int braceStart = topology.indexOf(QLatin1Char('{'), bodyStart);
-        const int bodyEnd = topology.indexOf(QStringLiteral("};"), braceStart);
-        QVERIFY2(braceStart >= 0 && bodyEnd > braceStart, "could not slice validPageNames() body");
-        const QString validBody = topology.mid(braceStart, bodyEnd - braceStart);
-        QSet<QString> valid;
-        static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
-        auto vit = kValid.globalMatch(validBody);
-        while (vit.hasNext()) {
-            valid.insert(vit.next().captured(1));
-        }
-        QVERIFY2(valid.size() > 20,
-                 qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(valid.size())));
+        QString why;
+        const QSet<QString> valid = validPageIds(&why);
+        QVERIFY2(!valid.isEmpty(), qPrintable(why));
 
         QStringList unreachable;
         int leafCount = 0;

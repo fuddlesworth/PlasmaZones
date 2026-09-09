@@ -377,11 +377,13 @@ p_add_test(test_settings_animation_profile config/settings/test_settings_animati
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.cpp)
-p_add_test(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
-# QTEST_MAIN constructing Settings needs QGuiApplication: link Qt6::Gui
-# explicitly rather than riding plasmazones_core's coincidental PUBLIC edge
-# (the p_add_test doc block above spells out the hazard).
-target_link_libraries(test_settings_overlay_shader_tree PRIVATE Qt6::Gui)
+# QTEST_MAIN constructing Settings needs QGuiApplication: Qt6::Gui is named
+# rather than ridden in on plasmazones_core's coincidental PUBLIC edge. Spelled
+# out longhand like every other Gui-needing target here, so the whole link line
+# reads in one place instead of a p_add_test plus a patch two lines later.
+add_executable(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
+target_link_libraries(test_settings_overlay_shader_tree PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_overlay_shader_tree COMMAND test_settings_overlay_shader_tree)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
 # (the decoration analogue of test_settings_shader_tree). PhosphorSurface
@@ -433,10 +435,11 @@ p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
 p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2tov3.cpp)
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
-p_add_test(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
-# Explicit Qt6::Gui for the QTEST_MAIN QGuiApplication expansion (see the
-# p_add_test doc block).
-target_link_libraries(test_overlayshader_relocation PRIVATE Qt6::Gui)
+# Explicit Qt6::Gui for the QTEST_MAIN QGuiApplication expansion, longhand like
+# the other Gui-needing targets in this file.
+add_executable(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
+target_link_libraries(test_overlayshader_relocation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_overlayshader_relocation COMMAND test_overlayshader_relocation)
 
 # Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
 # enum fall-back-to-default validators, preset-list canonicalization.

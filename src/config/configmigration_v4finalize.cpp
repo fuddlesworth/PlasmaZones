@@ -338,6 +338,15 @@ bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sideca
         // has been reading and writing since. Re-importing would push that
         // file's stale embedded block over a newer edit and silently lose it.
         // Still queue the strip, so the fat file is cleaned up either way.
+        //
+        // Since v8 that strip also takes the layout's inline shaderId with it,
+        // and in this one branch it is dropped rather than relocated: the
+        // sidecar entry that already exists is what the v8 overlay lift reads,
+        // and the fat file's own copy never reaches it. That is the correct
+        // trade. The sidecar entry is the live one the runtime store has been
+        // reading and writing; the fat file's block is a stale snapshot from
+        // before pass 2 first ran, and preferring it would lose every edit made
+        // since. A shader id is one field of that same stale block.
         if (!sidecar.contains(layoutId)) {
             sidecar.insert(layoutId, settings);
             sidecarDirty = true;

@@ -299,6 +299,26 @@ void retireLegacyAssignmentsFile(const QString& assignmentsPath)
              qPrintable(assignmentsPath));
 }
 
+namespace {
+
+/// Both filesystem finalizers, unconditionally, then the combined verdict.
+///
+/// NOT `a() && b()`. They share nothing: one folds assignments.json and the
+/// `_v4*Stash` keys into rules.json, the other lifts overlay-shader assignments
+/// out of the layout-settings sidecar. Short-circuiting means a v4 finalizer
+/// that keeps failing (an unwritable rules.json, a permissions problem)
+/// indefinitely blocks a lift that would have succeeded, on every startup, with
+/// the user's shader assignments stranded in the sidecar the whole time. Run
+/// both, report if either failed.
+bool runFilesystemFinalizers(const QString& jsonPath)
+{
+    const bool v4 = ConfigMigration::finalizeV4Conversion(jsonPath);
+    const bool overlay = ConfigMigration::relocateOverlayShaderAssignments(jsonPath);
+    return v4 && overlay;
+}
+
+} // namespace
+
 bool ConfigMigration::ensureJsonConfig()
 {
     // Process-level guard: migration is a one-shot operation. Once we've
@@ -405,14 +425,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
-                        return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
+                        return runFilesystemFinalizers(jsonPath);
                     }
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
                     // crash may have left behind (and prunes the retired
                     // provider-default rule from rules.json), a no-op once clean.
-                    return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
+                    return runFilesystemFinalizers(jsonPath);
                 }
                 corrupt = true;
             }
@@ -444,7 +464,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                 // The chain never ran on this path, so the v8 import has to be
                 // driven directly — see finalizeV8MotionImport.
                 finalizeV8MotionImport(jsonPath);
-                return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
+                return runFilesystemFinalizers(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -468,7 +488,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // overlay one lifts a layout-settings sidecar left behind by a partial
         // run.
         finalizeV8MotionImport(jsonPath);
-        return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
+        return runFilesystemFinalizers(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -496,7 +516,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
     // (which also adopts a legacy windowrules.json as rules.json and prunes
     // the retired provider-default rule) plus the v8 overlay-shader sidecar
     // lift.
-    return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
+    return runFilesystemFinalizers(jsonPath);
 }
 
 void ConfigMigration::resetMigrationGuardForTesting()

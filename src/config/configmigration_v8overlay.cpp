@@ -99,14 +99,14 @@ bool stripShaderKeys(QJsonObject& sidecar)
 } // namespace
 
 // v8's overlay-shader half moves zone-overlay shader assignments out of the
-// layout-settings sidecar into the config's Overlays/
-// OverlayShaderTree blob. There is no chain step for it: the config root
-// carries nothing to transform, and the sidecar lift needs filesystem access
-// and must NOT run on the sparse profile deltas the chain also processes (it
-// would stamp the user's live assignments into every profile). So it lives
-// here, invoked from ensureJsonConfig's finalize pass on every run — the same
-// split as the v4 layout-settings relocation (relocateLayoutSettings). The
-// version stamp is migrateV7ToV8's alone.
+// layout-settings sidecar into the config's Overlays/OverlayShaderTree blob.
+// There is no chain step for it: the config root carries nothing to transform,
+// and the sidecar lift needs filesystem access and must NOT run on the sparse
+// profile deltas the chain also processes (it would stamp the user's live
+// assignments into every profile). So it lives here, invoked from
+// ensureJsonConfig's finalize pass on every run, the same split as the v4
+// layout-settings relocation (relocateLayoutSettings). The version stamp is
+// migrateV7ToV8's alone.
 bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
 {
     const QString sidecarPath = ConfigDefaults::layoutSettingsFilePath();

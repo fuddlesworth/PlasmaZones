@@ -442,11 +442,11 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
 }
 
 // ── Overlay shader tree (PhosphorConfig::Store-backed) ──────────────────────
-// Persisted as one nested JSON entry under Overlays/
-// OverlayShaderTree, mirroring the two trees above. No prune-to-supported-
-// paths step (the paths are layout UUIDs, and a stale UUID for a deleted
-// layout is inert, never resolved) and no seed overlay (the schema default is
-// the bare empty tree, like the animation tree).
+// Persisted as one nested JSON entry under Overlays/OverlayShaderTree,
+// mirroring the two trees above. No prune-to-supported-paths step (the paths
+// are layout UUIDs, and a stale UUID for a deleted layout is inert, never
+// resolved) and no seed overlay (the schema default is the bare empty tree,
+// like the animation tree).
 //
 // Overrides are NOT reclaimed when a layout is deleted, and that is deliberate.
 // A layout UUID is per-installation, so "this machine has no layout with that

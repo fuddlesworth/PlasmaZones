@@ -665,10 +665,11 @@ private Q_SLOTS:
         QCOMPARE(ConfigSchemaVersion, 8);
     }
 
-    /// A profile file stamped v5 whose delta carries the old zone-colour
-    /// shape loads through the migration path: palette-snapshot colours drop
-    /// (UseSystem was on), pinned colours survive, the UseSystem key is gone,
-    /// and the record is served under the current version.
+    // The two below are FIXTURE HELPERS, not tests, and they live in a private
+    // section rather than among the slots. QTest skips them today only because
+    // its filter rejects a non-void return and a parameter list, which is luck:
+    // a future void parameterless helper written here would be run as a test.
+private:
     /// A store expecting the CURRENT version, unlike the fixture stores
     /// above (which pin formatVersion 5 for their synthetic groups). The
     /// current-schema defaults blob must declare the zone-colour groups —
@@ -726,6 +727,11 @@ private Q_SLOTS:
         return f.write(QJsonDocument(file).toJson()) >= 0;
     }
 
+private Q_SLOTS:
+    /// A profile file stamped v5 whose delta carries the old zone-colour
+    /// shape loads through the migration path: palette-snapshot colours drop
+    /// (UseSystem was on), pinned colours survive, the UseSystem key is gone,
+    /// and the record is served under the current version.
     void olderProfileFileMigratesForward()
     {
         const QUuid id = QUuid::createUuid();

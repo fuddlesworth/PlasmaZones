@@ -190,6 +190,13 @@ void OverlaysPageController::initSetsStore()
         const QJsonArray overrides = overridesValue.toArray();
         if (overrides.isEmpty())
             return false;
+        // Two consequences of that refusal, both intended and worth stating.
+        // A fully-default state cannot be saved as a set at all: with no
+        // baseline shader and no per-layout override the array is empty, and
+        // "a set that assigns nothing" is not a thing worth naming, listing
+        // and applying. And a hand-authored set with an `overrides: []` is
+        // refused rather than silently accepted as a no-op, which is the
+        // louder of the two failures a user could get.
 
         QSet<QString> seen;
         for (const QJsonValue& v : overrides) {

@@ -1024,11 +1024,10 @@ QtObject {
         // Cascading category menu of the zone overlay shaders, grouped by
         // category. Same registry the Appearance → Overlays pages browse and
         // whose ids the OverlayShaderTree assignments store. Distinct from
-        // _shaderEffectEditor, which lists the ANIMATION shaders. No
-        // path-aware dim/incompatible state here
-        // (overlay shaders are event-agnostic, unlike the per-event animation
-        // shaders). Wire value is the shader id; an unknown/uninstalled id
-        // renders as "(missing: <id>)".
+        // _shaderEffectEditor, which lists the ANIMATION shaders. No path-aware
+        // dim/incompatible state here (overlay shaders are event-agnostic,
+        // unlike the per-event animation shaders). Wire value is the shader id;
+        // an unknown/uninstalled id renders as "(missing: <id>)".
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
 
