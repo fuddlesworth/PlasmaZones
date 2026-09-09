@@ -1045,6 +1045,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             refreshFullscreenSuppression();
         }
     });
+    // Moving to another monitor changes which output the gate covers, and the
+    // set is derived positionally so nothing else re-derives it. A separate
+    // connection rather than a line in the outputChanged lambda above for the
+    // same reason the fullscreen one is separate: that lambda is placement
+    // machinery with several early returns, including one for daemon-driven
+    // applies, and the gate has to hold whichever of those it takes.
+    if (kw) {
+        connect(kw, &KWin::Window::outputChanged, this, [this, w]() {
+            if (w && w->isFullScreen()) {
+                refreshFullscreenSuppression();
+            }
+        });
+    }
 
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
