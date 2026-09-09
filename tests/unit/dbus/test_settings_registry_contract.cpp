@@ -195,6 +195,10 @@ private Q_SLOTS:
         QVERIFY(keys.contains(QStringLiteral("decorationPauseWhenIdle")));
         QVERIFY(keys.contains(QStringLiteral("decorationIdleTimeoutSec")));
         QVERIFY(keys.contains(QStringLiteral("decorationBlurScaleMultiplier")));
+        // SuppressWhileFullscreen is default-true and the effect pulls it over
+        // this same getter path, so a registry miss would invert it exactly the
+        // way PauseWhenIdle's did.
+        QVERIFY(keys.contains(QStringLiteral("decorationSuppressWhileFullscreen")));
     }
 
     /**
@@ -229,6 +233,19 @@ private Q_SLOTS:
         const QVariant afoOn = m_adaptor->getSetting(QStringLiteral("decorationAnimateFocusedOnly")).variant();
         QCOMPARE(afoOn.typeId(), QMetaType::Bool);
         QCOMPARE(afoOn.toBool(), true);
+
+        // SuppressWhileFullscreen, third of the default-true trio the effect
+        // fetches over this path. Same false-first ordering and the same
+        // reason: reading back the default proves nothing about the write.
+        m_settings->setDecorationSuppressWhileFullscreen(false);
+        const QVariant swfOff = m_adaptor->getSetting(QStringLiteral("decorationSuppressWhileFullscreen")).variant();
+        QCOMPARE(swfOff.typeId(), QMetaType::Bool);
+        QCOMPARE(swfOff.toBool(), false);
+
+        m_settings->setDecorationSuppressWhileFullscreen(true);
+        const QVariant swfOn = m_adaptor->getSetting(QStringLiteral("decorationSuppressWhileFullscreen")).variant();
+        QCOMPARE(swfOn.typeId(), QMetaType::Bool);
+        QCOMPARE(swfOn.toBool(), true);
     }
 
     /**

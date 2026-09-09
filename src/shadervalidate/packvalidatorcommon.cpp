@@ -24,6 +24,7 @@
 #include <algorithm>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
+using PhosphorPointerShaders::PointerShaderEffect;
 using PhosphorRendering::ShaderCompiler;
 using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
@@ -133,7 +134,8 @@ namespace {
 /// so the name identifies the family without guessing at metadata.
 bool isKnownFamilyDir(const QString& name)
 {
-    return name == QLatin1String("animations") || name == QLatin1String("overlays") || name == QLatin1String("surface");
+    return name == QLatin1String("animations") || name == QLatin1String("overlays") || name == QLatin1String("surface")
+        || name == QLatin1String("pointer");
 }
 
 /// Which family's marker header @p shared holds, if any.
@@ -144,6 +146,9 @@ std::optional<PackModel> modelFromSharedDir(const QDir& shared)
     }
     if (shared.exists(QStringLiteral("surface_uniforms.glsl"))) {
         return PackModel::Surface;
+    }
+    if (shared.exists(QStringLiteral("pointer_uniforms.glsl"))) {
+        return PackModel::Pointer;
     }
     if (shared.exists(QStringLiteral("common.glsl"))) {
         return PackModel::Overlay;
@@ -350,6 +355,14 @@ QStringList declaredParamNames(const QList<SurfaceShaderEffect::ParameterInfo>& 
     }
     return declared;
 }
+QStringList declaredParamNames(const QList<PointerShaderEffect::ParameterInfo>& params)
+{
+    QStringList declared;
+    for (const PointerShaderEffect::ParameterInfo& p : params) {
+        declared << QStringLiteral("p_") + p.id;
+    }
+    return declared;
+}
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.
@@ -383,7 +396,10 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
     }
 
     const ShaderCompiler::Result result = ShaderCompiler::compile(expanded.toUtf8(), stage);
-    return reportCompile(out, label, result, declaredParamNames(info.parameters));
+    // The did-you-mean hint only makes sense for the stage that received the
+    // preamble: an unscaffolded stage cannot see any p_<id>, so suggesting
+    // one would send the author after a name that stage can never use.
+    return reportCompile(out, label, result, useScaffold ? declaredParamNames(info.parameters) : QStringList());
 }
 
 } // namespace PlasmaZones::ShaderValidate

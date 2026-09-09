@@ -320,6 +320,7 @@ add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (La
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
 add_subdirectory(libs/phosphor-surface)     # surface-shader pack subsystem (SurfaceShaderContract/Effect/Registry) - depends on phosphor-shaders/registry/fsloader
+add_subdirectory(libs/phosphor-pointer)     # pointer-shader pack subsystem (PointerShaderContract/Effect/Registry, PointerHistory) - depends on phosphor-shaders/registry/fsloader
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
 # ext-idle-notify-v1. Built unconditionally (it used to sit behind
 # BUILD_PHOSPHOR_SHELL) because the DAEMON now depends on it: the KWin effect
@@ -685,6 +686,19 @@ install(DIRECTORY data/animations/
 install(DIRECTORY data/surface/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/surface
     PATTERN ".*" EXCLUDE
+    PATTERN "p_generated.glsl" EXCLUDE
+)
+
+# Install bundled pointer shader packs (pointer trails, halos, click ripples;
+# the fourth shader-pack family). The kwin-effect and the settings preview
+# discover ${XDG_DATA_DIRS}/plasmazones/pointer via the PointerShaderRegistry;
+# user overrides at ~/.local/share/plasmazones/pointer win.
+# Ship the whole pack tree (metadata, shaders, the shared/ GLSL includes,
+# and any texture a pack references) and exclude only hidden dev/OS files.
+install(DIRECTORY data/pointer/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/pointer
+    PATTERN ".*" EXCLUDE
+    PATTERN "p_generated.glsl" EXCLUDE
 )
 
 # Install bundled scripted tiling algorithms

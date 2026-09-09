@@ -1,0 +1,85 @@
+{
+    "id": "comet",
+    "name": "Comet",
+    "description": "A single bright object moves with the pointer. The head is a round soft dot sitting on the pointer and behind it a one-colour tail narrows to a point along the path, with a faint sparkle of grain drifting through it. Clicking makes the head flare and throw out an extra handful of that sparkle. The whole comet fades out shortly after the pointer stops. It can be set to appear only once the pointer passes a chosen speed, and to follow a smoothed path so an unsteady hand still gets a clean curve.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 40,
+    "reachParam": "reach",
+    "trailSeconds": 0.8,
+    "parameters": [
+        {
+            "id": "width",
+            "name": "Width",
+            "type": "float",
+            "default": 8.0,
+            "min": 1.0,
+            "max": 32.0,
+            "description": "Diameter of the head and the tail at its widest (px)"
+        },
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 40.0,
+            "min": 16.0,
+            "max": 256.0,
+            "description": "How far the glow around the head and tail may extend from the path, and how far a click burst is thrown (px)"
+        },
+        {
+            "id": "length",
+            "name": "Tail length",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.1,
+            "max": 0.8,
+            "description": "How long a point on the path stays lit (seconds)"
+        },
+        {
+            "id": "activationSpeed",
+            "name": "Activation speed",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2000.0,
+            "description": "Pointer speed below which the comet is not drawn (px per second), 0 to always draw"
+        },
+        {
+            "id": "smoothing",
+            "name": "Smoothing",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much the path is smoothed before it is drawn, 0 to follow it exactly"
+        },
+        {
+            "id": "color",
+            "name": "Colour",
+            "type": "color",
+            "default": "#ffffffff",
+            "description": "Colour of the head and tail"
+        },
+        {
+            "id": "sparkle",
+            "name": "Sparkle",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Amount of twinkling grain along the tail, 0 to disable"
+        },
+        {
+            "id": "clickBurst",
+            "name": "Click burst",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How strongly the head flares and sheds extra sparkle on a click, 0 to disable"
+        }
+    ]
+}

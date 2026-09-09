@@ -149,6 +149,11 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // Same for the strip pass (no claim to release, but its capture textures
     // and compiled shaders free under the same context discipline).
     m_stripTransition.reset();
+    // Same for the pointer pass: it owns compiled pack shaders, uploaded
+    // textures and any multipass buffer targets, and it may be holding the
+    // compositor's cursor hidden for a `layer: above` pack, which must be
+    // handed back before the effect goes.
+    m_pointerPass.reset();
     // And the tab indicators: the override cursor must be handed back before
     // the effect goes (KWin would keep a pointing hand nothing owns). The
     // handler's clear is GL-free — it RETIRES the per-output textures rather
@@ -376,6 +381,11 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
     disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
+    // Same UAF hazard for the pointer registry: its effectsChanged lambda
+    // touches m_pointerPass's own caches, and the registry lives INSIDE that
+    // member, so a signal emitted during the member's teardown would dispatch
+    // against half-destroyed state.
+    disconnect(&m_pointerPass.registry(), nullptr, this, nullptr);
 
     // Make the context current for the WHOLE destructor, member destruction included.
     //

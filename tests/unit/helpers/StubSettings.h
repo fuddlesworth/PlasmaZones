@@ -2278,6 +2278,19 @@ public:
         Q_EMIT decorationPauseWhenIdleChanged();
         Q_EMIT settingsChanged();
     }
+    bool decorationSuppressWhileFullscreen() const override
+    {
+        return m_decorationSuppressWhileFullscreen;
+    }
+    void setDecorationSuppressWhileFullscreen(bool value) override
+    {
+        if (m_decorationSuppressWhileFullscreen == value) {
+            return;
+        }
+        m_decorationSuppressWhileFullscreen = value;
+        Q_EMIT decorationSuppressWhileFullscreenChanged();
+        Q_EMIT settingsChanged();
+    }
     int decorationIdleTimeoutSec() const override
     {
         return m_decorationIdleTimeoutSec;
@@ -3296,6 +3309,7 @@ private:
     bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
     int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
     double m_decorationBlurScaleMultiplier = ConfigDefaults::decorationBlurScaleMultiplier();
+    bool m_decorationSuppressWhileFullscreen = ConfigDefaults::decorationSuppressWhileFullscreen();
     bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
     QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
     double m_windowOpacity = ConfigDefaults::windowOpacity();

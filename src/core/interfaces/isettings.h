@@ -223,6 +223,13 @@ public:
     virtual void setDecorationPauseWhenIdle(bool value) = 0;
     virtual int decorationIdleTimeoutSec() const = 0;
     virtual void setDecorationIdleTimeoutSec(int value) = 0;
+    /// Draw no decoration on an output while a window on it is fullscreen —
+    /// windows, the shell surfaces and the pointer chain alike. Scoped per
+    /// output, so a fullscreen window on one monitor leaves the rest decorated.
+    /// The strongest of the WHEN gates where it applies: the suppressed
+    /// surfaces stop requesting frames rather than drawing nothing.
+    virtual bool decorationSuppressWhileFullscreen() const = 0;
+    virtual void setDecorationSuppressWhileFullscreen(bool value) = 0;
     /// Multiplier on the bufferScale each decoration pack declares for its
     /// buffer passes (the blur pyramid density). Not a WHEN gate like its
     /// group-mates: it shrinks the per-frame work instead, which is the lever
@@ -1050,6 +1057,7 @@ Q_SIGNALS:
     void decorationPauseWhenIdleChanged();
     void decorationIdleTimeoutSecChanged();
     void decorationBlurScaleMultiplierChanged();
+    void decorationSuppressWhileFullscreenChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

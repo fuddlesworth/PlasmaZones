@@ -531,10 +531,16 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // covers a retire that happens between a clear and the next pass.
     m_scrollTabPainter->drainRetiredTextures();
     // While a desktop-switch transition is live for this output, paintOutput
-    // draws the two-desktop blend into the screen target and returns true, so we
-    // skip the normal scene paint. Otherwise (no transition, or it just settled)
-    // chain straight through to the standard scene — this override is a no-op for
-    // every non-transitioning frame.
+    // draws the two-desktop blend into the screen target and returns true, so
+    // the normal scene paint is skipped; otherwise this chains straight through.
+    // Hand the pointer pass's hide back BEFORE the switch paints, not after.
+    // The desktop pass replaces the whole frame and draws no cursor of its
+    // own, so releasing below — once it has already painted — costs the first
+    // frame of every switch its cursor. Gated on the manager's own per-output
+    // check, the same shape the strip arm below uses.
+    if (m_desktopTransition.isRunningForOutput(screen)) {
+        m_pointerPass.releaseCursorHideForForeignPaint(screen);
+    }
     if (m_desktopTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         // A desktop switch replaces this output's frame and draws no cursor
         // of its own, and the strip pass below is never reached for it while
@@ -542,7 +548,23 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
         // leg on this output has to be given back here or the pointer stays
         // invisible for the whole switch.
         m_stripTransition.releaseCursorHideForForeignPaint(screen);
+        // The pointer pass's hide is normally already back by now (above), but
+        // a switch that became live inside paintOutput itself has not passed
+        // that gate, so release again — it is idempotent.
+        m_pointerPass.releaseCursorHideForForeignPaint(screen);
         return;
+    }
+    // A strip leg is about to take this output's frame. Hand the pointer
+    // pass's cursor hide back BEFORE that pass runs, not after: the strip
+    // pass's own hideCursorForPass refuses when KWin already reports the
+    // cursor hidden, so a hide still held here would leave neither pass
+    // drawing the pointer for the length of the leg. Gated on the strip
+    // pass's entry check, which is broader than "will paint": the pass can
+    // still abandon the frame after it (a compile sentinel, a capture that
+    // failed to allocate), costing one frame with both cursors on that path.
+    // Accepted rather than plumbing a will-paint predicate through.
+    if (m_stripTransition.isRunningForOutput(screen)) {
+        m_pointerPass.releaseCursorHideForForeignPaint(screen);
     }
     // The strip pass sits BELOW the desktop transition on purpose: a desktop
     // switch replaces the scene wholesale, so a strip pass under it would
@@ -570,6 +592,16 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot
         && m_scrollTabPainter->hasIndicators(screen)) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
+    }
+    // The pointer decoration chain composites over the FINISHED frame, so it
+    // is the last thing this override does on the normal path. Reached only
+    // here: a desktop transition or a strip leg replaces the output's paint
+    // and returns above, and the pass gives its cursor hide back at those
+    // sites. The capture guard is defensive only: captures route through
+    // drawWindow and never nest a screen pass today, so the latch is always
+    // false here.
+    if (!m_capturingSnapshot) {
+        m_pointerPass.paintOutput(renderTarget, viewport, screen);
     }
 }
 
@@ -615,6 +647,11 @@ void PlasmaZonesEffect::postPaintScreen()
     m_windowAnimator->scheduleRepaints();
     // Keep the desktop-switch transition ticking (per-output repaints) while live.
     m_desktopTransition.scheduleRepaints();
+    // Keep a live pointer chain ticking: one repaint of its damage rect on
+    // the pointer's output. Also the release point for a `layer: above`
+    // cursor hide when the chain went quiet on an output that stopped
+    // painting entirely. An unengaged or quiet chain returns immediately.
+    m_pointerPass.scheduleRepaints();
     // Free strip-pass entries whose view spring has settled (the spring's own
     // repaint pump drives live legs; this is resource hygiene, not a ticker).
     m_stripTransition.reapSettled();

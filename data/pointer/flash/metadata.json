@@ -1,0 +1,99 @@
+{
+    "id": "flash",
+    "name": "Flash",
+    "description": "Clicking sets off a short snap of light at the pointer. A soft round bloom lights up with thin bright spikes crossing through it, the way a lens flare does, and it is gone again in a fifth of a second. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Click",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 90,
+    "reachParam": "spikeLength",
+    "trailSeconds": 0.5,
+    "parameters": [
+        {
+            "id": "bloomSize",
+            "name": "Bloom size",
+            "type": "float",
+            "default": 26.0,
+            "min": 4.0,
+            "max": 120.0,
+            "description": "Radius of the round bloom at the middle (px). It cannot grow past the spike length, which is the edge of the drawn area"
+        },
+        {
+            "id": "spikeCount",
+            "name": "Spikes",
+            "type": "int",
+            "default": 4,
+            "min": 0,
+            "max": 12,
+            "description": "How many spikes cross the bloom, spread evenly around it"
+        },
+        {
+            "id": "spikeLength",
+            "name": "Spike length",
+            "type": "float",
+            "default": 90.0,
+            "min": 10.0,
+            "max": 400.0,
+            "description": "How far a spike reaches from the middle before it tapers away (px)"
+        },
+        {
+            "id": "spikeWidth",
+            "name": "Spike width",
+            "type": "float",
+            "default": 3.0,
+            "min": 0.5,
+            "max": 12.0,
+            "description": "Thickness of a spike where it leaves the bloom (px)"
+        },
+        {
+            "id": "spikeAngle",
+            "name": "Spike angle",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 360.0,
+            "description": "Rotation of the whole set of spikes (degrees)"
+        },
+        {
+            "id": "intensity",
+            "name": "Intensity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 3.0,
+            "description": "Brightness of the flash. Set it to 0 to turn the pack off"
+        },
+        {
+            "id": "duration",
+            "name": "Duration",
+            "type": "float",
+            "default": 0.2,
+            "min": 0.05,
+            "max": 0.5,
+            "description": "How long the flash lasts before it is gone (seconds)"
+        },
+        {
+            "id": "colorLeft",
+            "name": "Left button",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Flash colour for the left button"
+        },
+        {
+            "id": "colorRight",
+            "name": "Right button",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Flash colour for the right button"
+        },
+        {
+            "id": "colorMiddle",
+            "name": "Middle button",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Flash colour for the middle button"
+        }
+    ]
+}

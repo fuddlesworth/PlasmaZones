@@ -6,13 +6,24 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include "plasmazoneseffect/shader_internal.h"
+
 #include <core/rendertarget.h>
+#include <core/region.h>
 #include <core/renderviewport.h>
+#include <effect/effect.h>
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
 #include <opengl/glvertexbuffer.h>
 
+#include <scene/itemrenderer.h>
+#include <scene/windowitem.h>
+#include <scene/workspacescene.h>
+
 #include <QColor>
+#include <QList>
 #include <QSize>
 #include <QVector2D>
 
@@ -96,6 +107,36 @@ void drawOutputQuad(const KWin::RenderViewport& viewport)
 const char* outputQuadVertexSource()
 {
     return kOutputQuadVertexSource;
+}
+
+void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport)
+{
+    if (!KWin::effects) {
+        return;
+    }
+    // The workspace scene is reached through any window item: the effects
+    // API exposes no scene accessor, and Item::scene() on a member of the
+    // scene IS the workspace scene. An empty stacking order means there is
+    // no scene to draw the cursor over either.
+    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    KWin::WorkspaceScene* scene = nullptr;
+    for (KWin::EffectWindow* w : stack) {
+        if (w && w->windowItem()) {
+            scene = qobject_cast<KWin::WorkspaceScene*>(w->windowItem()->scene());
+            break;
+        }
+    }
+    if (!scene || !scene->cursorItem()) {
+        return;
+    }
+    // WorkspaceScene::updateCursor only moves the item while the cursor is
+    // shown; hidden, its position is whatever the pointer was at when the
+    // hide landed. Track the live pointer the way that slot does (the item's
+    // own hotspot offset lives in its child, so the position IS the pointer).
+    scene->cursorItem()->setPosition(KWin::effects->cursorPos());
+    const ShaderInternal::ScopedGlState glStateGuard;
+    scene->renderer()->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
+                                  KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
 }
 
 void translatePackParams(

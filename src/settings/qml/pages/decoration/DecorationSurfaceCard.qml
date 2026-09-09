@@ -27,9 +27,9 @@ import org.kde.kirigami as Kirigami
  * top-level toggles. A child that DOES shadow the parent keeps its own look
  * — the warning below offers to clear those — and so do the popup leaves
  * that ship seed chrome, each of which has its own toggle. The
- * `shell` subtree is the exception: it is baseline-isolated
- * (DecorationSupportedPaths.h), inherits nothing, and stays undecorated
- * until a chain is engaged inside it. A category root additionally shows
+ * `shell` subtree and the `pointer` surface are the exceptions: both are
+ * baseline-isolated (DecorationSupportedPaths.h), inherit nothing, and stay
+ * undecorated until a chain is engaged inside them. A category root additionally shows
  * the "applies to all children" cascade banner while editing. The
  * alwaysEnabled escape hatch (no toggle, always editing) remains for any
  * future surface that must never be disableable.
@@ -61,6 +61,19 @@ Item {
     // this card claiming "Using global defaults": the shell subtree never
     // inherits the tree baseline.
     readonly property bool _baselineIsolated: root.bridge ? root.bridge.isBaselineIsolated(root.surfacePath) : false
+
+    // The pointer surface renders through the pointer pass, not the surface
+    // decoration host, so it takes the other pack family and the other preview
+    // pane. Everything else on this card — the override toggle, the
+    // inheritance banner, the chain editor — is identical, which is the point
+    // of folding the pointer into this tree.
+    readonly property bool _isPointer: root.surfacePath === "pointer"
+    readonly property string _previewKind: root._isPointer ? "pointer" : "decoration"
+    readonly property var _previewController: {
+        if (!root.bridge)
+            return null;
+        return root._isPointer ? root.bridge.pointerPreviewController : root.bridge.previewController;
+    }
 
     // Session-local "the user opened the chain editor" latch, mirroring
     // AnimationEventCard._editingTiming: flipping the toggle ON sets this and
@@ -110,12 +123,14 @@ Item {
     // The pack catalogue changes only on shaderEffectsChanged (install /
     // uninstall), so it is NOT re-read on every profile write — refresh()
     // runs on every built card for every tree edit, including each slider
-    // drag tick, and availableShaderEffects() materialises a map per
+    // drag tick, and availableShaderEffectsForPath() materialises a map per
     // installed pack.
     function _refreshEffects() {
         if (!root.bridge)
             return;
-        root._effects = root.bridge.availableShaderEffects();
+        // Path-scoped: a cursor chain must offer only pointer packs and a
+        // window chain only surface packs.
+        root._effects = root.bridge.availableShaderEffectsForPath(root.surfacePath);
     }
 
     function refresh() {
@@ -157,7 +172,9 @@ Item {
     function _packNames(ids) {
         var out = [];
         for (var i = 0; i < ids.length; i++) {
-            var found = ids[i];
+            // A chained id with no installed pack reads the way ChainEditor's
+            // row does, rather than as the raw id.
+            var found = i18nc("@info item missing", "(missing: %1)", ids[i]);
             for (var j = 0; j < root._effects.length; j++) {
                 if (root._effects[j] && root._effects[j].id === ids[i]) {
                     found = root._effects[j].name;
@@ -249,7 +266,7 @@ Item {
                     // it draws nothing.
                     var resolvedChain = (root._resolved && root._resolved.chain) ? root._resolved.chain : [];
                     if (root._undecorated || (root._baselineIsolated && resolvedChain.length === 0))
-                        return i18n("Not decorated. Add a decoration pack to style this surface.");
+                        return root._isPointer ? i18n("Not decorated. Add a pointer pack to style the cursor.") : i18n("Not decorated. Add a decoration pack to style this surface.");
                     if (root._parentChainText.length > 0)
                         return i18n("Inheriting from: %1", root._parentChainText);
                     return i18n("Using global defaults");
@@ -308,6 +325,23 @@ Item {
                     chain: root._chain
                     packParameters: root._params
                     disabledPacks: root._disabledPacks
+                    // Live preview inside each expanded layer row: the same
+                    // stand-in card the pack browser shows, on this page's
+                    // controller.
+                    previewKind: root._previewKind
+                    previewController: root._previewController
+                    // The pointer chain takes pointer packs, so it cannot use
+                    // the editor's decoration wording. ChainEditor declares
+                    // these for exactly this case; the pointer card is the
+                    // first host in another family. Both branches are spelled
+                    // out because a string property bound to `undefined`
+                    // resolves to empty, not back to the declared default.
+                    emptyChainText: root._isPointer ? i18n("No pointer packs.") : i18n("No decoration packs.")
+                    emptyChainAddHintText: root._isPointer ? i18n("No pointer packs. Add one below.") : i18n("No decoration packs. Add one below.")
+                    addRowTitle: root._isPointer ? i18n("Add pointer pack") : i18n("Add decoration pack")
+                    addRowDescription: root._isPointer ? i18n("Stack another pack onto the pointer's chain") : i18n("Stack another pack onto this surface's chain")
+                    noPacksInstalledText: root._isPointer ? i18n("No pointer packs are installed") : i18n("No decoration packs are installed")
+                    addComboAccessibleDescription: root._isPointer ? i18n("Add a pointer pack to the pointer's chain") : i18n("Add a decoration pack to this surface's chain")
                     onChainChangeRequested: function (newChain) {
                         if (root.bridge)
                             root.bridge.setChain(root.surfacePath, newChain);

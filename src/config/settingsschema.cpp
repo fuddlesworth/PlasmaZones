@@ -1254,6 +1254,9 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Resolution the blur passes render at, relative to the window. Below 1 is cheaper and softer, "
                         "above 1 is sharper and costs more."),
          clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
+        {CD::suppressWhileFullscreenKey(), CD::decorationSuppressWhileFullscreen(), QMetaType::Bool,
+         QStringLiteral("Draw no decorations on a monitor while a window on it is fullscreen. Other monitors keep "
+                        "theirs.")},
     };
 }
 

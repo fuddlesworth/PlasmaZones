@@ -391,6 +391,14 @@ add_test(NAME test_settings_overlay_shader_tree COMMAND test_settings_overlay_sh
 # PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
 p_add_test(test_settings_decoration_tree config/settings/test_settings_decoration_tree.cpp)
 
+# Companion test executable: the Decorations.Performance/SuppressWhileFullscreen
+# persistence chain — absent-key default (the key is default-true, so a reader
+# that skips the fallback inverts it rather than disabling it), change-gated
+# signal, save/reload in both directions, independence from its two same-typed
+# same-defaulted group-mates, reset(), and the schema entry itself.
+p_add_test(test_settings_fullscreen_suppression config/settings/test_settings_fullscreen_suppression.cpp)
+
+
 # Pins runtime palette tracking for system-colors mode (needs Qt6::Gui for
 # QGuiApplication palette events; p_add_test links Core only).
 add_executable(test_settings_system_palette_tracking config/settings/test_settings_system_palette_tracking.cpp)
@@ -1076,6 +1084,17 @@ add_executable(test_animation_shader_kwin_bake ui/shaders/test_animation_shader_
 target_link_libraries(test_animation_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_kwin_bake COMMAND test_animation_shader_kwin_bake)
+
+# The pointer twin: bakes the KWIN-PATH variant of every pointer pack (main
+# fragment with its preamble, buffer passes without one, and the compositor's
+# own vertex stage) through a real offscreen OpenGL context. Every pointer
+# pack ships on that branch while the preview bake only covers the Qt-RHI
+# one, and the two dialects declare different identifiers. Skips when no
+# desktop-GL >= 4.5 context is available; an empty pack discovery FAILS.
+add_executable(test_pointer_shader_kwin_bake ui/shaders/test_pointer_shader_kwin_bake.cpp)
+target_link_libraries(test_pointer_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorPointer::PhosphorPointer PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_pointer_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_pointer_shader_kwin_bake COMMAND test_pointer_shader_kwin_bake)
 
 # DRAWS every bundled strip pack through the KWin-path variant the strip
 # pass links (fragment assembled as striptransitionshader.cpp does, linked
@@ -1826,6 +1845,10 @@ set(_decoration_ctrl_SRCS
     # links the controller needs it — omitting it is a link error in each of the
     # three consumers of this list, not a silent degradation.
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpreviewcontroller.cpp
+    # And one of these, since the pointer became another decoration surface:
+    # the controller serves both pack families and previews each through its
+    # own host.
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpreviewcontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_browser.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_sets.cpp
@@ -1854,6 +1877,7 @@ target_link_libraries(test_decorationpagecontroller
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer  # the controller serves the pointer surface too
         PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
         PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
@@ -1967,6 +1991,30 @@ target_link_libraries(test_decorationpreviewcontroller
 target_compile_definitions(test_decorationpreviewcontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcontroller)
 
+# The pointer route's counterpart to the guard above. The decoration sweep
+# deliberately excludes the pointer preview QML (its previewController is a
+# PointerPreviewController, a different class), so without this the pointer
+# preview's QML calls would go unchecked — the exact gap that sweep exists to
+# close.
+add_executable(test_pointer_qml_contracts
+    settings/pages/test_pointer_qml_contracts.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/pointerpreviewcontroller.cpp
+)
+target_link_libraries(test_pointer_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        PhosphorPointer::PhosphorPointer
+        PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
+        plasmazones_core
+)
+target_include_directories(test_pointer_qml_contracts PRIVATE ${CMAKE_SOURCE_DIR}/src/settings)
+target_compile_definitions(test_pointer_qml_contracts PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_pointer_qml_contracts COMMAND test_pointer_qml_contracts)
+
 # Companion test executable: decoration-set CRUD over the shared
 # ShaderSetStore (save / list / apply / remove / update / export / import,
 # the active-flag containment semantics, and the format-version gate). Mirrors
@@ -1981,6 +2029,7 @@ target_link_libraries(test_decoration_sets
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer  # the controller serves the pointer surface too
         PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
         PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
@@ -2001,6 +2050,7 @@ target_link_libraries(test_decoration_sets_validation
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer  # the controller serves the pointer surface too
         PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
         PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
@@ -2272,7 +2322,7 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # The offline pack validator's metadata lints. The bundled-pack gate
 # (shader_validate_animations) only proves the shipped packs are clean; this
 # builds deliberately-broken packs in a temp dir and asserts the diagnostic.
-# Compiles the three validator arms straight in, the way the tool does, so it
+# Compiles the four validator arms straight in, the way the tool does, so it
 # links the same parsers and needs no glslang for the metadata paths it
 # exercises.
 #
@@ -2285,6 +2335,7 @@ add_executable(test_pack_validators shadervalidate/test_pack_validators.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
 target_include_directories(test_pack_validators PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_pack_validators
@@ -2295,6 +2346,7 @@ target_link_libraries(test_pack_validators
         PhosphorShaders::PhosphorShaders
         PhosphorAnimation::PhosphorAnimation
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
 )

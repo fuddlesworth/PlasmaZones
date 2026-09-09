@@ -315,6 +315,24 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // mirror the animation registry's effectsChanged handler above.
         scheduleEffectAudioSync();
     });
+
+    // Pointer shader pack hot-reload, the same shape as the surface handler
+    // above: drop every compiled pointer pack so the next live frame
+    // recompiles against the new source, and re-derive the engaged chain,
+    // because a reload can add the pack id a chain names, remove one it
+    // resolved to, or change the reach / trailSeconds / layer the pass
+    // budgets its damage and cursor handling from. No repaint is forced: the
+    // chain is event-driven, so the next pointer movement brings it back with
+    // the fresh packs, and a full repaint here would light up the whole
+    // screen for a decoration that is not even live.
+    connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this, [this]() {
+        // Fires from the registry's file watcher between frames, where
+        // the compositor's GL context is NOT current, and the cached
+        // packs own GLShaders, GLTextures and GLFramebuffers.
+        // invalidateShaderCache makes the context current itself,
+        // under the same discipline as the sibling handlers here.
+        m_pointerPass.invalidateShaderCache();
+    });
 }
 
 void PlasmaZonesEffect::initTimers()
@@ -828,6 +846,15 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenGeometryChanged);
 
+    // The pointer trail is sampled in its output's device pixels, so a
+    // resolution, scale or layout change leaves every stored sample describing
+    // a canvas that is gone. The output object itself is unchanged, so neither
+    // outputRemoved nor notePointer's own identity check notices; without this
+    // the trail draws at the wrong offset and size until the ring ages out.
+    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
+        m_pointerPass.outputGeometryChanged();
+    });
+
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin
     // tells us an output appeared or disappeared. KWin fires screenAdded /
     // screenRemoved BEFORE the per-window outputChanged signals it emits for
@@ -858,6 +885,47 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // re-resolve, mirroring the daemon-ready re-seed pattern.
         invalidateAllRuleCaches();
         scheduleBorderSweep();
+    });
+
+    // Decorations.Performance.SuppressWhileFullscreen — keep the set of outputs
+    // the gate covers current. Every signal that could plausibly change the
+    // answer to "which monitors carry a fullscreen window on the current
+    // desktop" funnels into one refresh:
+    //   • the per-window windowFullScreenChanged (wired in
+    //     window_connections.cpp, next to the tiling handler's own connection),
+    //     which is the enter and exit edge;
+    //   • windowAdded, for a window that OPENS fullscreen, and windowDeleted,
+    //     for the fullscreen window going away without ever emitting an exit.
+    //     Not windowClosed: it fires while the window is still in the
+    //     stacking order, so the walk answers exactly as before and the set
+    //     can only change once windowDeleted has removed it;
+    //   • desktopChanged and currentActivityChanged, because the gate is scoped
+    //     to the CURRENT desktop and a fullscreen window parked elsewhere must
+    //     not strip the desktop being looked at;
+    //   • screenAdded / screenRemoved / virtualScreenGeometryChanged, because a
+    //     layout change re-resolves which output a window sits on and can
+    //     invalidate a LogicalOutput* held in the set.
+    // refreshFullscreenSuppression compares the rebuilt set against the stored
+    // one and returns on a match, so the bursts several of these arrive in cost
+    // a stacking-order walk apiece and drive no sweep.
+    const auto refreshSuppression = [this]() {
+        refreshFullscreenSuppression();
+    };
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, refreshSuppression);
+    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, refreshSuppression);
+    // Show Desktop parks a fullscreen window without changing its desktop, its
+    // activity or its minimized flag, so this is the only edge that can tell
+    // the walk its isHiddenByShowDesktop() term has flipped. Without it the
+    // term is worse than absent: any unrelated trigger arriving mid-peek
+    // rebuilds the set with the window excluded, re-decorates that monitor,
+    // and leaves it that way after the peek ends until something else fires.
+    connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [refreshSuppression](bool) {
+        refreshSuppression();
     });
 }
 

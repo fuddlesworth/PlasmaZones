@@ -257,13 +257,19 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("taskbar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("applet"),
                              PhosphorI18n::tr("applet popup"), PhosphorI18n::tr("launcher"), PhosphorI18n::tr("tray"),
                              PhosphorI18n::tr("system tray"), PhosphorI18n::tr("dock"), PhosphorI18n::tr("widget")});
+    // The pointer is a decoration surface, so it sits beside its siblings
+    // rather than in a section of its own.
+    search->setPageKeywords(QStringLiteral("decorations-pointer"),
+                            {PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("mouse"),
+                             PhosphorI18n::tr("trail"), PhosphorI18n::tr("click"), PhosphorI18n::tr("ripple"),
+                             PhosphorI18n::tr("halo"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("sparks")});
     search->setPageKeywords(QStringLiteral("decorations-sets"),
                             {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
                              PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
     search->setPageKeywords(QStringLiteral("decorations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("surface"), PhosphorI18n::tr("pack"),
-                             PhosphorI18n::tr("border"), PhosphorI18n::tr("glass"), PhosphorI18n::tr("glow"),
-                             PhosphorI18n::tr("blur")});
+                             PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("border"),
+                             PhosphorI18n::tr("glass"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("blur")});
 
     // Top-level + tools
     search->setPageKeywords(QStringLiteral("window-appearance"),
@@ -519,6 +525,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Animate only the active window"),
                {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),
                 PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("focus")},
+               /*advancedOnly=*/true);
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationSuppressWhileFullscreen"),
+               PhosphorI18n::tr("Stop while a window is fullscreen"),
+               {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("gpu"),
+                PhosphorI18n::tr("fullscreen"), PhosphorI18n::tr("game"), PhosphorI18n::tr("video"),
+                PhosphorI18n::tr("pointer")},
                /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationPauseWhenIdle"),
                PhosphorI18n::tr("Pause while you are away"),

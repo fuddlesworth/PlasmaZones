@@ -235,7 +235,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 //      "appearance is the only class that reaches a daemon surface" — a new
 //      daemon-driven class must be added there, or its packs are silently
 //      classified compositor-only and skipped by the daemon.
-//   4. `_typeCatalog` in ShaderBrowserPage.qml — the browser's type axis.
+//   4. `typeCatalog` in ShaderBrowserPage.qml — the browser's type axis.
 //      A missing entry ships an untranslated badge sorted last.
 //   5. `shaderPathResolvesInIsolation` (shaderprofiletree.cpp) — decide
 //      whether the new class's leaves may inherit a shader from their

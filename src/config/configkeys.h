@@ -578,6 +578,7 @@ public:
     P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
     P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
     P_CONFIG_KEY(blurScaleMultiplierKey, "BlurScaleMultiplier")
+    P_CONFIG_KEY(suppressWhileFullscreenKey, "SuppressWhileFullscreen")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps

@@ -1,0 +1,115 @@
+{
+    "id": "brackets",
+    "name": "Brackets",
+    "description": "Four corner brackets snap inward onto the point you click, the way a camera locks focus on its subject. They start out wide, close in with a small turn that unwinds as they arrive, sit square for a moment and then fade. A lighter second set marks where you let the button go. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Click",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 44,
+    "reachParam": "spread",
+    "trailSeconds": 1.7,
+    "parameters": [
+        {
+            "id": "spread",
+            "name": "Spread",
+            "type": "float",
+            "default": 44.0,
+            "min": 16.0,
+            "max": 300.0,
+            "description": "How far out the brackets start, measured from the click (px). Every other length is a share of this."
+        },
+        {
+            "id": "rest",
+            "name": "Lock distance",
+            "type": "float",
+            "default": 0.42,
+            "min": 0.05,
+            "max": 1.0,
+            "step": 0.01,
+            "description": "Where the brackets come to rest, as a share of the spread"
+        },
+        {
+            "id": "arm",
+            "name": "Arm length",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.05,
+            "max": 1.0,
+            "step": 0.01,
+            "description": "Length of each bracket arm, as a share of the spread"
+        },
+        {
+            "id": "thickness",
+            "name": "Line thickness",
+            "type": "float",
+            "default": 2.0,
+            "min": 0.5,
+            "max": 6.0,
+            "step": 0.1,
+            "description": "Thickness of the bracket lines (px)"
+        },
+        {
+            "id": "duration",
+            "name": "Duration",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.2,
+            "max": 1.2,
+            "step": 0.05,
+            "description": "How long the brackets take to close in and then fade, not counting the hold (seconds)"
+        },
+        {
+            "id": "hold",
+            "name": "Hold",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.0,
+            "max": 0.5,
+            "step": 0.01,
+            "description": "How long the brackets sit at rest between closing in and fading. It is added on top of the duration (seconds)"
+        },
+        {
+            "id": "spin",
+            "name": "Turn",
+            "type": "float",
+            "default": 6.0,
+            "min": 0.0,
+            "max": 12.0,
+            "step": 0.5,
+            "description": "How far the brackets are turned when they start, unwinding to square as they arrive (degrees)"
+        },
+        {
+            "id": "releaseMark",
+            "name": "Release mark",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Strength of the smaller second set drawn when the button is released. Set it to 0 to leave the release unmarked."
+        },
+        {
+            "id": "colorLeft",
+            "name": "Left button",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Bracket colour for the left button"
+        },
+        {
+            "id": "colorRight",
+            "name": "Right button",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Bracket colour for the right button"
+        },
+        {
+            "id": "colorMiddle",
+            "name": "Middle button",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Bracket colour for the middle button"
+        }
+    ]
+}

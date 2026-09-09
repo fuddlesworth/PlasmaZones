@@ -1,0 +1,75 @@
+{
+    "id": "halo",
+    "name": "Halo",
+    "description": "A soft radial glow sits centred on the pointer. It brightens as the pointer speeds up and breathes gently once the pointer comes to rest, dimming to its idle level before it fades away. Clicking makes the glow swell and settle back. The glow can also be set to appear only once the pointer passes a chosen speed.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Glow",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reachParam": "radius",
+    "trailSeconds": 0.9,
+    "parameters": [
+        {
+            "id": "radius",
+            "name": "Radius",
+            "type": "float",
+            "default": 48.0,
+            "min": 8.0,
+            "max": 256.0,
+            "description": "Radius of the glow around the pointer (px)"
+        },
+        {
+            "id": "intensity",
+            "name": "Intensity",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Brightness of the glow at the pointer"
+        },
+        {
+            "id": "speedGain",
+            "name": "Speed gain",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How much brighter the glow gets when the pointer moves fast"
+        },
+        {
+            "id": "idleDim",
+            "name": "Idle dim",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Brightness the glow settles to while the pointer rests, as a share of full"
+        },
+        {
+            "id": "activationSpeed",
+            "name": "Activation speed",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2000.0,
+            "description": "Pointer speed below which the glow is not drawn (px per second), 0 to always draw"
+        },
+        {
+            "id": "clickSwell",
+            "name": "Click swell",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How much the glow swells on a click, 0 to disable"
+        },
+        {
+            "id": "color",
+            "name": "Colour",
+            "type": "color",
+            "default": "#ff3b82f6",
+            "description": "Colour of the glow"
+        }
+    ]
+}

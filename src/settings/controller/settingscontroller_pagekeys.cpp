@@ -125,13 +125,12 @@ const Settings::ConfigKeyList& animationConfigKeys()
 // the file-size ceiling).
 
 // Every decoration leaf reads/writes the single shared DecorationProfileTree
-// settings key (one JSON blob covering windows, OSDs, popups and shell
-// surfaces), so pageGroupChildren("decorations") — the canonical leaf set —
-// identifies them all. Reset/Discard/dirty are NOT whole-tree, though: the
-// four surface pages
-// each own one root subtree (see decorationSurfaceRoot), so resetting OSDs must
-// not touch the Windows overrides. Only the sets/shaders library leaves act on
-// the whole editable tree.
+// settings key (one JSON blob covering windows, OSDs, popups, shell surfaces
+// and the pointer), so pageGroupChildren("decorations") — the canonical leaf
+// set — identifies them all. Reset/Discard/dirty are NOT whole-tree, though:
+// the five surface pages each own one root subtree (see decorationSurfaceRoot),
+// so resetting OSDs must not touch the Windows overrides. Only the sets/shaders
+// library leaves act on the whole editable tree.
 bool isDecorationPage(const QString& page)
 {
     return SettingsController::pageGroupChildren().value(QStringLiteral("decorations")).contains(page);

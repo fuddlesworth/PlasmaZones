@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+find_package(Qt6 6.10 REQUIRED COMPONENTS Test)
+
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+
+function(phosphorpointer_add_test name)
+    add_executable(${name} ${name}.cpp)
+    target_link_libraries(${name}
+        PRIVATE
+            PhosphorPointer::PhosphorPointer
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Test
+    )
+    add_test(NAME ${name} COMMAND ${name})
+    phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorpointer")
+    # Qt requires an offscreen platform plugin when tests run under CI
+    # without a display server.
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the XDG
+    # sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
+endfunction()
+
+phosphorpointer_add_test(test_pointershaderregistry)
+phosphorpointer_add_test(test_pointeruniformextension)
+phosphorpointer_add_test(test_pointerhistory)
+
+# The registry test checks the entry prologue against the shared helper it
+# includes, which lives in the top-level data tree rather than in this lib.
+target_compile_definitions(test_pointershaderregistry PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")

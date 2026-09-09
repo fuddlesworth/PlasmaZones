@@ -120,6 +120,10 @@ set(plasmazones_effect_SRCS
     transitions/striptransitionmanager.h
     transitions/transitionpasshelpers.cpp
     transitions/transitionpasshelpers.h
+    pointer/pointerdecorationpass.cpp
+    pointer/pointerdecorationpass.h
+    pointer/pointerdecorationshader.cpp
+    pointer/pointerdecorationpaint.cpp
     tilinghandler/tilinghandler.cpp
     tilinghandler/tilinghandler.h
     tilinghandler/minimizefloat.cpp
@@ -213,6 +217,13 @@ set_source_files_properties(transitions/desktoptransitionteardown.cpp PROPERTIES
 set_source_files_properties(transitions/striptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/striptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/transitionpasshelpers.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# PointerDecorationPass follows the same prophylactic rule: three
+# concern-split TUs that carry file-local helpers with generic names (the
+# uniform element-name tables, includePathsFrom) stay out of the blob rather
+# than being audited for collisions one name at a time.
+set_source_files_properties(pointer/pointerdecorationpass.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(pointer/pointerdecorationshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(pointer/pointerdecorationpaint.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
@@ -256,6 +267,12 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # data/surface via SurfaceShaderRegistry, the third shader-pack category
     # alongside animations + overlay shaders. GPL->LGPL link is fine.
     PhosphorSurface::PhosphorSurface
+    # PhosphorPointer: the pointer-shader pack registry, contract, profile and
+    # the shared PointerHistory sampler. The effect runs the user's pointer
+    # chain as a screen-space pass over the finished frame
+    # (kwin-effect/pointer). Fourth pack family alongside animations, overlays
+    # and surfaces. GPL->LGPL link is fine.
+    PhosphorPointer::PhosphorPointer
     # PhosphorAudio: the CAVA spectrum provider (Qt-Core-only). The effect runs
     # its OWN CavaSpectrumProvider to feed audio-reactive surface decorations
     # (border-audio), since the daemon's spectrum is not exported over the

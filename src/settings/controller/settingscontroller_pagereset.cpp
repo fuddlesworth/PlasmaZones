@@ -419,7 +419,7 @@ void SettingsController::resetPage(const QString& page)
     // ConfigDefaults::decorationProfileTree at lowest precedence). So a SURFACE
     // page clears only its own root subtree's overrides — the seeds show
     // through again, restoring the default chrome for seeded surfaces and "no
-    // decoration" everywhere else — leaving the other three roots (and the
+    // decoration" everywhere else — leaving the other four roots (and the
     // global baseline) standing; a non-surface leaf (sets/shaders, empty root)
     // resets the whole tree key.
     // Staged like ordinary edits: Save commits, Discard restores the baseline.
@@ -666,7 +666,7 @@ void SettingsController::discardPage(const QString& page)
 
     // Decoration pages: discard reverts to the committed baseline. A SURFACE page
     // reverts only its own root subtree — each such path is restored to the
-    // baseline's value (re-added, changed, or removed) while the other three
+    // baseline's value (re-added, changed, or removed) while the other four
     // roots' staged edits stand — so discarding OSDs cannot drop a pending
     // Windows edit.
     // A non-surface leaf (sets/shaders, empty root) reverts the whole tree key via

@@ -240,6 +240,14 @@ int main(int argc, char* argv[])
     // this from QML (SurfaceAnimator builds its legs in C++), so the
     // registration exists only where the preview pane lives.
     qmlRegisterType<PhosphorRendering::ShaderEffect>("PlasmaZones", 1, 0, "AnimationShaderItem");
+    // The same rendering-library item again under a pointer name, for the live
+    // POINTER preview. A separate registration rather than reuse of
+    // AnimationShaderItem only so the QML reads as the family it belongs to.
+    // Both names resolve to the one C++ type, so instanceof and qobject_cast
+    // treat them as the same item.
+    // The compositor draws pointer packs itself and never creates this from
+    // QML, so the registration exists only where the preview lives.
+    qmlRegisterType<PhosphorRendering::ShaderEffect>("PlasmaZones", 1, 0, "PointerShaderItem");
 
     // Global settings search, set up BEFORE the engine so everything here
     // outlives ~QQmlApplicationEngine. Declaration order is the lifetime

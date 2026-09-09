@@ -69,7 +69,7 @@ ColumnLayout {
     /// Aliased onto the shared ShaderParamsEditor's `lockedParams`, which
     /// owns the lock map and self-updates it; assigning here (the card's
     /// reset-on-shader-change) writes straight through.
-    property alias lockedShaderParams: paramEditor.lockedParams
+    property alias lockedShaderParams: paramEditorBody.lockedParams
     // ── Configuration inputs ────────────────────────────────────────
     /// Title for the curve dialog ("Customize curve for <eventLabel>").
     property string eventLabel: ""
@@ -191,13 +191,19 @@ ColumnLayout {
     /// decoration chain packs. Collapsed by default; picking a shader
     /// expands it, whole-row click toggles it. UI-only, not persisted.
     property bool shaderSectionExpanded: false
+    /// Live preview of the picked pack inside the expanded shader section,
+    /// opt-in. Null renders none, which is what a host without an animation
+    /// preview controller wants. An animation event carries exactly ONE pack,
+    /// so the per-layer preview the chain editors show collapses here to
+    /// previewing the pack that is picked.
+    property QtObject shaderPreviewController: null
     // ── Computed ────────────────────────────────────────────────────
     /// Whether the shader section has anything to reveal (full
     /// description or a parameter editor). Mirrors the decoration
     /// rows' `expandable` gate: no picked shader, or a picked shader
     /// with neither text nor params, keeps the row-click inert and
     /// the chevron hidden.
-    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || (shaderParamSchema || []).length > 0)
+    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || (shaderParamSchema || []).length > 0 || shaderPreviewController !== null)
     /// Registry entry for the currently-picked shader, resolved from the
     /// consumer-fed picker model. Null when nothing is picked or the id
     /// has no match (a pack uninstalled while its override survives).
@@ -683,9 +689,9 @@ ColumnLayout {
     // collapsed header shows a one-line elided description teaser while the
     // expansion body carries the full text + parameter editor. Hand-rolled
     // from the same pattern rather than reusing ExpandableRowDelegate,
-    // because that shell lazy-loads its body and the parameter editor must
-    // stay statically instantiated — the `lockedShaderParams` alias above
-    // targets its id. Unlike the decoration chain this slot holds at most
+    // because that shell lazy-loads its body and the editor body must stay
+    // statically instantiated — the `lockedShaderParams` alias above targets
+    // its id. Unlike the decoration chain this slot holds at most
     // one pack, so the picker lives in its own setter row below.
     ItemDelegate {
         visible: root.shaderLegSupported && root.shaderEffectId.length > 0
@@ -917,44 +923,47 @@ ColumnLayout {
                 color: Kirigami.Theme.disabledTextColor
             }
 
-            // Inline parameter editor surfaces only when an effect is
-            // assigned and that effect declares parameters.
-            PZCommon.ShaderParamsEditor {
-                id: paramEditor
-
-                // Schema is consumer-fed (root.shaderParamSchema) so this editor
-                // doesn't reach a global context; the consumer binds it to
-                // shaderParameters(shaderEffectId) with a registry-tick dependency.
-                readonly property var _paramSchema: root.shaderParamSchema
+            // Parameters beside a live preview of the picked pack, in the
+            // shared body the decoration and pointer chain rows use too.
+            // `previewActive` follows the section's own expansion, so a
+            // collapsed card instantiates no shader item.
+            PackEditorBody {
+                id: paramEditorBody
 
                 Layout.fillWidth: true
-                visible: root.shaderEffectId.length > 0 && (_paramSchema || []).length > 0
-                parameters: _paramSchema
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
+                packId: root.shaderEffectId
+                // Consumer-fed so this editor does not reach a global context;
+                // the consumer binds it to shaderParameters(shaderEffectId)
+                // with a registry-tick dependency.
+                parameters: root.shaderParamSchema
                 currentValues: root.shaderParams
-                effectId: root.shaderEffectId
                 enableLocking: root.enableLocking
                 enableRandomize: root.enableRandomize
                 enableReset: root.enableReset
                 enableImage: root.enableImage
-                compact: true
-                // The shared editor owns the lock map (aliased onto
-                // `lockedShaderParams`) and hosts the colour dialog, so only the
-                // value-write and randomize signals need handling here. Lock state is
-                // working-state only and is not re-emitted: no consumer persists it,
-                // and forwarding signals nothing listens to only invites the next
-                // reader to hunt for the handler that does.
+                previewKind: "animation"
+                previewController: root.shaderPreviewController
+                previewActive: shaderExpansionClip.effectiveExpanded
+                // The shared editor owns the lock map and hosts the colour
+                // dialog, so only the value-write and randomize signals need
+                // handling here. Lock state is working-state only and is not
+                // re-emitted: no consumer persists it, and forwarding signals
+                // nothing listens to only invites the next reader to hunt for
+                // the handler that does.
                 onValueChanged: function (effectId, paramId, value) {
                     root.shaderParamWriteRequested(effectId, paramId, value);
                 }
                 onRandomizeRequested: function (rolled) {
-                    // Stage the rolled map so the UI updates before the consumer's
-                    // persistence round-trips it back through `shaderParams`.
+                    // Stage the rolled map so the UI updates before the
+                    // consumer's persistence round-trips it back through
+                    // `shaderParams`.
                     root.shaderParams = rolled;
                     root.randomizeRequested(rolled);
                 }
                 onResetRequested: function (defaults) {
-                    // Same staging as randomize: reflect the defaults immediately,
-                    // then hand the map up for the consumer to persist.
+                    // Same staging as randomize: reflect the defaults
+                    // immediately, then hand the map up to persist.
                     root.shaderParams = defaults;
                     root.resetRequested(defaults);
                 }

@@ -24,9 +24,7 @@
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 
-#include <scene/itemrenderer.h>
 #include <scene/windowitem.h>
-#include <scene/workspacescene.h>
 
 #include <QList>
 #include <QPoint>
@@ -310,8 +308,8 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // Keep KWin's own cursor out of the capture below (see the header): the
     // scene walk paints the overlay item last, and a software cursor drawn
     // into uStrip is smeared by the pack and never redrawn sharp, since this
-    // pass replaces the output's paint. Hidden here, blitted by drawCursor
-    // at the tail. Placed AFTER the compile and allocation checks above so
+    // pass replaces the output's paint. Hidden here, blitted by
+    // TransitionPass::drawSceneCursor at the tail. Placed AFTER the compile and allocation checks above so
     // no reachable return-false path between the hide and the tail exists
     // (the re-seat miss after the capture is structural and releases the
     // hide itself): a pass that abandons this frame paints the normal scene
@@ -726,8 +724,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     aboveStrip.swap(m_effect->m_stripCaptureSkippedWindows); // return the allocation for the next frame
     // Last draw of the pass: the cursor, above everything, where KWin's own
     // overlay item would have put it had this pass not replaced the paint.
+    // Shared with the pointer decoration pass, which hides and re-draws the
+    // cursor for the same reason, so the two renderItem calls cannot drift.
     if (m_cursorHidden && cursorOnOutput(screen)) {
-        drawCursor(renderTarget, viewport);
+        TransitionPass::drawSceneCursor(renderTarget, viewport);
     }
     return true;
 }
@@ -813,7 +813,11 @@ void StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarg
 
 bool StripTransitionManager::cursorOnOutput(KWin::LogicalOutput* screen) const
 {
-    return screen && KWin::effects && screen->geometryF().contains(KWin::effects->cursorPos());
+    // screenAt, not geometryF().contains(): QRectF::contains includes the
+    // right and bottom edges, so a pointer on a shared boundary would read as
+    // on BOTH outputs and two passes could each take the hide. screenAt is
+    // exclusive, and it is the rule the pointer pass resolves with too.
+    return screen && KWin::effects && KWin::effects->screenAt(KWin::effects->cursorPos().toPoint()) == screen;
 }
 
 void StripTransitionManager::hideCursorForPass(KWin::LogicalOutput* screen)
@@ -868,41 +872,6 @@ void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutpu
         KWin::effects->showCursor();
     }
     m_cursorHidden = false;
-}
-
-void StripTransitionManager::drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport)
-{
-    // The workspace scene is reached through any window item: the effects
-    // API exposes no scene accessor, and Item::scene() on a member of the
-    // scene IS the workspace scene. An empty stacking order means no strip
-    // either, so there is nothing to draw the cursor over.
-    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-    KWin::WorkspaceScene* scene = nullptr;
-    for (KWin::EffectWindow* w : stack) {
-        if (w && w->windowItem()) {
-            scene = qobject_cast<KWin::WorkspaceScene*>(w->windowItem()->scene());
-            break;
-        }
-    }
-    if (!scene || !scene->cursorItem()) {
-        return;
-    }
-    // WorkspaceScene::updateCursor only moves the item while the cursor is
-    // shown; hidden, its position is whatever the pointer was at when the
-    // hide landed. Track the live pointer the way that slot does (the item's
-    // own hotspot offset lives in its child, so the position IS the pointer).
-    scene->cursorItem()->setPosition(KWin::effects->cursorPos());
-    // Same call paintGenericScreen makes for the overlay item, with the same
-    // viewport, so the cursor lands exactly where the un-passed frame would
-    // have put it, at the item's own scale, for a theme sprite and a
-    // client-provided surface alike. Rendered as the ROOT of the call, which
-    // is what makes the hidden item drawable: the renderer honours
-    // explicitVisible on children only. No colour-space handling of our own,
-    // the renderer's item path carries it. Hand GL state back as found, as
-    // every draw in this tail does.
-    const ShaderInternal::ScopedGlState glStateGuard;
-    scene->renderer()->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
-                                  KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
 }
 
 void StripTransitionManager::reapSettled()

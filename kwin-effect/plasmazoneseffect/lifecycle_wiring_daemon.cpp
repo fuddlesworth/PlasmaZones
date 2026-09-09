@@ -494,6 +494,15 @@ void PlasmaZonesEffect::initExistingWindowsAndInput()
     // effect teardown.
     m_overhangInputFilter = std::make_unique<ScrollOverhangInputFilter>(this);
 
+    // Seed the fullscreen-suppression set from the windows that already exist.
+    // Every other path into it is signal-driven, and the settings handler that
+    // would otherwise prime it is change-gated against a member whose default
+    // already matches the config default — so without this call an effect
+    // loaded while a game is fullscreen leaves the gate inert until some
+    // unrelated window event happens to fire. Runs after the stacking-order
+    // sweep above so the connections it relies on are in place.
+    refreshFullscreenSuppression();
+
     qCInfo(lcEffect) << "initialized: C++ effect with D-Bus support and mouseChanged connection";
 }
 

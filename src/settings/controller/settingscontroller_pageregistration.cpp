@@ -505,6 +505,13 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/decoration/DecorationShellPage.qml"), QStringLiteral("computer"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    // The mouse pointer is a decoration surface like any other: its chain
+    // lives at the `pointer` path in the same DecorationProfileTree, so it
+    // rides the same card, the same sets and the same per-page reset.
+    regVirtual(QStringLiteral("decorations-pointer"), QStringLiteral("decorations-surfaces"),
+               PhosphorI18n::tr("Pointer"), QStringLiteral("pages/decoration/DecorationPointerPage.qml"),
+               QStringLiteral("input-mouse"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),

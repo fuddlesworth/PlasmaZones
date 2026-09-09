@@ -82,16 +82,26 @@ PHOSPHORSHADERS_EXPORT bool isValidParamId(const QString& id);
 /// If @p source has no `#version` line the block is prepended best-effort (such
 /// source is not valid GLSL anyway).
 ///
-/// The `#version` line is located by a line-anchored regex, which does NOT
-/// track block comments: a line whose non-whitespace prefix is `#version`
-/// INSIDE a `/* … */` block, appearing before the real directive, would be
-/// matched. (A `//`-commented line cannot match — its prefix is `//`.) Such
-/// source is not valid GLSL either, since `#version` must be the first
-/// non-comment token, so no well-formed pack can reach it. The compositor's
-/// `ShaderInternal::injectKwinDefineAfterVersion` runs a comment-aware walk
-/// instead, because the block it splices is the ABI switch itself and a pack
-/// that lost it would compile as the wrong dialect rather than fail.
+/// The `#version` line is located by `versionDirectiveEnd`, so a leading BOM
+/// is stripped once (the returned source never carries it) and a `#version`
+/// inside a comment is never taken for the directive. The emitted newlines
+/// follow the source's own convention (CRLF when it contains any).
 PHOSPHORSHADERS_EXPORT QString spliceAfterVersion(const QString& source, const QString& block);
+
+/// Locate the first REAL `#version` directive of @p source: the first line
+/// whose first non-whitespace token is `#version` outside any `//` or
+/// `/* … */` comment, with a leading UTF-8 BOM (U+FEFF) skipped. Returns the
+/// index of the newline that terminates that line, `source.size()` when the
+/// directive is the last line and has no trailing newline, or -1 when there
+/// is no directive at all.
+///
+/// The ONE `#version` finder every compile path shares: `spliceAfterVersion`
+/// above (the daemon's preview bake, the validator and the compositor's
+/// preamble splices) and the compositor's own
+/// `ShaderInternal::injectKwinDefineAfterVersion`. Two finders that disagreed
+/// on a comment or a BOM put the preamble and the ABI define on different
+/// sides of the directive, which is a compile failure on the compositor only.
+PHOSPHORSHADERS_EXPORT int versionDirectiveEnd(const QString& source);
 
 /// The preprocessor block that selects the COMPOSITOR branch of a pack's
 /// source, newline-terminated with @p eol and ready for `spliceAfterVersion`.

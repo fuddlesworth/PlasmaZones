@@ -1,0 +1,66 @@
+{
+    "id": "ink",
+    "name": "Ink",
+    "description": "The pointer draws with a brush. The stroke is opaque and matte with a clean edge, and it is broad where you moved slowly and thins to a hairline where you moved quickly, the way a brush answers to the speed of the hand. Fresh ink spreads a little for a moment, the way it soaks into paper, then it stops spreading and dries. Because the drying follows the age of the ink, the far end of the stroke lifts away first and the part next to the pointer is the last to go. A click leaves a round blot at the spot.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reachParam": "width",
+    "trailSeconds": 2.5,
+    "parameters": [
+        {
+            "id": "width",
+            "name": "Stroke width",
+            "type": "float",
+            "default": 14.0,
+            "min": 4.0,
+            "max": 48.0,
+            "description": "Width of the stroke where the pointer is moving slowly (px)"
+        },
+        {
+            "id": "bleed",
+            "name": "Bleed",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much fresh ink spreads outward before it dries, 0 to keep one width"
+        },
+        {
+            "id": "lifetime",
+            "name": "Lifetime",
+            "type": "float",
+            "default": 1.5,
+            "min": 0.3,
+            "max": 2.5,
+            "description": "How long a point on the stroke lasts before it has dried away (seconds)"
+        },
+        {
+            "id": "smoothing",
+            "name": "Smoothing",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much the path is smoothed before it is drawn, 0 to follow it exactly"
+        },
+        {
+            "id": "blot",
+            "name": "Click blot",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 0.7,
+            "description": "Size of the blot a click leaves, as a share of the stroke width, 0 to disable"
+        },
+        {
+            "id": "color",
+            "name": "Ink colour",
+            "type": "color",
+            "default": "#ff2f3566",
+            "description": "Colour of the ink"
+        }
+    ]
+}

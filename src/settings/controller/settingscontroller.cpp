@@ -59,6 +59,7 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
@@ -736,6 +737,13 @@ SettingsController::SettingsController(QObject* parent)
     m_surfaceShaderRegistry = new PhosphorSurfaceShaders::SurfaceShaderRegistry(this);
     registerXdgPackDirs(m_surfaceShaderRegistry, ConfigDefaults::userSurfaceSubdir());
 
+    // Pointer shader registry — the fourth pack family, scanning the XDG
+    // `plasmazones/pointer` dirs the same way the two registries above scan
+    // theirs. Built BEFORE the decoration page: the pointer is a decoration
+    // surface, so that page owns the pointer chain and takes this registry.
+    m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
+    registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
+
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
     // DecorationProfileTree (per-surface chains of decoration packs) with a
     // baseline global default + walk-up inheritance. The tree persists via the
@@ -744,8 +752,10 @@ SettingsController::SettingsController(QObject* parent)
     // into onSettingsPropertyChanged for dirty tracking — so this controller
     // needs no per-page staging (isDirty/apply/discard are no-ops). It is
     // registered with the framework as a headless domain (the drill-down nav
-    // nodes are virtual PageAdapters) in buildApplicationController.
-    m_decorationPage = new DecorationPageController(m_surfaceShaderRegistry, &m_settings, this);
+    // nodes are virtual PageAdapters) in buildApplicationController. It takes
+    // both pack registries: `pointer` is one of its surfaces.
+    m_decorationPage =
+        new DecorationPageController(m_surfaceShaderRegistry, &m_settings, m_pointerShaderRegistry, this);
 
     // Rules page sub-controller — the unified rule surface. It owns
     // its own RuleModel and talks to the daemon's

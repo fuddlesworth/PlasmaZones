@@ -43,6 +43,7 @@
 #include "shader_resolve.h"
 #include "types.h"
 
+#include "pointer/pointerdecorationpass.h"
 #include "transitions/desktoptransitionmanager.h"
 #include "transitions/shadertransitionmanager.h"
 #include "transitions/striptransitionmanager.h"
@@ -1931,6 +1932,22 @@ private:
     /// last composite until something unrelated damaged it. Defined in surface_gating.cpp.
     void repaintAllDecorations();
 
+    /// Rebuild m_fullscreenSuppressedOutputs from the stacking order. On an
+    /// actual change it re-sweeps every decoration (so a surface the gate just
+    /// covered is TORN DOWN through updateWindowDecoration's normal undecorate
+    /// path, not merely skipped) and pushes the new set to the pointer pass.
+    /// Cheap and idempotent when nothing moved, which is the common case, so
+    /// every signal that could plausibly change the answer can call it.
+    /// Defined in surface_gating.cpp.
+    void refreshFullscreenSuppression();
+
+    /// Is @p w on an output the fullscreen gate currently covers? The gate
+    /// consulted by shouldDecorateWindow, which is what makes the suppression
+    /// share the teardown path every other decoration reject already uses.
+    /// A window that is ITSELF fullscreen is rejected separately and earlier,
+    /// so this is about the window's NEIGHBOURS on the same monitor.
+    bool decorationSuppressedByFullscreen(KWin::EffectWindow* w) const;
+
     /// Repaint every decorated window whose chain reads the cursor. The ONLY thing that
     /// restarts a hover pack's repaint loop after it settles — see the note on it.
     void repaintHoverDecorations(const QPointF& cursor);
@@ -2880,6 +2897,14 @@ private:
     // Same ownership shape and init-order rule as m_desktopTransition.
     StripTransitionManager m_stripTransition;
 
+    // The POINTER decoration pass: the user's chain of data/pointer packs
+    // (trails, halos, click ripples) drawn over the finished frame of the
+    // output the pointer is on. A default-constructed by-value member: it
+    // takes no owner pointer and has no ordering constraint, unlike the
+    // transition managers above (see the class note). Driven by pointer
+    // events alone (slotMouseChanged), so an idle chain costs nothing per frame.
+    PointerDecorationPass m_pointerPass;
+
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.
     /// Returns true when a fresh leg was installed (or the prior leg was
@@ -3114,6 +3139,23 @@ private:
 
     /// Stop animating once the session goes idle, resume on the first input.
     bool m_pauseAnimationWhenIdle = true;
+
+    /// Draw nothing on an output while a window on it is fullscreen
+    /// (Decorations.Performance.SuppressWhileFullscreen). The hardest of the
+    /// WHEN gates: where it applies the surface is not decorated at all, so
+    /// there is no chain to fold and no repaint to pump. Mirrors
+    /// ConfigDefaults::decorationSuppressWhileFullscreen() until the daemon
+    /// pushes the real value, for the same default-true reason as
+    /// m_animateFocusedOnly above.
+    bool m_suppressDecorationsWhileFullscreen = true;
+
+    /// The outputs the gate above currently covers: those carrying a fullscreen
+    /// window on the CURRENT desktop. Recomputed wholesale by
+    /// refreshFullscreenSuppression() and empty whenever the setting is off, so
+    /// every consumer is a plain set lookup rather than a stacking-order walk.
+    /// Never dereferenced — only compared — so a stale entry cannot crash, but
+    /// onScreenRemoved refreshes anyway to keep it honest.
+    QSet<KWin::LogicalOutput*> m_fullscreenSuppressedOutputs;
 
     /// Multiplier on each pack's declared buffer-pass bufferScale
     /// (Decorations.Performance.BlurScaleMultiplier) — unlike its WHEN-gating

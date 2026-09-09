@@ -590,6 +590,12 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)
     REGISTER_DOUBLE_SETTING("decorationBlurScaleMultiplier", decorationBlurScaleMultiplier,
                             setDecorationBlurScaleMultiplier)
+    // Also fetched by the effect via loadSettingAsync, and subject to the same
+    // unknown-key trap the comment above describes: it is default-TRUE, so a
+    // missing entry here would read back as false and quietly disable the
+    // fullscreen suppression on every startup.
+    REGISTER_BOOL_SETTING("decorationSuppressWhileFullscreen", decorationSuppressWhileFullscreen,
+                          setDecorationSuppressWhileFullscreen)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified

@@ -1015,6 +1015,51 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFullScreenChanged);
 
+    // Decorations.Performance.SuppressWhileFullscreen — the enter and exit edge
+    // of the gate. A SEPARATE connection rather than a line inside the tiling
+    // handler's slot above: that slot is scrolling-mode machinery with several
+    // early returns and a windowed-fullscreen branch, and the gate is a
+    // decoration concern that has to hold in every placement mode. Connected
+    // after it so the tiling handler has already reconciled its own state (and
+    // shed the fullscreen window's own decoration) by the time the sweep runs.
+    // refreshFullscreenSuppression re-derives the covered outputs and only
+    // sweeps when the answer actually moved.
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this]() {
+        refreshFullscreenSuppression();
+    });
+
+    // The same gate's OTHER edges. A fullscreen window keeps isFullScreen()
+    // true while it is minimized, sent to another desktop, or moved to another
+    // output, so without these the covered set stays stale and a monitor with
+    // nothing on it goes on being undecorated. Each is pre-gated on the window
+    // actually being fullscreen: the refresh walks the entire stacking order,
+    // and the overwhelming majority of windows firing these are not fullscreen
+    // and cannot move the answer. The refresh's own set comparison then makes a
+    // no-change call cost one compare.
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
+        if (w && w->isFullScreen()) {
+            refreshFullscreenSuppression();
+        }
+    });
+    connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this, w]() {
+        if (w && w->isFullScreen()) {
+            refreshFullscreenSuppression();
+        }
+    });
+    // Moving to another monitor changes which output the gate covers, and the
+    // set is derived positionally so nothing else re-derives it. A separate
+    // connection rather than a line in the outputChanged lambda above for the
+    // same reason the fullscreen one is separate: that lambda is placement
+    // machinery with several early returns, including one for daemon-driven
+    // applies, and the gate has to hold whichever of those it takes.
+    if (kw) {
+        connect(kw, &KWin::Window::outputChanged, this, [this, w]() {
+            if (w && w->isFullScreen()) {
+                refreshFullscreenSuppression();
+            }
+        });
+    }
+
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);

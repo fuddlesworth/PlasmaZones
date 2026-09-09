@@ -57,7 +57,7 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     // section key from sectionForPath), and neither ever yields a class token.
     // They were shipped to translators as strings that render nowhere. The
     // class tokens the user does see come from ShaderBrowserPage's own
-    // _typeCatalog, which spells them differently on purpose.
+    // typeCatalog, which spells them differently on purpose.
     if (segment == QLatin1String("accordionCollapse")) {
         return PhosphorI18n::tr("Accordion Collapse", "animation event or section");
     }

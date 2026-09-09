@@ -78,8 +78,12 @@ using ShaderInternal::shaderClockNowMs;
 /// which is what KWin's classic-GL `KWin::GLShader` API requires (no UBO
 /// bind path). The GLSL spec disallows non-comment, non-whitespace tokens
 /// before `#version`, so the define cannot just be prepended verbatim —
-/// we find the first newline at or after the `#version` line and inject
-/// after it.
+/// it is injected after the directive's own line, which
+/// PhosphorShaders::versionDirectiveEnd locates. That is the same finder
+/// spliceAfterVersion uses, so all three compile paths (pointer, surface,
+/// animation) and the validator agree on where `#version` is: the preamble
+/// splice that runs before this step and this define land on the same side
+/// of it whatever comments or BOM the pack carries.
 ///
 /// Defensive fallback: if no `#version` is present (a hand-rolled
 /// shader that ships without one), synthesize `#version 450` and warn.
@@ -90,6 +94,26 @@ using ShaderInternal::shaderClockNowMs;
 /// fallback exists to surface third-party packs that violate the
 /// contract with a useful journal entry rather than a cryptic GLSL
 /// error.
+const QString& ShaderInternal::kwinFinalizeColorBlock()
+{
+    // Mirrors KWin's base.frag step for step: encoding → nits, colorimetry
+    // transform, tonemap, destination encoding. Deliberately NOT
+    // sourceEncodingToNitsInDestinationColorspace(), which folds
+    // doTonemapping() in at the end and would tonemap twice — a double
+    // compression on HDR, precisely the case this exists for.
+    static const QString block = QStringLiteral(
+        "#include \"colormanagement.glsl\"\n"
+        "vec4 pzFinalizeColor(vec4 c) {\n"
+        "    c = encodingToNits(c, sourceNamedTransferFunction,\n"
+        "                       sourceTransferFunctionParams.x, sourceTransferFunctionParams.y);\n"
+        "    c.rgb = (colorimetryTransform * vec4(c.rgb, 1.0)).rgb;\n"
+        "    c.rgb = doTonemapping(c.rgb);\n"
+        "    return nitsToDestinationEncoding(c);\n"
+        "}\n"
+        "#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)\n");
+    return block;
+}
+
 QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
 {
     // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
@@ -134,73 +158,16 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
     // read and assemble on the compositor thread every transition.
     const QString defineLine = PhosphorShaders::kwinDefineBlock(eol);
 
-    // Walk the source line-by-line and find the FIRST line whose
-    // non-whitespace prefix is `#version`. A naive
-    // `source.indexOf("#version")` would match `#version` substrings
-    // embedded in `// ...` line comments or `/* ... */` block comments,
-    // splicing the define into the comment body — the macro silently
-    // disappears and the shader compiles against the wrong UBO ABI.
-    //
-    // `foundVersion` is tracked separately from `realVersionEnd` because
-    // a shader whose `#version` line ends at EOF without a trailing
-    // newline (rare but legal: a manual editor save that strips the
-    // final LF) hits `lineEnd == -1` on the match, leaving
-    // `realVersionEnd == -1`. Without the boolean we can't distinguish
-    // "no #version directive at all" (prepend define) from "#version
-    // at EOF, no newline" (must append `\n` + define). Conflating the
-    // two would emit `#define PLASMAZONES_KWIN\n#version 450`, which
-    // the GLSL compiler rejects because `#version` must be the first
-    // directive in the translation unit.
-    int searchFrom = 0;
-    int realVersionEnd = -1;
-    bool foundVersion = false;
-    bool inBlockComment = false;
-    while (searchFrom < working.size()) {
-        const int lineEnd = working.indexOf(QLatin1Char('\n'), searchFrom);
-        const int lineStop = (lineEnd < 0) ? working.size() : lineEnd;
-        QStringView line = QStringView(working).mid(searchFrom, lineStop - searchFrom);
-        // Strip block comments (single-line forms only — multi-line
-        // detection is handled across iterations via inBlockComment).
-        if (inBlockComment) {
-            const int closeIdx = line.indexOf(QLatin1String("*/"));
-            if (closeIdx < 0) {
-                searchFrom = (lineEnd < 0) ? working.size() : lineEnd + 1;
-                continue;
-            }
-            line = line.mid(closeIdx + 2);
-            inBlockComment = false;
-        }
-        // Drop line and same-line block comments before checking.
-        QString stripped;
-        stripped.reserve(line.size());
-        for (int i = 0; i < line.size();) {
-            if (i + 1 < line.size() && line[i] == QLatin1Char('/') && line[i + 1] == QLatin1Char('/')) {
-                break; // rest of line is comment
-            }
-            if (i + 1 < line.size() && line[i] == QLatin1Char('/') && line[i + 1] == QLatin1Char('*')) {
-                const int closeIdx = line.indexOf(QLatin1String("*/"), i + 2);
-                if (closeIdx < 0) {
-                    inBlockComment = true;
-                    break;
-                }
-                i = closeIdx + 2;
-                continue;
-            }
-            stripped.append(line[i]);
-            ++i;
-        }
-        const QString trimmed = stripped.trimmed();
-        if (trimmed.startsWith(QLatin1String("#version"))) {
-            realVersionEnd = lineEnd; // newline AFTER the version line, or -1 if at EOF
-            foundVersion = true;
-            break;
-        }
-        if (lineEnd < 0)
-            break;
-        searchFrom = lineEnd + 1;
-    }
+    // The comment-aware, BOM-tolerant finder shared with spliceAfterVersion.
+    // A naive `indexOf("#version")` would match inside a `//` or `/* */`
+    // comment and splice the define into the comment body, so the macro
+    // silently disappears and the shader compiles against the wrong UBO ABI.
+    // Three answers: -1 for no directive, working.size() for a directive
+    // that ends the file with no trailing newline, otherwise the index of
+    // the newline after it.
+    const int versionEnd = PhosphorShaders::versionDirectiveEnd(working);
 
-    if (!foundVersion) {
+    if (versionEnd < 0) {
         // No #version directive (or it was shadowed by an early break
         // mid block-comment). KWin on Wayland with modern Mesa runs
         // core profile, where `#version` is mandatory and a bare
@@ -215,17 +182,15 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
         const QString header = QStringLiteral("#version 450") + eol + defineLine;
         return (header + working).toUtf8();
     }
-    if (realVersionEnd < 0) {
-        // `#version` line ends at EOF with no trailing newline. The
-        // GLSL spec requires `#version` to be the FIRST directive, so
-        // we cannot prepend the define; we must append it (with a
-        // separator newline) so the compiler still sees `#version`
-        // first. Without this branch the `!foundVersion` path above
-        // would run instead and emit invalid `#define\n#version`
-        // GLSL.
-        return (working + QLatin1Char('\n') + defineLine).toUtf8();
+    if (versionEnd >= working.size()) {
+        // `#version` line ends at EOF with no trailing newline (rare but
+        // legal: an editor save that strips the final LF). The GLSL spec
+        // requires `#version` to be the FIRST directive, so the define
+        // cannot be prepended; append it behind a separator newline so the
+        // compiler still sees `#version` first.
+        return (working + eol + defineLine).toUtf8();
     }
-    working.insert(realVersionEnd + 1, defineLine);
+    working.insert(versionEnd + 1, defineLine);
     return working.toUtf8();
 }
 

@@ -58,6 +58,10 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorPointerShaders {
+class PointerShaderRegistry;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -1065,6 +1069,14 @@ private:
     /// Safe only while `~DecorationPageController` stays `= default`.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
     DecorationPageController* m_decorationPage = nullptr;
+    /// Settings-side mirror of the daemon's / compositor's pointer-pack
+    /// registry — the pack family the `pointer` decoration surface draws from.
+    /// Same parent / construction-order situation as the two registries above:
+    /// a QObject child of `this` constructed before the page controller that
+    /// borrows it, so insertion-order child deletion tears the registry down
+    /// FIRST and the page's non-owned registry pointer dangles through its own
+    /// destruction. Safe only while that page's destructor stays `= default`.
+    PhosphorPointerShaders::PointerShaderRegistry* m_pointerShaderRegistry = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
