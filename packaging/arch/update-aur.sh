@@ -24,7 +24,7 @@ if [[ -z "$VERSION" || -z "$SHA256" ]]; then
     exit 1
 fi
 
-if [[ ! "$PKGREL" =~ ^[0-9]+$ ]]; then
+if [[ ! "$PKGREL" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: pkgrel must be a positive integer, got: $PKGREL"
     exit 1
 fi
