@@ -144,6 +144,11 @@ void PointerDecorationPass::rebuildChain()
     // A chain whose every layer resolved away is NOT engaged: the cost rule
     // is about live layers, not about a non-empty profile.
     m_engaged = !m_engagedLayers.empty() && m_maxTrailSeconds > 0.0;
+    // The ring spreads its samples over the longest window in the chain, so a
+    // pack's tail can actually be as long as its trailSeconds says. Without
+    // this the sampler kept every event and a fast mouse filled all 32 slots
+    // in a few tens of ms, whatever the pack's length parameter said.
+    m_history.setTrailSeconds(m_maxTrailSeconds);
 }
 
 // ── Pointer sampling ────────────────────────────────────────────────────────

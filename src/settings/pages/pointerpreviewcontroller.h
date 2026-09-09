@@ -78,8 +78,7 @@ public:
     /// path's ordering rationale: the first prepare() must allocate the UBO
     /// with the tail's trailing bytes, or the shader reads garbage past
     /// sizeof(BaseUniforms) until the next allocation cycle.
-    Q_INVOKABLE bool configurePreviewItem(QQuickItem* item, const QString& packId,
-                                          const QVariantMap& friendlyParams) const;
+    Q_INVOKABLE bool configurePreviewItem(QQuickItem* item, const QString& packId, const QVariantMap& friendlyParams);
 
     /// Re-translate and upload @p friendlyParams onto an already-configured
     /// item, for live parameter editing in the detail dialog.

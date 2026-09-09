@@ -7,6 +7,8 @@
 
 #include <QtTest/QtTest>
 
+#include <cmath>
+
 using namespace PhosphorPointerShaders;
 
 namespace {
@@ -33,6 +35,7 @@ private Q_SLOTS:
     void testFreshHistoryIsNotLive();
     void testRingHoldsAtMostCapacityAndIsNewestFirst();
     void testStationarySamplesAreCoalesced();
+    void testRingSpansTrailWindowAtHighEventRates();
     void testLivenessExpiresAfterTrailSeconds();
     void testButtonEventKeepsPassLiveWithoutMotion();
     void testVelocityDecaysWhenPointerStops();
@@ -111,9 +114,50 @@ void TestPointerHistory::testStationarySamplesAreCoalesced()
     history.notePointer(QPointF(100.0, 100.0), PointerHistory::kMinSampleGapMs);
     QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs), 2);
 
-    // Moving far enough lands immediately, without waiting for the gap.
+    // Moving inside the gap does not append: the head follows the pointer in
+    // place, so index 0 is where the pointer is without spending a slot.
     history.notePointer(QPointF(400.0, 100.0), PointerHistory::kMinSampleGapMs + 1);
-    QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs + 1), 3);
+    QCOMPARE(sampleCount(history, PointerHistory::kMinSampleGapMs + 1), 2);
+    QCOMPARE(history.frameState(PointerHistory::kMinSampleGapMs + 1, 1.0).newestTrail().x(), 400.0f);
+}
+
+void TestPointerHistory::testRingSpansTrailWindowAtHighEventRates()
+{
+    // A 1000 Hz mouse. Without a window-derived interval every event took a
+    // slot and the ring held 32 ms of motion: a comet's 0.5 s tail was drawn
+    // from 32 ms of path and read as a stub, however long its length
+    // parameter was set. With the window set the ring covers it.
+    PointerHistory history;
+    history.setTrailSeconds(0.8);
+    QCOMPARE(history.sampleIntervalMs(), qint64(26)); // ceil(800 / 31)
+    const qint64 endMs = 2000;
+    for (qint64 t = 0; t <= endMs; ++t) {
+        history.notePointer(QPointF(t * 2.0, 0.0), t);
+    }
+    const PointerFrameState state = history.frameState(endMs, 1.0);
+    QCOMPARE(state.trailSize(), PointerHistory::kCapacity);
+    // Head is exactly the last event, not the last appended slot.
+    QCOMPARE(state.newestTrail().x(), static_cast<float>(endMs * 2.0));
+    QCOMPARE(state.trailAt(0).z(), 0.0f);
+    // The oldest slot reaches back at least the window.
+    QVERIFY2(
+        state.trailAt(PointerHistory::kCapacity - 1).z() >= 0.8f,
+        qPrintable(
+            QStringLiteral("oldest sample is only %1 s old").arg(state.trailAt(PointerHistory::kCapacity - 1).z())));
+    // Speed on the refreshed head is still the true speed (2000 px/s), not a
+    // figure divided over a stale pairing.
+    QVERIFY(std::abs(state.newestTrail().w() - 2000.0f) < 50.0f);
+
+    // The window survives a reset: an output crossing must not fall back to
+    // the 8 ms floor.
+    history.reset();
+    QCOMPARE(history.trailSeconds(), 0.8);
+    QCOMPARE(history.sampleIntervalMs(), qint64(26)); // ceil(800 / 31)
+
+    // A short window never goes under the floor.
+    PointerHistory quick;
+    quick.setTrailSeconds(0.05);
+    QCOMPARE(quick.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
 }
 
 void TestPointerHistory::testLivenessExpiresAfterTrailSeconds()

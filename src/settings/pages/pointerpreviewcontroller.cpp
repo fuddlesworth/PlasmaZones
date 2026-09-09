@@ -77,7 +77,7 @@ QVariantMap PointerPreviewController::packInfo(const QString& packId) const
 }
 
 bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QString& packId,
-                                                    const QVariantMap& friendlyParams) const
+                                                    const QVariantMap& friendlyParams)
 {
     using Registry = PhosphorPointerShaders::PointerShaderRegistry;
     auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
@@ -131,6 +131,19 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     // seconds since the pass engaged rather than a progress sweep. The item
     // free-runs it; the pane gates that through `playing`.
     shaderItem->setITime(0.0);
+    // The same window the compositor gives its sampler for this pack, so the
+    // preview's trail is spaced (and so is as long as) the one on screen.
+    // Created here rather than on the first drivePointer so the window is in
+    // place before the first sample lands; destroyed with the item like the
+    // drivePointer-created entry.
+    auto stateIt = m_states.find(shaderItem);
+    if (stateIt == m_states.end()) {
+        stateIt = m_states.insert(shaderItem, PointerState{});
+        connect(shaderItem, &QObject::destroyed, this, [this](QObject* gone) {
+            m_states.remove(gone);
+        });
+    }
+    stateIt->history.setTrailSeconds(effect.trailSeconds);
     updatePreviewParams(item, packId, friendlyParams);
     return true;
 }
@@ -231,8 +244,12 @@ void PointerPreviewController::resetPointer(QQuickItem* item)
     // re-insert and connect a SECOND destroyed handler on the same live item —
     // one more per restart, for as long as the canvas exists.
     const auto it = m_states.find(item);
+    // The history's reset keeps its trail window, which configurePreviewItem
+    // set for this pack; a fresh PointerState would drop it to the floor.
     if (it != m_states.end()) {
-        *it = PointerState{};
+        it->history.reset();
+        it->nowMs = 0;
+        it->pressed = false;
     }
 }
 

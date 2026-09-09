@@ -25,9 +25,16 @@ namespace PhosphorPointerShaders {
 /// Positions are in device px of the canvas the caller chose; timestamps are
 /// caller-supplied milliseconds on one monotonic clock.
 ///
-/// Sampling rule: `notePointer` appends a sample when its distance from the
-/// newest is at least 1 device px OR the time gap is at least
-/// `kMinSampleGapMs`; anything closer and sooner is dropped. Ages are
+/// Sampling rule: the ring has `kCapacity` slots and has to cover the pack's
+/// whole `trailSeconds` window with them, so `notePointer` appends a new
+/// sample only when the gap since the newest one is at least the sample
+/// interval (`sampleIntervalMs`, derived from `setTrailSeconds`: the window
+/// spread over `kCapacity - 1` gaps, never under `kMinSampleGapMs`). An event
+/// inside that gap that has moved at least 1 device px REFRESHES the newest
+/// sample in place, so index 0 is always exactly where the pointer is, and a
+/// sub-pixel drift inside the gap is dropped. Without the interval a 1000 Hz
+/// mouse filled all 32 slots in 32 ms, and a pack's tail could never be
+/// longer than that however long its `length` parameter asked for. Ages are
 /// computed at `frameState` time. Velocity is the finite difference over the
 /// newest two samples with a floor of `kVelocityMinDtSeconds` on dt. A
 /// sample whose gap to the previous one is not a usable pairing records
@@ -68,6 +75,21 @@ public:
 
     PointerHistory();
 
+    /// The window the ring must span, in seconds: the longest `trailSeconds`
+    /// of the packs this history feeds. Sets the sample interval (see the
+    /// sampling rule above). 0 (the default) means the `kMinSampleGapMs`
+    /// floor alone. Survives `reset()`.
+    void setTrailSeconds(double seconds);
+    [[nodiscard]] double trailSeconds() const
+    {
+        return m_trailSeconds;
+    }
+    /// Minimum gap between two appended samples, in ms.
+    [[nodiscard]] qint64 sampleIntervalMs() const
+    {
+        return m_sampleIntervalMs;
+    }
+
     /// Record a pointer position at @p nowMs (see the sampling rule above).
     void notePointer(const QPointF& devicePx, qint64 nowMs);
 
@@ -105,11 +127,24 @@ private:
     {
         QPointF pos;
         qint64 timeMs = 0;
+        /// When this slot was appended. An in-place refresh moves timeMs but
+        /// not this, so the interval is measured from the append and the ring
+        /// keeps filling while the pointer moves.
+        qint64 anchorMs = 0;
         double speed = 0.0;
     };
 
     const Sample& sampleAt(int newestFirstIndex) const;
     static double secondsBetween(qint64 laterMs, qint64 earlierMs);
+    /// Speed of a move from @p earlier to @p devicePx at @p nowMs, or 0 when
+    /// the pair is not a usable pairing (see the header comment).
+    static double speedOver(const QPointF& earlierPos, qint64 earlierMs, const QPointF& devicePx, qint64 nowMs);
+    /// Record @p devicePx at @p nowMs as the newest accepted motion event,
+    /// with the previous one (if @p hasPrev) as its velocity pairing.
+    void acceptEvent(const QPointF& devicePx, qint64 nowMs, bool hasPrev, const QPointF& prevPos, qint64 prevMs);
+
+    double m_trailSeconds = 0.0;
+    qint64 m_sampleIntervalMs = kMinSampleGapMs;
 
     std::array<Sample, kCapacity> m_ring{};
     int m_head = 0; ///< index of the newest sample (valid when m_count > 0)
@@ -117,6 +152,15 @@ private:
 
     qint64 m_lastMotionMs = 0;
     bool m_hasMotion = false;
+
+    /// The last two accepted motion events, the pairing velocity is read
+    /// over. Kept apart from the ring because an event inside the sample
+    /// interval folds into the head slot rather than taking one of its own.
+    QPointF m_lastEventPos;
+    qint64 m_lastEventMs = 0;
+    QPointF m_prevEventPos;
+    qint64 m_prevEventMs = 0;
+    bool m_hasPrevEvent = false;
 
     QPointF m_pressPos;
     qint64 m_pressMs = 0;
