@@ -90,13 +90,17 @@ public:
     /// frame state onto the item's uniform extension.
     ///
     /// @p x / @p y are the cursor position in the item's own logical
-    /// coordinates and @p dtMs the frame delta. @p pressed drives a synthetic
+    /// coordinates, @p cursorW / @p cursorH the drawn size of the host's
+    /// stand-in cursor (logical too, hotspot at @p x / @p y) so the frame's
+    /// cursor rect matches what the host paints, and @p dtMs the frame delta.
+    /// @p pressed drives a synthetic
     /// left button, so a click pack's ring fires on the press edge and its
     /// release ring on the release edge, exactly as the compositor's
     /// noteButtons produces them. Each canvas gets its own history, created on
     /// its first frame, so a newly opened pack starts empty instead of
     /// inheriting wherever another preview's pointer happened to be.
-    Q_INVOKABLE void drivePointer(QQuickItem* item, qreal x, qreal y, qreal dtMs, bool pressed);
+    Q_INVOKABLE void drivePointer(QQuickItem* item, qreal x, qreal y, qreal cursorW, qreal cursorH, qreal dtMs,
+                                  bool pressed);
 
     /// Forget one canvas's simulated pointer so its next drivePointer starts a
     /// fresh trail. The pane calls it when the loop restarts or the pack

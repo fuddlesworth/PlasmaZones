@@ -3,6 +3,9 @@
 
 #include "pointerpreviewcontroller.h"
 
+#include "pointer_controller_detail.h"
+
+#include <PhosphorPointer/PointerFrameState.h>
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorPointer/PointerUniformExtension.h>
@@ -10,6 +13,7 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 
 #include <QPointF>
+#include <QRectF>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QUrl>
@@ -61,20 +65,12 @@ QVariantMap PointerPreviewController::packInfo(const QString& packId) const
     info.insert(QStringLiteral("trailSeconds"), effect.trailSeconds);
     info.insert(QStringLiteral("needsCursor"), effect.needsCursor);
 
+    // The same row shape the page controller's effectToMap emits, so the
+    // shared parameter editor reads a pack-info map and a browser row alike.
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters) {
-        QVariantMap m;
-        m.insert(QStringLiteral("id"), p.id);
-        m.insert(QStringLiteral("name"), p.name);
-        m.insert(QStringLiteral("type"), p.type);
-        m.insert(QStringLiteral("description"), p.description);
-        m.insert(QStringLiteral("group"), p.group);
-        m.insert(QStringLiteral("default"), p.defaultValue);
-        m.insert(QStringLiteral("min"), p.minValue);
-        m.insert(QStringLiteral("max"), p.maxValue);
-        m.insert(QStringLiteral("step"), p.stepValue);
-        params.append(m);
+        params.append(decoration_controller_detail::parameterInfoToMap(p));
     }
     info.insert(QStringLiteral("parameters"), params);
     return info;
@@ -162,7 +158,8 @@ void PointerPreviewController::updatePreviewParams(QQuickItem* item, const QStri
     }
 }
 
-void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, qreal dtMs, bool pressed)
+void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, qreal cursorW, qreal cursorH,
+                                            qreal dtMs, bool pressed)
 {
     auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
     if (!shaderItem) {
@@ -209,7 +206,18 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
         st.pressed = pressed;
     }
 
-    ext->apply(st.history.frameState(st.nowMs, dpr));
+    // frameState leaves the sprite rect to the host, because only the host
+    // knows where its cursor is drawn. Here that is the canvas's stand-in
+    // arrow, hotspot at the tip, so the rect starts at the pointer position
+    // and spans the arrow's drawn size, in device px like every other canvas
+    // position. A needsCursor pack sizes its work from this rect the way it
+    // does from KWin's cursor rect on screen, and reads hasSprite the same
+    // way. No sprite texture is bound in the preview; the rect is what packs
+    // size from.
+    PhosphorPointerShaders::PointerFrameState state = st.history.frameState(st.nowMs, dpr);
+    state.cursorRect = QRectF(x * dpr, y * dpr, cursorW * dpr, cursorH * dpr);
+    state.hasSprite = true;
+    ext->apply(state);
     shaderItem->setIMouse(QPointF(x, y));
 }
 

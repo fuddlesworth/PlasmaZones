@@ -172,7 +172,9 @@ Item {
     function _packNames(ids) {
         var out = [];
         for (var i = 0; i < ids.length; i++) {
-            var found = ids[i];
+            // A chained id with no installed pack reads the way ChainEditor's
+            // row does, rather than as the raw id.
+            var found = i18nc("@info item missing", "(missing: %1)", ids[i]);
             for (var j = 0; j < root._effects.length; j++) {
                 if (root._effects[j] && root._effects[j].id === ids[i]) {
                     found = root._effects[j].name;

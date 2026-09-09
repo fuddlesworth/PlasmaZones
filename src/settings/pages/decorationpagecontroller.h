@@ -365,6 +365,20 @@ private:
     QString userShaderDirectoryPath() const;
     QString decorationSetsDirectoryPath() const;
 
+    /// Whether @p effectId names a pointer pack: the one predicate behind
+    /// previewKindFor and previewControllerFor. An id present in BOTH
+    /// registries resolves as a surface pack (that family was there first)
+    /// and is warned about once.
+    bool isPointerPack(const QString& effectId) const;
+
+    /// The ids in @p chain the registry for @p path's family cannot resolve:
+    /// the pointer registry at the pointer path, the surface registry
+    /// everywhere else. Empty when every id resolves, and empty when that
+    /// family has no registry to judge against. Gates setChain and the
+    /// decoration-set import alike, so the two cannot drift on what a
+    /// surface may carry.
+    QStringList unresolvableChainPacks(const QString& path, const QStringList& chain) const;
+
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     PhosphorPointerShaders::PointerShaderRegistry* m_pointerRegistry = nullptr;
     ISettings* m_settings = nullptr;

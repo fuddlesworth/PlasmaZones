@@ -116,23 +116,42 @@ GridLayout {
         }
     }
 
-    PackPreview {
+    // The preview column: the stage, and under it whatever the family has to
+    // say about the pack. Today only the pointer family says anything.
+    ColumnLayout {
         // Fixed column when beside the editor; centred and no wider than its
         // canvas when stacked, so a narrow host does not stretch it.
         Layout.preferredWidth: root._twoColumn ? root._previewWidth : Math.min(root.width, root._previewWidth)
         Layout.alignment: Qt.AlignTop | (root._twoColumn ? Qt.AlignRight : Qt.AlignHCenter)
         visible: root._hasPreview
-        previewKind: root.previewKind
-        previewController: root.previewController
-        packId: root.packId
-        params: root.currentValues
-        active: root._hasPreview && root.previewActive
-        // `active` covers "this row is collapsed" — it tears the shader item
-        // down. This covers "the window is not in front": a chain row left
-        // expanded on a page the user navigated away from stays instantiated
-        // (the page host keeps a visited page active and only hides it), so
-        // without this its 60 Hz clock keeps running against a preview nobody
-        // can see. Same lever the detail dialog already uses.
-        animating: root._appActive
+        spacing: Kirigami.Units.smallSpacing
+
+        PackPreview {
+            Layout.fillWidth: true
+            previewKind: root.previewKind
+            previewController: root.previewController
+            packId: root.packId
+            params: root.currentValues
+            active: root._hasPreview && root.previewActive
+            // `active` covers "this row is collapsed" — it tears the shader item
+            // down. This covers "the window is not in front": a chain row left
+            // expanded on a page the user navigated away from stays instantiated
+            // (the page host keeps a visited page active and only hides it), so
+            // without this its 60 Hz clock keeps running against a preview nobody
+            // can see. Same lever the detail dialog already uses.
+            animating: root._appActive
+        }
+
+        // A pointer pack's cursor-order and stand-in notices, the same strip
+        // the browser's detail pane shows, so a chain row does not hide what
+        // the catalogue tells the user about the pack it is tuning. Handed a
+        // controller only for the pointer kind: the strip reads packInfo on
+        // it, which only the pointer controller answers in pointer terms, and
+        // it collapses to nothing with a null one.
+        PointerPackNotices {
+            Layout.fillWidth: true
+            previewController: root.previewKind === "pointer" ? root.previewController : null
+            packId: root.packId
+        }
     }
 }

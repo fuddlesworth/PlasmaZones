@@ -113,7 +113,7 @@ private Q_SLOTS:
                 // comments (including /** doc blocks */) name controller
                 // methods freely, and a comment mentioning a method that was
                 // since removed would fail the slot for prose.
-                static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+                static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
                 static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                                QRegularExpression::DotMatchesEverythingOption);
                 const QString src = readFile(dirIt.next()).remove(blockCommentRe).remove(lineCommentRe);
@@ -247,7 +247,7 @@ private Q_SLOTS:
         // asserted rather than assumed. Block comments are deliberately NOT
         // stripped: one could hide a statement, and the equality below would
         // then fail loudly, which is the right direction to be wrong in.
-        static const QRegularExpression commentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression commentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
         QString code = QString(arm).remove(commentRe);
         // Checked AFTER stripping, like the OFF arm's twin below. Checking BEFORE
         // meant an ordinary apostrophe in an ON-arm comment ("the user's intent")
@@ -344,7 +344,7 @@ private Q_SLOTS:
             QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
         QString src = readFile(qmlPath);
         QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
-        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
         static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                        QRegularExpression::DotMatchesEverythingOption);
         src.remove(blockCommentRe);
@@ -385,7 +385,7 @@ private Q_SLOTS:
     /// one for exactly this hazard class two slots up.
     void shaderOwnershipContractsHoldInTheQml()
     {
-        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
         static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                        QRegularExpression::DotMatchesEverythingOption);
         static const QRegularExpression wsRe(QStringLiteral("\\s+"));
@@ -475,7 +475,7 @@ private Q_SLOTS:
         // coverage check for a class that has no real catalog entry, and
         // inverts the negative assertion below — the exact false pass this
         // slot exists to prevent.
-        static const QRegularExpression catalogLineCommentRe(QStringLiteral("//[^\n]*"));
+        static const QRegularExpression catalogLineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
         static const QRegularExpression catalogBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                               QRegularExpression::DotMatchesEverythingOption);
         const QString src = readFile(qmlPath).remove(catalogBlockCommentRe).remove(catalogLineCommentRe);
@@ -609,7 +609,7 @@ private Q_SLOTS:
                 // that merely MENTIONS bridge. in a doc comment is not a route
                 // file, and failing it here would send whoever hits it looking
                 // for a call that does not exist.
-                static const QRegularExpression sweepLineCommentRe(QStringLiteral("//[^\\n]*"));
+                static const QRegularExpression sweepLineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
                 static const QRegularExpression sweepBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                                     QRegularExpression::DotMatchesEverythingOption);
                 QString swept = readFile(path);
@@ -622,7 +622,7 @@ private Q_SLOTS:
             }
         }
         QSet<QString> used;
-        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
         static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                        QRegularExpression::DotMatchesEverythingOption);
         static const QRegularExpression bridgeRe(QStringLiteral("\\bbridge\\.([A-Za-z_][A-Za-z0-9_]*)"));

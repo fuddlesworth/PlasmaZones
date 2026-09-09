@@ -765,7 +765,6 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
-
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Per-mode families, one TU each: settingsadaptor_registry_snapping.cpp,

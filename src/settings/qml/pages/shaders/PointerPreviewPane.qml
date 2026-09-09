@@ -34,16 +34,6 @@ Item {
     /// Dropped-focus freeze: the clock stops, the preview holds its frame.
     property bool animating: true
 
-    /// Invokable-call dependency tick — see DecorationPreviewPane._rev.
-    readonly property int _rev: previewController ? previewController.previewRevision : 0
-
-    readonly property var _info: {
-        void root._rev;
-        return (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})) : ({});
-    }
-    readonly property bool _paintsAboveCursor: _info.layer === "above"
-    readonly property bool _needsCursorSprite: _info.needsCursor === true
-
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing
@@ -136,18 +126,13 @@ Item {
             }
         }
 
-        Kirigami.InlineMessage {
+        // The same notice strip the Pointer page's chain rows show under
+        // their preview, so the catalogue and the page agree on what a pack
+        // needs.
+        PointerPackNotices {
             Layout.fillWidth: true
-            visible: root._paintsAboveCursor
-            type: Kirigami.MessageType.Information
-            text: i18nc("@info pointer preview note", "This pack paints over the cursor, so PlasmaZones hides the system cursor and draws it after the pack.")
-        }
-
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            visible: root._needsCursorSprite
-            type: Kirigami.MessageType.Information
-            text: i18nc("@info pointer preview limitation", "This pack samples the cursor image. The preview stands a plain arrow in for your cursor theme.")
+            previewController: root.previewController
+            packId: root.packId
         }
     }
 }

@@ -610,6 +610,7 @@ private Q_SLOTS:
                                    settingsQml + QStringLiteral("/AnimationPreviewPane.qml"),
                                    settingsQml + QStringLiteral("/PointerPreviewPane.qml"),
                                    settingsQml + QStringLiteral("/PointerPreviewCanvas.qml"),
+                                   settingsQml + QStringLiteral("/PointerPackNotices.qml"),
                                    settingsQml + QStringLiteral("/PackPreview.qml")};
         QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
         while (sweep.hasNext()) {

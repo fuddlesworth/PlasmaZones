@@ -701,7 +701,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Stop while a window is fullscreen")
                     searchAnchor: "decorationSuppressWhileFullscreen"
-                    description: i18n("Drop every decoration on a monitor while a window on it is fullscreen, the mouse pointer included. Other monitors keep theirs. A fullscreen game or video has no frame to decorate, and it is the last thing that can spare the graphics card.")
+                    description: i18n("Drop every decoration on a monitor while a window on it is fullscreen, the mouse pointer included. Other monitors keep theirs. A fullscreen game or video has no frame to decorate, and it is the last place you want to spend graphics work.")
 
                     SettingsSwitch {
                         checked: appSettings.decorationSuppressWhileFullscreen

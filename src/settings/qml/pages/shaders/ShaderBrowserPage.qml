@@ -433,6 +433,23 @@ SettingsFlickable {
     Connections {
         function onShaderEffectsChanged() {
             root.effectList = root.bridge ? root.bridge.availableShaderEffects() : [];
+            // The open detail dialog holds the row it was opened with, which
+            // the fresh list has now replaced. An uninstalled pack would keep
+            // previewing from the stale row, so close on it; a pack still
+            // present re-points at its fresh row so edited metadata shows.
+            if (!detailDialog.opened || !detailDialog.effect)
+                return;
+            var fresh = null;
+            for (var i = 0; i < root.effectList.length; i++) {
+                if (root.effectList[i] && root.effectList[i].id === detailDialog.effect.id) {
+                    fresh = root.effectList[i];
+                    break;
+                }
+            }
+            if (fresh)
+                detailDialog.effect = fresh;
+            else
+                detailDialog.close();
         }
 
         function onShaderProfileChanged(path) {

@@ -9,6 +9,7 @@
 
 #include "config/configdefaults.h"
 #include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
@@ -19,6 +20,8 @@
 
 #include <QColor>
 #include <QLatin1String>
+#include <QLoggingCategory>
+#include <QSet>
 
 #include <algorithm>
 
@@ -219,18 +222,67 @@ QString DecorationPageController::previewKind() const
     return QStringLiteral("decoration");
 }
 
+bool DecorationPageController::isPointerPack(const QString& effectId) const
+{
+    if (!m_pointerRegistry || effectId.isEmpty() || !m_pointerRegistry->hasEffect(effectId))
+        return false;
+    // An id both registries answer to is a pack-author error: the two
+    // families draw through different passes, so one id cannot mean both.
+    // Resolve to the surface family, which was there first, and say so once
+    // per id rather than on every preview or chain read that asks.
+    if (m_registry && m_registry->hasEffect(effectId)) {
+        static QSet<QString> warned;
+        if (!warned.contains(effectId)) {
+            warned.insert(effectId);
+            qCWarning(lcConfig) << "decoration: pack id" << effectId
+                                << "is claimed by both a surface pack and a pointer pack; treating it as the "
+                                   "surface pack";
+        }
+        return false;
+    }
+    return true;
+}
+
 QString DecorationPageController::previewKindFor(const QString& effectId) const
 {
-    if (m_pointerRegistry && !effectId.isEmpty() && m_pointerRegistry->hasEffect(effectId))
-        return QStringLiteral("pointer");
-    return previewKind();
+    return isPointerPack(effectId) ? QStringLiteral("pointer") : previewKind();
 }
 
 QObject* DecorationPageController::previewControllerFor(const QString& effectId) const
 {
-    if (m_pointerRegistry && !effectId.isEmpty() && m_pointerRegistry->hasEffect(effectId))
+    if (isPointerPack(effectId))
         return m_pointerPreview;
     return m_preview;
+}
+
+QStringList DecorationPageController::unresolvableChainPacks(const QString& path, const QStringList& chain) const
+{
+    // The pointer surface renders through the pointer pass and every other
+    // surface through a window paint, so a chain is judged against the one
+    // registry its path consumes. What is refused is a pack the OTHER family
+    // owns: a surface pack at the pointer path cannot be drawn by the pointer
+    // pass (different uniform contract), and the reverse is just as dead. A
+    // pack that neither registry knows is NOT refused — that is an
+    // uninstalled pack, a legitimate state the chain editor already shows as
+    // "(missing)", and refusing it would leave the user unable to reorder or
+    // remove anything around that row. A family whose registry is absent (a
+    // headless host, or a test built without one) judges nothing.
+    QStringList foreign;
+    const bool pointerPath = path == PhosphorSurfaceShaders::decorationPointerPath();
+    const bool haveOwn = pointerPath ? m_pointerRegistry != nullptr : m_registry != nullptr;
+    if (!haveOwn) {
+        return foreign;
+    }
+    for (const QString& id : chain) {
+        const bool inPointer = m_pointerRegistry && m_pointerRegistry->hasEffect(id);
+        const bool inSurface = m_registry && m_registry->hasEffect(id);
+        const bool inOwn = pointerPath ? inPointer : inSurface;
+        const bool inOther = pointerPath ? inSurface : inPointer;
+        if (!inOwn && inOther) {
+            foreign.append(id);
+        }
+    }
+    return foreign;
 }
 
 // ── Available packs ───────────────────────────────────────────────────────
@@ -343,6 +395,16 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
+    // Same family gate a decoration set passes on import: a surface pack at
+    // the pointer path (or a pointer pack anywhere else) would persist and
+    // then render nothing, because the pass that draws that surface knows
+    // only its own contract.
+    const QStringList unresolvable = unresolvableChainPacks(path, chain);
+    if (!unresolvable.isEmpty()) {
+        qCWarning(lcConfig) << "setChain: refusing chain at" << path
+                            << "with packs the surface cannot draw:" << unresolvable;
+        return;
+    }
     DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // Packs newly entering the chain, for the border-seed below. The previous

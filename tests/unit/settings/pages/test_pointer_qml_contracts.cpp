@@ -21,7 +21,10 @@
 
 #include "pages/pointerpreviewcontroller.h"
 
+#include <QDir>
+#include <QDirIterator>
 #include <QFile>
+#include <QFileInfo>
 #include <QIODevice>
 #include <QMetaMethod>
 #include <QMetaObject>
@@ -99,6 +102,21 @@ QStringList unreachableOn(const QMetaObject* meta, const QSet<QString>& used)
 }
 
 const QString kShadersQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+const QString kPagesDir = QStringLiteral(P_SOURCE_DIR "/src/settings/pages");
+
+/// The files the pointer route scrapes. The pane and the canvas are the
+/// pointer route proper, and the notice strip reads packInfo for both hosts.
+/// PackPreview is NOT here: it is the shared stage every family renders
+/// through, and its decoration branch reads audioSpectrum, which the pointer
+/// controller has no reason to carry. The two names it reads on every route
+/// (previewRevision, packInfo) are pinned directly, on all three controllers,
+/// by everyPreviewControllerCarriesTheNamesPackPreviewReads.
+QStringList pointerMirrorPaths()
+{
+    return {kShadersQml + QStringLiteral("/PointerPreviewPane.qml"),
+            kShadersQml + QStringLiteral("/PointerPreviewCanvas.qml"),
+            kShadersQml + QStringLiteral("/PointerPackNotices.qml")};
+}
 
 } // namespace
 
@@ -108,16 +126,17 @@ class TestPointerQmlContracts : public QObject
 
 private Q_SLOTS:
     void everyPreviewControllerCallFromThePointerQmlIsReachable();
+    void everyPointerFileThatCallsThePreviewControllerIsMirrored();
+    void everyPreviewControllerCarriesTheNamesPackPreviewReads();
     void thePointerDrivingCallsKeepTheirArgumentCount();
     void theBrowserDialogRoutesThePointerPreviewKind();
 };
 
 void TestPointerQmlContracts::everyPreviewControllerCallFromThePointerQmlIsReachable()
 {
-    // Both files, not just the pane: the canvas is where the simulated pointer
+    // Every file, not just the pane: the canvas is where the simulated pointer
     // is driven, so it carries the calls most likely to be renamed.
-    const QStringList paths{kShadersQml + QStringLiteral("/PointerPreviewPane.qml"),
-                            kShadersQml + QStringLiteral("/PointerPreviewCanvas.qml")};
+    const QStringList paths = pointerMirrorPaths();
 
     QString readError;
     const QSet<QString> used = scrapeCalls(paths, QStringLiteral("previewController"), &readError);
@@ -132,6 +151,65 @@ void TestPointerQmlContracts::everyPreviewControllerCallFromThePointerQmlIsReach
                             .arg(unreachable.join(QStringLiteral(", ")))));
 }
 
+void TestPointerQmlContracts::everyPointerFileThatCallsThePreviewControllerIsMirrored()
+{
+    // Anti-rot sweep for the hardcoded list above: a new Pointer*.qml in the
+    // shaders directory that talks to previewController is pointer-route code
+    // whose calls would otherwise go unchecked, which is the exact gap the
+    // mirror exists to close. Comments stripped first, so a file that only
+    // MENTIONS the receiver in prose is not a caller.
+    const QStringList mirrored = pointerMirrorPaths();
+    QDirIterator sweep(kShadersQml, QStringList{QStringLiteral("Pointer*.qml")}, QDir::Files);
+    int seen = 0;
+    while (sweep.hasNext()) {
+        const QString path = sweep.next();
+        ++seen;
+        const QString src = stripComments(readFile(path));
+        if (!src.contains(QLatin1String("previewController."))) {
+            continue;
+        }
+        QVERIFY2(mirrored.contains(path),
+                 qPrintable(QStringLiteral("%1 calls previewController but is not in the pointer mirror's path "
+                                           "list — add it to pointerMirrorPaths")
+                                .arg(QFileInfo(path).fileName())));
+    }
+    QVERIFY2(seen > 0, "swept no Pointer*.qml — the pointer preview files or the directory moved");
+}
+
+void TestPointerQmlContracts::everyPreviewControllerCarriesTheNamesPackPreviewReads()
+{
+    // PackPreview.qml reads exactly two names on whichever controller its host
+    // supplies, and every family's mirror rests on the premise that all three
+    // controllers carry both. The pointer controller is checked on its real
+    // metaobject. The decoration and animation controllers are checked on
+    // their headers: this target links only the pointer controller, so their
+    // metaobjects are not reachable here, and a declaration scrape is what
+    // can be pinned from this side.
+    const QStringList required{QStringLiteral("previewRevision"), QStringLiteral("packInfo")};
+
+    PointerPreviewController pointer;
+    const QStringList missingOnPointer =
+        unreachableOn(pointer.metaObject(), QSet<QString>(required.cbegin(), required.cend()));
+    QVERIFY2(
+        missingOnPointer.isEmpty(),
+        qPrintable(
+            QStringLiteral("PointerPreviewController lacks: %1").arg(missingOnPointer.join(QStringLiteral(", ")))));
+
+    static const QRegularExpression revisionRe(QStringLiteral("Q_PROPERTY\\(\\s*int\\s+previewRevision\\s+READ"));
+    static const QRegularExpression packInfoRe(QStringLiteral("Q_INVOKABLE\\s+QVariantMap\\s+packInfo\\s*\\("));
+    for (const QString& header :
+         {QStringLiteral("/decorationpreviewcontroller.h"), QStringLiteral("/animationpreviewcontroller.h"),
+          QStringLiteral("/pointerpreviewcontroller.h")}) {
+        const QString src = stripComments(readFile(kPagesDir + header));
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("cannot read ") + header));
+        QVERIFY2(
+            src.contains(revisionRe),
+            qPrintable(QStringLiteral("%1 declares no previewRevision property, which PackPreview reads").arg(header)));
+        QVERIFY2(src.contains(packInfoRe),
+                 qPrintable(QStringLiteral("%1 declares no packInfo invokable, which PackPreview reads").arg(header)));
+    }
+}
+
 void TestPointerQmlContracts::thePointerDrivingCallsKeepTheirArgumentCount()
 {
     // Name reachability is not enough for the calls that carry the simulated
@@ -142,7 +220,7 @@ void TestPointerQmlContracts::thePointerDrivingCallsKeepTheirArgumentCount()
     // actually calls with.
     const QMetaObject* mo = &PointerPreviewController::staticMetaObject;
     const QHash<QString, int> expected{
-        {QStringLiteral("drivePointer"), 5}, // item, x, y, dtMs, pressed
+        {QStringLiteral("drivePointer"), 7}, // item, x, y, cursorW, cursorH, dtMs, pressed
         {QStringLiteral("resetPointer"), 1}, // item
         {QStringLiteral("configurePreviewItem"), 3}, // item, packId, params
         {QStringLiteral("updatePreviewParams"), 3}, // item, packId, params

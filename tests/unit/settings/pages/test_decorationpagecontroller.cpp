@@ -43,15 +43,21 @@
 
 #include <QColor>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaMethod>
+#include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTemporaryDir>
 
+#include <PhosphorPointer/PointerShaderRegistry.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
@@ -144,6 +150,19 @@ QJsonObject fadeTintMetadata()
                                    QJsonObject{{QLatin1String("id"), QLatin1String("tintColor")},
                                                {QLatin1String("type"), QLatin1String("color")},
                                                {QLatin1String("default"), QLatin1String("#ff3daee9")}}}}};
+}
+
+/// The smallest pointer pack the pointer registry accepts, in the shape the
+/// registry's own test fixture authors: a metadata.json naming a fragment
+/// shader that exists beside it.
+bool writePointerPack(const QString& root, const QString& id)
+{
+    QJsonObject metadata;
+    metadata.insert(QLatin1String("id"), id);
+    metadata.insert(QLatin1String("name"), id);
+    metadata.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+    metadata.insert(QLatin1String("parameters"), QJsonArray{});
+    return writePack(root, id, metadata);
 }
 
 /// A plain non-border pack: providesBorder absent, so setChain must not seed it.
@@ -1023,6 +1042,101 @@ private Q_SLOTS:
                                                "controller's token and the QML's have drifted")
                                     .arg(name)));
         }
+    }
+
+    /// Pointer routing on the ONE bridge that serves two families. With a real
+    /// pointer registry holding one pack, that pack resolves to the pointer
+    /// preview kind and controller, is offered at the pointer path, and is
+    /// listed in the type-tagged catalogue as a pointer row, while a surface
+    /// id keeps resolving to the decoration side.
+    void pointerPack_routesToThePointerPreviewAndListing()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePointerPack(tmp.path(), QStringLiteral("halo")));
+        PhosphorPointerShaders::PointerShaderRegistry pointerRegistry;
+        pointerRegistry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        pointerRegistry.refresh();
+        QVERIFY(pointerRegistry.hasEffect(QStringLiteral("halo")));
+
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings, &pointerRegistry);
+
+        QCOMPARE(c.previewKindFor(QStringLiteral("halo")), QStringLiteral("pointer"));
+        QCOMPARE(c.previewControllerFor(QStringLiteral("halo")), c.pointerPreviewController());
+        QVERIFY(c.pointerPreviewController() != nullptr);
+        // An id no registry owns falls to the decoration side, as before.
+        QCOMPARE(c.previewKindFor(QStringLiteral("glow")), c.previewKind());
+        QCOMPARE(c.previewControllerFor(QStringLiteral("glow")), c.previewController());
+
+        const auto ids = [](const QVariantList& rows) {
+            QStringList out;
+            for (const QVariant& row : rows)
+                out.append(row.toMap().value(QStringLiteral("id")).toString());
+            return out;
+        };
+        QVERIFY(ids(c.availableShaderEffectsForPath(PhosphorSurfaceShaders::decorationPointerPath()))
+                    .contains(QStringLiteral("halo")));
+        // And NOT at a window surface, which the pointer pass never draws.
+        QVERIFY(!ids(c.availableShaderEffectsForPath(QStringLiteral("window.tiled"))).contains(QStringLiteral("halo")));
+
+        bool pointerRow = false;
+        for (const QVariant& row : c.availableShaderEffects()) {
+            const QVariantMap m = row.toMap();
+            if (m.value(QStringLiteral("id")).toString() == QLatin1String("halo")
+                && m.value(QStringLiteral("type")).toString() == QLatin1String("pointer")) {
+                pointerRow = true;
+            }
+        }
+        QVERIFY2(pointerRow, "availableShaderEffects lists no row typed \"pointer\" for the pointer pack");
+    }
+
+    /// Every `bridge.<name>` the decoration pages' QML uses resolves to a
+    /// property or method on this controller. The animations route carries
+    /// the same guard for the shader browser; the decoration pages had none,
+    /// so a renamed invokable here was a silent TypeError on the page. Source
+    /// scrape, comments stripped: it checks that a call CAN resolve, not what
+    /// it does.
+    void everyBridgeCallFromTheDecorationPagesIsReachable()
+    {
+        const QString decorationDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/decoration");
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression bridgeRe(QStringLiteral("\\bbridge\\.([A-Za-z_][A-Za-z0-9_]*)"));
+
+        QSet<QString> used;
+        QDirIterator files(decorationDir, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+        while (files.hasNext()) {
+            QFile f(files.next());
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(f.fileName()));
+            const QString src = QString::fromUtf8(f.readAll()).remove(blockCommentRe).remove(lineCommentRe);
+            auto it = bridgeRe.globalMatch(src);
+            while (it.hasNext())
+                used.insert(it.next().captured(1));
+        }
+        QVERIFY2(!used.isEmpty(), "scraped no bridge.* names — the decoration QML tree or receiver name moved");
+
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : used) {
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        unreachable.sort();
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("the decoration pages call these on their bridge, but "
+                                           "DecorationPageController lacks them: %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
     }
 };
 

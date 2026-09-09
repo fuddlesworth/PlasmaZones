@@ -155,6 +155,14 @@ Item {
     /// square the reduction, so it is handed the whole slot untouched.
     readonly property bool _selfScaling: previewKind === "decoration"
 
+    /// Cores that layer their own stage, so this wrapper must not layer them
+    /// again. The decoration core does (SurfaceDecoration.layeredStages) and
+    /// so does the pointer canvas, for the same render-node reason it writes
+    /// up on its canvasStage. The pointer canvas still takes this wrapper's
+    /// scale, which is what keeps it out of `_selfScaling`: it composes at
+    /// canvas size and leaves the fit to its host.
+    readonly property bool _selfLayering: previewKind === "decoration" || previewKind === "pointer"
+
     /// Whether the loaded component is a whole PANE — a canvas-pinned frame
     /// plus caption and notice rows underneath — rather than a bare canvas.
     ///
@@ -213,9 +221,17 @@ Item {
             return;
 
         root._refreshHold = true;
-        Qt.callLater(function () {
-            root._refreshHold = false;
-        });
+        refreshRelease.restart();
+    }
+
+    // Releases the hold on the next event-loop turn. A child Timer rather
+    // than Qt.callLater because the timer dies with this item, whereas a
+    // queued callback can still run after it is destroyed.
+    Timer {
+        id: refreshRelease
+
+        interval: 0
+        onTriggered: root._refreshHold = false
     }
 
     // No global cap on how many of these run at once. There was one, allowing
@@ -309,8 +325,9 @@ Item {
         scale: root._selfScaling ? 1.0 : root._canvasScale
         transformOrigin: Item.Center
         // A render node draws at full size, outside any QML clip, unless the
-        // composition it belongs to is a layer. The decoration pane layers its
-        // own stages, so layering it again here would only cost a texture.
+        // composition it belongs to is a layer. The decoration and pointer
+        // cores layer their own stages (see `_selfLayering`), so layering
+        // them again here would only cost a texture.
         //
         // Only while the scale is actually reducing. At 1:1 there is nothing
         // for a layer to correct — the stage is exactly the canvas and the
@@ -319,7 +336,7 @@ Item {
         // child crisp. It also keeps the animation pane's capture chain
         // (a ShaderEffectSource over its stand-in card) out of a nested layer
         // in the case that matters most, the browser's 1:1 detail slot.
-        layer.enabled: !root._selfScaling && root._canvasScale < 1.0
+        layer.enabled: !root._selfLayering && root._canvasScale < 1.0
         layer.mipmap: true
 
         Loader {
@@ -386,11 +403,28 @@ Item {
     // failed to compile. Opaque, and the colour a preview slot is framed with,
     // so it reads as the empty slot rather than as a hole. Covering rather
     // than hiding is deliberate — see `showable`.
+    //
+    // Three states, told apart here because this wrapper knows all three: a
+    // compile failure, a stage that is switched on and still compiling, and
+    // no stage at all (the host has it off, or the pack is not previewable).
+    // Only the last is "unavailable"; the middle one is loading, and naming
+    // it so stops a preview that is simply still arriving from reading as
+    // broken. The panes' own covers (DecorationPreviewPane,
+    // AnimationPreviewPane, PointerPreviewPane) and the placeholder's default
+    // text cannot make this split, because they see only showable and
+    // hasError and not whether a stage is active, so they keep the one
+    // wording.
     PZCommon.ShaderPreviewPlaceholder {
         anchors.fill: parent
         visible: root.showPlaceholder && (!root.showable || root.hasError)
         backgroundColor: Kirigami.Theme.alternateBackgroundColor
         radius: Kirigami.Units.smallSpacing
-        text: root.hasError ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
+        text: {
+            if (root.hasError)
+                return i18nc("@info:placeholder shader preview", "This pack's shader did not compile.");
+            if (root._stageActive && !root.showable)
+                return i18nc("@info:placeholder shader preview", "Loading preview…");
+            return i18nc("@info:placeholder shader preview", "Preview unavailable");
+        }
     }
 }

@@ -290,6 +290,106 @@ PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfi
         .withSeedDefaults(ConfigDefaults::decorationProfileTree());
 }
 
+namespace {
+
+/// Size bounds for a decoration-tree profile at the persistence boundary, the
+/// decoration twin of boundedProfileMap above and there for the same reason:
+/// one shared config key, hand-editable, reached by several writers (the
+/// decoration pages, a set import, a settings profile, the D-Bus setter), and
+/// nothing downstream prunes what it does not understand.
+///
+/// The FIELD SET is not whitelisted here, unlike the motion twin, because it
+/// cannot be: `parameters` is keyed by pack id and then by the parameter ids
+/// each pack declares in its own metadata, so the legitimate key set is
+/// whatever packs are installed, which this layer does not know and must not
+/// load a registry to learn. What can be bounded regardless of pack is the
+/// SIZE of each container and of each string in it, so that is what is
+/// bounded: chain and disabledPacks length, parameter-map key count at both
+/// levels, and every string's length. Excess is dropped with one warning per
+/// field, and a tree written through here can never grow past these no
+/// matter which door it came in by.
+constexpr int kMaxDecorationListEntries = 64;
+constexpr int kMaxDecorationMapKeys = 64;
+constexpr int kMaxDecorationStringChars = 1024;
+
+QStringList boundedIdList(const QStringList& ids, const char* field, const QString& path)
+{
+    QStringList out;
+    bool warnedLength = false;
+    for (const QString& id : ids) {
+        if (id.size() > kMaxDecorationStringChars) {
+            qCWarning(lcConfig) << "setDecorationProfileTree: dropping over-long id in" << field << "at" << path;
+            continue;
+        }
+        if (out.size() >= kMaxDecorationListEntries) {
+            if (!warnedLength) {
+                qCWarning(lcConfig) << "setDecorationProfileTree: dropping" << field << "entries past"
+                                    << kMaxDecorationListEntries << "at" << path;
+                warnedLength = true;
+            }
+            continue;
+        }
+        out.append(id);
+    }
+    return out;
+}
+
+/// One level of a parameters map: key count capped, over-long strings and
+/// over-long keys dropped, nested maps bounded the same way. Values that are
+/// neither strings nor maps (numbers, bools, colours) are fixed-size already.
+QVariantMap boundedParameterMap(const QVariantMap& map, const QString& path, int depth)
+{
+    QVariantMap out;
+    bool warnedCount = false;
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        if (it.key().size() > kMaxDecorationStringChars) {
+            qCWarning(lcConfig) << "setDecorationProfileTree: dropping over-long parameter key at" << path;
+            continue;
+        }
+        if (out.size() >= kMaxDecorationMapKeys) {
+            if (!warnedCount) {
+                qCWarning(lcConfig) << "setDecorationProfileTree: dropping parameter keys past" << kMaxDecorationMapKeys
+                                    << "at" << path;
+                warnedCount = true;
+            }
+            continue;
+        }
+        const QVariant& v = it.value();
+        if (v.typeId() == QMetaType::QString && v.toString().size() > kMaxDecorationStringChars) {
+            qCWarning(lcConfig) << "setDecorationProfileTree: dropping over-long parameter" << it.key() << "at" << path;
+            continue;
+        }
+        // A pack's own map sits one level under the pack id, and a bounded
+        // depth keeps a hand-crafted nest from recursing without end.
+        if (v.typeId() == QMetaType::QVariantMap) {
+            if (depth >= 2) {
+                qCWarning(lcConfig) << "setDecorationProfileTree: dropping over-nested parameter" << it.key() << "at"
+                                    << path;
+                continue;
+            }
+            out.insert(it.key(), boundedParameterMap(v.toMap(), path, depth + 1));
+            continue;
+        }
+        out.insert(it.key(), v);
+    }
+    return out;
+}
+
+PhosphorSurfaceShaders::DecorationProfile boundedDecorationProfile(const PhosphorSurfaceShaders::DecorationProfile& p,
+                                                                   const QString& path)
+{
+    PhosphorSurfaceShaders::DecorationProfile out = p;
+    if (out.chain)
+        out.chain = boundedIdList(*out.chain, "chain", path);
+    if (out.disabledPacks)
+        out.disabledPacks = boundedIdList(*out.disabledPacks, "disabledPacks", path);
+    if (out.parameters)
+        out.parameters = boundedParameterMap(*out.parameters, path, 0);
+    return out;
+}
+
+} // namespace
+
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
 {
     refreshCleanBackendFromDisk();
@@ -301,6 +401,12 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // disk. The read side (decorationProfileTree) passes through the same
     // filter, so the comparison below is pruned-vs-pruned.
     auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
+    // Size-bound every profile body before anything else looks at the tree,
+    // so the seed strip below and the stored value see the same shape (the
+    // motion twin filters before its comparison for the same reason).
+    pruned.setBaseline(boundedDecorationProfile(pruned.baseline(), QString()));
+    for (const QString& path : pruned.overriddenPaths())
+        pruned.setOverride(path, boundedDecorationProfile(pruned.directOverride(path), path));
     // Strip the parts of an override the read-side seed overlay regenerates:
     // callers read the MERGED tree (seed defaults injected), mutate, and write
     // the whole tree back, so without this the injected card chrome would

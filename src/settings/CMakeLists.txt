@@ -536,6 +536,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/shaders/AnimationPreviewPane.qml
         qml/pages/shaders/PointerPreviewCanvas.qml
         qml/pages/shaders/PointerPreviewPane.qml
+        qml/pages/shaders/PointerPackNotices.qml
         qml/pages/shaders/ShaderBrowserDetailDialog.qml
         qml/pages/animations/CurveEditorDialog.qml
         qml/pages/animations/CurvePresets.qml

@@ -9,10 +9,11 @@ import PlasmaZones
  * @brief The pointer preview's stage: a desktop, a simulated cursor, and the
  * pack's screen-space pass over both.
  *
- * Hosted by the browser's detail pane (PointerPreviewPane), which is its only
- * consumer today. It is kept a separate component from that pane so a second
- * host can show the same stage rather than reimplementing it, which is what a
- * per-layer preview in the chain editor would need.
+ * Hosted by PackPreview, the shared stage wrapper, and by nothing else
+ * directly. Every pointer preview reaches this file through it: the browser's
+ * detail pane (PointerPreviewPane) frames a PackPreview, and the Pointer
+ * page's chain rows host one bare through PackEditorBody, so a pack composes
+ * the same stage in the catalogue and in the row that uses it.
  *
  * ## The canvas contract
  *
@@ -127,22 +128,21 @@ Item {
 
     // Re-upload translated parameters as the host's editor moves them.
     onParamsChanged: {
-        if (shaderLoader.item && shaderLoader.item.configured)
+        if (previewController && shaderLoader.item && shaderLoader.item.configured)
             previewController.updatePreviewParams(shaderLoader.item.shaderItem, packId, params);
     }
 
-    // A registry revision while the preview is open (a pack installed or edited
-    // on disk) must rebuild the whole item: its configuration is one-shot in
-    // Component.onCompleted, and a live item never rebakes an edited source on
-    // its own. Bouncing the Loader reconfigures from scratch, and the fresh
-    // load keys the bake cache on the edited files' new mtimes.
-    on_RevChanged: {
-        if (shaderLoader.active) {
-            shaderLoader.refreshHold = true;
-            Qt.callLater(function () {
-                shaderLoader.refreshHold = false;
-            });
-        }
+    // A pack switch on a live item reconfigures it in place. Every host today
+    // rebuilds the whole component on a switch, so this is not reached, but
+    // the configure contract belongs to the item that configures rather than
+    // to a promise about every host. A registry revision needs no arm here:
+    // PackPreview bounces the whole component on it, as it does for the
+    // decoration stage.
+    onPackIdChanged: {
+        if (!previewController || !shaderLoader.item)
+            return;
+        previewController.resetPointer(shaderLoader.item.shaderItem);
+        shaderLoader.item.configured = previewController.configurePreviewItem(shaderLoader.item.shaderItem, packId, params);
     }
 
     // Everything visible composes HERE, at the fixed canvas size, and the
@@ -209,6 +209,8 @@ Item {
                 ctx.lineTo(w * 0.52, h * 0.63);
                 ctx.lineTo(w, h * 0.6);
                 ctx.closePath();
+                // Intentionally not theme colours: this stands in for the
+                // cursor sprite, which is white-on-black whatever the theme.
                 ctx.fillStyle = "white";
                 ctx.fill();
                 ctx.lineWidth = 1;
@@ -222,14 +224,9 @@ Item {
         Loader {
             id: shaderLoader
 
-            /// One-frame teardown pulse driven by root.on_RevChanged — folded into
-            /// the `active` binding rather than written to `active` imperatively,
-            /// which would sever the binding.
-            property bool refreshHold: false
-
             anchors.fill: parent
             z: root._paintsAboveCursor ? 2 : 1
-            active: root.active && root.previewable && !refreshHold
+            active: root.active && root.previewable
             visible: active
 
             sourceComponent: Item {
@@ -276,7 +273,10 @@ Item {
                         var dt = pointerClock.lastMs > 0 ? now - pointerClock.lastMs : pointerClock.interval;
                         pointerClock.lastMs = now;
                         root._phase = (root._phase + dt / 1000 / root._lapSeconds) % 1;
-                        root.previewController.drivePointer(shaderItem, root.cursorX, root.cursorY, dt, root._pressed);
+                        // The arrow's drawn size rides along so the frame's
+                        // cursor rect is the rect the stand-in actually
+                        // occupies, hotspot at the tip.
+                        root.previewController.drivePointer(shaderItem, root.cursorX, root.cursorY, cursorArrow.width, cursorArrow.height, dt, root._pressed);
                     }
                 }
             }
