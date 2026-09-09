@@ -129,13 +129,19 @@ vec4 pPointer(vec2 uv) {
     // reach there is no radius that fits both, because `reach` here tracks the
     // orbit radius alone and the shader has no uniform for the budget it is
     // spending. Bounded and much reduced, not eliminated.
-    radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize, radiusMax * 0.4)) * scale;
+    // Hoisted above the clamp because the reservation below has to know it: a
+    // smeared dot is elongated along the travel axis by this much, so
+    // reserving a fixed three dot radii would leave the smeared end hanging
+    // outside the rect no matter what the cutoff does.
+    float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
+    float stretch = 1.0 + smear * 2.0;
+
+    radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize * stretch, radiusMax * 0.4)) * scale;
 
     vec2 centre = orbitLaggedCentre(count, max(p_lag, 0.0));
     vec2 drift = uPointerVelocity.xy;
     float dotPx = dotSize * scale;
     float spin = iTime * p_orbitRate * TAU;
-    float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -154,31 +160,30 @@ vec4 pPointer(vec2 uv) {
         float travelLen = length(travel);
         float along = rel.x;
         float across = rel.y;
-        float stretch = 1.0;
+        float dotStretch = 1.0;
         if (travelLen > 1e-3 && smear > 0.0) {
             vec2 dir = travel / travelLen;
             along = dot(rel, dir);
             across = dot(rel, vec2(-dir.y, dir.x));
-            stretch = 1.0 + smear * 2.0;
+            dotStretch = stretch;
         }
-        float da = along / (dotPx * stretch);
+        float da = along / (dotPx * dotStretch);
         float db = across / dotPx;
         float q = da * da + db * db;
         float body = exp(-q * 0.5);
-        // Compact support, like the shapes in Halo and Flash. A bare gaussian
-        // is still around a tenth of a unit of coverage where the reservation
-        // above runs out, so it met the damage rect's edge at a visible level
-        // and was cut off square.
+        float halo = exp(-q / 8.0) * 0.35;
+        // Compact support, like the shapes in Halo and Flash. Both gaussians
+        // are still visible where the reservation above runs out, so the dot
+        // met the damage rect's edge at a level you could see and was cut off
+        // square.
         //
-        // Cut on the UNSTRETCHED distance. `da` is divided by the smear
-        // stretch, so a cutoff in that space would sit at up to three times
-        // further along the travel axis than across it — which is exactly the
-        // direction the reservation above does not cover. Measuring in plain
-        // dot radii bounds the dot at the same 3 the reservation reserves,
-        // whichever way the smear points.
-        float rUnstretched = length(vec2(along, across)) / max(dotPx, 1e-4);
-        float halo = exp(-q / 8.0) * 0.35 * (1.0 - smoothstep(2.0, 3.0, rUnstretched));
-        float cover = clamp(body + halo, 0.0, 1.0) * live;
+        // The window goes on the SUM, in the same stretched space the shape is
+        // drawn in. Windowing only the halo left `body` — the very term the
+        // smear elongates — unbounded, and windowing in unstretched space
+        // would clip the smear back toward a circle, which is the shape's whole
+        // point. Three dot radii in stretched space is what the reservation
+        // now reserves, so the two agree in every direction.
+        float cover = clamp(body + halo, 0.0, 1.0) * (1.0 - smoothstep(2.0, 3.0, sqrt(q))) * live;
         if (cover <= 0.0) {
             continue;
         }

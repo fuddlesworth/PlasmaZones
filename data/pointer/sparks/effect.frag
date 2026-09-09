@@ -60,9 +60,9 @@ vec4 pPointer(vec2 uv) {
     float reachPx = max(p_reach, 1.0) * scale;
     float travel = launch * life + 0.5 * gravity * life * life;
     float envelope = max(reachPx - size * 3.0, 0.0);
-    float k = (travel > envelope && travel > 0.0) ? (envelope / travel) : 1.0;
-    launch *= k;
-    gravity *= k;
+    float shrink = (travel > envelope && travel > 0.0) ? (envelope / travel) : 1.0;
+    launch *= shrink;
+    gravity *= shrink;
 
     // Furthest a spark can travel in its life: launch plus the fall.
     float reach = launch * life + 0.5 * gravity * life * life + size * 3.0;

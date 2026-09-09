@@ -7,14 +7,14 @@
     "category": "Particles",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 200,
+    "reach": 260,
     "trailSeconds": 1.0,
     "parameters": [
         {
             "id": "reach",
             "name": "Reach",
             "type": "float",
-            "default": 200.0,
+            "default": 260.0,
             "min": 48.0,
             "max": 480.0,
             "description": "Furthest a spark may travel from the path. Launch speed and gravity are scaled down together to stay inside it (px)"
