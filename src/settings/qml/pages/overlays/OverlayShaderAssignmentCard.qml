@@ -63,6 +63,21 @@ Item {
     // rescans (shaderEffectsChanged), leaving stale declarations.
     property var _paramDefs: []
 
+    /// The shader being edited names a pack this machine does not have. An
+    /// absent pack and a pack with no parameters both leave _paramDefs empty,
+    /// and only this tells the editor's empty state which one it is looking at.
+    /// Same registry test _shaderName makes for its "Missing shader" label, so
+    /// the two cannot disagree about the same id.
+    readonly property bool _editShaderMissing: {
+        if (root._editShaderId.length === 0)
+            return false;
+        for (var i = 0; i < root._effects.length; i++) {
+            if (root._effects[i] && root._effects[i].id === root._editShaderId)
+                return false;
+        }
+        return true;
+    }
+
     // Each card fetches the pack list for itself, and availableShaderEffects
     // rebuilds it from the registry uncached, so N cards means N rebuilds.
     // Deliberate, and the same shape DecorationSurfaceCard uses, whose own
@@ -328,6 +343,7 @@ Item {
                     parameters: root._paramDefs
                     currentValues: root._editParams
                     effectId: root._editShaderId
+                    subjectMissing: root._editShaderMissing
                     enableLocking: true
                     enableRandomize: true
                     enableImage: false
