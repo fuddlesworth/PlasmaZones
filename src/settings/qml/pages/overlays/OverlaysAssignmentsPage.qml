@@ -25,14 +25,6 @@ SettingsFlickable {
 
     property var _layouts: []
 
-    /// The leading group of a layout UUID, braces stripped — enough to tell
-    /// two stale overrides apart on screen without printing all 36 characters.
-    function _shortId(id) {
-        var bare = String(id).replace(/[{}]/g, "");
-        var dash = bare.indexOf("-");
-        return dash > 0 ? bare.substring(0, dash) : bare.substring(0, 8);
-    }
-
     // Reassigning a plain array resets the Repeater wholesale (every card
     // delegate is destroyed and recreated, dropping per-card latch and
     // collapse state), so only publish a new array when the list content
@@ -104,7 +96,10 @@ SettingsFlickable {
                 // way to tell which card clears which. The id's leading group
                 // is enough to tell them apart and is what the layout files
                 // are named by.
-                cardLabel: modelData.missing ? i18n("Deleted layout %1", page._shortId(modelData.id)) : (modelData.name.length > 0 ? modelData.name : i18n("Unnamed layout"))
+                // The absent-layout wording comes from the controller so this
+                // page, the set coverage chip and the browser's usage list all
+                // render the same state the same way.
+                cardLabel: modelData.missing ? page.bridge.absentLayoutLabel(modelData.id) : (modelData.name.length > 0 ? modelData.name : i18n("Unnamed Layout"))
             }
         }
     }

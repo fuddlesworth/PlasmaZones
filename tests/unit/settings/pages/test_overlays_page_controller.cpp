@@ -116,11 +116,15 @@ private Q_SLOTS:
         QCOMPARE(usages.first().toMap().value(QStringLiteral("path")).toString(), QString());
         QVERIFY(!usages.first().toMap().value(QStringLiteral("label")).toString().isEmpty());
         // The layout row carries the UUID path and, with no registry to name
-        // it, an EMPTY label — the consumer's label || path fallback shows
-        // the UUID.
+        // it, the shared absent-layout label rather than an empty string. An
+        // empty label made the consumer fall back to `path` and print all 36
+        // characters of the UUID, where the assignments page and the coverage
+        // chip both said something readable about the same state.
         const QVariantMap row = usages.last().toMap();
         QCOMPARE(row.value(QStringLiteral("path")).toString(), kLayoutA);
-        QCOMPARE(row.value(QStringLiteral("label")).toString(), QString());
+        QCOMPARE(row.value(QStringLiteral("label")).toString(), c.absentLayoutLabel(kLayoutA));
+        QVERIFY2(!row.value(QStringLiteral("label")).toString().contains(kLayoutA),
+                 "the raw UUID reached the label, so the browser prints it verbatim");
 
         QVERIFY(c.shaderEffectUsages(QStringLiteral("unused-pack")).isEmpty());
     }

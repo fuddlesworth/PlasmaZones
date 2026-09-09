@@ -200,6 +200,15 @@ public:
     /// printing 36 characters of hex.
     Q_INVOKABLE QString setCoverageLabel(const QString& token) const;
 
+    /// How a layout this machine does not have is named on screen: the id's
+    /// leading group, braces stripped, so two absent layouts are still
+    /// distinguishable without printing all 36 characters. One implementation
+    /// for every surface that has to render this state — the assignments page,
+    /// the set coverage chip and the shader browser's usage list previously
+    /// each had their own, and the two that computed the short id did it in
+    /// two languages.
+    Q_INVOKABLE QString absentLayoutLabel(const QString& layoutId) const;
+
     /// Reverse-lookup over the assignment tree: a "Global default" entry
     /// (empty path) when the baseline uses @p effectId, plus `{path,
     /// label}` for every layout whose override does — `path` the layout

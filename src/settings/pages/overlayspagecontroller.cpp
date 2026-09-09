@@ -330,11 +330,14 @@ QVariantList OverlaysPageController::shaderEffectUsages(const QString& effectId)
         QVariantMap entry;
         // `path` is the layout's UUID-with-braces (matches the rest of
         // the codebase's QUuid::toString convention); `label` is the
-        // user-facing name. The browser renders `label` and falls back
-        // to `path` when `label` is empty (e.g. a stale entry for a
-        // deleted layout).
+        // user-facing name. A layout this machine does not have gets the
+        // shared absent-layout wording rather than an empty label: the
+        // browser falls back to `path` when the label is empty, and that
+        // printed a raw 36-character UUID where the assignments page and the
+        // coverage chip both said something readable about the same state.
+        const QString name = layoutNameFor(layoutId);
         entry.insert(QLatin1String("path"), layoutId);
-        entry.insert(QLatin1String("label"), layoutNameFor(layoutId));
+        entry.insert(QLatin1String("label"), name.isEmpty() ? absentLayoutLabel(layoutId) : name);
         layoutRows.append(entry);
     }
     std::sort(layoutRows.begin(), layoutRows.end(), [](const QVariant& a, const QVariant& b) {

@@ -5551,7 +5551,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="144"/>
         <location filename="../src/settings/pages/overlayspagecontroller.cpp" line="322"/>
         <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="113"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="90"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="82"/>
         <source>Global default</source>
         <translation>Global standard</translation>
     </message>
@@ -16378,6 +16378,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="102"/>
         <source>Unnamed Layout</source>
         <translation>Namnlös layout</translation>
     </message>
@@ -23618,28 +23619,18 @@
         <translation>Övrigt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="81"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="73"/>
         <source>The global default applies to every layout. Each layout card can override it. To install more packs, go to the Library&apos;s Shaders page.</source>
         <comment>@info banner on the overlay shader assignments page</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="107"/>
-        <source>Deleted layout %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="107"/>
-        <source>Unnamed layout</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="124"/>
+        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="129"/>
         <source>Layout %1 (not on this computer)</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="284"/>
+        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="289"/>
         <source>%n layouts in this set are not on this computer, so they were skipped. Everything else was applied.</source>
         <translation type="unfinished">
             <numerusform></numerusform>

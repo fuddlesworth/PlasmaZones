@@ -114,13 +114,18 @@ QString OverlaysPageController::setCoverageLabel(const QString& token) const
     const QString name = layoutNameFor(token);
     if (!name.isEmpty())
         return name;
-    // Not on this machine. Carry the id's leading group so two absent layouts
-    // are distinguishable, the same shape the assignments page uses for a
-    // stale override.
-    QString bare = token;
+    return absentLayoutLabel(token);
+}
+
+QString OverlaysPageController::absentLayoutLabel(const QString& layoutId) const
+{
+    QString bare = layoutId;
     bare.remove(QLatin1Char('{'));
     bare.remove(QLatin1Char('}'));
     const qsizetype dash = bare.indexOf(QLatin1Char('-'));
+    // "not on this computer" rather than "deleted": layout ids are per-machine,
+    // so an override naming one this machine lacks is far more often a set or a
+    // profile from elsewhere than something the user removed.
     return PhosphorI18n::tr("Layout %1 (not on this computer)").arg(dash > 0 ? bare.left(dash) : bare.left(8));
 }
 
