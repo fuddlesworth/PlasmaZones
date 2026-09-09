@@ -130,13 +130,17 @@ Item {
     }
 
     function _shaderName(id) {
+        // Contexted because "None" agrees with its noun in several target
+        // languages — German alone splits Keiner / Keine / Keines across the
+        // other sites — so an uncontexted entry would collapse them all onto
+        // one form.
         if (!id || id.length === 0)
-            return i18n("None");
+            return i18nc("@item no overlay shader assigned", "None");
         for (var i = 0; i < root._effects.length; i++) {
             if (root._effects[i] && root._effects[i].id === id)
                 return root._effects[i].name;
         }
-        return i18n("Missing shader %1", id);
+        return i18nc("@item the assigned overlay shader pack is not installed", "Missing shader %1", id);
     }
 
     // Write the whole node for this path. A latched card with no override
@@ -250,7 +254,9 @@ Item {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Information
                 visible: !root.isBaseline && !root._editing
-                text: i18n("Using global default")
+                // Uncontexted and plural to match the already-translated string
+                // the animation and decoration cards use.
+                text: i18n("Using global defaults")
             }
 
             Label {
@@ -276,7 +282,9 @@ Item {
                     spacing: Kirigami.Units.largeSpacing
 
                     Label {
-                        text: i18n("Shader:")
+                        // Keeps the @label context the deleted editor dialog
+                        // used, so the shipped translations still match.
+                        text: i18nc("@label", "Shader:")
                     }
 
                     PZCommon.CategoryMenuButton {
@@ -284,8 +292,11 @@ Item {
                         items: root._effects
                         currentId: root._editShaderId
                         includeNoneEntry: true
+                        // Left uncontexted on purpose: this exact string is
+                        // already translated, and adding a context would re-key
+                        // the entry and drop those translations.
                         placeholderText: i18n("Choose an overlay shader…")
-                        Accessible.name: root.isBaseline ? i18n("Global default overlay shader") : i18n("Overlay shader for %1", root.cardLabel)
+                        Accessible.name: root.isBaseline ? i18nc("@label:listbox", "Global default overlay shader") : i18nc("@label:listbox overlay shader for a named layout", "Overlay shader for %1", root.cardLabel)
                         onSelected: function (id) {
                             // Switching packs resets the parameters to the new
                             // pack's defaults (an empty override map).

@@ -463,9 +463,10 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // Fresh install, or a config that was just removed as empty — no old
         // config to migrate. Still run all three finalizers: the v4 one folds a
         // stray assignments.json from a partial earlier conversion into
-        // rules.json rather than leaving it orphaned, the v8 one recovers
-        // per-event timing files the chain never got to look at, and the v9 one
-        // lifts a layout-settings sidecar left behind by a partial run.
+        // rules.json rather than leaving it orphaned, the v8 motion one recovers
+        // per-event timing files the chain never got to look at, and the v8
+        // overlay one lifts a layout-settings sidecar left behind by a partial
+        // run.
         finalizeV8MotionImport(jsonPath);
         return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
     }

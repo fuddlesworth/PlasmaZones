@@ -281,7 +281,7 @@ void OverlaysPageController::initSetsStore()
         m_settings->setOverlayShaderTree(tree);
         if (skipped > 0) {
             Q_EMIT toastRequested(
-                PhosphorI18n::tr("%n layout(s) in this set are not on this computer, so they were "
+                PhosphorI18n::tr("%n layouts in this set are not on this computer, so they were "
                                  "skipped. Everything else was applied.",
                                  nullptr, skipped));
         }

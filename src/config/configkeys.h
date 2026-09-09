@@ -861,13 +861,16 @@ public:
         // restructured. They exist as separate accessors so migration code
         // reads unambiguously as "reading from v1 source" vs "writing to v2
         // destination".
-        // Not a v1 spelling: a one-shot marker the v8 overlay-shader lift
-        // stamps into the Overlays group so it merges from the layout-settings
-        // sidecar at most once (see relocateOverlayShaderAssignments). It lives
-        // in Legacy rather than beside the live keys because nothing but that
-        // migration reads or writes it, and it is deliberately NOT schema-
-        // declared — it survives on JsonBackend round-tripping unknown keys.
-        P_CONFIG_KEY(v8SidecarLiftedKey, "SidecarLifted")
+        // Not a v1 spelling: the v8 overlay-shader lift's record of which layout
+        // ids it has already merged from the layout-settings sidecar, so it
+        // merges each at most once (see relocateOverlayShaderAssignments). It
+        // lives in Legacy rather than beside the live keys because nothing but
+        // that migration reads or writes it, and it is deliberately NOT schema-
+        // declared. The leading underscore and the config-ROOT placement match
+        // the _v4* stashes below and are what keep purgeStaleKeys from deleting
+        // it: its first pass strips undeclared scalars inside declared groups,
+        // and Overlays is a declared group.
+        P_CONFIG_KEY(v8SidecarLiftedKey, "_v8SidecarLifted")
 
         P_CONFIG_GROUP(v1ActivationGroup, "Activation")
         P_CONFIG_GROUP(v1DisplayGroup, "Display")

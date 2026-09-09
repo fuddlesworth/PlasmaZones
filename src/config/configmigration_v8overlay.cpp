@@ -9,11 +9,13 @@
 #include <PhosphorConfig/JsonBackend.h>
 
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
 #include <QLatin1String>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -30,17 +32,43 @@ constexpr QLatin1String kTreeBaseline{"baseline"};
 constexpr QLatin1String kTreeOverrides{"overrides"};
 constexpr QLatin1String kNodeShaderId{"shaderId"};
 constexpr QLatin1String kNodeParameters{"parameters"};
-// One-shot marker stamped into the Overlays group by the same atomic write as
-// the lift. Once present, later runs only STRIP the sidecar and never merge
-// from it again — so an override the user removed after a failed sidecar strip
-// cannot be resurrected from the stale sidecar copy on the retry. JsonBackend
-// round-trips unknown keys, so ordinary Settings saves preserve it. The
-// spelling lives with the other migration-only spellings in ConfigKeys::Legacy
-// rather than inline here; see v8SidecarLiftedKey for why it is not a declared
-// settings key.
+// Records which layout ids this migration has already merged, so a key the
+// user REMOVED after a failed sidecar strip cannot be resurrected from the
+// stale sidecar on the retry. It is a LIST rather than a bool because the
+// strip below is unconditional while the merge is not: a shaderId that reaches
+// the sidecar later (a restored backup, a layout file copied from another
+// machine) must still be lifted, and only the ids recorded here are ones the
+// user could have deleted after a lift.
+//
+// It lives at the config ROOT, not in the Overlays group, and that placement is
+// load-bearing rather than cosmetic. Settings::save() runs purgeStaleKeys,
+// whose first pass deletes every undeclared scalar leaf inside a schema-declared
+// group — and Overlays IS declared, with OverlayShaderTree as its only declared
+// key. A marker inside that group is therefore deleted on the first save, which
+// would silently re-arm the resurrection this guard exists to prevent. At the
+// root it is invisible to that pass (which visits only schema groups and their
+// ancestors) and to the second pass (whose enumerator appends only object-valued
+// paths), exactly as the _v4* stashes are. reset() deletes named groups only, so
+// it also survives a factory reset — which is correct: the sidecar has already
+// been stripped by then, so there is nothing to re-merge into a config the user
+// just cleared.
 QString liftedMarkerKey()
 {
     return ConfigKeys::Legacy::v8SidecarLiftedKey();
+}
+
+/// The set of layout ids already merged by a previous run, read from the root.
+QSet<QString> liftedMarkerIds(const QJsonObject& root)
+{
+    QSet<QString> ids;
+    const QJsonArray arr = root.value(liftedMarkerKey()).toArray();
+    for (const QJsonValue& v : arr) {
+        const QString id = v.toString();
+        if (!id.isEmpty()) {
+            ids.insert(id);
+        }
+    }
+    return ids;
 }
 
 /// Remove the two relocated shader keys from every object-valued sidecar
@@ -127,7 +155,8 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         }
         const QJsonObject entry = it.value().toObject();
         const QString shaderId = entry.value(kSidecarShaderId).toString();
-        if (shaderId.isEmpty() || QUuid::fromString(it.key()).isNull()) {
+        const QUuid layoutId = QUuid::fromString(it.key());
+        if (shaderId.isEmpty() || layoutId.isNull()) {
             continue;
         }
         QJsonObject node;
@@ -136,7 +165,12 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         if (params.isObject() && !params.toObject().isEmpty()) {
             node.insert(kNodeParameters, params.toObject());
         }
-        lifted.insert(it.key(), node);
+        // Key on the canonical braced spelling rather than the sidecar's own.
+        // QUuid::fromString accepts both forms, but every reader asks with
+        // QUuid::toString(), so an unbraced key would sit in the tree
+        // unresolvable. This also keeps the marker list, the already-present
+        // check below and the tree itself on one spelling.
+        lifted.insert(layoutId.toString(), node);
     }
     QJsonObject strippedSidecar = sidecar;
     const bool sidecarDirty = stripShaderKeys(strippedSidecar);
@@ -171,30 +205,43 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         }
         QJsonObject root = doc.object();
         QJsonObject group = groupObjectAtPath(root, ConfigKeys::overlaysGroup());
-        // The lift merges from the sidecar at most ONCE (see liftedMarkerKey()).
-        // On a retry after a failed sidecar strip, the user may have edited OR
-        // REMOVED lifted assignments meanwhile; the config is authoritative,
-        // so a marked config takes nothing more from the stale sidecar.
-        const bool alreadyLifted = group.value(liftedMarkerKey()).toBool();
+        // Each layout id is merged from the sidecar at most ONCE. On a retry
+        // after a failed sidecar strip the user may have edited OR REMOVED an
+        // assignment meanwhile; the config is authoritative, so an id this
+        // migration already merged is never taken from the stale sidecar
+        // again. An id NOT in the list has never been lifted on this version,
+        // so merging it is correct even on a later run — that is what lets a
+        // restored backup or a layout file copied in after the first start
+        // still reach the tree instead of being stripped away silently.
+        const QSet<QString> alreadyMerged = liftedMarkerIds(root);
         QJsonObject tree = group.value(ConfigKeys::overlayShaderTreeKey()).toObject();
         QJsonObject overrides = tree.value(kTreeOverrides).toObject();
         bool treeDirty = false;
-        if (!alreadyLifted) {
-            for (auto it = lifted.constBegin(); it != lifted.constEnd(); ++it) {
-                if (overrides.contains(it.key())) {
-                    continue; // already present (edited copy) — that copy is live
-                }
-                overrides.insert(it.key(), it.value());
-                treeDirty = true;
+        QSet<QString> mergedNow = alreadyMerged;
+        for (auto it = lifted.constBegin(); it != lifted.constEnd(); ++it) {
+            if (alreadyMerged.contains(it.key())) {
+                continue; // merged by an earlier run — the user may have since removed it
             }
+            mergedNow.insert(it.key());
+            if (overrides.contains(it.key())) {
+                continue; // already present (edited copy) — that copy is live
+            }
+            overrides.insert(it.key(), it.value());
+            treeDirty = true;
         }
-        if (treeDirty || !alreadyLifted) {
+        // Rewrite only when something actually moved: either the tree gained an
+        // override, or the marker list grew. Testing the marker's mere presence
+        // here would rewrite config.json on every single startup.
+        const bool markerDirty = mergedNow.size() != alreadyMerged.size();
+        if (treeDirty || markerDirty) {
             if (treeDirty) {
                 tree.insert(kTreeOverrides, overrides);
                 group.insert(ConfigKeys::overlayShaderTreeKey(), tree);
+                setGroupAtSegments(root, ConfigKeys::overlaysGroup().split(QLatin1Char('.')), group);
             }
-            group.insert(liftedMarkerKey(), true);
-            setGroupAtSegments(root, ConfigKeys::overlaysGroup().split(QLatin1Char('.')), group);
+            QStringList mergedIds(mergedNow.constBegin(), mergedNow.constEnd());
+            mergedIds.sort(); // stable on disk, so an unchanged run rewrites nothing
+            root.insert(liftedMarkerKey(), QJsonArray::fromStringList(mergedIds));
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root)) {
                 qWarning("ConfigMigration: failed to write lifted overlay shader tree to %s", qPrintable(jsonPath));
                 return false;
@@ -213,17 +260,26 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
     // above keeps that safe.
     {
         QFile sf(sidecarPath);
-        if (sf.open(QIODevice::ReadOnly)) {
-            QJsonParseError err;
-            const QJsonDocument doc = QJsonDocument::fromJson(sf.readAll(), &err);
-            if (err.error == QJsonParseError::NoError && doc.isObject()) {
-                QJsonObject fresh = doc.object();
-                if (!stripShaderKeys(fresh)) {
-                    return true; // someone else already stripped it
-                }
-                strippedSidecar = fresh;
-            }
+        if (!sf.open(QIODevice::ReadOnly)) {
+            // Falling through would write the entry-time snapshot, which is the
+            // clobber this fresh read exists to prevent. Retry on the next run.
+            qWarning("ConfigMigration: overlay-shader relocation could not re-read %s — deferring strip",
+                     qPrintable(sidecarPath));
+            return false;
         }
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(sf.readAll(), &err);
+        sf.close();
+        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+            qWarning("ConfigMigration: overlay-shader relocation: %s did not re-parse — deferring strip",
+                     qPrintable(sidecarPath));
+            return false;
+        }
+        QJsonObject fresh = doc.object();
+        if (!stripShaderKeys(fresh)) {
+            return true; // someone else already stripped it
+        }
+        strippedSidecar = fresh;
     }
     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, strippedSidecar)) {
         qWarning("ConfigMigration: failed to strip overlay shader keys from %s", qPrintable(sidecarPath));

@@ -20,7 +20,7 @@ import QtQuick
 ShaderBrowserPage {
     bridge: settingsController.overlaysPage
     settingsCategory: "OverlaysLibraryFilterBar"
-    infoBannerText: i18n("Browse installed snapping overlay shaders. Assign a shader on the Shaders page, as a global default or per layout.")
+    infoBannerText: i18nc("@info banner on the overlay shader browser", "Browse the zone overlay shaders you have installed. To assign one, either as the global default or for a single layout, go to the Layouts page.")
     // Closures (not pre-evaluated strings) so `i18ncp` runs with the
     // LIVE usage count — required for locales with more than two plural
     // forms and so `%n` displays the actual count rather than a baked-in

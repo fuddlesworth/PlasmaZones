@@ -183,10 +183,36 @@ void OverlaysPageController::writeTreeAnnouncing(const OverlayShaderTree& tree, 
     m_settings->setOverlayShaderTree(tree);
 }
 
+bool OverlaysPageController::acceptableShaderEffectId(const QString& effectId) const
+{
+    // An empty id is the "None" sentinel and a real stored value: it suppresses
+    // the baseline for this layout, so it must pass.
+    if (effectId.isEmpty())
+        return true;
+    // The schema validator already bounds the length, but it deliberately does
+    // not judge the shape or the membership, so both are checked here — the
+    // same gate the animations sibling applies for the same reason.
+    if (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\\'))
+        || effectId.contains(QLatin1String("..")) || effectId.contains(QLatin1Char('\0'))) {
+        return false;
+    }
+    // Skipped while the registry is still empty (startup, tests), or a pack
+    // that is mid-scan would have its assignment eaten.
+    if (m_shaderRegistry && !m_shaderRegistry->availableShaders().isEmpty()
+        && m_shaderRegistry->shaderInfo(effectId).isEmpty()) {
+        return false;
+    }
+    return true;
+}
+
 void OverlaysPageController::setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params)
 {
     if (!m_settings)
         return;
+    if (!acceptableShaderEffectId(effectId)) {
+        qCWarning(lcConfig) << "OverlaysPageController: refusing overlay shader id" << effectId << "for path" << path;
+        return;
+    }
     OverlayShaderTree tree = m_settings->overlayShaderTree();
     const OverlayShaderProfile node{effectId, params};
     if (path.isEmpty())

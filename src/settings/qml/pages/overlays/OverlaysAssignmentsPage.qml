@@ -78,13 +78,16 @@ SettingsFlickable {
             Layout.fillWidth: true
             Layout.bottomMargin: Kirigami.Units.smallSpacing
             type: Kirigami.MessageType.Information
-            text: i18n("The global default applies to every layout. Each layout card can override it. Install more packs from the Shader Library page.")
+            text: i18nc("@info banner on the overlay shader assignments page", "The global default applies to every layout. Each layout card can override it. To install more packs, go to the Library's Shaders page.")
         }
 
         OverlayShaderAssignmentCard {
             Layout.fillWidth: true
             assignmentPath: ""
-            cardLabel: i18n("Global Default")
+            // Deliberately uncontexted and lower-case to match the identical
+            // string the coverage chip and the browser already use, so the
+            // three surfaces share one catalogue entry and its translations.
+            cardLabel: i18n("Global default")
             isBaseline: true
         }
 

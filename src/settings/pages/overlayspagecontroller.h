@@ -274,6 +274,13 @@ private:
     /// m_setsDirOverride when a test set one.
     QString overlaySetsDirectoryPath() const;
 
+    /// Whether @p effectId may be persisted into the tree. Bounds the length
+    /// and refuses path-shaped ids and ids no installed pack answers to, the
+    /// same gate AnimationsPageController applies. An empty id is the "None"
+    /// sentinel and is always acceptable; membership is skipped while the
+    /// registry is still empty so a pack mid-scan is not eaten.
+    bool acceptableShaderEffectId(const QString& effectId) const;
+
     ShaderSetStore* m_sets = nullptr;
     QString m_setsDirOverride;
 

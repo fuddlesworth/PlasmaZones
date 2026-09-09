@@ -42,6 +42,12 @@ bool overLongString(const QVariant& value)
 OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
 {
     OverlayShaderProfile out;
+    // Each field is bounded independently on purpose. Dropping the surviving
+    // parameters along with an over-long id would be a second, coupled rule for
+    // no gain: as a baseline an empty id is simply the unset default and the
+    // leftover values are inert, and if the id is later corrected by hand the
+    // parameters are still there. tests/unit/config/settings/
+    // test_settings_overlay_shader_tree.cpp pins this.
     if (profile.shaderId.size() <= kMaxStringChars)
         out.shaderId = profile.shaderId;
     for (auto it = profile.parameters.cbegin(); it != profile.parameters.cend(); ++it) {
@@ -74,11 +80,15 @@ OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
 /// second copy at each writer.
 ///
 /// Override paths are layout UUIDs in the braced @c QUuid::toString() form the
-/// project uses everywhere. The v8 sidecar lift already refuses a non-UUID key
-/// (the `autotile:<algoId>` entries the pre-v8 editor could stamp); this is
-/// the same refusal at every other door. A key the resolver can never match is
-/// junk in a shared key, and it surfaces on the assignments page as a nameless
-/// broken row rather than staying invisible.
+/// project uses everywhere. A non-UUID key is refused outright (the
+/// `autotile:<algoId>` entries the pre-v8 editor could stamp), and a key that
+/// parses but is spelled without braces is NORMALIZED rather than kept:
+/// @c QUuid::fromString accepts both forms while every reader asks with
+/// @c QUuid::toString(), so an unbraced key would sit in the tree matching
+/// nothing. Normalizing here covers the migration's writer too, which reaches
+/// @c config.json outside the store, because the value passes this validator on
+/// the first read back. Note a config holding BOTH spellings of one layout
+/// collapses to a single entry, the braced one winning by sort order.
 ///
 /// Deliberately does NOT judge a shaderId against the installed packs, or a
 /// parameter against the type its pack declares. Both would need a
@@ -100,9 +110,11 @@ QVariant sanitizeOverlayShaderTree(const QVariant& v)
     for (const QString& layoutId : layouts) {
         if (kept >= kMaxOverrides)
             break;
-        if (QUuid::fromString(layoutId).isNull())
+        const QUuid parsed = QUuid::fromString(layoutId);
+        if (parsed.isNull())
             continue;
-        out.setOverride(layoutId, boundedProfile(in.directOverride(layoutId)));
+        // Read on the original spelling, write on the canonical one.
+        out.setOverride(parsed.toString(), boundedProfile(in.directOverride(layoutId)));
         ++kept;
     }
     return QVariant(out.toJson().toVariantMap());
@@ -121,9 +133,10 @@ void appendOverlayShadersSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
     schema.groups[CD::overlaysGroup()] = {
         {CD::overlayShaderTreeKey(), CD::overlayShaderTree(), QMetaType::QVariantMap,
-         QStringLiteral("Zone-overlay shader assignments (global baseline plus per-layout overrides). The "
-                        "settings app's Snapping Shaders page writes this, so it is not meant to be edited "
-                        "by hand."),
+         QStringLiteral(
+             "Zone-overlay shader assignments (global baseline plus per-layout overrides). The "
+             "settings app's Appearance → Overlays → Layouts page writes this, so it is not meant to be edited "
+             "by hand."),
          sanitizeOverlayShaderTree},
     };
 }
