@@ -361,6 +361,68 @@ private Q_SLOTS:
         QVERIFY(!readJson(ConfigDefaults::layoutSettingsFilePath()).contains(layoutA()));
     }
 
+    /// The `!sidecarDirty` bail between the raw-bytes scan and the lift. The
+    /// scan only proves the key NAMES appear somewhere in the bytes, so a
+    /// sidecar that spells one as a VALUE reaches the parse, produces no
+    /// liftable entry and no strippable key, and must leave both files exactly
+    /// as they were. Without this slot the branch is unreachable in the suite
+    /// and deleting it (falling through to the lift and the unconditional
+    /// re-strip write) stays green.
+    void testLift_shaderKeyNamesAppearingOnlyAsValuesAreNotAStrip()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
+        // "shaderId" and "shaderParams" both appear in the bytes, neither as a key.
+        const QJsonObject sidecar{
+            {layoutA(),
+             QJsonObject{{QStringLiteral("note"), QStringLiteral("shaderId and shaderParams moved to the config")}}}};
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(), sidecar));
+        const QByteArray configBefore = readBytes(ConfigDefaults::configFilePath());
+        const QByteArray sidecarBefore = readBytes(ConfigDefaults::layoutSettingsFilePath());
+
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+
+        QCOMPARE(readBytes(ConfigDefaults::configFilePath()), configBefore);
+        QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), sidecarBefore);
+    }
+
+    /// The `params.isObject() && !params.toObject().isEmpty()` guard on the
+    /// lifted node, on both of its false arms. An empty object and a non-object
+    /// must both lift the shaderId with NO parameters key, and must still be
+    /// stripped from the sidecar. Neither arm has a fixture otherwise, so
+    /// dropping either half of the guard stays green.
+    void testLift_emptyAndNonObjectShaderParamsLiftWithoutParameters()
+    {
+        IsolatedConfigGuard guard;
+        const QString layoutC = QStringLiteral("{cccc1111-0000-0000-0000-000000000000}");
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(),
+                          QJsonObject{
+                              {layoutA(),
+                               QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("aurora")},
+                                           {QStringLiteral("shaderParams"), QJsonObject{}}}},
+                              {layoutC,
+                               QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")},
+                                           {QStringLiteral("shaderParams"), QStringLiteral("not-an-object")}}},
+                          }));
+
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+
+        const QJsonObject overrides =
+            treeFromConfig(readJson(ConfigDefaults::configFilePath())).value(QStringLiteral("overrides")).toObject();
+        const QJsonObject nodeA = overrides.value(layoutA()).toObject();
+        QCOMPARE(nodeA.value(QStringLiteral("shaderId")).toString(), QStringLiteral("aurora"));
+        QVERIFY2(!nodeA.contains(QStringLiteral("parameters")),
+                 "an empty shaderParams object was lifted as an empty parameters node");
+        const QJsonObject nodeC = overrides.value(layoutC).toObject();
+        QCOMPARE(nodeC.value(QStringLiteral("shaderId")).toString(), QStringLiteral("cosmic-flow"));
+        QVERIFY2(!nodeC.contains(QStringLiteral("parameters")), "a non-object shaderParams reached the lifted node");
+
+        const QJsonObject sidecar = readJson(ConfigDefaults::layoutSettingsFilePath());
+        QVERIFY(!sidecar.contains(layoutA()));
+        QVERIFY(!sidecar.contains(layoutC));
+    }
+
     void testLift_missingSidecarIsNoOpSuccess()
     {
         IsolatedConfigGuard guard;

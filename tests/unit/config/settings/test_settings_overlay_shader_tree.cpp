@@ -23,6 +23,7 @@
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
+#include <QUuid>
 
 #include "config/configdefaults.h"
 #include "config/configmigration.h"
@@ -41,7 +42,102 @@ class TestSettingsOverlayShaderTree : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Write @p tree straight into config.json under the overlays group,
+    /// bypassing Settings so the schema validator is exercised on READ against
+    /// bytes the typed setter would never have produced. Group names are
+    /// dot-paths that JsonBackend stores as NESTED objects, so the nesting is
+    /// built rather than the dotted name inserted flat.
+    [[nodiscard]] static bool writeRawTree(const QJsonObject& tree)
+    {
+        QJsonObject group{{ConfigDefaults::overlayShaderTreeKey(), tree}};
+        const QStringList segments = ConfigDefaults::overlaysGroup().split(QLatin1Char('.'));
+        for (auto it = segments.crbegin(); it != segments.crend(); ++it)
+            group = QJsonObject{{*it, group}};
+        QJsonObject root = group;
+        root.insert(ConfigKeys::versionKey(), ConfigSchemaVersion);
+        QFile f(ConfigDefaults::configFilePath());
+        if (!QDir().mkpath(QFileInfo(f).absolutePath()) || !f.open(QIODevice::WriteOnly))
+            return false;
+        const QByteArray bytes = QJsonDocument(root).toJson();
+        return f.write(bytes) == static_cast<qint64>(bytes.size());
+    }
+
 private Q_SLOTS:
+    /// The two counting bounds in the sanitizer. Neither has a fixture
+    /// otherwise, so raising either to INT_MAX leaves the suite green.
+    ///
+    /// Both are asserted as "fewer than offered, and more than none": pinning
+    /// the exact cap here would make the test a copy of the constant rather
+    /// than a check that a cap runs at all, and a guard that emptied the key
+    /// would pass a bare upper bound.
+    void testOverlayShaderTree_parameterAndOverrideCountsAreBounded()
+    {
+        IsolatedConfigGuard guard;
+
+        QJsonObject params;
+        for (int i = 0; i < 300; ++i)
+            params.insert(QStringLiteral("p%1").arg(i), i);
+        QJsonObject overrides;
+        for (int i = 0; i < 2000; ++i) {
+            overrides.insert(
+                QUuid::createUuid().toString(),
+                QJsonObject{{QLatin1String(OverlayShaderProfile::JsonFieldShaderId), QStringLiteral("neon-city")}});
+        }
+        QVERIFY(writeRawTree(QJsonObject{
+            {QLatin1String(OverlayShaderTree::JsonFieldBaseline),
+             QJsonObject{{QLatin1String(OverlayShaderProfile::JsonFieldShaderId), QStringLiteral("cosmic-flow")},
+                         {QLatin1String(OverlayShaderProfile::JsonFieldParameters), params}}},
+            {QLatin1String(OverlayShaderTree::JsonFieldOverrides), overrides}}));
+
+        Settings s;
+        const OverlayShaderTree read = s.overlayShaderTree();
+        const int keptParams = read.baseline().parameters.size();
+        const int keptOverrides = read.overriddenLayouts().size();
+        QVERIFY2(keptParams > 0 && keptParams < 300,
+                 qPrintable(QStringLiteral("parameter cap did not run: kept %1 of 300").arg(keptParams)));
+        QVERIFY2(keptOverrides > 0 && keptOverrides < 2000,
+                 qPrintable(QStringLiteral("override cap did not run: kept %1 of 2000").arg(keptOverrides)));
+        // The bound truncates; it does not corrupt what survives.
+        QCOMPARE(read.baseline().shaderId, QStringLiteral("cosmic-flow"));
+    }
+
+    /// The UUID arm of the sanitizer in BOTH directions: a key that parses but
+    /// is spelled without braces is NORMALIZED (not merely kept, and not
+    /// refused), and a key that does not parse at all is refused. The existing
+    /// sanitize slot covers only the refusal.
+    void testOverlayShaderTree_unbracedOverrideKeyIsNormalizedOnRead()
+    {
+        IsolatedConfigGuard guard;
+        const QString unbraced = QStringLiteral("ffff0000-0000-0000-0000-000000000000");
+        const QJsonObject node{{QLatin1String(OverlayShaderProfile::JsonFieldShaderId), QStringLiteral("aurora")}};
+        QVERIFY(writeRawTree(
+            QJsonObject{{QLatin1String(OverlayShaderTree::JsonFieldOverrides), QJsonObject{{unbraced, node}}}}));
+
+        Settings s;
+        const OverlayShaderTree read = s.overlayShaderTree();
+        QVERIFY2(read.hasOverride(QUuid::fromString(unbraced).toString()),
+                 "an unbraced override key was not normalized to the braced form every reader asks with");
+        QVERIFY2(!read.hasOverride(unbraced), "the unbraced spelling survived alongside the braced one");
+    }
+
+    /// OverlayShaderTree::fromJson's `!it.value().isObject()` guard on the
+    /// override map. A non-object node must be skipped, not admitted as a
+    /// default-constructed profile that would then shadow the baseline for
+    /// that layout. Nothing else in the suite feeds fromJson a non-object
+    /// node, so dropping the guard stays green.
+    void testOverlayShaderTree_nonObjectOverrideNodeIsSkippedNotShadowing()
+    {
+        OverlayShaderTree tree = OverlayShaderTree::fromJson(QJsonObject{
+            {QLatin1String(OverlayShaderTree::JsonFieldBaseline),
+             QJsonObject{{QLatin1String(OverlayShaderProfile::JsonFieldShaderId), QStringLiteral("cosmic-flow")}}},
+            {QLatin1String(OverlayShaderTree::JsonFieldOverrides),
+             QJsonObject{{kLayoutId, QJsonValue(QStringLiteral("not-an-object"))}}}});
+
+        QVERIFY2(!tree.hasOverride(kLayoutId), "a non-object override node became an override");
+        QCOMPARE(tree.resolve(kLayoutId).shaderId, QStringLiteral("cosmic-flow"));
+    }
+
     void testOverlayShaderTree_setRoundTripsThroughDisk()
     {
         IsolatedConfigGuard guard;
@@ -150,20 +246,7 @@ private Q_SLOTS:
         const QJsonObject tree{{QLatin1String(OverlayShaderTree::JsonFieldBaseline), baseline},
                                {QLatin1String(OverlayShaderTree::JsonFieldOverrides), overrides}};
 
-        // Group names are dot-paths that JsonBackend stores as NESTED objects,
-        // so build the nesting rather than inserting the dotted name flat.
-        QJsonObject group{{ConfigDefaults::overlayShaderTreeKey(), tree}};
-        const QStringList segments = ConfigDefaults::overlaysGroup().split(QLatin1Char('.'));
-        for (auto it = segments.crbegin(); it != segments.crend(); ++it)
-            group = QJsonObject{{*it, group}};
-        QJsonObject root = group;
-        root.insert(ConfigKeys::versionKey(), ConfigSchemaVersion);
-        QFile f(ConfigDefaults::configFilePath());
-        QVERIFY(QDir().mkpath(QFileInfo(f).absolutePath()));
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        const QByteArray bytes = QJsonDocument(root).toJson();
-        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
-        f.close();
+        QVERIFY(writeRawTree(tree));
 
         Settings s;
         const OverlayShaderTree read = s.overlayShaderTree();
@@ -190,13 +273,7 @@ private Q_SLOTS:
         // itself. Feed the RAW fixture back to disk instead and re-read with a
         // fresh Settings, so the validator genuinely runs a second time over
         // its own first output.
-        {
-            QFile again(ConfigDefaults::configFilePath());
-            QVERIFY(again.open(QIODevice::WriteOnly));
-            const QByteArray raw = QJsonDocument(root).toJson();
-            QCOMPARE(again.write(raw), static_cast<qint64>(raw.size()));
-            again.close();
-        }
+        QVERIFY(writeRawTree(tree));
         Settings second;
         QCOMPARE(second.overlayShaderTree(), read);
     }

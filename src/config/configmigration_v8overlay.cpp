@@ -176,7 +176,15 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
     const bool sidecarDirty = stripShaderKeys(strippedSidecar);
 
     if (!sidecarDirty) {
-        return true; // fully idempotent — nothing left to move
+        // An OPTIMIZATION, not a correctness gate, and worth naming as such so
+        // nobody reads it as one. `lifted` cannot be non-empty here (an entry
+        // carrying a shaderId is exactly an entry stripShaderKeys finds), so
+        // the fall-through would skip the config write, re-read the sidecar,
+        // get false from the second strip and return true anyway. This bails
+        // one file re-read earlier. It is reached whenever the raw-bytes scan
+        // sees the key NAMES somewhere the parse then finds no key for, which
+        // testLift_shaderKeyNamesAppearingOnlyAsValuesAreNotAStrip pins.
+        return true;
     }
 
     // Lift into the config root FIRST: the config copy is the authoritative
@@ -263,6 +271,14 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
     // post-v8 writes shader keys, so re-stripping the fresh copy is safe.
     // A failure here retries on the next run; the existing-entry-wins merge
     // above keeps that safe.
+    //
+    // NOT pinned by a test, and it cannot be from outside: discriminating the
+    // fresh read from the entry-time snapshot needs the sidecar to change
+    // BETWEEN them, inside one synchronous call, which a test can only reach
+    // through a seam this function does not have and should not grow. Replacing
+    // this block with `strippedSidecar` therefore stays green while
+    // reintroducing the clobber. Treat the block as load-bearing on the
+    // strength of the reasoning above, not on the strength of the suite.
     {
         QFile sf(sidecarPath);
         if (!sf.open(QIODevice::ReadOnly)) {
