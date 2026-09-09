@@ -240,14 +240,28 @@ void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layout
     if (m_layoutManager) {
         // Update visible zone selector and overlay windows when layout changes.
         // Hidden windows are skipped: showZoneSelector()/show() refresh before showing.
+        // Both arms recreate before refreshing, for the same reason the
+        // layoutModified path below does: the new layout may resolve to a
+        // different overlay TYPE. updateOverlayWindow's two arms both require
+        // the slot to already be a shader slot, so a switch from a no-shader
+        // layout to a shader one matches neither and the overlay keeps drawing
+        // rectangles, and a switch the other way clears the shader properties
+        // without ever returning the slot to rectangle mode. The recreate is
+        // what flips the slot; it self-guards when no overlay window exists.
         connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
                     observeLayoutForLiveEdits(layout);
+                    if (m_visible) {
+                        recreateOverlayWindowsOnTypeMismatch();
+                    }
                     refreshVisibleWindows();
                 });
         connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this,
                 [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                     observeLayoutForLiveEdits(layout);
+                    if (m_visible) {
+                        recreateOverlayWindowsOnTypeMismatch();
+                    }
                     refreshVisibleWindows();
                 });
         // Observe newly-created layouts so edits reach the overlay before
