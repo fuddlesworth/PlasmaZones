@@ -338,8 +338,12 @@ bool ShaderSetStore::applySet(const QString& name)
         // user they picked the wrong page when they did not sends them looking
         // in the wrong place entirely.
         Q_EMIT toastRequested(
+            // Domain-neutral wording: this store is shared by motion sets
+            // (events), decoration sets (surfaces) and overlay sets (layouts),
+            // so naming any one of them tells two thirds of the callers to
+            // look for something their page does not have.
             PhosphorI18n::tr("“%1” could not be used here. It may be for another page, or it may need packs or "
-                             "events this version does not have.")
+                             "entries this version does not have.")
                 .arg(name));
         return false;
     }
@@ -654,7 +658,7 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     if (!m_config.validate || !m_config.validate(root)) {
         Q_EMIT toastRequested(
             PhosphorI18n::tr("That set could not be imported here. It may be for another page, or it may need packs "
-                             "or events this version does not have."));
+                             "or entries this version does not have."));
         return false;
     }
 

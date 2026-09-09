@@ -780,7 +780,7 @@ private Q_SLOTS:
         QCOMPARE(toastSpy.count(), 1);
         QCOMPARE(toastSpy.first().first().toString(),
                  PhosphorI18n::tr("That set could not be imported here. It may be for another page, or it may need "
-                                  "packs or events this version does not have."));
+                                  "packs or entries this version does not have."));
 
         // The KEY is refused, not just a non-empty value: an empty `{}` is the
         // same foreign envelope, and tolerating it would let the two domains
