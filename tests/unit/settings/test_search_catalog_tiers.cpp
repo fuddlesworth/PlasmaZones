@@ -729,6 +729,29 @@ private Q_SLOTS:
             registered.size() > 200,
             qPrintable(
                 QStringLiteral("catalogue parse yielded only %1 unique (page, anchor) pairs").arg(registered.size())));
+        // The intersect below is what makes "a catalogue entry may legitimately
+        // not exist for a given anchor" safe, but it is also a silent drop: an
+        // advanced-gated QML anchor the catalogue forgot entirely disappears
+        // from `missing` instead of being reported. Pin the drop set so the
+        // exemption is a decision on the record rather than a side effect, and
+        // guard it in both directions so it cannot rot.
+        static const QSet<QString> kAnchorsWithNoCatalogueEntry = {};
+        const QSet<QString> unregisteredAdvanced = expected - registered;
+        for (const QString& k : unregisteredAdvanced) {
+            if (!kAnchorsWithNoCatalogueEntry.contains(k)) {
+                qWarning() << "advanced in QML but the catalogue registers no entry for it:" << k;
+            }
+        }
+        QVERIFY2(
+            (unregisteredAdvanced - kAnchorsWithNoCatalogueEntry).isEmpty(),
+            qPrintable(QStringLiteral("%1 advanced-gated QML anchors have no catalogue entry at all — add the entry, "
+                                      "or list the anchor in kAnchorsWithNoCatalogueEntry with a reason")
+                           .arg((unregisteredAdvanced - kAnchorsWithNoCatalogueEntry).size())));
+        for (const QString& k : kAnchorsWithNoCatalogueEntry) {
+            QVERIFY2(!registered.contains(k),
+                     qPrintable(QStringLiteral("stale exemption: %1 is registered in the catalogue now").arg(k)));
+        }
+
         expected.intersect(registered);
 
         const QSet<QString> missing = expected - flagged;

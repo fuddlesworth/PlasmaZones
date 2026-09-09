@@ -1,20 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned), CEILING 1250 LINES: this is one Q_OBJECT
-// class declaration, and moc needs the whole class in a single header, so the
-// only available "split" would fragment one class across several headers and
-// cost every reader the hunt for where a property lives (the settings.h and
-// settingscontroller.h precedent). The bulk here is the Q_PROPERTY /
-// Q_INVOKABLE surface QML binds to, which cannot move without rewriting every
-// binding in src/editor/qml. The IMPLEMENTATION is already split by concern
-// under src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and
-// siblings), which is where the real per-concern boundary is.
+// This header carried a sanctioned 1250-line exception while it was over the
+// project ceiling. Removing the shader-preview surface brought it back under,
+// so the ordinary CLAUDE.md limit applies again and no exception is in force.
 //
-// The ceiling is a budget, not a description of where the file sits: a new
-// declaration that would pass it has to buy its room by retiring another. Long
-// rationale belongs on the definition in the matching controller/*.cpp when it
-// will not fit here.
+// It stays a single Q_OBJECT declaration on purpose: moc needs the whole class
+// in one header, and the bulk here is the Q_PROPERTY / Q_INVOKABLE surface QML
+// binds to, which cannot move without rewriting every binding in
+// src/editor/qml. The implementation is already split by concern under
+// src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and siblings),
+// which is where the real per-concern boundary is. Long rationale belongs on
+// the definition in the matching controller/*.cpp when it will not fit here.
 
 #pragma once
 

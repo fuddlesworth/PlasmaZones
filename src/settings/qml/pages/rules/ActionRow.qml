@@ -121,12 +121,7 @@ ColumnLayout {
         if (!overlayShadersController)
             return [];
 
-        var effects = overlayShadersController.availableShaderEffects() || [];
-        for (var i = 0; i < effects.length; ++i) {
-            if (effects[i].id === effectId)
-                return effects[i].parameters || [];
-        }
-        return [];
+        return overlayShadersController.shaderParameters(effectId);
     }
     /// The active shader-uniform schema for whichever shader-override action is
     /// being edited (animation or overlay) — drives the inline
