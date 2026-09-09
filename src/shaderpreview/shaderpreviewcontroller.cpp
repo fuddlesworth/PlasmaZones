@@ -489,11 +489,9 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
         // A preset file is a system boundary: its keys are whatever was in the
         // JSON, and nothing downstream checks a parameter id against what the
         // shader declares. Keep only the declared ids, so a hand-edited or
-        // stale preset cannot push unknown keys into the live param map. Same
-        // id-filtering EditorController::stripStaleShaderParams does against
-        // its cached parameter list; that method is not reachable from here
-        // (it is an editor member reading m_cachedShaderParameters), so the
-        // logic is mirrored against this shader's own metadata instead.
+        // stale preset cannot push unknown keys into the live param map. The
+        // filter runs against this shader's own declared metadata, which is
+        // the only description of the valid ids available here.
         const QVariantList declared = info.value(QStringLiteral("parameters")).toList();
         QSet<QString> validIds;
         for (const QVariant& paramVar : declared) {

@@ -10,7 +10,6 @@
 #include "core/utils/dbusvariantutils.h"
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include "core/platform/logging.h"
-#include "core/interfaces/shaderregistry.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>

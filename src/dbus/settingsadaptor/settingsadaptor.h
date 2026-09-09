@@ -22,7 +22,6 @@ namespace PlasmaZones {
 
 class ISettings;
 class Settings; // Forward declaration for concrete type
-class ShaderRegistry;
 
 /**
  * @brief D-Bus adaptor for settings operations
@@ -49,10 +48,6 @@ class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor, public Q
 
 public:
     /// @param settings Settings interface (required).
-    /// @param shaderRegistry Per-process shader registry. Borrowed; must
-    ///        outlive the adaptor. Optional in tests / unit fixtures —
-    ///        when null, every shader-related method returns an empty
-    ///        result and the on-disk hot-reload connection is skipped.
     /// @param profileRegistry Per-process motion-profile registry holding
     ///        the merged per-event `PhosphorAnimation::Profile` set (the
     ///        same registry the daemon's SurfaceAnimator path resolves
@@ -65,7 +60,7 @@ public:
                              QObject* parent = nullptr);
     ~SettingsAdaptor() override;
 
-    /// Null the borrowed ISettings / ShaderRegistry pointers, sever their
+    /// Null the borrowed ISettings and profile-registry pointers, sever their
     /// signal wiring, and flush any pending debounced save. Called from
     /// Daemon::stop() before the owning unique_ptr members destroy the
     /// backing objects — after detach() the adaptor's D-Bus slots hit the
