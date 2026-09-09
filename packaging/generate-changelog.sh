@@ -254,7 +254,7 @@ generate_notes() {
 # Without a revision bump apt/dnf/zypper see the same NEVR and offer no
 # upgrade, so the rebuild never reaches anyone. Mirrors Arch's pkgrel.
 REVISION="${3:-1}"
-if [[ ! "$REVISION" =~ ^[0-9]+$ ]]; then
+if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: revision must be a positive integer, got: $REVISION" >&2
     exit 1
 fi
