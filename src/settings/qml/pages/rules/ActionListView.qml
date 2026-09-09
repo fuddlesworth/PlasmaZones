@@ -173,7 +173,7 @@ ColumnLayout {
             // pickers all show it as None.
             return i18nc("@item rule action layout value, explicitly none at all", "None");
         }
-        if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate") {
+        if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate" || kind === "overlayLayout") {
             // Layouts are serialised via `toVariantMap(LayoutPreview)` which
             // stamps the friendly title under `displayName`. The previous
             // `.name` read returned undefined, leaving the read-only rule
@@ -183,9 +183,12 @@ ColumnLayout {
             // layout, etc.) so the user can SEE what the rule contains
             // rather than an empty pill.
             var layouts = root.appSettings && root.appSettings.layouts ? root.appSettings.layouts : [];
-            // Snapping layouts and scrolling templates are stored by raw
-            // braced UUID, which keys the layouts list directly (template
-            // rows ride the same list flagged isScrollingTemplate).
+            // Snapping layouts, scrolling templates and the overlay shader
+            // tree's layout nodes are all stored by raw braced UUID, which
+            // keys the layouts list directly (template rows ride the same
+            // list flagged isScrollingTemplate). The overlay node's EMPTY
+            // value never reaches here: it is the tree's global default, and
+            // the descriptor's emptyLabel named it above.
             // Tiling-algorithm actions store the BARE registry token
             // ("bsp"), while the layouts list keys autotile entries as
             // "autotile:<token>" — so prefix before matching, mirroring the C++

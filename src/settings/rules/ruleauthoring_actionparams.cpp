@@ -332,6 +332,13 @@ QString paramLabel(const QString& type, const QString& key)
     }
     // Context overlay-property overrides. These come BEFORE the generic
     // EffectId / Value fallbacks so they win for the overlay actions.
+    if (type == ActionType::OverrideOverlayShader && key == ActionParam::LayoutId) {
+        // The OverlayShaderTree node the rule overrides, named the way the
+        // Layouts page names its cards. Not "Snapping layout": that label is
+        // SetSnappingLayout's, where the value ASSIGNS a layout, and here it
+        // only picks which layout's shader to change.
+        return PhosphorI18n::tr("Layout");
+    }
     if (type == ActionType::OverrideOverlayShader && key == ActionParam::EffectId) {
         return PhosphorI18n::tr("Overlay shader");
     }
@@ -406,6 +413,11 @@ QString paramHint(const QString& type, const QString& key)
             "Zone names like “Editor, Terminal”, found in whichever layout is active. "
             "Give numbers, names, or both.");
     }
+    if (type == ActionType::OverrideOverlayShader && key == ActionParam::LayoutId) {
+        return PhosphorI18n::tr(
+            "Global default changes the shader for every layout in the matched context. "
+            "Pick a layout to change only that layout, and only while it is the active one there.");
+    }
     return {};
 }
 
@@ -430,6 +442,20 @@ QString paramEmptyValueLabel(const QString& typeWire, const QString& key)
     if (typeWire == QString(PhosphorRules::ActionType::SetTabIndicatorFontFamily)
         && key == QString(PhosphorRules::ActionParam::Value)) {
         return PhosphorI18n::tr("System font");
+    }
+    if (typeWire == QString(PhosphorRules::ActionType::OverrideOverlayShader)) {
+        // Both of this action's empty values are real choices, mirroring the
+        // OverlayShaderTree the rule overrides: an empty node is the tree's
+        // global default, and an empty shader is its "no shader" suppression
+        // node. The wording is the assignments page's own for the same two
+        // states, uncontexted / contexted exactly as it spells them, so each
+        // shares that page's catalogue entry and translations.
+        if (key == QString(PhosphorRules::ActionParam::LayoutId)) {
+            return PhosphorI18n::tr("Global default");
+        }
+        if (key == QString(PhosphorRules::ActionParam::EffectId)) {
+            return PhosphorI18n::tr("None", "@item no overlay shader assigned");
+        }
     }
     return {};
 }

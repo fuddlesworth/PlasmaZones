@@ -143,10 +143,17 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
-/// Context-domain overlay-property overrides. A matched context rule
-/// (screen / desktop / activity) overrides the active layout's overlay shader
-/// or style (display mode: zone rectangles vs layout preview) for that context's
-/// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
+/// Context-domain override of one node of the zone-overlay shader tree, the
+/// overlay analogue of OverrideAnimationShader. Carries the node
+/// (`ActionParam::LayoutId`: a layout UUID, or absent / empty for the tree's
+/// global default), the shader (`ActionParam::EffectId`) and optional uniform
+/// overrides (`ActionParam::Params`). For the matched context (screen /
+/// desktop / activity) the rule replaces what the tree would have resolved at
+/// that node: a layout node applies only while that layout is the context's
+/// active one, the global node applies to every layout there. An engaged EMPTY
+/// effectId is the "no shader" sentinel, blocking the tree's answer for that
+/// node just as the animation action's does. Resolved daemon-side via
+/// `LayoutRegistry::resolveContextOverlay`, slot `overlay-shader:<node>`.
 inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
 inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
 /// Context-domain overrides of the active layout's zone-overlay APPEARANCE —

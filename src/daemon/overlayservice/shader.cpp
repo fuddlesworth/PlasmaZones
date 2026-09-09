@@ -78,7 +78,12 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
 {
     // Rule override wins both id and params: an engaged rule id with no
     // params means "that shader at its defaults", never "that shader with
-    // the tree's params" (see the pre-tree semantics this preserves).
+    // the tree's params" (see the pre-tree semantics this preserves). The
+    // registry has already picked the rule for this layout's tree node (or
+    // the global node) in resolveContextOverlay, so by the time it arrives
+    // here the override IS the answer for this layout. An engaged EMPTY id is
+    // the rule's "no shader" sentinel and resolves to no shader below, the
+    // same way an empty tree override suppresses the baseline.
     if (overlayOverride.shaderId) {
         return {*overlayOverride.shaderId, overlayOverride.shaderParams};
     }

@@ -1020,6 +1020,45 @@ QtObject {
     // Overlay-shader picker for OverrideOverlayShader actions — the zone
     // overlay shader registry (Appearance → Overlays), distinct from the
     // animation shaders above. Wire value is the shader id.
+    // The OverlayShaderTree NODE an OverrideOverlayShader rule targets — the
+    // overlay twin of _animationEventEditor, where the animation rule picks the
+    // event node it overrides. The rows are the assignments page's own cards
+    // (assignableLayouts: every layout, plus any layout an override still
+    // names after the layout was deleted, labelled the way that page labels
+    // it), and the "Global default" entry is the tree's baseline node, stored
+    // as the empty id exactly as the page addresses it. The wording is the
+    // page's uncontexted string so the two share one catalogue entry.
+    property Component _overlayLayoutEditor: Component {
+        PZCommon.CategoryMenuButton {
+            readonly property var _param: parent.modelData
+
+            items: {
+                var controller = row.appSettings ? row.appSettings.overlaysPage : null;
+                if (!controller)
+                    return [];
+
+                var rows = controller.assignableLayouts() || [];
+                var out = [];
+                for (var i = 0; i < rows.length; ++i) {
+                    var entry = rows[i];
+                    out.push({
+                        "id": entry.id,
+                        "name": entry.missing ? controller.absentLayoutLabel(entry.id) : (entry.name || i18n("Unnamed Layout"))
+                    });
+                }
+                return out;
+            }
+            includeNoneEntry: true
+            noneId: ""
+            noneText: i18n("Global default")
+            currentId: row.action[_param.key] || ""
+            Accessible.description: _param.label
+            onSelected: function (id) {
+                row.actionEdited(row._withParam(_param.key, id));
+            }
+        }
+    }
+
     property Component _overlayShaderEditor: Component {
         // Cascading category menu of the zone overlay shaders, grouped by
         // category. Same registry the Appearance → Overlays pages browse and
@@ -1028,6 +1067,12 @@ QtObject {
         // dim/incompatible state here (overlay shaders are event-agnostic,
         // unlike the per-event animation shaders). Wire value is the shader id;
         // an unknown/uninstalled id renders as "(missing: <id>)".
+        //
+        // "None" is a real entry, not a placeholder: an empty shader on the
+        // wire is the rule's "no shader" sentinel, the same suppression the
+        // tree's own override card offers under the same word (and the same
+        // context, so the two share a catalogue entry). Showing it for the
+        // empty state says what saving the row as it stands would do.
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
 
@@ -1035,8 +1080,10 @@ QtObject {
                 var controller = row.appSettings ? row.appSettings.overlaysPage : null;
                 return controller ? controller.availableShaderEffects() : [];
             }
+            includeNoneEntry: true
+            noneId: ""
+            noneText: i18nc("@item no overlay shader assigned", "None")
             currentId: row.action[_param.key] || ""
-            placeholderText: i18n("Choose an overlay shader…")
             Accessible.description: _param.label
             onSelected: function (id) {
                 row.actionEdited(row._withParam(_param.key, id));

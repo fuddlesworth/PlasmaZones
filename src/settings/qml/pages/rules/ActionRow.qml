@@ -502,6 +502,9 @@ ColumnLayout {
                     if (modelData.kind === "decorationChain")
                         return paramEditors._decorationChainEditor;
 
+                    if (modelData.kind === "overlayLayout")
+                        return paramEditors._overlayLayoutEditor;
+
                     if (modelData.kind === "overlayShader")
                         return paramEditors._overlayShaderEditor;
 

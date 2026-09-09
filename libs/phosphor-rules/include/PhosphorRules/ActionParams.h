@@ -68,6 +68,12 @@ inline constexpr QLatin1StringView Mode{"mode"};
 // resolve in `LayoutRegistry::scrollingTemplateForContext`, whose template-store
 // lookup degrades an unknown id to "no template" and leaves the engine on its
 // compiled defaults.
+//
+// OverrideOverlayShader carries it too, as the OverlayShaderTree NODE the
+// rule overrides: a manual-layout uuid for that layout's node, or absent /
+// empty for the tree's global default. Its consumer is the slot itself
+// (`overlay-shader:<node>`), so an id naming no layout simply fills a slot the
+// resolver never reads.
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
