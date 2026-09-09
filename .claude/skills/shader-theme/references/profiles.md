@@ -219,10 +219,10 @@ and a decoration set has always carried a whole surface. So the normal route is 
 and no file surgery:
 
 1. Write the set files to `~/.local/share/plasmazones/{motionsets,decorationsets,overlaysets}/`.
-2. Settings → Appearance → Animations → Library → Motion Sets → Apply, Settings → Appearance →
-   Decorations → Library → Decoration Sets → Apply, and Settings → Appearance → Overlays →
-   Library → Overlay Sets → Apply. Apply is a pending settings change in each of the three, so it needs the page's
-   Apply button as well.
+2. Settings → Appearance → Animations → Library → Sets → Apply, Settings → Appearance →
+   Decorations → Library → Sets → Apply, and Settings → Appearance → Overlays → Library →
+   Sets → Apply. Apply is a pending settings change in each of the three, so it needs the
+   page's Apply button as well.
 
 Since schema v8 the zone overlay shader is a set like the other two. It is no longer a
 per-layout property of the layout file: the assignment lives in `Overlays.OverlayShaderTree`

@@ -14,9 +14,10 @@
 
 namespace PlasmaZones {
 
-/// Persistence + CRUD for shader-set JSON files, shared by the two set
+/// Persistence + CRUD for shader-set JSON files, shared by the three set
 /// domains (motion sets over the animation motion profile tree, decoration
-/// sets over the surface profile tree). One instance per domain, hosted as a child
+/// sets over the surface profile tree, overlay sets over the zone-overlay
+/// shader assignments). One instance per domain, hosted as a child
 /// QObject of that domain's page controller and handed to QML as the
 /// `bridge` of ShaderSetsPage.
 ///

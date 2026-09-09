@@ -34,7 +34,8 @@ ExpandableRowDelegate {
     required property var bridge
     /// token (e.g. "window") → translated chip label.
     required property var coverageLabel
-    /// count → translated "%n Surfaces" / "%n Overrides" badge label.
+    /// count → translated "%n Surfaces" / "%n Overrides" / "%n Assignments"
+    /// badge label.
     required property var coverageCountLabel
     /// name → translated apply-confirmation subtitle.
     required property var applySubtitleFor

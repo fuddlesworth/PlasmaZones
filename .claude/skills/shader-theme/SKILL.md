@@ -194,9 +194,9 @@ Lead with what exists and whether it is verified. Then:
 - a table of every pack (id, family, class, event paths it is assigned to)
 - the curves and their parameters
 - where the three set files are and how to apply them (Settings → Appearance → Decorations →
-  Library → Decoration Sets, Settings → Appearance → Animations → Library → Motion Sets, and
-  Settings → Appearance → Overlays → Library → Overlay Sets, each followed by the page's Apply;
-  a format-2 motion set carries the packs too, so there is no separate step for them)
+  Library → Sets, Settings → Appearance → Animations → Library → Sets, and Settings →
+  Appearance → Overlays → Library → Sets, each followed by the page's Apply; a format-2 motion
+  set carries the packs too, so there is no separate step for them)
 - links to rendered evidence, the visual verdict and any unresolved visual findings
 - every gate with its real exit status, and anything left unverified (a live session smoke
   test you could not run, glslang missing, tests not built)
