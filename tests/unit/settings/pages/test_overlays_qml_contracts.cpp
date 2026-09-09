@@ -76,8 +76,12 @@ private:
     }
 
 private Q_SLOTS:
-    /// Every `bridge.<name>` the three overlays QML files call must exist on
+    /// Every `bridge.<name>` the overlays QML calls must exist on
     /// OverlaysPageController. This is what catches a half-finished rename.
+    /// Two files, not the whole directory: the appearance and library pages
+    /// bind their bridge straight through to a shared component and make no
+    /// `bridge.<name>` calls of their own, and the sets page reaches its
+    /// store through setsBridge, which the C++ suite covers.
     void everyBridgeCallFromTheOverlaysQmlIsReachable()
     {
         const QStringList files{
@@ -197,7 +201,11 @@ private Q_SLOTS:
         // correctness bug rather than a performance one: a card with no
         // override resolves THROUGH the baseline, so a baseline change moves
         // what it displays.
-        QVERIFY2(src.contains(QStringLiteral("!root._hasOverride")),
+        // Anchored to the whole expression, not just "!root._hasOverride":
+        // that substring also appears in the pending-write drop higher up, so
+        // matching it alone was satisfied by an unrelated line and the arm
+        // this slot exists for could be deleted with the suite still green.
+        QVERIFY2(src.contains(QStringLiteral("path.length === 0 && !root._hasOverride")),
                  "the card no longer refreshes on a baseline change while inheriting — an inheriting "
                  "card would keep showing the old resolved shader");
     }

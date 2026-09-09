@@ -66,10 +66,23 @@ private:
     std::unique_ptr<OverlaysPageController> m_controller;
     QString m_layoutA;
 
-    void makeFixture()
+    /// [[nodiscard]] bool rather than QVERIFY-in-void: a QVERIFY failure in a
+    /// void helper returns from the HELPER only, so the calling slot would
+    /// carry on and dereference the members this never got round to building,
+    /// crashing the suite instead of failing it. Same conversion the sibling
+    /// relocation tests already made. Call it as QVERIFY(makeFixture()).
+    [[nodiscard]] bool makeFixture()
     {
+        // Tear the previous controller down FIRST. It borrows the settings and
+        // the layout registry, and the reassignments below destroy those, so
+        // reassigning it last would leave it outliving everything it holds —
+        // the inverse of the ownership order the member comment above declares.
+        m_controller.reset();
+
         m_setsDir = std::make_unique<QTemporaryDir>();
-        QVERIFY(m_setsDir->isValid());
+        if (!m_setsDir->isValid()) {
+            return false;
+        }
         m_settings = std::make_unique<StubSettings>();
         m_layouts.reset(TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         auto* layout = new PhosphorZones::Layout(m_layouts.get());
@@ -81,6 +94,7 @@ private:
         // ctest runs suites in parallel against one qttest data dir, so the
         // store must not touch the shared location.
         m_controller->setSetsDirOverride(m_setsDir->path());
+        return true;
     }
 
     ShaderSetStore* sets() const
@@ -92,7 +106,7 @@ private Q_SLOTS:
     void testRoundTrip_globalAndOverrideSurviveSaveAndApply()
     {
         IsolatedConfigGuard guard;
-        makeFixture();
+        QVERIFY(makeFixture());
 
         OverlayShaderTree tree;
         tree.setBaseline({QStringLiteral("cosmic-flow"), {{QStringLiteral("speed"), 1.5}}});
@@ -119,7 +133,7 @@ private Q_SLOTS:
     void testSuppressingOverrideIsCapturedNotPrunedAsEmpty()
     {
         IsolatedConfigGuard guard;
-        makeFixture();
+        QVERIFY(makeFixture());
 
         OverlayShaderTree tree;
         tree.setBaseline({QStringLiteral("cosmic-flow"), {}});
@@ -145,7 +159,7 @@ private Q_SLOTS:
     void testAbsentLayoutIsSkippedNotRefused()
     {
         IsolatedConfigGuard guard;
-        makeFixture();
+        QVERIFY(makeFixture());
 
         OverlayShaderTree tree;
         tree.setBaseline({QStringLiteral("cosmic-flow"), {}});
@@ -167,7 +181,7 @@ private Q_SLOTS:
     void testActiveBadgeIgnoresEntriesApplyCannotWrite()
     {
         IsolatedConfigGuard guard;
-        makeFixture();
+        QVERIFY(makeFixture());
 
         OverlayShaderTree tree;
         tree.setBaseline({QStringLiteral("cosmic-flow"), {}});
@@ -191,7 +205,7 @@ private Q_SLOTS:
     void testSetOfOnlyAbsentLayoutsIsNeverActive()
     {
         IsolatedConfigGuard guard;
-        makeFixture();
+        QVERIFY(makeFixture());
 
         OverlayShaderTree tree;
         tree.setOverride(m_layoutA, {QStringLiteral("neon-city"), {}});
@@ -200,7 +214,9 @@ private Q_SLOTS:
 
         // Remove the only layout the set covers: every entry is now
         // inapplicable, and the set describes nothing that is live here.
-        m_layouts->removeLayout(m_layouts->layoutById(QUuid::fromString(m_layoutA)));
+        auto* toRemove = m_layouts->layoutById(QUuid::fromString(m_layoutA));
+        QVERIFY2(toRemove, "fixture layout vanished before the removal this slot depends on");
+        m_layouts->removeLayout(toRemove);
 
         const QVariantMap row = rowFor(sets(), kSetName);
         QVERIFY(!row.isEmpty());
@@ -214,7 +230,7 @@ private Q_SLOTS:
     void testApplyIsASingleSettingsWrite()
     {
         IsolatedConfigGuard guard;
-        makeFixture();
+        QVERIFY(makeFixture());
 
         OverlayShaderTree tree;
         tree.setBaseline({QStringLiteral("cosmic-flow"), {}});

@@ -183,8 +183,22 @@ private Q_SLOTS:
 
         // Idempotent: the validator's own output must survive a second pass,
         // which is the contract KeyDef::validator states.
-        s.setOverlayShaderTree(read);
-        QCOMPARE(s.overlayShaderTree(), read);
+        //
+        // Re-writing `read` through the setter would prove nothing — it is
+        // what the getter just returned, so the setter's value-equality gate
+        // returns before writing and the comparison is a value against
+        // itself. Feed the RAW fixture back to disk instead and re-read with a
+        // fresh Settings, so the validator genuinely runs a second time over
+        // its own first output.
+        {
+            QFile again(ConfigDefaults::configFilePath());
+            QVERIFY(again.open(QIODevice::WriteOnly));
+            const QByteArray raw = QJsonDocument(root).toJson();
+            QCOMPARE(again.write(raw), static_cast<qint64>(raw.size()));
+            again.close();
+        }
+        Settings second;
+        QCOMPARE(second.overlayShaderTree(), read);
     }
 };
 
