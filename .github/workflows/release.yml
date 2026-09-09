@@ -104,7 +104,7 @@ jobs:
           # Digits only, for the same script-injection reason the tag is
           # gated above.
           PKGREL="${INPUT_PKGREL:-1}"
-          if [[ ! "$PKGREL" =~ ^[0-9]+$ ]]; then
+          if [[ ! "$PKGREL" =~ ^[1-9][0-9]*$ ]]; then
               echo "Error: PKGREL '$PKGREL' is not a positive integer" >&2
               exit 1
           fi
@@ -886,14 +886,31 @@ jobs:
       # probes each channel's current KWin, and dispatches a rebuild (pkgrel +
       # 1) when any of them has moved. pkgrel is recorded so the watcher
       # knows what to bump from. Every channel must be present: a missing one
-      # would silently drop that distro from the watch.
+      # would silently drop that distro from the watch. And every baseline a
+      # build job uploaded must be in the list: a channel that is probed but
+      # never recorded reads as moved on every run, so the watcher would
+      # rebuild it every six hours without ever settling.
       - name: Assemble KWin baseline manifest
         env:
           VERSION: ${{ needs.version.outputs.version }}
           PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          for channel in arch debian-unstable fedora-44 opensuse-tumbleweed; do
+          shopt -s nullglob
+          CHANNELS=(arch debian-unstable fedora-44 opensuse-tumbleweed)
+          for dir in artifacts/kwin-baseline-*/; do
+              found="${dir#artifacts/kwin-baseline-}"
+              found="${found%/}"
+              known=false
+              for channel in "${CHANNELS[@]}"; do
+                  [[ "$channel" == "$found" ]] && known=true
+              done
+              if [[ "$known" != true ]]; then
+                  echo "Error: a build job recorded a KWin baseline for '$found', which this step does not merge. Add it to CHANNELS here and to the probe matrix in kwin-rebuild-watch.yml." >&2
+                  exit 1
+              fi
+          done
+          for channel in "${CHANNELS[@]}"; do
               f="artifacts/kwin-baseline-$channel/$channel"
               if [[ ! -s "$f" ]]; then
                   echo "Error: no KWin baseline recorded for channel '$channel'" >&2
