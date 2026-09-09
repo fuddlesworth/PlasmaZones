@@ -113,10 +113,10 @@ SettingsFlickable {
         // through here rather than read off the context directly so every
         // editor body keeps to the injected surface.
         readonly property int animationDuration: settingsController.settings.animationDuration
-        // `SnappingShadersPageController` — exposes `availableShaderEffects()`
+        // `OverlaysPageController` — exposes `availableShaderEffects()`
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
-        readonly property var snappingShadersPage: settingsController.snappingShadersPage
+        readonly property var overlaysPage: settingsController.overlaysPage
         // `DecorationPageController` — exposes `availableShaderEffects()` (the
         // surface-pack catalog) for the decorationChain editor in ActionRow
         // (OverrideDecorationChain) and its read-only name resolution.

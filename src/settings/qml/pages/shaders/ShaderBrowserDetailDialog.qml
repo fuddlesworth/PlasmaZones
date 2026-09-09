@@ -87,6 +87,19 @@ Kirigami.Dialog {
     readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
     readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
     readonly property bool _animationPreview: _livePreview && _previewKind === "animation"
+
+    // The wallpaper the zone pane draws behind its zones, as a file:// URL.
+    // Resolved once per dialog rather than per frame — the path does not change
+    // while the dialog is open, and ShaderRegistry caches the decode anyway.
+    // Empty when the zone pane is not the active one or the path cannot be
+    // resolved, which leaves the pane on its black ground.
+    readonly property string _zoneWallpaperUrl: {
+        if (!_zonePreview || !previewController)
+            return "";
+        var p = previewController.wallpaperPath() || "";
+        return p.length > 0 ? "file://" + _encodeFilePath(p) : "";
+    }
+
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -814,13 +827,37 @@ Kirigami.Dialog {
                     anchors.margins: Kirigami.Units.smallSpacing
                     visible: root._zonePreview
                     radius: Kirigami.Units.smallSpacing
-                    // Intentionally a true-black backdrop (not a theme color): the
-                    // shader renders over this, and a tinted background would
-                    // contaminate the previewed colors.
+                    // True black, not a theme colour: it is what shows while the
+                    // wallpaper decodes and where it cannot be resolved, and a
+                    // tinted ground would contaminate the previewed colours.
                     color: "black"
                     border.width: 1
                     border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                     clip: true
+
+                    // The user's wallpaper behind the zones, matching the
+                    // decoration and animation panes. Every overlay pack is
+                    // translucent somewhere — that is what an overlay is — so
+                    // over flat black they all read as far more opaque than they
+                    // will be on a real desktop, and a pack whose whole point is
+                    // what shows through cannot be judged at all.
+                    //
+                    // Distinct from the useWallpaper SAMPLER feed below: this is
+                    // the backdrop, and it is drawn for every pack, not only the
+                    // ones that sample it.
+                    Image {
+                        anchors.fill: parent
+                        source: root._zoneWallpaperUrl
+                        visible: source.toString().length > 0
+                        fillMode: Image.PreserveAspectCrop
+                        // A desktop wallpaper is far larger than this pane, and
+                        // the decode is cached by ShaderRegistry, so ask for the
+                        // pane's size rather than holding the full image.
+                        sourceSize.width: Math.max(1, Math.round(parent.width))
+                        sourceSize.height: Math.max(1, Math.round(parent.height))
+                        asynchronous: true
+                        cache: true
+                    }
 
                     // Zones the preview renders over — shared by the renderer,
                     // the label texture, and the hover hit-test. Recomputed on
@@ -958,8 +995,8 @@ Kirigami.Dialog {
         }
     }
 
-    // Color picker for color params (child of the dialog root, mirroring the
-    // editor's ShaderSettingsDialog). Outlives any param row destroyed mid-edit.
+    // Color picker for color params, kept as a child of the dialog root so it
+    // outlives any param row destroyed mid-edit.
     ColorDialog {
         id: shaderColorDialog
 

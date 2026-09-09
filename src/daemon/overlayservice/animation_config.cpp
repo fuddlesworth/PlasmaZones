@@ -162,9 +162,7 @@ QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, const QStrin
 ///
 /// Load-bearing, not documentation, for ONE surface: ZoneOverlay has no
 /// per-role config and genuinely routes through the animator, so this default is
-/// the motion it gets. ShaderPreview also has no config but never touches the
-/// animator at all (it is shown imperatively), so it merely RESOLVES to this if
-/// anything asks. The registration site below names both.
+/// the motion it gets. The registration site below names it.
 PAL::SurfaceAnimator::Config buildDefaultConfig()
 {
     return PAL::SurfaceAnimator::Config{};
@@ -363,9 +361,6 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //     animator (overlay.cpp passes PhosphorRoles::ZoneOverlay to
     //     beginShow/beginHide on the passive-shell slot) but the default
     //     motion is the intended visual; no shader leg is configured.
-    //   - ShaderPreview (editor preview window): shown via direct
-    //     window->show() in showShaderPreview because the editor controls
-    //     visibility imperatively and re-creates on every open.
     //   - ScrollDropIndicator (drag re-insert drop target): the
     //     animation-profile taxonomy defines no domain for it, so the library
     //     default is the intended motion for both legs, and the role doc

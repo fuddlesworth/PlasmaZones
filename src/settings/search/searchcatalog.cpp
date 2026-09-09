@@ -117,7 +117,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-overlay-behavior"),
                             {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("trigger"), PhosphorI18n::tr("edge"),
                              PhosphorI18n::tr("magnet"), PhosphorI18n::tr("snap")});
-    search->setPageKeywords(QStringLiteral("snapping-overlay-appearance"),
+    search->setPageKeywords(QStringLiteral("overlays-appearance"),
                             {PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"), PhosphorI18n::tr("opacity"),
                              PhosphorI18n::tr("transparency"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("border")});
     search->setPageKeywords(QStringLiteral("snapping-zoneselector"),
@@ -132,8 +132,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
-    search->setPageKeywords(QStringLiteral("snapping-shaders"),
+    search->setPageKeywords(QStringLiteral("overlays-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
+    search->setPageKeywords(QStringLiteral("overlays-assignments"),
+                            {PhosphorI18n::tr("shader"), PhosphorI18n::tr("overlay"), PhosphorI18n::tr("layout"),
+                             PhosphorI18n::tr("assign"), PhosphorI18n::tr("default"), PhosphorI18n::tr("override")});
+    search->setPageKeywords(QStringLiteral("overlays-sets"),
+                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("bundle"),
+                             PhosphorI18n::tr("share"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export")});
 
     // Tiling & scrolling
     search->setPageKeywords(QStringLiteral("tiling-behavior"),
@@ -408,52 +414,48 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
 
     // ── Setting + section anchors: appearance / algorithm / behaviour rows ──
     // Snapping › Overlay (appearance)
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("colors"),
-               PhosphorI18n::tr("Colors"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("opacity"),
-               PhosphorI18n::tr("Opacity"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("border"),
-               PhosphorI18n::tr("Border"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("zoneLabels"),
+    addSection(search, QStringLiteral("overlays-appearance"), QStringLiteral("colors"), PhosphorI18n::tr("Colors"));
+    addSection(search, QStringLiteral("overlays-appearance"), QStringLiteral("opacity"), PhosphorI18n::tr("Opacity"));
+    addSection(search, QStringLiteral("overlays-appearance"), QStringLiteral("border"), PhosphorI18n::tr("Border"));
+    addSection(search, QStringLiteral("overlays-appearance"), QStringLiteral("zoneLabels"),
                PhosphorI18n::tr("Zone labels"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("effects"),
-               PhosphorI18n::tr("Effects"));
+    addSection(search, QStringLiteral("overlays-appearance"), QStringLiteral("effects"), PhosphorI18n::tr("Effects"));
     // The theme/scheme keywords ride the colour rows themselves now that the
     // all-or-nothing "System accent color" switch is gone: each row's Reset
     // is the follow-the-scheme affordance.
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("highlightColor"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("highlightColor"),
                PhosphorI18n::tr("Highlight color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("active"), PhosphorI18n::tr("hover"),
                 PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("accent")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("inactiveColor"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("inactiveColor"),
                PhosphorI18n::tr("Inactive color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("theme"),
                 PhosphorI18n::tr("scheme")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderColor"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("borderColor"),
                PhosphorI18n::tr("Border color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("outline"), PhosphorI18n::tr("theme"),
                 PhosphorI18n::tr("scheme")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("activeOpacity"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("activeOpacity"),
                PhosphorI18n::tr("Active opacity"), {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("alpha")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("inactiveOpacity"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("inactiveOpacity"),
                PhosphorI18n::tr("Inactive opacity"), {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("alpha")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderWidth"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("borderWidth"),
                PhosphorI18n::tr("Border width"), {PhosphorI18n::tr("thickness"), PhosphorI18n::tr("size")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderRadius"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("borderRadius"),
                PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelColor"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("labelColor"),
                PhosphorI18n::tr("Label color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("text"), PhosphorI18n::tr("font"),
                 PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("font"), PhosphorI18n::tr("Font"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("font"), PhosphorI18n::tr("Font"),
                {PhosphorI18n::tr("typeface"), PhosphorI18n::tr("family"), PhosphorI18n::tr("style")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelScale"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("labelScale"),
                PhosphorI18n::tr("Label scale"),
                {PhosphorI18n::tr("size"), PhosphorI18n::tr("text"), PhosphorI18n::tr("multiplier")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("zoneNumbers"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("zoneNumbers"),
                PhosphorI18n::tr("Zone numbers"),
                {PhosphorI18n::tr("index"), PhosphorI18n::tr("digit"), PhosphorI18n::tr("label")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("flashOnLayoutSwitch"),
+    addSetting(search, QStringLiteral("overlays-appearance"), QStringLiteral("flashOnLayoutSwitch"),
                PhosphorI18n::tr("Flash on layout switch"), {PhosphorI18n::tr("blink"), PhosphorI18n::tr("animation")});
 
     // Window Appearance (config-backed Windows.* / Gaps.* page)
@@ -1076,7 +1078,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
     // decoration sets. Every page that hosts a ShaderBrowserPage carries its
     // "userShaders" card, so each one registers the anchor.
-    addSection(search, QStringLiteral("snapping-shaders"), QStringLiteral("userShaders"),
+    addSection(search, QStringLiteral("overlays-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
@@ -1097,6 +1099,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("importDecorationSets"),
                PhosphorI18n::tr("User sets"));
     addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("savedDecorationSets"),
+               PhosphorI18n::tr("Saved sets"));
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("saveOverlaySet"),
+               PhosphorI18n::tr("Save current state"));
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("importOverlaySets"),
+               PhosphorI18n::tr("User sets"));
+    addSection(search, QStringLiteral("overlays-sets"), QStringLiteral("savedOverlaySets"),
                PhosphorI18n::tr("Saved sets"));
 
     // The per-event animation anchors live in their own TU

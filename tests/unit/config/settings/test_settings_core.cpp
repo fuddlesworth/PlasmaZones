@@ -35,6 +35,7 @@
 #include <PhosphorConfig/JsonBackend.h>
 
 #include "config/settings.h"
+#include "core/types/overlayshadertree.h"
 #include "config/configdefaults.h"
 #include "core/types/constants.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -1243,6 +1244,52 @@ private Q_SLOTS:
         settings.setAdjacentThreshold(99);
         QVERIFY(settings.save());
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+    }
+
+    /// The profile round trip over the REAL schema, not a synthetic blob.
+    ///
+    /// Every slot in test_profilestore.cpp runs against a hand-built
+    /// defaultConfig and never constructs a Settings, so none of them can
+    /// notice a real schema key that fails to survive save and restore: the
+    /// key simply is not in their fixture. This one drives the two halves the
+    /// profile machinery actually calls (exportConfigToJson to capture,
+    /// applyConfigOverlayStaged to apply) against a live Settings, so a
+    /// structured key that exports but does not come back is a failure here.
+    ///
+    /// It uses the overlay shader tree because that is the newest structured
+    /// key, but the point is the ROUTE. A structured key added later gets this
+    /// coverage for free only if it is added to the loop below.
+    void testProfileRoundTrip_carriesStructuredKeysThroughTheRealSchema()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+
+        OverlayShaderTree tree;
+        tree.setBaseline({QStringLiteral("cosmic-flow"), {{QStringLiteral("speed"), 1.5}}});
+        tree.setOverride(QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}"), {QStringLiteral("neon-city"), {}});
+        settings.setOverlayShaderTree(tree);
+        settings.setAdjacentThreshold(42); // a scalar beside it, as a control
+
+        // Capture the way a profile save does.
+        const QJsonObject captured = settings.exportConfigToJson();
+        QVERIFY2(captured.contains(ConfigDefaults::overlaysGroup()),
+                 "the overlays group did not reach the profile capture at all");
+
+        // Move both values away, then apply the captured blob the way
+        // ProfileStore::apply does.
+        settings.setOverlayShaderTree(OverlayShaderTree{});
+        settings.setAdjacentThreshold(7);
+        QCOMPARE(settings.overlayShaderTree(), OverlayShaderTree{});
+
+        QVERIFY(settings.applyConfigOverlayStaged(captured));
+        QCOMPARE(settings.adjacentThreshold(), 42);
+        const OverlayShaderTree restored = settings.overlayShaderTree();
+        QCOMPARE(restored.baseline().shaderId, QStringLiteral("cosmic-flow"));
+        QCOMPARE(restored.baseline().parameters.value(QStringLiteral("speed")).toDouble(), 1.5);
+        QCOMPARE(restored.resolve(QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}")).shaderId,
+                 QStringLiteral("neon-city"));
+        QCOMPARE(restored, tree);
     }
 
     /// defaultConfigJson delegates to the store's defaults snapshot, so it is

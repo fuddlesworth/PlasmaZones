@@ -5,9 +5,12 @@
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "core/types/animationshadersupportedpaths.h"
+#include "core/types/overlayshadertree.h"
 
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorConfig/Schema.h>
+#include <PhosphorConfig/Store.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 #include <QJsonDocument>
@@ -15,6 +18,31 @@
 #include <QSet>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// Run a blob through the same schema validator `Store::write` applies, so a
+/// setter's changed-check compares like with like.
+///
+/// The two setters below compare the CALLER's tree against a store READ, and a
+/// store read has already been sanitized. Any input the validator would alter
+/// (a parameter past its bound, a non-canonical UUID spelling, an override
+/// count over the cap) therefore never equals what comes back, so the setter
+/// writes, the store canonicalizes to the value already on disk, and the
+/// changed signals fire for a value that did not move — on every repeat call.
+/// The overlay tree's signal drives the daemon's overlay recreate, so the
+/// repeat is not free. The two arms above this one canonicalize their input
+/// in-setter and need no help.
+QVariantMap sanitizedThroughSchema(const PhosphorConfig::Store* store, const QString& group, const QString& key,
+                                   const QVariantMap& map)
+{
+    const PhosphorConfig::KeyDef* def = store->schema().findKey(group, key);
+    if (!def || !def->validator)
+        return map;
+    return def->validator(QVariant(map)).toMap();
+}
+
+} // namespace
 
 PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
 {
@@ -376,7 +404,11 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // correctly a no-op.
     const QVariantMap storedMap =
         m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
-    if (pruned == PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(storedMap)))
+    const QVariantMap prunedMap =
+        sanitizedThroughSchema(m_store.get(), ConfigDefaults::decorationsGroup(),
+                               ConfigDefaults::decorationProfileTreeKey(), pruned.toJson().toVariantMap());
+    if (PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(prunedMap))
+        == PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(storedMap)))
         return;
     m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(),
                    pruned.toJson().toVariantMap());
@@ -407,6 +439,67 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
         return;
     }
     setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+}
+
+// ── Overlay shader tree (PhosphorConfig::Store-backed) ──────────────────────
+// Persisted as one nested JSON entry under Overlays/OverlayShaderTree,
+// mirroring the two trees above. No prune-to-supported-paths step (the paths
+// are layout UUIDs, and a stale UUID for a deleted layout is inert, never
+// resolved) and no seed overlay (the schema default is the bare empty tree,
+// like the animation tree).
+//
+// Overrides are NOT reclaimed when a layout is deleted, and that is deliberate.
+// A layout UUID is per-installation, so "this machine has no layout with that
+// id" is exactly the state a shared overlay set or an imported settings profile
+// produces on a second machine, and it is not evidence the entry is dead. Auto
+// reclaiming would silently eat those the first time the config was saved. The
+// growth is bounded by the schema's override cap, and the assignments page
+// appends every unmatched override as a clearable row (see
+// OverlaysPageController::assignableLayouts), so a genuinely dead entry still
+// has a way out.
+
+OverlayShaderTree Settings::overlayShaderTree() const
+{
+    const QVariantMap map =
+        m_store->read<QVariantMap>(ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey());
+    return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(map));
+}
+
+void Settings::setOverlayShaderTree(const OverlayShaderTree& tree)
+{
+    refreshCleanBackendFromDisk();
+    // Value-equality compare so a same-tree write doesn't fire a spurious
+    // changed signal (discard-changes writes back the tree it just read).
+    // Sanitized first, because the read side already is: see
+    // sanitizedThroughSchema above.
+    const OverlayShaderTree sanitized = OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(
+        sanitizedThroughSchema(m_store.get(), ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey(),
+                               tree.toJson().toVariantMap())));
+    if (sanitized == overlayShaderTree())
+        return;
+    m_store->write(ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey(),
+                   tree.toJson().toVariantMap());
+    Q_EMIT overlayShaderTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::overlayShaderTreeJson() const
+{
+    return QString::fromUtf8(QJsonDocument(overlayShaderTree().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setOverlayShaderTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setOverlayShaderTree(OverlayShaderTree{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setOverlayShaderTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
 }
 
 } // namespace PlasmaZones

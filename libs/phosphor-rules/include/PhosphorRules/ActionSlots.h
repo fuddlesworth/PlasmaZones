@@ -227,10 +227,18 @@ inline constexpr QLatin1StringView OpenFullscreen{"open-fullscreen"};
 inline constexpr QLatin1StringView ScrollFactor{"scroll-factor"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
-// by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader
-// effect id (ActionParam::EffectId); OverlayStyle carries a wire token
-// (ActionParam::Value).
-inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
+// by `LayoutRegistry::resolveContextOverlay`.
+//
+// The shader slot is NODE-scoped, "overlay-shader:<node>", the way the
+// animation shader slot is event-scoped: the node is a path into the
+// OverlayShaderTree, a layout UUID (ActionParam::LayoutId) or the empty
+// string for the tree's global default. Two rules overriding different layouts
+// in one context therefore land in different slots and compose, and the
+// resolver reads the active layout's own node before the global one, the same
+// walk the tree itself makes. A rule carrying no LayoutId addresses the global
+// node, which is exactly what every rule written before the node existed
+// meant. OverlayStyle carries a wire token (ActionParam::Value).
+inline constexpr QLatin1StringView OverlayShaderPrefix{"overlay-shader:"};
 inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
 // Per-context overlay-APPEARANCE slots (one per property so independent rules
 // cascade per-property). Filled by the SetOverlay* appearance context actions,

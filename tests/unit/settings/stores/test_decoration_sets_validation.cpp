@@ -475,7 +475,7 @@ private Q_SLOTS:
         QCOMPARE(validateSpy.count(), 1);
         QCOMPARE(validateSpy.first().first().toString(),
                  PhosphorI18n::tr("“%1” could not be used here. It may be for another page, or it may need packs or "
-                                  "events this version does not have.")
+                                  "entries this version does not have.")
                      .arg(QStringLiteral("foreign")));
     }
 

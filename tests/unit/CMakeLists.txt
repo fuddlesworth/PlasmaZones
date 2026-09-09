@@ -377,6 +377,13 @@ p_add_test(test_settings_animation_profile config/settings/test_settings_animati
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.cpp)
+# QTEST_MAIN constructing Settings needs QGuiApplication: Qt6::Gui is named
+# rather than ridden in on plasmazones_core's coincidental PUBLIC edge. Spelled
+# out longhand like every other Gui-needing target here, so the whole link line
+# reads in one place instead of a p_add_test plus a patch two lines later.
+add_executable(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
+target_link_libraries(test_settings_overlay_shader_tree PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_overlay_shader_tree COMMAND test_settings_overlay_shader_tree)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
 # (the decoration analogue of test_settings_shader_tree). PhosphorSurface
@@ -428,6 +435,11 @@ p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
 p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2tov3.cpp)
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
+# Explicit Qt6::Gui for the QTEST_MAIN QGuiApplication expansion, longhand like
+# the other Gui-needing targets in this file.
+add_executable(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
+target_link_libraries(test_overlayshader_relocation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_overlayshader_relocation COMMAND test_overlayshader_relocation)
 
 # Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
 # enum fall-back-to-default validators, preset-list canonicalization.
@@ -1853,6 +1865,82 @@ target_link_libraries(test_decorationpagecontroller
 target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
+# One source list, shared by the overlay controller test and the QML-contract
+# test below, so a new controller TU can't silently miss one of the two.
+set(_overlays_ctrl_SRCS
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller.cpp
+    # The ctor builds the set store, so every TU linking the controller needs
+    # the sets TU and the store — omitting either is a link error, not a silent
+    # degradation.
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/animationfileutils.cpp
+    # installShaderPack forwards into the shared installer, so the symbol is
+    # needed at link even though the suites do not exercise it.
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+)
+
+add_executable(test_overlays_page_controller
+    settings/pages/test_overlays_page_controller.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_link_libraries(test_overlays_page_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        # Named, not left to the coincidental link: two slots build a real
+        # LayoutRegistry (with the RuleStore its ctor needs) because a null
+        # registry makes every label identical and the sort vacuous.
+        PhosphorZones::PhosphorZones
+        PhosphorRules::PhosphorRules
+        PhosphorShaders::PhosphorShaders  # ShaderRegistry base the ctor connects to
+        PhosphorAudio::PhosphorAudio  # shaderpreviewcontroller.h -> ishaderpreviewbackend.h include chain
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_overlays_page_controller COMMAND test_overlays_page_controller)
+
+# Contracts between the Appearance -> Overlays QML and its controller, pinned
+# by parsing the QML source. Needs P_SOURCE_DIR to read the source tree, which
+# is what keeps it out of the controller suite above.
+add_executable(test_overlays_qml_contracts
+    settings/pages/test_overlays_qml_contracts.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_compile_definitions(test_overlays_qml_contracts PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_overlays_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        PhosphorAudio::PhosphorAudio
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_overlays_qml_contracts COMMAND test_overlays_qml_contracts)
+
+# Overlay sets — the domain closures over the shared ShaderSetStore. Needs a
+# real LayoutRegistry (and so PhosphorRules, which its ctor takes a store from)
+# because the layout-applicability rule is the whole point of the suite.
+add_executable(test_overlays_sets
+    settings/pages/test_overlays_sets.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_link_libraries(test_overlays_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        PhosphorAudio::PhosphorAudio
+        PhosphorControl::PhosphorControl
+        PhosphorRules::PhosphorRules
+        plasmazones_core
+)
+add_test(NAME test_overlays_sets COMMAND test_overlays_sets)
+
 # Data surface behind the settings app's live decoration preview: chain
 # composition, the extended-FBO padding request, and the degraded paths a
 # browsing user can reach (unknown pack, no registry). Links only the preview
@@ -2247,16 +2335,13 @@ add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
 # through hand-built commands against a raw QUndoStack. UndoController.cpp
 # rides along only because pushCommand references its push(); the stubs keep
 # it unreached. Qt6::Gui is explicit for QUndoCommand, same rationale as
-# test_zone_zorder above. PhosphorAudio is a compile-time need, not a call:
-# the stubs' TU includes EditorController.h, whose IShaderPreviewBackend base
-# includes <PhosphorAudio/IAudioSpectrumProvider.h>.
+# test_zone_zorder above.
 add_executable(test_editor_template_model editor/test_editor_template_model.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/EditorTemplateModel.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/undo/UndoController.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateTemplateCommand.cpp)
 target_link_libraries(test_editor_template_model PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
-                                                         PhosphorZones::PhosphorZones
-                                                         PhosphorAudio::PhosphorAudio)
+                                                         PhosphorZones::PhosphorZones)
 add_test(NAME test_editor_template_model COMMAND test_editor_template_model)
 
 # The editor's D-Bus client has to read the daemon's ANSWER, not just the reply

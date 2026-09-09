@@ -31,6 +31,8 @@ class DecorationProfileTree;
 
 namespace PlasmaZones {
 
+class OverlayShaderTree;
+
 namespace isettings_detail {
 /// The drop indicator's colour when nothing can resolve one: the shipped zone
 /// highlight forced opaque. Shared by the two colour defaults below so the
@@ -198,6 +200,17 @@ public:
     /// `shaderProfileTreeJson` plays for the pack half.
     virtual QString motionProfileTreeJson() const = 0;
     virtual void setMotionProfileTreeJson(const QString& json) = 0;
+
+    // Zone-overlay shader assignments — an OverlayShaderTree (global baseline
+    // + per-layout-UUID overrides) under Overlays. Flat
+    // counterpart of the two trees above; same typed-getter + JSON-facade
+    // split so the Q_PROPERTY dirty-tracking loop and the D-Bus adaptor both
+    // ride the facade. No committed getter: per-page Discard rides the
+    // generic baseline-map path (the decoration one is Settings-only too).
+    virtual OverlayShaderTree overlayShaderTree() const = 0;
+    virtual void setOverlayShaderTree(const OverlayShaderTree& tree) = 0;
+    virtual QString overlayShaderTreeJson() const = 0;
+    virtual void setOverlayShaderTreeJson(const QString& json) = 0;
 
     // Decorations.Performance — an animated pack repaints every window carrying
     // it on every vsync, and that alone keeps the GPU in its top performance
@@ -786,6 +799,7 @@ Q_SIGNALS:
     void outerGapLeftChanged();
     void outerGapRightChanged();
     void adjacentThresholdChanged();
+
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();
     void minimumZoneDisplaySizePxChanged();
@@ -1026,6 +1040,9 @@ Q_SIGNALS:
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
     void motionProfileTreeChanged();
+
+    // Zone overlay settings
+    void overlayShaderTreeChanged(); // zone-overlay shader assignments tree
 
     // Surface decoration settings
     void decorationProfileTreeChanged();

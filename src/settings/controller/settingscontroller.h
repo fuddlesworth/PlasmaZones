@@ -98,7 +98,7 @@ class RegistryShaderPreviewBackend;
 #include "settings/pages/snappingzonescontroller.h"
 #include "settings/pages/snappingbehaviorcontroller.h"
 #include "settings/pages/snappingeffectscontroller.h"
-#include "settings/pages/snappingshaderspagecontroller.h"
+#include "settings/pages/overlayspagecontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/decorationpagecontroller.h"
 #include "settings/services/stagingservice.h"
@@ -167,7 +167,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
     Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
-    Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
+    Q_PROPERTY(OverlaysPageController* overlaysPage READ overlaysPage CONSTANT)
     Q_PROPERTY(WindowAppearanceController* windowAppearancePage READ windowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -524,7 +524,7 @@ public:
     }
     SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const;
-    SnappingShadersPageController* snappingShadersPage() const;
+    OverlaysPageController* overlaysPage() const;
     WindowAppearanceController* windowAppearancePage() const;
     TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const
@@ -1069,10 +1069,11 @@ private:
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
-    /// Settings-side mirror of the daemon's overlay-shader registry —
-    /// drives the read-only Snapping → Shaders browser. Same parent /
+    /// Settings-side mirror of the daemon's overlay-shader registry — drives
+    /// the Appearance → Overlays pages, both the read-only Library browser and
+    /// the Layouts assignment page that writes the tree. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.
-    /// The companion `m_snappingShadersPage` is declared further down as
+    /// The companion `m_overlaysPage` is declared further down as
     /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
     /// page borrows the layout registry — see the declaration-order
     /// invariant block below.
@@ -1082,7 +1083,7 @@ private:
     // (T3.1). The backend borrows m_overlayShaderRegistry + m_settings; the
     // controller borrows the backend. Declared backend-before-controller so
     // reverse member destruction tears the controller down first;
-    // m_snappingShadersPage (declared later) borrows the controller and is
+    // m_overlaysPage (declared later) borrows the controller and is
     // destroyed before it.
     std::unique_ptr<RegistryShaderPreviewBackend> m_shaderPreviewBackend;
     std::unique_ptr<ShaderPreviewController> m_shaderPreviewController;
@@ -1160,7 +1161,7 @@ private:
     // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
     // m_localAlgorithmRegistry + m_localLayoutManager are borrowed by the
     // bundle's sources and by m_scriptLoader. Reverse-order member destruction
-    // runs, in order: the borrowers declared after them (~m_snappingShadersPage,
+    // runs, in order: the borrowers declared after them (~m_overlaysPage,
     // ~m_tilingAlgorithmPage, ~m_algorithmService, which disconnects its
     // registry watchers); ~m_scriptLoader, which unregisters scripted algorithms
     // while the registry is still alive (a UAF the QObject-child pattern had,
@@ -1205,7 +1206,7 @@ private:
     /// first and would double-free this object on close.
     std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
 
-    /// Snapping→Shaders page sub-controller. Same rationale as
+    /// Appearance→Overlays page sub-controller. Same rationale as
     /// `m_tilingAlgorithmPage`: borrows `m_localLayoutManager` (the registry
     /// walked by `shaderEffectUsages` for the "Used in:" reverse-lookup), so it
     /// MUST be a `unique_ptr<>` declared AFTER that registry — the unique_ptr
@@ -1214,7 +1215,7 @@ private:
     /// does not adopt it to the first-destroyed m_app (double-free on close).
     /// Borrows `m_overlayShaderRegistry` too, but that registry is a QObject
     /// child of `this` and survives until ~QObject — fine.
-    std::unique_ptr<SnappingShadersPageController> m_snappingShadersPage;
+    std::unique_ptr<OverlaysPageController> m_overlaysPage;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so

@@ -55,7 +55,7 @@
 #include <PhosphorRules/RuleStoreWatcher.h>
 
 #include "core/interfaces/shaderregistry.h"
-#include "settings/pages/snappingshaderspagecontroller.h"
+#include "settings/pages/overlayspagecontroller.h"
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
@@ -820,10 +820,10 @@ SettingsController::SettingsController(QObject* parent)
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
     // + user search paths (`plasmazones/overlays`), so no extra path
-    // bookkeeping is needed here. Read-only browser surface — there is no
-    // per-event override store; assignments live on `Layout::shaderId`
-    // (per-layout) and the snapping page surfaces "Used by" by walking
-    // m_localLayoutManager's catalogue.
+    // bookkeeping is needed here. Assignments live in the config as the
+    // OverlayShaderTree (Settings::overlayShaderTree — global baseline +
+    // per-layout overrides); the Overlays pages edit that tree and resolve
+    // layout names through m_localLayoutManager's catalogue.
     //
     // The page controller is a `unique_ptr<>` declared after
     // `m_localLayoutManager` (see header), so member-destructor reverse-order
@@ -848,8 +848,8 @@ SettingsController::SettingsController(QObject* parent)
     // without a parent, registerPage would adopt it to m_app (destroyed first)
     // and the unique_ptr would then double-free it on close. The unique_ptr
     // still drives destruction in member order, before the borrowed registries.
-    m_snappingShadersPage = std::make_unique<SnappingShadersPageController>(
-        m_overlayShaderRegistry, m_localLayoutManager.get(), m_shaderPreviewController.get(), this);
+    m_overlaysPage = std::make_unique<OverlaysPageController>(m_overlayShaderRegistry, m_localLayoutManager.get(),
+                                                              &m_settings, m_shaderPreviewController.get(), this);
 
     // Screen helper signals — wire BEFORE the initial refreshScreens()
     // so a synchronous screensChanged emit from the refresh reaches our
@@ -977,9 +977,9 @@ SnappingEffectsController* SettingsController::snappingEffectsPage() const
     return m_snappingEffectsPage;
 }
 
-SnappingShadersPageController* SettingsController::snappingShadersPage() const
+OverlaysPageController* SettingsController::overlaysPage() const
 {
-    return m_snappingShadersPage.get();
+    return m_overlaysPage.get();
 }
 
 TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const

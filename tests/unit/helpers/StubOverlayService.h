@@ -132,15 +132,6 @@ public:
     void clearSelectedZone() override
     {
     }
-    void showShaderPreview(int, int, int, int, const QString&, const QString&, const QString&, const QString&) override
-    {
-    }
-    void updateShaderPreview(int, int, int, int, const QString&, const QString&) override
-    {
-    }
-    void hideShaderPreview() override
-    {
-    }
     void showSnapAssist(const QString&, const PhosphorProtocol::EmptyZoneList&,
                         const PhosphorProtocol::SnapAssistCandidateList&) override
     {

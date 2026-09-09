@@ -31,7 +31,9 @@ namespace PlasmaZones {
 /// ```
 /// { "name": …, "description": …, "version": <domain formatVersion>,
 ///   "overrides": [ { "path": …, "profile": { … } }, … ] }
-/// (a "baseline" key, even an empty one, is REFUSED by both domain validators)
+/// (a "baseline" KEY, even an empty one, is refused by every domain validator:
+///  a domain that has a global default of its own encodes it as an ordinary
+///  entry under a reserved path, so this envelope stays one shape)
 /// ```
 /// so coverage (which root sections a set touches) and active-detection are
 /// computed generically here rather than per domain.
@@ -78,6 +80,27 @@ public:
     /// reads as inactive because of one field it does not own.
     using EntrySatisfiedFn = std::function<bool(const QJsonObject& setProfile, const QJsonObject& live)>;
 
+    /// Whether an entry at @p path can be applied on THIS machine at all.
+    ///
+    /// Optional, and only a domain whose paths are not a fixed, build-defined
+    /// vocabulary needs it. Decoration and motion do not: their paths are
+    /// surfaces and event paths this build either has or does not, so a path
+    /// they do not recognise means the set is foreign and their validators
+    /// refuse the whole file.
+    ///
+    /// The overlay domain's paths are layout UUIDs, which are per-installation.
+    /// A set shared between machines names layouts the other machine has never
+    /// seen even when it has the identical layouts by name, so refusing would
+    /// make shared sets useless; apply skips those entries instead. This
+    /// predicate is what keeps the `active` badge honest under that rule:
+    /// without it, a set carrying one absent layout can never be contained and
+    /// so reads dark forever, immediately after an apply that did everything it
+    /// could — the same shape as the motion bug where one field a set did not
+    /// own kept the whole set dark. A payload whose entries are ALL
+    /// inapplicable is never active, or a set of purely foreign layouts would
+    /// light up on a machine that applied none of it.
+    using EntryApplicableFn = std::function<bool(const QString& path)>;
+
     struct Config
     {
         DirFn setsDir;
@@ -85,6 +108,7 @@ public:
         ValidateFn validate;
         ApplyFn apply;
         EntrySatisfiedFn entrySatisfied; // optional, defaults to exact equality
+        EntryApplicableFn entryApplicable; // optional, defaults to "every entry applies"
         /// Current on-disk format. Save stamps it; apply and import refuse a
         /// NEWER file, so a set written by a future build (carrying fields
         /// this build drops on parse) fails cleanly instead of committing a

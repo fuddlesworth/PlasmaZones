@@ -299,6 +299,26 @@ void retireLegacyAssignmentsFile(const QString& assignmentsPath)
              qPrintable(assignmentsPath));
 }
 
+namespace {
+
+/// Both filesystem finalizers, unconditionally, then the combined verdict.
+///
+/// NOT `a() && b()`. They share nothing: one folds assignments.json and the
+/// `_v4*Stash` keys into rules.json, the other lifts overlay-shader assignments
+/// out of the layout-settings sidecar. Short-circuiting means a v4 finalizer
+/// that keeps failing (an unwritable rules.json, a permissions problem)
+/// indefinitely blocks a lift that would have succeeded, on every startup, with
+/// the user's shader assignments stranded in the sidecar the whole time. Run
+/// both, report if either failed.
+bool runFilesystemFinalizers(const QString& jsonPath)
+{
+    const bool v4 = ConfigMigration::finalizeV4Conversion(jsonPath);
+    const bool overlay = ConfigMigration::relocateOverlayShaderAssignments(jsonPath);
+    return v4 && overlay;
+}
+
+} // namespace
+
 bool ConfigMigration::ensureJsonConfig()
 {
     // Process-level guard: migration is a one-shot operation. Once we've
@@ -405,14 +425,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
-                        return finalizeV4Conversion(jsonPath);
+                        return runFilesystemFinalizers(jsonPath);
                     }
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
                     // crash may have left behind (and prunes the retired
                     // provider-default rule from rules.json), a no-op once clean.
-                    return finalizeV4Conversion(jsonPath);
+                    return runFilesystemFinalizers(jsonPath);
                 }
                 corrupt = true;
             }
@@ -444,7 +464,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                 // The chain never ran on this path, so the v8 import has to be
                 // driven directly — see finalizeV8MotionImport.
                 finalizeV8MotionImport(jsonPath);
-                return finalizeV4Conversion(jsonPath);
+                return runFilesystemFinalizers(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -461,12 +481,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
     const QString iniPath = ConfigDefaults::legacyConfigFilePath();
     if (!QFile::exists(iniPath)) {
         // Fresh install, or a config that was just removed as empty — no old
-        // config to migrate. Still run both finalizers: the v4 one folds a
+        // config to migrate. Still run all three finalizers: the v4 one folds a
         // stray assignments.json from a partial earlier conversion into
-        // rules.json rather than leaving it orphaned, and the v8 one recovers
-        // per-event timing files the chain never got to look at.
+        // rules.json rather than leaving it orphaned, the v8 motion one recovers
+        // per-event timing files the chain never got to look at, and the v8
+        // overlay one lifts a layout-settings sidecar left behind by a partial
+        // run.
         finalizeV8MotionImport(jsonPath);
-        return finalizeV4Conversion(jsonPath);
+        return runFilesystemFinalizers(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -485,15 +507,16 @@ bool ConfigMigration::ensureJsonConfigImpl()
     }
 
     qInfo("ConfigMigration: migration complete");
-    // The in-memory chain above ran through migrateV4ToV5 and migrateV5ToV6,
-    // both pure config→config transforms (v5 folds the per-mode
+    // The in-memory chain above ran through migrateV4ToV5 up to
+    // migrateV7ToV8 — pure config→config transforms (v5 folds the per-mode
     // appearance/gap values into the unified "Windows" / "Gaps" groups; v6
-    // converts the snapping zone colours to theme-fallback strings; neither
-    // creates rules), so only the v4 finalizer runs here.
-    // finalizeV4Conversion also adopts a legacy windowrules.json as
-    // rules.json (a first-step, all-paths action) and prunes the retired
-    // provider-default rule.
-    return finalizeV4Conversion(jsonPath);
+    // converts the snapping zone colours to theme-fallback strings; v7
+    // renames the placement animation nodes; v8 only stamps the version), so
+    // the filesystem-touching finalizers run here: finalizeV4Conversion
+    // (which also adopts a legacy windowrules.json as rules.json and prunes
+    // the retired provider-default rule) plus the v8 overlay-shader sidecar
+    // lift.
+    return runFilesystemFinalizers(jsonPath);
 }
 
 void ConfigMigration::resetMigrationGuardForTesting()

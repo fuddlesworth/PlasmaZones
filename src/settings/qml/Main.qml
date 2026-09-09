@@ -205,7 +205,7 @@ PhosphorUi.SettingsAppWindow {
     }
 
     Connections {
-        target: settingsController.snappingShadersPage
+        target: settingsController.overlaysPage
 
         function onToastRequested(text) {
             window.showToast(text);

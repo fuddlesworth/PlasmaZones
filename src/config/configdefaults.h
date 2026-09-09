@@ -725,6 +725,15 @@ public:
         return {};
     }
 
+    /// Zone-overlay shader assignments (Overlays /
+    /// OverlayShaderTree). Schema default is the empty tree — no baseline
+    /// shader, no per-layout overrides — same materialization as the
+    /// animation shaderProfileTree above (a bare {}).
+    static QVariantMap overlayShaderTree()
+    {
+        return {};
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;
@@ -1190,6 +1199,14 @@ public:
     static QString userDecorationSetsSubdir()
     {
         return QStringLiteral("/plasmazones/decorationsets");
+    }
+
+    /// Overlay sets — named snapshots of the zone-overlay shader assignments
+    /// (the global default plus the per-layout overrides), the overlay twin of
+    /// `userDecorationSetsSubdir()`.
+    static QString userOverlaySetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/overlaysets");
     }
 
     /// Surface shader packs (the `data/surface/` family — border, etc.).

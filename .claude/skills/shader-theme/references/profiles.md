@@ -10,15 +10,16 @@ Source of truth: `src/settings/stores/shadersetstore.cpp`, `src/settings/service
 `libs/phosphor-animation/src/curveloader.cpp`, `src/config/configdefaults_shaders.h`
 (`ConfigDefaults::decorationProfileTree()` is the canonical well-formed chain example).
 
-There is NO single theme/bundle object in PlasmaZones. A theme is applied through five
-independent artefacts. Generate all of them.
+There is NO single theme/bundle object in PlasmaZones. A theme is applied through the
+independent artefacts below. Generate all of them.
 
 | artefact | where | carries |
 |---|---|---|
 | Decoration set | `~/.local/share/plasmazones/decorationsets/<slug>.json` | surface pack chains + params per surface path |
 | Motion set | `~/.local/share/plasmazones/motionsets/<slug>.json` | duration/curve AND the animation pack per event path |
+| Overlay set | `~/.local/share/plasmazones/overlaysets/<slug>.json` | zone-overlay shader: the global baseline plus a per-layout override each |
 | Curves | `~/.local/share/plasmazones/curves/<name>.json` | named easing presets referenced by name |
-| Config trees | `~/.config/plasmazones/config.json` | `Animations.ShaderProfileTree` (pack per event), `Animations.MotionProfileTree` (timing per event) and `Decorations.DecorationProfileTree` |
+| Config trees | `~/.config/plasmazones/config.json` | `Animations.ShaderProfileTree` (pack per event), `Animations.MotionProfileTree` (timing per event), `Decorations.DecorationProfileTree`, and `Overlays.OverlayShaderTree` (zone overlay shader, baseline plus per-layout overrides) |
 
 Animation pack selection (`effectId`) lives in `Animations.ShaderProfileTree` in config.json,
 and per-event timing beside it in `Animations.MotionProfileTree`. A format-2 MOTION SET
@@ -174,12 +175,21 @@ A motion set now carries BOTH halves of every event it covers (the pack and the 
 and a decoration set has always carried a whole surface. So the normal route is two clicks
 and no file surgery:
 
-1. Write the set files to `~/.local/share/plasmazones/{motionsets,decorationsets}/`.
-2. Settings → Animations → Motion Sets → Apply, and Settings → Decorations →
-   Decoration Sets → Apply.
+1. Write the set files to `~/.local/share/plasmazones/{motionsets,decorationsets,overlaysets}/`.
+2. Settings → Animations → Motion Sets → Apply, Settings → Decorations →
+   Decoration Sets → Apply, and Settings → Appearance → Overlays → Library →
+   Overlay Sets → Apply.
 
-The zone overlay pack is the one artefact no set carries: it is a per-LAYOUT property, so
-point the user at Settings → Snapping → the layout's shader picker.
+Since schema v8 the zone overlay shader is a set like the other two. It is no longer a
+per-layout property of the layout file: the assignment lives in `Overlays.OverlayShaderTree`
+in config.json, as one global baseline plus a per-layout override keyed by layout UUID. An
+overlay set carries the baseline and every override together.
+
+A per-layout override names a layout by UUID, and UUIDs are per-installation, so an overlay
+set generated without knowing the target machine's layout ids should carry the BASELINE only.
+Applying a set merges, and it skips overrides for layouts the machine does not have rather
+than refusing the whole file. A set naming a shader pack the machine lacks is refused
+outright, so only name packs you know are installed.
 
 ### Headless, when the user wants no GUI
 

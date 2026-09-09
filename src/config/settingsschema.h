@@ -54,6 +54,7 @@ QVariant canonicalWheelTriggerList(const QVariant& v);
 QVariant canonicalThemeFallbackColor(const QVariant& v);
 
 void appendShadersSchema(PhosphorConfig::Schema& schema);
+void appendOverlayShadersSchema(PhosphorConfig::Schema& schema);
 void appendAppearanceSchema(PhosphorConfig::Schema& schema);
 void appendOrderingSchema(PhosphorConfig::Schema& schema);
 void appendAnimationsSchema(PhosphorConfig::Schema& schema);

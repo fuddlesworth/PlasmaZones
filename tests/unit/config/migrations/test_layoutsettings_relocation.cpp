@@ -33,12 +33,17 @@ private:
         return QJsonDocument::fromJson(f.readAll()).object();
     }
 
-    void writeJsonRaw(const QString& path, const QJsonObject& obj)
+    // [[nodiscard]] bool, not QVERIFY-in-void: a QVERIFY failure in a void
+    // helper only returns from the helper, so the slot would continue
+    // against a missing fixture (see test_migration_v5_to_v6.cpp's note).
+    [[nodiscard]] bool writeJsonRaw(const QString& path, const QJsonObject& obj)
     {
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(obj).toJson());
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        return f.write(QJsonDocument(obj).toJson()) >= 0;
     }
 
     QString layoutsDirPath() const
@@ -88,17 +93,19 @@ private:
         };
     }
 
-    void writeLayoutFile(const QString& fileName, const QJsonObject& layout)
+    [[nodiscard]] bool writeLayoutFile(const QString& fileName, const QJsonObject& layout)
     {
         QDir().mkpath(layoutsDirPath());
         QFile f(layoutsDirPath() + QLatin1Char('/') + fileName);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(layout).toJson());
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        return f.write(QJsonDocument(layout).toJson()) >= 0;
     }
 
-    void writeLayoutFileWithSettings(const QString& fileName, const QString& layoutId)
+    [[nodiscard]] bool writeLayoutFileWithSettings(const QString& fileName, const QString& layoutId)
     {
-        writeLayoutFile(fileName, fullLayoutWithSettings(layoutId));
+        return writeLayoutFile(fileName, fullLayoutWithSettings(layoutId));
     }
 
     QByteArray readBytes(const QString& path)
@@ -113,7 +120,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
-        writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId);
+        QVERIFY(writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId));
 
         QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
 
@@ -144,8 +151,8 @@ private Q_SLOTS:
     void testLayoutSettingsRelocation_isIdempotent()
     {
         IsolatedConfigGuard guard;
-        writeLayoutFileWithSettings(QStringLiteral("layout.json"),
-                                    QStringLiteral("{abcd0000-0000-0000-0000-000000000000}"));
+        QVERIFY(writeLayoutFileWithSettings(QStringLiteral("layout.json"),
+                                            QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")));
 
         QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
         const QByteArray layoutAfter1 = readBytes(layoutsDirPath() + QStringLiteral("/layout.json"));
@@ -174,7 +181,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
         const QJsonObject original = fullLayoutWithSettings(layoutId);
-        writeLayoutFile(QStringLiteral("layout.json"), original);
+        QVERIFY(writeLayoutFile(QStringLiteral("layout.json"), original));
 
         QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
 
@@ -185,7 +192,19 @@ private Q_SLOTS:
 
         const QJsonObject reconstructed =
             PhosphorZones::LayoutSettingsStore::mergeSettings(slim, store.settingsFor(layoutId));
-        QCOMPARE(reconstructed, original);
+        // The runtime store no longer merges the retired shaderId/shaderParams
+        // keys (v7 relocates overlay shader assignments into the config's
+        // OverlayShaderTree), so the roundtrip reconstructs everything BUT
+        // them. The v4 relocation still carries them into the sidecar — that
+        // frozen behavior is what the v7 lift consumes — so assert they
+        // survived there.
+        QJsonObject expected = original;
+        expected.remove(QStringLiteral("shaderId"));
+        expected.remove(QStringLiteral("shaderParams"));
+        QCOMPARE(reconstructed, expected);
+        const QJsonObject sidecarEntry =
+            readJsonConfig(ConfigDefaults::layoutSettingsFilePath()).value(layoutId).toObject();
+        QCOMPARE(sidecarEntry.value(QStringLiteral("shaderId")).toString(), QStringLiteral("dissolve"));
     }
 
     void testLayoutSettingsRelocation_mergesIntoExistingSidecar()
@@ -195,12 +214,12 @@ private Q_SLOTS:
         // the runtime store, or a prior partial run) must be preserved.
         const QString existingId = QStringLiteral("{eeee0000-0000-0000-0000-000000000000}");
         QDir().mkpath(QFileInfo(ConfigDefaults::layoutSettingsFilePath()).absolutePath());
-        writeJsonRaw(ConfigDefaults::layoutSettingsFilePath(),
-                     QJsonObject{{QStringLiteral("_version"), 1},
-                                 {existingId, QJsonObject{{QStringLiteral("zonePadding"), 99}}}});
+        QVERIFY(writeJsonRaw(ConfigDefaults::layoutSettingsFilePath(),
+                             QJsonObject{{QStringLiteral("_version"), 1},
+                                         {existingId, QJsonObject{{QStringLiteral("zonePadding"), 99}}}}));
 
         const QString newId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
-        writeLayoutFileWithSettings(QStringLiteral("layout.json"), newId);
+        QVERIFY(writeLayoutFileWithSettings(QStringLiteral("layout.json"), newId));
 
         QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
 
@@ -224,12 +243,12 @@ private Q_SLOTS:
         const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
 
         // The fat file carries the OLD value (8, from the shared fixture)...
-        writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId);
+        QVERIFY(writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId));
         // ...while the sidecar already holds a newer one for the same layout.
         QDir().mkpath(QFileInfo(ConfigDefaults::layoutSettingsFilePath()).absolutePath());
-        writeJsonRaw(
-            ConfigDefaults::layoutSettingsFilePath(),
-            QJsonObject{{QStringLiteral("_version"), 1}, {layoutId, QJsonObject{{QStringLiteral("zonePadding"), 42}}}});
+        QVERIFY(writeJsonRaw(ConfigDefaults::layoutSettingsFilePath(),
+                             QJsonObject{{QStringLiteral("_version"), 1},
+                                         {layoutId, QJsonObject{{QStringLiteral("zonePadding"), 42}}}}));
 
         QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
 
@@ -249,17 +268,17 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         const QString idA = QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}");
         const QString idB = QStringLiteral("{bbbb0000-0000-0000-0000-000000000000}");
-        writeLayoutFileWithSettings(QStringLiteral("a.json"), idA);
+        QVERIFY(writeLayoutFileWithSettings(QStringLiteral("a.json"), idA));
 
         // Layout B: two zones, only the first has a custom appearance.
         const QJsonObject zone1 = zoneWithAppearance(QStringLiteral("{22222222-0000-0000-0000-000000000001}"), 1);
         QJsonObject zone2 = zoneWithAppearance(QStringLiteral("{22222222-0000-0000-0000-000000000002}"), 2);
         zone2.remove(QStringLiteral("appearance"));
-        writeLayoutFile(QStringLiteral("b.json"),
-                        QJsonObject{{QStringLiteral("id"), idB},
-                                    {QStringLiteral("name"), QStringLiteral("B")},
-                                    {QStringLiteral("zonePadding"), 3},
-                                    {QStringLiteral("zones"), QJsonArray{zone1, zone2}}});
+        QVERIFY(writeLayoutFile(QStringLiteral("b.json"),
+                                QJsonObject{{QStringLiteral("id"), idB},
+                                            {QStringLiteral("name"), QStringLiteral("B")},
+                                            {QStringLiteral("zonePadding"), 3},
+                                            {QStringLiteral("zones"), QJsonArray{zone1, zone2}}}));
 
         QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
 

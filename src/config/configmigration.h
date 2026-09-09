@@ -90,10 +90,16 @@ namespace PlasmaZones {
 /// v7: the window-movement placement animation nodes `snapIn` / `snapOut` are
 ///     renamed `placeIn` / `placeOut`, and `window.movement.maximize` is
 ///     retired into them (see migrateV6ToV7).
-/// v8: per-event animation TIMING overrides move out of the loose
-///     `<data>/plasmazones/profiles/<event.path>.json` files and into
-///     `Animations/MotionProfileTree`, beside the pack assignment already in
-///     `Animations/ShaderProfileTree` (see migrateV7ToV8).
+/// v8: two stores fold into config. Per-event animation TIMING overrides move
+///     out of the loose `<data>/plasmazones/profiles/<event.path>.json` files
+///     and into `Animations/MotionProfileTree`, beside the pack assignment
+///     already in `Animations/ShaderProfileTree` (see migrateV7ToV8); and
+///     zone-overlay shader assignments move out of the layout-settings sidecar
+///     into `Overlays/OverlayShaderTree` (global baseline +
+///     per-layout overrides). The overlay half has no chain step of its own:
+///     the sidecar lift needs filesystem access, so it runs from
+///     ensureJsonConfig's finalize pass (see relocateOverlayShaderAssignments),
+///     mirroring how the v4 layout-settings relocation runs outside the chain.
 inline constexpr int ConfigSchemaVersion = 8;
 
 class PLASMAZONES_EXPORT ConfigMigration
@@ -346,6 +352,24 @@ public:
     ///        user's timings into every profile they load. That path only needs
     ///        the version stamp, which is applied either way.
     static void migrateV7ToV8(QJsonObject& root, bool importOverrideFiles);
+
+    /// The overlay-shader half of v8: lift zone-overlay shader assignments
+    /// from the layout-settings sidecar into the config's OverlayShaderTree,
+    /// stripping the relocated keys from the sidecar, and rewrite every
+    /// OverrideOverlayShader rule written against the old per-layout property
+    /// onto the tree's node shape (the global-default node made explicit, so
+    /// the rule keeps meaning "every layout in this context").
+    ///
+    /// It has no chain step of its own. The lift needs filesystem access and
+    /// must not run on sparse profile deltas, so like the v4 layout-settings
+    /// relocation it runs from the finalize pass instead, and migrateV7ToV8
+    /// owns the version stamp for both halves.
+    ///
+    /// Idempotent and crash-safe — ensureJsonConfig calls it on every run
+    /// beside finalizeV4Conversion. An already-present tree entry for a layout
+    /// always wins over the sidecar copy (a retry after a partial run must not
+    /// clobber a since-edited assignment).
+    static bool relocateOverlayShaderAssignments(const QString& jsonPath);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

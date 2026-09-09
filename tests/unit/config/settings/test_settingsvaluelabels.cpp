@@ -438,6 +438,37 @@ private Q_SLOTS:
                  QStringLiteral("shaderPack"));
     }
 
+    /// All THREE profile trees, table-driven. Asserting only the animation one
+    /// is why the overlay tree shipped with no descriptor at all: its kind and
+    /// its QML resolver both existed, the table row did not, and a profile diff
+    /// silently rendered raw pack ids instead of names. A per-tree slot would
+    /// have gone the same way, so the table is the point — a fourth tree that
+    /// forgets its row fails here rather than degrading quietly.
+    void everyProfileTreeDeclaresAnIdKind_data()
+    {
+        QTest::addColumn<QString>("group");
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("expectedKind");
+        using CD = ConfigDefaults;
+        QTest::newRow("animation shader tree")
+            << CD::animationsGroup() << CD::shaderProfileTreeKey() << QStringLiteral("shaderPack");
+        QTest::newRow("decoration tree") << CD::decorationsGroup() << CD::decorationProfileTreeKey()
+                                         << QStringLiteral("decorationPack");
+        QTest::newRow("overlay shader tree")
+            << CD::overlaysGroup() << CD::overlayShaderTreeKey() << QStringLiteral("overlayShader");
+    }
+
+    void everyProfileTreeDeclaresAnIdKind()
+    {
+        QFETCH(QString, group);
+        QFETCH(QString, key);
+        QFETCH(QString, expectedKind);
+        const auto descriptor = SettingsValueLabels::descriptorFor(group, key);
+        QCOMPARE(SettingsValueLabels::kindName(descriptor.kind), expectedKind);
+        QVERIFY2(SettingsValueLabels::kindName(descriptor.kind) != QStringLiteral("plain"),
+                 "the tree fell through to the plain kind, so its diff rows render raw ids");
+    }
+
     /// Every (group, key) pair a QML picker passes to valueOptions() must name
     /// a key that declares choices.
     ///
