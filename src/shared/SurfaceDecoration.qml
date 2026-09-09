@@ -142,7 +142,8 @@ Item {
     /// zone/overlay preview has always had.
     property bool animationsPaused: false
 
-    /// Route EVERY stage through a layer texture, not just the multipass ones.
+    /// Route the LAST stage, the one that reaches the screen, through a layer
+    /// texture.
     ///
     /// Mandatory for a host that applies a transform to this component or
     /// relies on an ancestor's `clip`. A SurfaceShaderItem stage is a
@@ -151,20 +152,23 @@ Item {
     /// viewport from `item->width() * devicePixelRatio` and the item's mapped
     /// ORIGIN — so a scaled ancestor moves the stage but does not resize it,
     /// and the node overwrites the scissor Qt set for the clip. A scaled host
-    /// therefore gets full-size stages drawn at scaled positions, spilling
-    /// over whatever is beside them.
+    /// therefore gets a full-size stage drawn at a scaled position, spilling
+    /// over whatever is beside it.
     ///
     /// Layering removes the problem rather than working around it: the node
     /// renders into an FBO sized to its own item (which is what it thinks it
     /// is drawing at anyway), and the scene graph composites THAT texture with
-    /// the full transform and clip, like any other textured node. Multipass
-    /// stages already take this path for their own reasons, which is why the
-    /// blur family survived a scaled host while every single-pass pack escaped
-    /// its bounds.
+    /// the full transform and clip, like any other textured node. Only the
+    /// last stage needs it: every intermediate stage already renders into the
+    /// next stage's `tap` FBO and never reaches the screen directly, and
+    /// layering one would draw its opaque layer sibling under the composite
+    /// (see the stage's layer.enabled below for why a captured stage must
+    /// never be layered).
     ///
     /// False by default: the daemon's overlay surfaces are drawn untransformed
-    /// at 1:1, and a layer per stage there would be a canvas-sized FBO for
-    /// nothing.
+    /// at 1:1, and a layer there would be a canvas-sized FBO for nothing, and
+    /// the animator captures the last stage for the show / hide legs, which a
+    /// layer would break.
     property bool layeredStages: false
 
     /// Drives `uSurfaceFocused` on every stage. A pack that distinguishes an
@@ -800,10 +804,10 @@ Item {
                 // sampled and building them is pure cost, which is what the
                 // daemon's overlay surfaces would be paying.
                 //
-                // And only on the LAST stage. An intermediate stage's layer
-                // texture is never composited by the scene graph — the next
-                // stage's `tap` captures it instead — so its mip chain would be
-                // rebuilt every frame for a texture nothing samples through it.
+                // And only on the LAST stage, which is the only stage that is
+                // ever layered (see layer.enabled above); an intermediate
+                // stage is captured by the next stage's `tap` and has no layer
+                // for a mip chain to belong to.
                 layer.mipmap: root.layeredStages && stage.isLast
                 layer.smooth: root.layeredStages && stage.isLast
                 // iTime driver: only a stage whose pack declares "animated"

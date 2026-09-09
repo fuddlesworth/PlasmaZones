@@ -24,6 +24,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Glass and blur decorations on the OSD and popups fade out with them again**: with a pack from the glass or blur family on an OSD or a popup, the card faded in and out but the decoration itself stayed on screen at full strength until the card was gone. Those packs render in several passes, and each of them was given a private drawing layer on the theory that their passes needed one. That layer is drawn by a helper item Qt puts beside the stage, and the fade animation hides and animates the stage while leaving the helper where it was. The passes never needed the layer, so it is gone, and every decoration now fades with the card it decorates. ([#1087](https://github.com/fuddlesworth/PlasmaZones/pull/1087))
+- **Animation previews that drift or spin no longer hold still**: in the animation pack preview, packs that move a little every frame on their own clock, such as the vortex spin, the matrix and fire drift and the noise in the desktop switch packs, sat frozen except for the open or close sweep. The preview drove the sweep but never told the pack how much time had passed since the last frame or which frame it was on, and those packs add their motion up from exactly that. The preview now advances both every frame, the way the compositor does. ([#1087](https://github.com/fuddlesworth/PlasmaZones/pull/1087))
 - **Pressing the float shortcut a second time puts a tiled window back in the layout**: in tiling mode the shortcut floated a window and then refused to take it back, so the window stayed floating however many times you pressed. The engine asked the layout state to flip the window's floating bit and read the answer as whether the flip had worked, but the answer was the bit's new value, so the press that turned floating back off read as a failure. The flip itself had already landed. Everything that follows it, re-tiling the screen and telling the rest of PlasmaZones the window came back, was skipped, which left the layout believing the window was tiled while the window stayed floating on screen. ([#1076](https://github.com/fuddlesworth/PlasmaZones/discussions/1076), [#1085](https://github.com/fuddlesworth/PlasmaZones/pull/1085))
 
 ## [3.4.15] - 2026-09-07
@@ -2425,7 +2427,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.14...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.15...HEAD
+[3.4.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.14...v3.4.15
 [3.4.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.13...v3.4.14
 [3.4.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.12...v3.4.13
 [3.4.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.11...v3.4.12

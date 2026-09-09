@@ -1583,11 +1583,11 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the eleven test executables below
-# (page controller / QML contracts / profile-store sync / motion sets / presets /
-# shader overrides / shader param writes / group writes / group write bounds /
-# suppression mirror / stale params). One list so a new controller source file
-# cannot silently miss one of the eleven.
+# Animations-controller sources shared by the twelve test executables below
+# (page controller / preview controller / QML contracts / profile-store sync /
+# motion sets / presets / shader overrides / shader param writes / group writes /
+# group write bounds / suppression mirror / stale params). One list so a new
+# controller source file cannot silently miss one of the twelve.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpreviewcontroller.cpp
@@ -1628,6 +1628,27 @@ target_link_libraries(test_animations_page_controller
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
+
+# AnimationPreviewController's per-frame drive (driveFrameClock) against a
+# real PhosphorRendering::ShaderEffect item, off-window: the iTimeDelta cap,
+# the 0-first iFrame counter, and its resets on configure and item change.
+add_executable(test_animation_preview_controller
+    settings/pages/test_animation_preview_controller.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animation_preview_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        PhosphorRendering::PhosphorRendering
+        plasmazones_core
+)
+add_test(NAME test_animation_preview_controller COMMAND test_animation_preview_controller)
 
 # The stock-animation suppression mirror, split out of the sibling above
 # when it crossed the 1150-line hard ceiling.

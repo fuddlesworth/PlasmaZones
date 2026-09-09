@@ -257,12 +257,19 @@ QVariantMap AnimationPreviewController::packInfo(const QString& packId) const
 }
 
 bool AnimationPreviewController::configurePreviewItem(QQuickItem* item, const QString& packId,
-                                                      const QVariantMap& friendlyParams) const
+                                                      const QVariantMap& friendlyParams)
 {
     auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
     if (!shaderItem) {
         return false;
     }
+    // A configure is a leg boundary: driveFrameClock's next push on this
+    // item reports iFrame 0 again. Keyed here rather than only on the item
+    // pointer changing, because the pane tears its item down and creates a
+    // new one at every rebuild and the allocator may hand the new item the
+    // old address, which would carry the old count into the new leg.
+    m_clockItem = nullptr;
+    m_clockFrame = 0;
     PhosphorAnimationShaders::AnimationShaderEffect effect;
     QStringList includePaths;
     if (!resolvePreviewEffect(m_registry, packId, effect, includePaths)) {
@@ -484,8 +491,9 @@ void AnimationPreviewController::driveFrameClock(QQuickItem* item, qreal dtMs)
     const qreal deltaSecs =
         qMin(qMax(0.0, dtMs) / 1000.0, static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
     shaderItem->setITimeDelta(deltaSecs);
-    // Post-increment: the first push after a (re)configure reports 0,
-    // matching the compositor's `transition.frameCount++`.
+    // Post-increment: the first push after a (re)configure (which resets
+    // the counter) or an item change reports 0, matching the compositor's
+    // `transition.frameCount++`.
     shaderItem->setIFrame(m_clockFrame++);
 }
 

@@ -5,7 +5,7 @@
 
 // The kwin-effect's wobble-lattice spring integrator, included by relative
 // path on purpose: this controller is compiled into the settings app AND
-// eleven animation test executables, and a quote-include resolves against
+// twelve animation test executables, and a quote-include resolves against
 // this file so none of those targets needs the kwin-effect include dir.
 // Both trees are GPL-3.0, so no license boundary is crossed.
 #include "../../../kwin-effect/plasmazoneseffect/mesh_sim.h"
@@ -123,10 +123,11 @@ public:
     /// packs in every class integrate on them (phosphor-vortex's spin,
     /// matrix and fire's drift, the desktop packs' noise advance). The
     /// pane's class clocks only sweep `iTime`, so without this pump those
-    /// packs sit still in the preview. Resets the frame counter when the
-    /// item changes. Not for the strip class: its item free-runs through
-    /// `playing`, whose auto-tick already advances all three and treats
-    /// manual writes as additive.
+    /// packs sit still in the preview. The frame counter restarts at 0
+    /// when configurePreviewItem runs and when the item changes. Not for
+    /// the strip class: its item free-runs through `playing`, whose
+    /// auto-tick already advances all three and treats manual writes as
+    /// additive.
     Q_INVOKABLE void driveFrameClock(QQuickItem* item, qreal dtMs);
 
     /// Push the transition-class scalars for the current clock frame onto
@@ -163,9 +164,10 @@ public:
     /// the shared animation.vert fallback, mirroring SurfaceAnimator's
     /// runLeg), seed iTime / isReversed for a show leg, and upload the
     /// translated parameters. Returns false — leaving the item unconfigured
-    /// — for an unknown, invalid or compositor-only pack.
-    Q_INVOKABLE bool configurePreviewItem(QQuickItem* item, const QString& packId,
-                                          const QVariantMap& friendlyParams) const;
+    /// — for an unknown, invalid or compositor-only pack. Either way the
+    /// call restarts driveFrameClock's frame counter: a configure is a leg
+    /// boundary.
+    Q_INVOKABLE bool configurePreviewItem(QQuickItem* item, const QString& packId, const QVariantMap& friendlyParams);
 
     /// Re-translate and upload @p friendlyParams onto an already-configured
     /// item, for live parameter editing in the detail dialog.
@@ -253,7 +255,9 @@ private:
     double m_moveTrailAccumMs = 0.0;
 
     // driveFrameClock's per-leg frame counter. Same one-item-at-a-time
-    // shape as the move sim; the QObject* is only compared, never dereferenced.
+    // shape as the move sim; the QObject* is only compared, never
+    // dereferenced. configurePreviewItem clears it, so a rebuilt item that
+    // lands on the old address still starts its leg at 0.
     QObject* m_clockItem = nullptr;
     int m_clockFrame = 0;
 };
