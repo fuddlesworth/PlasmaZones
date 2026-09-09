@@ -25,6 +25,7 @@ private Q_SLOTS:
     void testLivenessExpiresAfterTrailSeconds();
     void testButtonEventKeepsPassLiveWithoutMotion();
     void testVelocityDecaysWhenPointerStops();
+    void testSpeedIsNotUnderReportedAtRealSamplingRates();
     void testDamageRectCoversTrailInflatedByReach();
     void testDamageRectIsEmptyWhenNotLive();
     void testPressAndReleaseAreReportedSeparately();
@@ -150,6 +151,52 @@ void TestPointerHistory::testVelocityDecaysWhenPointerStops()
     QCOMPARE(stopped.velocity.x(), 0.0f);
     QCOMPARE(stopped.velocity.y(), 0.0f);
     QVERIFY(stopped.idleSeconds > 0.9);
+}
+
+void TestPointerHistory::testSpeedIsNotUnderReportedAtRealSamplingRates()
+{
+    // The dt a speed is divided by is floored, but the distance is not, so a
+    // floor at or above the real sampling interval scales every speed down by
+    // interval/floor. The floor was 1/30 s, slower than any real source: a
+    // 60 Hz stream reported half the true speed and a 125 Hz mouse a quarter,
+    // which made every px-per-second parameter mean something else entirely
+    // and left speed-gated packs drawing nothing.
+    //
+    // Table-driven over the rates that actually occur. The pre-existing
+    // velocity test samples 50 ms apart, above the old floor, which is why it
+    // never saw this.
+    struct Case
+    {
+        const char* label;
+        qint64 gapMs;
+    };
+    const QList<Case> cases = {
+        {"1000Hz gaming mouse", 1}, {"125Hz mouse", 8}, {"60Hz stream", 16}, {"30Hz stream", 33}, {"slow 50ms", 50},
+    };
+
+    for (const Case& c : cases) {
+        // Distance chosen so the true speed is always exactly 1000 px/s,
+        // whatever the interval, which is what makes the rates comparable.
+        const double distance = 1000.0 * (static_cast<double>(c.gapMs) / 1000.0);
+        PointerHistory history;
+        history.notePointer(QPointF(0.0, 0.0), 0);
+        history.notePointer(QPointF(distance, 0.0), c.gapMs);
+
+        const PointerFrameState state = history.frameState(c.gapMs, 1.0);
+        QVERIFY2(qAbs(state.velocity.x() - 1000.0f) < 1.0f,
+                 qPrintable(QStringLiteral("%1: reported %2 px/s for a true 1000 px/s")
+                                .arg(QLatin1String(c.label))
+                                .arg(static_cast<double>(state.velocity.x()))));
+
+        // The per-sample speed the trail carries (`.w`, what a shader reads)
+        // has to agree with the velocity, or a pack gating on one and drawing
+        // with the other disagrees with itself.
+        QVERIFY2(!state.trail.isEmpty(), c.label);
+        QVERIFY2(qAbs(state.trail.first().w() - 1000.0f) < 1.0f,
+                 qPrintable(QStringLiteral("%1: trail sample speed %2")
+                                .arg(QLatin1String(c.label))
+                                .arg(static_cast<double>(state.trail.first().w()))));
+    }
 }
 
 void TestPointerHistory::testDamageRectCoversTrailInflatedByReach()

@@ -37,7 +37,20 @@ public:
     static constexpr int kCapacity = PointerShaderContract::kMaxTrailPoints;
     static constexpr double kMinSampleDistancePx = 1.0;
     static constexpr qint64 kMinSampleGapMs = 8;
-    static constexpr double kVelocityMinDtSeconds = 1.0 / 30.0;
+    /// Floor on the dt a speed is divided by, guarding against a zero or
+    /// denormal gap between two events that arrive in the same millisecond.
+    ///
+    /// It must stay far below the real sampling interval. The distance is NOT
+    /// floored alongside it, so whenever the sampler runs faster than
+    /// 1/kVelocityMinDtSeconds every speed is under-reported by exactly
+    /// dt/kVelocityMinDtSeconds. This was 1/30 s, which is slower than any
+    /// real source: a 60 Hz motion stream reported half the true speed and a
+    /// 125 Hz mouse a quarter of it, so `activationSpeed` and every other
+    /// px-per-second parameter meant nothing like px per second. 1 ms clears
+    /// a 1000 Hz mouse. Noise in the resulting figure is the exponential
+    /// filter's job (pointerFilteredSpeed in pointer_lib.glsl), not this
+    /// floor's.
+    static constexpr double kVelocityMinDtSeconds = 0.001;
     static constexpr qint64 kVelocityHoldMs = 100;
 
     /// The "none this session" sentinel for press / release / idle ages.
