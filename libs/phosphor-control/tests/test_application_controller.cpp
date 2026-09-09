@@ -392,6 +392,26 @@ private Q_SLOTS:
         QCOMPARE(app.parentChainFor(QStringLiteral("ghost")), QStringList());
     }
 
+    void titlePathJoinsAncestorTitlesThenOwn()
+    {
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* aB = new StubPage(QStringLiteral("a.b"));
+        auto* aBC = new StubPage(QStringLiteral("a.b.c"));
+        auto* aD = new StubPage(QStringLiteral("a.d"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(aB, QStringLiteral("a"), QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+        app.registerPage(aBC, QStringLiteral("a.b"), QStringLiteral("C"), QUrl(QStringLiteral("qrc:/C.qml")));
+        // An untitled ancestor contributes no crumb rather than an empty one.
+        app.registerPage(aD, QStringLiteral("a"), QString(), QUrl(QStringLiteral("qrc:/D.qml")));
+
+        QCOMPARE(app.titlePathFor(QStringLiteral("a.b.c")), QStringLiteral("A › B › C"));
+        QCOMPARE(app.titlePathFor(QStringLiteral("a.b")), QStringLiteral("A › B"));
+        QCOMPARE(app.titlePathFor(QStringLiteral("a")), QStringLiteral("A"));
+        QCOMPARE(app.titlePathFor(QStringLiteral("a.d")), QStringLiteral("A"));
+        QCOMPARE(app.titlePathFor(QStringLiteral("ghost")), QString());
+    }
+
     void gotoNextSkipsNonNavigablePages()
     {
         ApplicationController app;

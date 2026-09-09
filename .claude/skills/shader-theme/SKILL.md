@@ -195,8 +195,8 @@ Lead with what exists and whether it is verified. Then:
   different claims and the second one is common: say which it is in the first two sentences.
 - a table of every pack (id, family, class, event paths it is assigned to)
 - the curves and their parameters
-- where the set files and profile snippet are and how to apply them (Settings > Decorations >
-  Decoration Sets and Settings > Animations > Motion Sets — a format-2 motion set carries the
+- where the set files and profile snippet are and how to apply them (Settings > Appearance > Decorations >
+  Library > Sets and Settings > Appearance > Animations > Library > Sets — a format-2 motion set carries the
   packs too, so there is no separate step for them)
 - every gate with its real exit status, and anything left unverified (a live session smoke
   test you could not run, glslang missing, tests not built)

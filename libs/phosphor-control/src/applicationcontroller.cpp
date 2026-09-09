@@ -11,6 +11,7 @@
 #include <QScopeGuard>
 
 #include <algorithm>
+#include <utility>
 
 namespace PhosphorControl {
 
@@ -560,6 +561,22 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
     qWarning() << "ApplicationController::parentChainFor: page nested deeper than" << PageRegistry::MaxParentChainHops
                << "levels walking up from id" << id;
     return chain;
+}
+
+QString ApplicationController::titlePathFor(const QString& id) const
+{
+    QStringList crumbs;
+    QStringList chain = parentChainFor(id);
+    chain.append(id);
+    for (const QString& pageId : std::as_const(chain)) {
+        const QString title = m_registry->entry(pageId).title;
+        if (!title.isEmpty()) {
+            crumbs.append(title);
+        }
+    }
+    // U+203A (›), matching SearchController's breadcrumb separator. A
+    // QStringLiteral, not QLatin1String: the separator is multibyte UTF-8.
+    return crumbs.join(QStringLiteral(" › "));
 }
 
 void ApplicationController::trackDomain(StagingDomain* domain)
