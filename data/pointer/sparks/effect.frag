@@ -28,6 +28,9 @@
 
 const int kMaxTrail = 32;
 const int kMaxSparks = 48;
+// Speed (device px/s) at which a sample sheds its full budget. Deliberately
+// low: the settings preview's simulated pointer peaks near 324 px/s.
+const float kFullSpeed = 220.0;
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -77,9 +80,24 @@ vec4 pPointer(vec2 uv) {
         if (s.z >= life) {
             break;
         }
-        // Below the activation speed this sample sheds nothing at all.
+        // The far half of the tail sheds from every second sample only. Those
+        // sparks are near the end of their life and faint, and the inner loop
+        // below is the pack's whole cost, so thinning them there halves the
+        // worst case for no visible loss.
+        if (i >= 8 && (i & 1) == 1) {
+            continue;
+        }
+        // Below the activation speed this sample sheds nothing at all. The
+        // shed decision comes before the distance test so a sample that sheds
+        // nothing costs nothing, whichever order the two would have rejected.
         float gate = pointerSpeedGate(s.w, p_activationSpeed);
         if (gate <= 0.0) {
+            continue;
+        }
+        // Spark budget for this sample scales with its speed.
+        float shed = budget * clamp(s.w / kFullSpeed, 0.0, 1.0) * gate;
+        int sparks = int(ceil(shed));
+        if (sparks < 1) {
             continue;
         }
         // Sparks launch from the smoothed path, but keep their seed on the
@@ -89,13 +107,6 @@ vec4 pPointer(vec2 uv) {
         vec2 origin = pointerSmoothedAt(i, count, p_smoothing);
         vec2 rel = px - origin;
         if (abs(rel.x) > reach || abs(rel.y) > reach) {
-            continue;
-        }
-
-        // Spark budget for this sample scales with its speed.
-        float shed = budget * clamp(s.w / 1400.0, 0.0, 1.0) * gate;
-        int sparks = int(ceil(shed));
-        if (sparks < 1) {
             continue;
         }
         vec2 seed = floor(s.xy * 0.5);

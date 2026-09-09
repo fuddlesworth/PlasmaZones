@@ -15,7 +15,7 @@
             "name": "Thickness",
             "type": "float",
             "default": 14.0,
-            "min": 2.0,
+            "min": 4.0,
             "max": 64.0,
             "description": "Width of the ribbon at full speed (px)"
         },
@@ -42,9 +42,9 @@
             "name": "Activation speed",
             "type": "float",
             "default": 120.0,
-            "min": 20.0,
+            "min": 0.0,
             "max": 2000.0,
-            "description": "Pointer speed the ribbon starts appearing at (px per second)"
+            "description": "Pointer speed below which the ribbon is not drawn (px per second), 0 to always draw"
         },
         {
             "id": "smoothing",

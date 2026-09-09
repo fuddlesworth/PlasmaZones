@@ -172,7 +172,12 @@ vec4 pPointer(vec2 uv) {
             vec3 h = hash23(vec2(float(j) * 21.7 + 3.0, floor(origin.x) * 0.13 + floor(origin.y) * 0.29));
             float angle = (float(j) + 0.4 * h.x) / float(burst) * TAU;
             vec2 tip = origin + vec2(cos(angle), sin(angle)) * len * (0.55 + 0.45 * h.y);
-            float amp = jag * 0.22 * length(tip - origin);
+            // The jag pushes vertices sideways off the straight line, so the
+            // arc's whole excursion is its length plus its amplitude. Both
+            // together are held inside the reach, or the kinks of a full-length
+            // strike would hang outside the damage rect.
+            float tipLen = length(tip - origin);
+            float amp = min(jag * 0.22 * tipLen, max(reachPx - tipLen, 0.0));
             vec2 lo = min(origin, tip) - vec2(amp + glow * 3.0);
             vec2 hi = max(origin, tip) + vec2(amp + glow * 3.0);
             if (any(lessThan(px, lo)) || any(greaterThan(px, hi))) {

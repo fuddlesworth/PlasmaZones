@@ -58,6 +58,7 @@
             "items": {
                 "type": "object",
                 "required": ["path"],
+                "additionalProperties": false,
                 "properties": {
                     "path": { "type": "string", "minLength": 1 },
                     "wrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
@@ -66,8 +67,19 @@
         },
         "parameters": {
             "type": "array",
+            "minItems": 0,
             "maxItems": 48,
             "items": { "$ref": "#/definitions/parameter" }
+        }
+    },
+    "if": {
+        "properties": { "multipass": { "const": true } },
+        "required": ["multipass"]
+    },
+    "then": {
+        "required": ["bufferShaders"],
+        "properties": {
+            "bufferShaders": { "minItems": 1 }
         }
     },
     "definitions": {

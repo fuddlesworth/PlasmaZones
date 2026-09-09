@@ -1,20 +1,25 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The offline animation-pack validator's metadata lints. The bundled-pack CI
-// gate (shader_validate_animations) only proves the shipped packs are clean —
-// it cannot show that a BROKEN pack is actually caught, which is how an
-// appliesTo token that the parser accepted and the lint rejected shipped
-// undetected. These tests build deliberately-broken packs in a temp dir and
-// assert the diagnostic.
+// The offline pack validator's lints, across all four authoring models:
+// animation, overlay, surface-adjacent detection, and pointer. The
+// bundled-pack CI gates (shader_validate_*) only prove the shipped packs are
+// clean — they cannot show that a BROKEN pack is actually caught, which is how
+// an appliesTo token that the parser accepted and the lint rejected shipped
+// undetected, and how a pointer pack with a speed gate the preview could
+// never open shipped invisible. These tests build deliberately-broken packs
+// in a temp dir and assert the diagnostic.
 //
-// Mostly metadata lints, plus two bakes that the bundled-pack gate cannot
-// exercise on its own. The multipass buffer pass has no other coverage at all
-// (no bundled animation pack is multipass, so the CI gate walks straight past
-// it). The COMPOSITOR-ONLY bake has the opposite problem: a third of the
-// bundled packs take it, but a test over shipped packs can only show that
-// clean source passes, never that broken source is caught, and that path used
-// to be a silent skip.
+// Mostly metadata lints, plus the bakes the bundled-pack gates cannot
+// exercise on their own. The animation multipass buffer pass has no other
+// coverage at all (no bundled animation pack is multipass, so the CI gate
+// walks straight past it). The COMPOSITOR-ONLY bake has the opposite
+// problem: a third of the bundled animation packs take it, but a test over
+// shipped packs can only show that clean source passes, never that broken
+// source is caught, and that path used to be a silent skip. The
+// authoring-model detection cases pin the shared/ marker lookup that decides
+// which arm a pack is sent to, since the wrong arm produces confident
+// diagnostics about nothing.
 
 #include <QtTest>
 
@@ -178,24 +183,64 @@ PackResult validatePointer(const QTemporaryDir& tmp, const QString& name, const 
     return result;
 }
 
-/// A pointer pack declaring one float parameter `activationSpeed` at `def`.
-QJsonObject pointerPackWithGate(const QString& id, double def)
+/// One pointer parameter declaration.
+QJsonObject pointerParam(const QString& id, const QString& type, double def, double min, double max)
 {
     QJsonObject param;
-    param.insert(QStringLiteral("id"), QStringLiteral("activationSpeed"));
-    param.insert(QStringLiteral("name"), QStringLiteral("Activation speed"));
-    param.insert(QStringLiteral("type"), QStringLiteral("float"));
+    param.insert(QStringLiteral("id"), id);
+    param.insert(QStringLiteral("name"), id);
+    param.insert(QStringLiteral("type"), type);
     param.insert(QStringLiteral("default"), def);
-    param.insert(QStringLiteral("min"), 0.0);
-    param.insert(QStringLiteral("max"), 2000.0);
+    param.insert(QStringLiteral("min"), min);
+    param.insert(QStringLiteral("max"), max);
+    return param;
+}
 
+/// A minimal pointer pack with the given parameters.
+QJsonObject pointerPack(const QString& id, const QJsonArray& params)
+{
     QJsonObject obj;
     obj.insert(QStringLiteral("id"), id);
     obj.insert(QStringLiteral("name"), id);
     obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("effect.frag"));
     obj.insert(QStringLiteral("trailSeconds"), 1.0);
-    obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+    obj.insert(QStringLiteral("parameters"), params);
     return obj;
+}
+
+/// A pointer pack declaring one float parameter `activationSpeed` at `def`.
+QJsonObject pointerPackWithGate(const QString& id, double def)
+{
+    return pointerPack(
+        id, QJsonArray{pointerParam(QStringLiteral("activationSpeed"), QStringLiteral("float"), def, 0.0, 2000.0)});
+}
+
+/// A pointer body that reads every scalar parameter in @p ids, so the
+/// declared-but-unread sweep stays quiet and the lint under test is the only
+/// thing in the report about that parameter.
+QString pointerBodyReadingScalars(const QStringList& ids)
+{
+    QString body = QStringLiteral("vec4 pPointer(vec2 uv) {\n    float acc = 0.0;\n");
+    for (const QString& id : ids) {
+        body += QStringLiteral("    acc += float(p_") + id + QStringLiteral(");\n");
+    }
+    body += QStringLiteral("    return vec4(acc);\n}\n");
+    return body;
+}
+
+/// Write @p body as a buffer pass file in the pointer pack @p name. Returns
+/// false when the write fails, for the caller to QVERIFY.
+bool writePointerBuffer(const QTemporaryDir& tmp, const QString& name, const QString& file, const QString& body)
+{
+    const QString dir = tmp.filePath(name);
+    QDir().mkpath(dir);
+    QFile buf(dir + QLatin1Char('/') + file);
+    if (!buf.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    buf.write(body.toUtf8());
+    buf.close();
+    return buf.error() == QFile::NoError;
 }
 
 /// `multipass` is set because the buffer lints gate on it, matching the
@@ -1078,6 +1123,205 @@ private Q_SLOTS:
                                                "    return vec4(p_activationSpeed * 0.001);\n"
                                                "}\n"));
             QVERIFY2(!r.report.contains(marker), qPrintable(r.report));
+        }
+    }
+
+    /// The pointer arm's metadata lints, one fixture each. Every one of these
+    /// fields is silently repaired by PointerShaderEffect::fromJson (an unknown
+    /// layer falls back to below, reach and trailSeconds are clamped, a
+    /// reachParam naming nothing numeric is ignored), so without a fixture per
+    /// lint a repair that quietly widened would take the diagnostic with it
+    /// and the bundled-pack gate would stay green. Each asserts the
+    /// diagnostic's text, not just an error count, so a lint firing for the
+    /// wrong reason is not mistaken for the right one.
+    void pointerMetadataLintsCatchEachSilentlyRepairedField()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        const QString body = pointerBodyReadingScalars({QStringLiteral("activationSpeed")});
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-layer"), 0.0);
+            obj.insert(QStringLiteral("layer"), QStringLiteral("between"));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-layer"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("layer must be \"below\" or \"above\": between")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-reach-range"), 0.0);
+            obj.insert(QStringLiteral("reach"), 4096.0);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-range"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("reach out of range [0, 1024]: 4096")), qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-reach-undeclared"), 0.0);
+            obj.insert(QStringLiteral("reachParam"), QStringLiteral("radius"));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-undeclared"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("reachParam 'radius' names no declared parameter")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject tint;
+            tint.insert(QStringLiteral("id"), QStringLiteral("tint"));
+            tint.insert(QStringLiteral("name"), QStringLiteral("tint"));
+            tint.insert(QStringLiteral("type"), QStringLiteral("color"));
+            tint.insert(QStringLiteral("default"), QStringLiteral("#ffffffff"));
+            QJsonObject obj = pointerPack(QStringLiteral("pt-reach-color"), QJsonArray{tint});
+            obj.insert(QStringLiteral("reachParam"), QStringLiteral("tint"));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-color"), obj,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) { return p_tint; }\n"));
+            QVERIFY2(r.report.contains(QStringLiteral("reachParam 'tint' has type 'color'")), qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-reach-max"),
+                QJsonArray{pointerParam(QStringLiteral("radius"), QStringLiteral("float"), 64.0, 8.0, 2048.0)});
+            obj.insert(QStringLiteral("reachParam"), QStringLiteral("radius"));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-max"), obj,
+                                                 pointerBodyReadingScalars({QStringLiteral("radius")}));
+            QVERIFY2(
+                r.report.contains(QStringLiteral("reachParam 'radius' allows up to 2048, past the 1024 reach cap")),
+                qPrintable(r.report));
+        }
+        {
+            // The floor: a reach the user can drag down to a pixel clips the
+            // pack to nothing around the path.
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-reach-min"),
+                QJsonArray{pointerParam(QStringLiteral("radius"), QStringLiteral("float"), 64.0, 1.0, 256.0)});
+            obj.insert(QStringLiteral("reachParam"), QStringLiteral("radius"));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-min"), obj,
+                                                 pointerBodyReadingScalars({QStringLiteral("radius")}));
+            QVERIFY2(r.report.contains(QStringLiteral("reachParam 'radius' allows a minimum of 1 logical px")),
+                     qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("clips the pack to nothing")), qPrintable(r.report));
+
+            // And a floor at the limit is not linted.
+            QJsonObject ok = pointerPack(
+                QStringLiteral("pt-reach-min-ok"),
+                QJsonArray{pointerParam(QStringLiteral("radius"), QStringLiteral("float"), 64.0, 4.0, 256.0)});
+            ok.insert(QStringLiteral("reachParam"), QStringLiteral("radius"));
+            const PackResult fine = validatePointer(tmp, QStringLiteral("pt-reach-min-ok"), ok,
+                                                    pointerBodyReadingScalars({QStringLiteral("radius")}));
+            QVERIFY2(!fine.report.contains(QStringLiteral("allows a minimum of")), qPrintable(fine.report));
+        }
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-trail"), 0.0);
+            obj.insert(QStringLiteral("trailSeconds"), 0.0);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-trail"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("trailSeconds must be positive: 0")), qPrintable(r.report));
+        }
+        {
+            // Declared and never read: the control is dead but nothing at
+            // load says so.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-unread"), 0.0);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-unread"), obj,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(0.0); }\n"));
+            QVERIFY2(r.report.contains(QStringLiteral(
+                         "parameter 'activationSpeed' is declared but no stage reads p_activationSpeed")),
+                     qPrintable(r.report));
+        }
+    }
+
+    /// The multipass, texture and cursor lints the pointer arm was missing
+    /// while the overlay and surface arms had them. A traversal in
+    /// bufferShaders is rejected outright, the way every other user-editable
+    /// path is; a multipass switch with nothing behind it is diagnosed; and a
+    /// texture list past the contract cap is told the surplus is dropped.
+    void pointerMultipassAndTextureLintsMatchTheSiblingArms()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString body = pointerBodyReadingScalars({QStringLiteral("activationSpeed")});
+
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-buf-escape"), 0.0);
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("../../etc/passwd")}));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-buf-escape"), obj, body);
+            QVERIFY2(r.errors > 0, qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferShaders path escapes the pack directory")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-mp-empty"), 0.0);
+            obj.insert(QStringLiteral("multipass"), true);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-mp-empty"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("multipass is true but no bufferShaders are declared")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-tex-cap"), 0.0);
+            QJsonArray textures;
+            for (int i = 0; i < 4; ++i) {
+                QJsonObject tex;
+                tex.insert(QStringLiteral("path"), QStringLiteral("tile%1.png").arg(i));
+                textures.append(tex);
+            }
+            obj.insert(QStringLiteral("textures"), textures);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-tex-cap"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("too many textures: 4 declared, cap is 3")),
+                     qPrintable(r.report));
+        }
+        {
+            // A buffer pass reaches parameters by raw slot, never by p_<id>,
+            // so a pack whose scalars are read only there must not be told
+            // its controls are dead. This is the shape the bundled afterglow
+            // pack has.
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-mp-slot"),
+                QJsonArray{pointerParam(QStringLiteral("persistence"), QStringLiteral("float"), 0.9, 0.0, 1.0)});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            obj.insert(QStringLiteral("bufferFeedback"), true);
+            QVERIFY(
+                writePointerBuffer(tmp, QStringLiteral("pt-mp-slot"), QStringLiteral("buffer.frag"),
+                                   QStringLiteral("#version 450\n"
+                                                  "uniform vec4 customParams[8];\n"
+                                                  "uniform sampler2D iChannel0;\n"
+                                                  "layout(location = 0) in vec2 vTexCoord;\n"
+                                                  "layout(location = 0) out vec4 fragColor;\n"
+                                                  "void main() {\n"
+                                                  "    fragColor = texture(iChannel0, vTexCoord) * customParams[0].x;\n"
+                                                  "}\n")));
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-mp-slot"), obj,
+                                QStringLiteral("uniform sampler2D iChannel0;\n"
+                                               "vec4 pPointer(vec2 uv) { return texture(iChannel0, uv); }\n"));
+            QVERIFY2(!r.report.contains(QStringLiteral("parameter 'persistence' is declared but no stage reads")),
+                     qPrintable(r.report));
+            QVERIFY2(!r.report.contains(QStringLiteral("bufferFeedback is true but no buffer pass samples")),
+                     qPrintable(r.report));
+        }
+        {
+            // A sprite sampled without needsCursor reads texture unit 0 on
+            // the compositor, which is the contract's stated reason for the
+            // gate living in the validator.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-cursor"), 0.0);
+            const PackResult r = validatePointer(
+                tmp, QStringLiteral("pt-cursor"), obj,
+                QStringLiteral("uniform sampler2D uCursorSprite;\n"
+                               "vec4 pPointer(vec2 uv) { return texture(uCursorSprite, uv) * p_activationSpeed; }\n"));
+            QVERIFY2(
+                r.report.contains(QStringLiteral("samples uCursorSprite but the pack does not declare `needsCursor`")),
+                qPrintable(r.report));
+        }
+        {
+            // The shared pointer.vert is the preview's stage: a pack naming a
+            // copy of it as its own gets a vertex stage that is dead on the
+            // compositor, and the message has to say why rather than leave a
+            // bare undeclared-identifier error.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-vert-qt"), 0.0);
+            obj.insert(QStringLiteral("vertexShader"), QStringLiteral("pointer.vert"));
+            QVERIFY(writePointerBuffer(
+                tmp, QStringLiteral("pt-vert-qt"), QStringLiteral("pointer.vert"),
+                QStringLiteral("#version 450\n"
+                               "layout(std140, binding = 0) uniform U { mat4 qt_Matrix; };\n"
+                               "layout(location = 0) in vec2 position;\n"
+                               "void main() { gl_Position = qt_Matrix * vec4(position, 0.0, 1.0); }\n")));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-vert-qt"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("reads qt_Matrix / qt_Opacity, which exist only in the preview")),
+                     qPrintable(r.report));
         }
     }
 };

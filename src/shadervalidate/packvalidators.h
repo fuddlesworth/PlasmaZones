@@ -27,8 +27,9 @@ int validateAnimationPack(const QString& packDir, QTextStream& out);
 int validateSurfacePack(const QString& packDir, QTextStream& out);
 
 // pointer packs (data/pointer/*): PointerShaderEffect + the pPointer entry
-// scaffold + paramPreamble; validates effect.frag, buffer passes, and the
-// shared vertex stage.
+// scaffold + paramPreamble; validates effect.frag and the buffer passes on
+// both the preview and the compositor dialect, and the shared vertex stage
+// on the preview dialect.
 int validatePointerPack(const QString& packDir, QTextStream& out);
 
 } // namespace PlasmaZones::ShaderValidate

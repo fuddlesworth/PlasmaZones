@@ -19,6 +19,10 @@
 // Drying is age-asymmetric and deliberate: a stroke clears from its OLDEST end
 // forward, so the tail lifts off the page first and the ink at the cursor is
 // the last to go. Nothing else in the family fades that way round.
+//
+// `smoothing` goes through the shared pointerSmoothedAt(), like every other
+// path pack, so two packs in one chain trace the same curve from the same
+// pointer. It defaults to 0.5, the value the pack used to hardcode.
 
 const int kMaxTrail = 32;
 
@@ -48,8 +52,8 @@ vec4 pPointer(vec2 uv) {
                 break;
             }
 
-            vec2 pa = pointerSmoothedAt(i, count, 0.5);
-            vec2 pb = pointerSmoothedAt(i + 1, count, 0.5);
+            vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
+            vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
             vec2 ab = pb - pa;
             float len = length(ab);
             if (len < 1e-4) {

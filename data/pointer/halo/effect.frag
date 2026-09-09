@@ -28,9 +28,14 @@
 // starting halfway through, under a fifth of a cycle was ever on screen and
 // the "breathes while you hold still" the pack advertises was not visible.
 const float kIdleSeconds = 0.85;
-// One full cycle inside the visible window.
+// One full cycle inside the visible window, in radians per second. Nudged
+// at use onto a divisor of the iTime wrap (pointerWrapSafeRate) so the
+// breath does not jump when iTime wraps.
 const float kBreathRate = 7.4;
 const float kSwellSeconds = 0.55;
+// Speed (device px/s) at which speedGain is fully applied. Deliberately low:
+// the settings preview's simulated pointer peaks near 324 px/s.
+const float kFullSpeed = 200.0;
 
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
@@ -50,14 +55,14 @@ vec4 pPointer(vec2 uv) {
         body *= 1.0 - smoothstep(radius * 0.8, radius, d);
 
         float speed = uPointerVelocity.z;
-        float gain = 1.0 + p_speedGain * clamp(speed / 1200.0, 0.0, 1.0);
+        float gain = 1.0 + p_speedGain * clamp(speed / kFullSpeed, 0.0, 1.0);
         float gate = pointerSpeedGate(speed, p_activationSpeed);
 
         // Idle envelope: settle to idleDim over the first third of the window
         // while breathing, then fade out over the rest.
         float idle = pointerIdleSeconds();
         float settle = smoothstep(0.0, kIdleSeconds * 0.35, idle);
-        float breath = 1.0 + 0.08 * sin(iTime * kBreathRate);
+        float breath = 1.0 + 0.08 * sin(iTime * pointerWrapSafeRate(kBreathRate / TAU) * TAU);
         float level = mix(1.0, clamp(p_idleDim, 0.0, 1.0) * breath, settle);
         // Fade late, so the breath is a thing you watch rather than something
         // the fade eats.

@@ -18,7 +18,7 @@
             "default": 26.0,
             "min": 4.0,
             "max": 120.0,
-            "description": "Radius of the round bloom at the middle (px)"
+            "description": "Radius of the round bloom at the middle (px). It cannot grow past the spike length, which is the edge of the drawn area"
         },
         {
             "id": "spikeCount",

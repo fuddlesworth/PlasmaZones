@@ -46,6 +46,24 @@
 // iTimeHi wrap counterpart is not used by pointer packs).
 uniform float iTime;
 
+// The rest of the preview branch's BaseUniforms members, declared here too so
+// that BOTH dialects accept the same source: a pack (or a shared helper) that
+// names any base-contract identifier compiles on the compositor exactly as it
+// does in the preview, instead of failing only on the path that ships. The
+// compositor never sets them, so on this branch they read as zero. The two
+// Qt scene-graph members, qt_Matrix and qt_Opacity, are deliberately absent:
+// they are the preview's alone (its vertex stage reads qt_Matrix) and a pack
+// that names them is preview-only by construction.
+uniform float iTimeDelta;
+uniform int iFrame;
+uniform int _appField0;
+uniform int _appField1;
+uniform vec4 iDate;
+uniform int iAudioSpectrumSize;
+uniform int iFlipBufferY;
+uniform float iTimeHi;
+uniform int iIsReversed;
+
 // Canvas size in device px.
 uniform vec2 iResolution;
 

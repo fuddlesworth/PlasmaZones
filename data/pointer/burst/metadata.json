@@ -63,7 +63,7 @@
             "default": 180.0,
             "min": 32.0,
             "max": 320.0,
-            "description": "Furthest a bit may travel from the press point. Launch speed and gravity are scaled down together to stay inside it (px)"
+            "description": "Furthest a bit may travel from the press point. Launch speed and gravity are scaled down together to stay inside it, and the bit size is taken out of it first (px)"
         },
         {
             "id": "releaseSpray",

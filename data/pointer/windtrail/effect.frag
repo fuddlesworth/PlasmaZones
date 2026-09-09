@@ -36,9 +36,16 @@ const int kMaxTrail = 32;
 // normalised against this so `thickness` means the same width on any machine.
 const float kFullWidthSpeed = 900.0;
 
-// Seconds of stillness over which the ribbon fades away once the pointer
-// stops. Well inside trailSeconds, so the pack stops asking for frames.
-const float kStopFadeSeconds = 0.35;
+// Stop fade, as a share of `duration`: the seconds of stillness over which
+// the ribbon fades away once the pointer stops. Scaled off the duration
+// rather than fixed, because a fixed 0.35 s took the whole ribbon to zero
+// long before a 1.2 s duration had let its far end age out, which made most
+// of the Duration slider inert once the hand stopped. The ratio reproduces
+// the old 0.35 s at the default 0.5 s duration, and the result is floored so
+// a very short duration still gets a fade rather than a cut, and capped at
+// the duration itself so it stays inside trailSeconds.
+const float kStopFadeShare = 0.35 / 0.5;
+const float kStopFadeFloorSeconds = 0.2;
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -61,13 +68,16 @@ vec4 pPointer(vec2 uv) {
     }
 
     // Stop fade: rest dims the whole ribbon out rather than cutting it.
-    float stopFade = 1.0 - smoothstep(0.0, kStopFadeSeconds, pointerIdleSeconds());
+    float stopFadeSeconds = clamp(kStopFadeShare * duration, kStopFadeFloorSeconds, duration);
+    float stopFade = 1.0 - smoothstep(0.0, stopFadeSeconds, pointerIdleSeconds());
     if (stopFade <= 0.0) {
         return vec4(0.0);
     }
 
-    // Widest the ribbon can be anywhere, for the per-segment reject box.
-    float cull = halfWidth * 1.6 + 2.0 * scale;
+    // The reach the host resolved, in device px. It is both the per-segment
+    // reject box and the outer edge of the soft glow below, so the glow never
+    // meets the damage rect's edge at a visible level.
+    float reach = pointerReach();
 
     float cover = 0.0;
     for (int i = 0; i < kMaxTrail - 1; ++i) {
@@ -87,8 +97,8 @@ vec4 pPointer(vec2 uv) {
         if (len < 1e-4) {
             continue;
         }
-        vec2 lo = min(pa, pb) - cull;
-        vec2 hi = max(pa, pb) + cull;
+        vec2 lo = min(pa, pb) - reach;
+        vec2 hi = max(pa, pb) + reach;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
             continue;
         }
@@ -121,7 +131,14 @@ vec4 pPointer(vec2 uv) {
 
         float core = 1.0 - smoothstep(w - 0.75, w + 0.75, d);
         float sigma = w + 1.5 * scale;
-        float soft = exp(-(d * d) / (2.0 * sigma * sigma)) * 0.4;
+        // Compact support: the gaussian alone is still visible at the reject
+        // box, so it is windowed to reach exactly zero at the reach.
+        float soft = exp(-(d * d) / (2.0 * sigma * sigma)) * 0.4 * (1.0 - smoothstep(0.8 * reach, reach, d));
+        // `tail` is applied a second time here, on the opacity, after it
+        // already shaped the width above. That is deliberate and not a
+        // duplicate: the width has a floor (0.35 px) it can never taper
+        // below, so without this end fade the ribbon's old end would stop at
+        // a hairline and then vanish in one frame instead of dissolving.
         cover = max(cover, max(core, soft) * tail);
     }
 

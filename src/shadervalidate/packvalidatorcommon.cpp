@@ -24,6 +24,7 @@
 #include <algorithm>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
+using PhosphorPointerShaders::PointerShaderEffect;
 using PhosphorRendering::ShaderCompiler;
 using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
@@ -354,6 +355,14 @@ QStringList declaredParamNames(const QList<SurfaceShaderEffect::ParameterInfo>& 
     }
     return declared;
 }
+QStringList declaredParamNames(const QList<PointerShaderEffect::ParameterInfo>& params)
+{
+    QStringList declared;
+    for (const PointerShaderEffect::ParameterInfo& p : params) {
+        declared << QStringLiteral("p_") + p.id;
+    }
+    return declared;
+}
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.
@@ -387,7 +396,10 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
     }
 
     const ShaderCompiler::Result result = ShaderCompiler::compile(expanded.toUtf8(), stage);
-    return reportCompile(out, label, result, declaredParamNames(info.parameters));
+    // The did-you-mean hint only makes sense for the stage that received the
+    // preamble: an unscaffolded stage cannot see any p_<id>, so suggesting
+    // one would send the author after a name that stage can never use.
+    return reportCompile(out, label, result, useScaffold ? declaredParamNames(info.parameters) : QStringList());
 }
 
 } // namespace PlasmaZones::ShaderValidate

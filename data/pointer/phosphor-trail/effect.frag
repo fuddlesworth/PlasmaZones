@@ -59,8 +59,11 @@ vec4 pPointer(vec2 uv) {
     // to cyan in a single frame once per cycle. Walking back down the ramp
     // keeps it the continuous drift the pack advertises, at the cost of a
     // period twice the setting.
+    //
+    // The walk rate is nudged onto a divisor of the iTime wrap
+    // (pointerWrapSafeRate) so the colour does not jump when iTime wraps.
     float cycle = max(p_colorCycle, 0.0);
-    float hueBase = cycle > 0.0 ? abs(fract(iTime / (cycle * 2.0)) * 2.0 - 1.0) : 0.35;
+    float hueBase = cycle > 0.0 ? abs(fract(iTime * pointerWrapSafeRate(1.0 / (cycle * 2.0))) * 2.0 - 1.0) : 0.35;
 
     float core = 0.0;
     float halo = 0.0;
@@ -81,7 +84,10 @@ vec4 pPointer(vec2 uv) {
         }
         float t;
         float d = pointerSmoothSegmentDistance(px, i, count, p_smoothing, t);
-        if (d > sigma * 3.0) {
+        // Four sigma, where the bloom is under a thousandth, rather than three,
+        // where it was still a visible 1.5% and cut off square. Bounded by the
+        // reach too, since four sigma at the widest stroke is past it.
+        if (d > min(sigma * 4.0, pointerReach())) {
             continue;
         }
         float age = clamp(mix(a.z, b.z, t) / lifetime, 0.0, 1.0);

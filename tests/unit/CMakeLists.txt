@@ -1073,6 +1073,17 @@ target_link_libraries(test_animation_shader_kwin_bake PRIVATE Qt6::Test Qt6::Cor
 target_compile_definitions(test_animation_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_kwin_bake COMMAND test_animation_shader_kwin_bake)
 
+# The pointer twin: bakes the KWIN-PATH variant of every pointer pack (main
+# fragment with its preamble, buffer passes without one, and the compositor's
+# own vertex stage) through a real offscreen OpenGL context. Every pointer
+# pack ships on that branch while the preview bake only covers the Qt-RHI
+# one, and the two dialects declare different identifiers. Skips when no
+# desktop-GL >= 4.5 context is available; an empty pack discovery FAILS.
+add_executable(test_pointer_shader_kwin_bake ui/shaders/test_pointer_shader_kwin_bake.cpp)
+target_link_libraries(test_pointer_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorPointer::PhosphorPointer PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_pointer_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_pointer_shader_kwin_bake COMMAND test_pointer_shader_kwin_bake)
+
 # DRAWS every bundled strip pack through the KWin-path variant the strip
 # pass links (fragment assembled as striptransitionshader.cpp does, linked
 # against the pass's quad vertex stage) over a synthetic uStrip / uBelow

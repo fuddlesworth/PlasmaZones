@@ -15,6 +15,14 @@
 //
 // vTexCoord is the screen UV the fragment contract expects; pointerPixel(uv)
 // turns it into top-down canvas px on either runtime.
+//
+// PREVIEW ONLY. Do NOT name this file as a pack's `vertexShader`. qt_Matrix
+// exists only in the preview's UBO branch, so on the compositor this stage
+// fails to compile and the pack falls back to the built-in vertex source with
+// a warning nobody reads; the preview and the validator's preview bake would
+// both pass, hiding that the declared stage is dead where it ships. The
+// validator rejects a pack whose vertexShader resolves here for that reason.
+// A pack that needs its own vertex stage writes one against the KWin branch.
 
 #version 450
 

@@ -39,44 +39,43 @@ const float kClickLife = 0.55;
 // the settings preview's simulated pointer peaks near 324 px/s.
 const float kFullSpeed = 220.0;
 
-// Pointer position `lag` seconds ago, interpolated between the trail samples
-// on either side of that age. Falls back to the newest sample when the trail
-// does not reach that far back yet.
-vec2 orbitLaggedCentre(int count, float lag) {
-    vec2 newest = pointerTrailAt(0).xy;
-    if (lag <= 0.0 || count < 2) {
-        return newest;
-    }
-    vec2 prev = newest;
-    float prevAge = pointerTrailAt(0).z;
+// One walk over the trail for the two fragment-invariant answers the ring
+// needs, folded together because both are the same loop over the same
+// samples and this runs per fragment:
+//
+//   • `centre`: the pointer position `lag` seconds ago, interpolated between
+//     the trail samples on either side of that age. Falls back to the newest
+//     sample when the trail does not reach that far back yet.
+//   • `meanSpeed`: the mean sample speed over the trail window, the eased
+//     stand-in for a smoothed speed the contract gives no state to keep.
+void orbitTrailWalk(int count, float lag, out vec2 centre, out float meanSpeed) {
+    vec4 newest = pointerTrailAt(0);
+    vec2 prev = newest.xy;
+    float prevAge = newest.z;
+    float sum = newest.w;
+    bool centreFound = lag <= 0.0 || count < 2;
+    centre = newest.xy;
     for (int i = 1; i < kMaxTrail; ++i) {
         if (i >= count) {
             break;
         }
         vec4 s = pointerTrailAt(i);
-        if (s.z >= lag) {
-            float span = max(s.z - prevAge, 1e-4);
-            return mix(prev, s.xy, clamp((lag - prevAge) / span, 0.0, 1.0));
+        sum += s.w;
+        if (!centreFound) {
+            if (s.z >= lag) {
+                float span = max(s.z - prevAge, 1e-4);
+                centre = mix(prev, s.xy, clamp((lag - prevAge) / span, 0.0, 1.0));
+                centreFound = true;
+            } else {
+                prev = s.xy;
+                prevAge = s.z;
+            }
         }
-        prev = s.xy;
-        prevAge = s.z;
     }
-    return prev;
-}
-
-// Mean sample speed over the trail window, which is the eased stand-in for a
-// smoothed speed the contract gives no state to keep.
-float orbitMeanSpeed(int count) {
-    float sum = 0.0;
-    float n = 0.0;
-    for (int i = 0; i < kMaxTrail; ++i) {
-        if (i >= count) {
-            break;
-        }
-        sum += pointerTrailAt(i).w;
-        n += 1.0;
+    if (!centreFound) {
+        centre = prev;
     }
-    return n > 0.0 ? sum / n : 0.0;
+    meanSpeed = sum / float(max(count, 1));
 }
 
 vec4 pPointer(vec2 uv) {
@@ -101,9 +100,13 @@ vec4 pPointer(vec2 uv) {
     float dotSize = max(p_dotSize, 0.25);
     float radiusMax = max(p_radius, 2.0);
 
+    vec2 centre;
+    float meanSpeed;
+    orbitTrailWalk(count, max(p_lag, 0.0), centre, meanSpeed);
+
     // Everything below is sized in LOGICAL px and converted once, so the reach
     // clamp can be stated in the same units as the `radius` parameter.
-    float speedNorm = clamp(orbitMeanSpeed(count) / kFullSpeed, 0.0, 1.0);
+    float speedNorm = clamp(meanSpeed / kFullSpeed, 0.0, 1.0);
     float grow = clamp(p_speedGrowth, 0.0, 1.0);
     float baseFrac = mix(1.0, 0.35, grow);
     float radius = radiusMax * (baseFrac + (1.0 - baseFrac) * speedNorm);
@@ -138,10 +141,12 @@ vec4 pPointer(vec2 uv) {
 
     radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize * stretch, radiusMax * 0.4)) * scale;
 
-    vec2 centre = orbitLaggedCentre(count, max(p_lag, 0.0));
     vec2 drift = uPointerVelocity.xy;
     float dotPx = dotSize * scale;
-    float spin = iTime * p_orbitRate * TAU;
+    // The spin rate is nudged onto a divisor of the iTime wrap so the ring
+    // does not jump at the wrap; see pointerWrapSafeRate.
+    float orbitRate = pointerWrapSafeRate(max(p_orbitRate, 0.0));
+    float spin = iTime * orbitRate * TAU;
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -155,7 +160,7 @@ vec4 pPointer(vec2 uv) {
         vec2 rel = px - pos;
 
         // Travel direction: the orbital tangent plus the centre's own motion.
-        vec2 tangent = vec2(-radial.y, radial.x) * (radius * p_orbitRate * TAU);
+        vec2 tangent = vec2(-radial.y, radial.x) * (radius * orbitRate * TAU);
         vec2 travel = tangent + drift;
         float travelLen = length(travel);
         float along = rel.x;
@@ -187,7 +192,13 @@ vec4 pPointer(vec2 uv) {
         if (cover <= 0.0) {
             continue;
         }
-        float t = dots > 1 ? float(j) / float(dots - 1) : 0.0;
+        // Ping-pong, not a straight ramp: the dots sit on a closed circle, so
+        // a ramp that ends on colorB puts the last dot right beside the first,
+        // and the seam between the two colours lands there. Walking back down
+        // the ramp keeps neighbours close in colour all the way round. The
+        // half-turn phase puts dot 0 at colorA, which is what "First colour"
+        // promises.
+        float t = abs(fract(float(j) / float(dots) + 0.5) * 2.0 - 1.0);
         vec3 c = mix(p_colorA.rgb, p_colorB.rgb, t);
         float ca = cover * mix(p_colorA.a, p_colorB.a, t);
         rgb += c * ca;

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -104,6 +105,7 @@ int reportCompile(QTextStream& out, const QString& label, const PhosphorRenderin
 QStringList declaredParamNames(const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& params);
+QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& params);
 
 // ── compositor (KWin classic-GL) bake ──────────────────────────────────────
 // Packs whose appliesTo makes them compositor-only are never loaded by the

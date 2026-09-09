@@ -7,7 +7,8 @@
     "category": "Trail",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reachParam": "width",
+    "reach": 40,
+    "reachParam": "reach",
     "trailSeconds": 0.8,
     "parameters": [
         {
@@ -18,6 +19,15 @@
             "min": 1.0,
             "max": 32.0,
             "description": "Diameter of the head and the tail at its widest (px)"
+        },
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 40.0,
+            "min": 16.0,
+            "max": 256.0,
+            "description": "How far the glow around the head and tail may extend from the path, and how far a click burst is thrown (px)"
         },
         {
             "id": "length",

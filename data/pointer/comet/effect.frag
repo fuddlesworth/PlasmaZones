@@ -9,15 +9,27 @@
 //
 // A press makes the head flare and throws an extra helping of the same
 // sparkle grain out from the press point, scaled by `clickBurst`. The burst
-// is kept inside `width` of the press point so it stays within the damage
+// is kept inside `reach` of the press point so it stays within the damage
 // rect the host derives from that parameter, and it is gone by
 // kBurstSeconds, well inside trailSeconds.
+//
+// REACH. `width` is a stroke thickness and says nothing about how far the
+// glow around it extends, so the pack declares a separate `reach` parameter,
+// the one its metadata reachParam names. Every gaussian here has compact
+// support that ends exactly there: the head glow, the tail's soft term and
+// the burst all multiply by a window that is 1 inside 80% of the reach and
+// 0 at it, so nothing meets the damage rect's edge at a visible level.
 
 #include <pointer_noise.glsl>
 
 const int kMaxTrail = 32;
 const float kTrailSeconds = 0.8;
 const float kBurstSeconds = 0.35;
+
+// 1 well inside the reach, exactly 0 at it.
+float cometWindow(float d, float reach) {
+    return 1.0 - smoothstep(0.8 * reach, reach, d);
+}
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -29,7 +41,14 @@ vec4 pPointer(vec2 uv) {
     float scale = pointerScale();
     float tailSeconds = clamp(p_length, 0.05, kTrailSeconds);
     float radius = 0.5 * max(p_width, 0.5) * scale;
-    float cull = radius * 4.0;
+    // The reach in device px: both the reject box and the outer edge of every
+    // glow, so the two cannot disagree. Read from the parameter the metadata's
+    // reachParam names, which is the same number pointerReach() reports after
+    // the host resolves it, so the declared control is what the shader reads.
+    float reach = max(p_reach, 1.0) * scale;
+    // Grain cell, in device px. Well above a pixel so it reads as twinkling
+    // flecks rather than per-pixel dither.
+    float grainCell = max(4.0 * scale, 1.0);
 
     // Head: a soft dot on the newest sample that dims as the pointer idles,
     // and is fully out by the end of the live window. It sits on the smoothed
@@ -42,7 +61,8 @@ vec4 pPointer(vec2 uv) {
     float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, kTrailSeconds, idle)) * headGate;
     float dHead = length(px - headPos);
     float headCore = (1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead)) * headFade;
-    float headGlow = exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade;
+    float headGlow =
+        exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade * cometWindow(dHead, reach);
 
     float tail = 0.0;
     float tailGrain = 0.0;
@@ -59,36 +79,44 @@ vec4 pPointer(vec2 uv) {
         if (gate <= 0.0) {
             continue;
         }
+        // The smoothed endpoints are looked up once and handed to the
+        // distance helper, rather than letting it look them up again.
         vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
         vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-        vec2 lo = min(pa, pb) - cull;
-        vec2 hi = max(pa, pb) + cull;
+        vec2 lo = min(pa, pb) - reach;
+        vec2 hi = max(pa, pb) + reach;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
             continue;
         }
 
         float t;
-        float d = pointerSmoothSegmentDistance(px, i, count, p_smoothing, t);
+        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
         float age = clamp(mix(a.z, b.z, t) / tailSeconds, 0.0, 1.0);
         float life = (1.0 - age) * gate;
         float w = radius * life;
         float body = (1.0 - smoothstep(w - 0.75, w + 0.75, d)) * life * life;
-        float soft = exp(-(d * d) / (2.0 * (w + scale) * (w + scale) * 4.0)) * 0.3 * life * life;
+        float soft = exp(-(d * d) / (2.0 * (w + scale) * (w + scale) * 4.0)) * 0.3 * life * life
+            * cometWindow(d, reach);
         float here = max(body, soft);
         if (here > tail) {
             tail = here;
-            // Grain that lives in the tail's own frame: cells hashed by the
-            // path position and a slow time step so it twinkles rather than
-            // crawls.
-            vec2 cell = floor(px / max(1.5 * scale, 1.0));
-            float g = hash13(cell + floor(iTime * 12.0) * 0.37);
+            // Grain that lives in the tail's own frame: the cell is addressed
+            // by the segment index and the position along it, so the flecks
+            // ride with the stroke instead of sitting on the screen like
+            // dither. A slow time step re-rolls them so they twinkle rather
+            // than crawl, with two independent offsets so the re-roll is not
+            // a diagonal walk that repeats after a few steps.
+            float step = floor(iTime * 12.0);
+            vec2 cell = floor(vec2(float(i) * 8.0 + t * 8.0, d / grainCell))
+                + vec2(hashSin1(step), hashSin1(step + 7.0)) * 512.0;
+            float g = hash13(cell);
             tailGrain = smoothstep(0.75, 1.0, g) * soft * 3.0;
         }
     }
 
     // Click burst: the head flares and sheds a fistful of extra grain from
-    // the press point. Everything is cut to zero at `reach` device px so the
-    // burst cannot paint outside the declared damage rect. It is deliberately
+    // the press point. Everything is cut to zero at the reach so the burst
+    // cannot paint outside the declared damage rect. It is deliberately
     // outside the speed gate, so a click still answers when the pointer is
     // sitting still.
     float burst = 0.0;
@@ -96,16 +124,22 @@ vec4 pPointer(vec2 uv) {
     if (p_clickBurst > 0.0 && uPointerPress.w > 0.5 && sincePress < kBurstSeconds) {
         float ct = sincePress / kBurstSeconds;
         float decay = (1.0 - ct) * (1.0 - ct);
-        float reach = max(p_width, 0.5) * scale;
-        float dp = length(px - uPointerPress.xy);
-        float ball = exp(-(dp * dp) / (2.0 * mix(radius * 0.5, reach * 0.45, ct) * mix(radius * 0.5, reach * 0.45, ct)));
-        vec2 cell = floor(px / max(1.5 * scale, 1.0));
-        float g = hash13(cell + floor(iTime * 20.0) * 0.71);
+        vec2 rel = px - uPointerPress.xy;
+        float dp = length(rel);
+        float ballSigma = mix(radius * 0.5, reach * 0.45, ct);
+        float ball = exp(-(dp * dp) / (2.0 * ballSigma * ballSigma));
+        // Burst grain is addressed in the press point's own frame, with the
+        // same two-offset re-roll as the tail grain.
+        float step = floor(iTime * 20.0);
+        vec2 cell = floor(rel / grainCell) + vec2(hashSin1(step + 3.0), hashSin1(step + 11.0)) * 512.0;
+        float g = hash13(cell);
         float grain = smoothstep(0.55, 1.0, g);
-        float edge = 1.0 - smoothstep(reach * 0.75, reach, dp);
+        float edge = cometWindow(dp, reach);
         burst = decay * edge * (ball * 0.5 + ball * grain * 1.5) * p_clickBurst;
         // The head itself lifts with the burst rather than only the grain.
-        headCore = min(headCore + decay * 0.4 * p_clickBurst * headCore, 1.0);
+        // Added, not scaled: a click on a resting pointer has headCore at 0,
+        // and scaling nothing lifts nothing.
+        headCore = min(headCore + decay * 0.4 * p_clickBurst, 1.0);
     }
 
     float alpha = clamp(headCore + headGlow + tail + tailGrain * p_sparkle + burst, 0.0, 1.0);

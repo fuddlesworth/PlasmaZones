@@ -35,7 +35,7 @@
             "default": 34.0,
             "min": 8.0,
             "max": 160.0,
-            "description": "Widest the ring of dots can get (px)"
+            "description": "Radius of the ring of dots, before the dots' own size is taken out of it so they stay inside the drawn area (px)"
         },
         {
             "id": "speedGrowth",

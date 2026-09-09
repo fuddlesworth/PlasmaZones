@@ -63,13 +63,13 @@ vec4 pointerTrailAt(int i) {
     return uPointerTrail[clamp(i, 0, kPointerTrailCapacity - 1)];
 }
 
-// Distance from canvas point `p` to the trail segment trail[i]..trail[i+1],
-// with `t` the normalized position along it (0 at trail[i], the newer end).
-// Callers guard i + 1 < pointerTrailCount(); a degenerate segment collapses
-// to a point distance with t = 0.
-float pointerSegmentDistance(vec2 p, int i, out float t) {
-    vec2 a = pointerTrailAt(i).xy;
-    vec2 b = pointerTrailAt(i + 1).xy;
+// Distance from canvas point `p` to the segment a..b, with `t` the normalized
+// position along it (0 at `a`). A degenerate segment collapses to a point
+// distance with t = 0. The index-taking helpers below are thin wrappers over
+// this one; a pack that already holds both endpoints (it needs them for its
+// own reject box) calls this directly rather than paying for the lookups a
+// second time.
+float pointerSegmentDistanceFrom(vec2 p, vec2 a, vec2 b, out float t) {
     vec2 ab = b - a;
     float len2 = dot(ab, ab);
     if (len2 < 1e-6) {
@@ -78,6 +78,30 @@ float pointerSegmentDistance(vec2 p, int i, out float t) {
     }
     t = clamp(dot(p - a, ab) / len2, 0.0, 1.0);
     return length(p - (a + ab * t));
+}
+
+// Distance from canvas point `p` to the trail segment trail[i]..trail[i+1],
+// with `t` the normalized position along it (0 at trail[i], the newer end).
+// Callers guard i + 1 < pointerTrailCount().
+float pointerSegmentDistance(vec2 p, int i, out float t) {
+    return pointerSegmentDistanceFrom(p, pointerTrailAt(i).xy, pointerTrailAt(i + 1).xy, t);
+}
+
+// A rate in cycles per second nudged to the nearest value that completes a
+// whole number of cycles per iTime wrap.
+//
+// iTime wraps at 1024 s (kShaderTimeWrap in BaseUniforms.h). The overlay
+// family rides the wrap through iTimeHi, but the pointer contract never sets
+// that counterpart on either runtime, so a phase derived from iTime alone
+// snaps at every wrap unless the rate divides the wrap period. Rounding
+// `rate * 1024` to an integer makes it divide exactly, and the nudge is at
+// most 1/2048 cycles per second, below anything a user could pick out. Use
+// this for anything periodic that runs while the pointer rests; a hash seed
+// stepped from iTime does not need it, since a re-roll at the wrap is just
+// another re-roll.
+const float kPointerTimeWrap = 1024.0;
+float pointerWrapSafeRate(float rate) {
+    return max(round(rate * kPointerTimeWrap), 1.0) / kPointerTimeWrap;
 }
 
 // Speed gate for a path sample: 0 below `activationSpeed`, easing to 1 as the
@@ -120,16 +144,8 @@ vec2 pointerSmoothedAt(int i, int count, float smoothing) {
 // that gain a `smoothing` parameter; at smoothing 0 it is the raw-path
 // answer.
 float pointerSmoothSegmentDistance(vec2 p, int i, int count, float smoothing, out float t) {
-    vec2 a = pointerSmoothedAt(i, count, smoothing);
-    vec2 b = pointerSmoothedAt(i + 1, count, smoothing);
-    vec2 ab = b - a;
-    float len2 = dot(ab, ab);
-    if (len2 < 1e-6) {
-        t = 0.0;
-        return length(p - a);
-    }
-    t = clamp(dot(p - a, ab) / len2, 0.0, 1.0);
-    return length(p - (a + ab * t));
+    return pointerSegmentDistanceFrom(p, pointerSmoothedAt(i, count, smoothing),
+                                      pointerSmoothedAt(i + 1, count, smoothing), t);
 }
 
 // Seconds since the pointer last moved.
@@ -198,10 +214,11 @@ float pointerFilteredSpeed() {
     // Seeded from the oldest sample rather than 0, or a short ring would
     // always report a speed biased down toward standing still.
     float filtered = pointerTrailAt(count - 1).w;
-    for (int i = kPointerTrailCapacity - 2; i >= 0; --i) {
-        if (i > count - 2) {
-            continue;
-        }
+    // Start at the newest filled neighbour of the seed rather than at the
+    // ring's capacity: the entries past `count` are zero and were only ever
+    // skipped, so walking them cost a bounds test per unfilled slot on every
+    // fragment for nothing.
+    for (int i = min(count - 2, kPointerTrailCapacity - 2); i >= 0; --i) {
         filtered = filtered * 0.54 + pointerTrailAt(i).w * 0.46;
     }
     return max(filtered, 0.0);

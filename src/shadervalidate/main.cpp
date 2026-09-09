@@ -32,11 +32,13 @@
 //     validateSurfacePack.
 //   • pointer packs (--pointer, data/pointer/*):
 //     PointerShaderEffect + the pPointer entry scaffold + paramPreamble;
-//     validates effect.frag, buffer passes, and the shared vertex stage on the
-//     preview Qt-RHI path — see validatePointerPack.
+//     validates effect.frag and the buffer passes on BOTH the preview Qt-RHI
+//     path and, through glslang, the compositor PLASMAZONES_KWIN path every
+//     pointer pack ships on; the shared vertex stage bakes on the preview
+//     path only — see validatePointerPack.
 //
 // Usage:
-//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface|--pointer]
+//   plasmazones-shader-validate [--quiet|-q] [--overlay|-o|--animation|-a|--surface|-s|--pointer|-p]
 //                               [--emit-preamble] [--] <path> [<path> ...]
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
@@ -86,76 +88,59 @@ bool isPackDir(const QString& dir)
 // glslls / glsl-language-server autocomplete, and the include resolver skips it
 // at load (ShaderIncludeResolver::GeneratedPreambleInclude), so it neither ships
 // nor affects the compiled shader. Returns 0 on success, 1 on error.
+// The three effect-struct families share one open / parse / isValid / preamble
+// sequence and differ only in the struct and registry involved, so it lives
+// here once. Returns the pack's `p_<id>` preamble, or nullopt after printing
+// why. The overlay family parses through ShaderRegistry::parsePackMetadata and
+// takes its own branch in emitPreamble.
+template<typename Effect, typename Registry>
+std::optional<QString> preambleFromEffectMetadata(const QString& packDir, const QString& name, QTextStream& errStream)
+{
+    QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+    if (!metaFile.open(QIODevice::ReadOnly)) {
+        errStream << name << ": cannot read metadata.json\n";
+        return std::nullopt;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
+    if (!doc.isObject()) {
+        errStream << name << ": invalid metadata.json\n";
+        return std::nullopt;
+    }
+    Effect eff = Effect::fromJson(doc.object());
+    eff.sourceDir = QDir(packDir).absolutePath();
+    // Mirror the validate path: reject metadata missing the required id /
+    // fragmentShader fields rather than silently emitting a sidecar from a
+    // half-parsed pack. (isValid() checks field presence, not file
+    // existence, so emit-preamble-before-writing-the-shader still works.)
+    if (!eff.isValid()) {
+        errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
+        return std::nullopt;
+    }
+    return Registry::paramPreamble(eff);
+}
+
 int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStream& out, QTextStream& errStream)
 {
     const QString name = QFileInfo(packDir).fileName();
-    QString preamble;
+    std::optional<QString> preamble;
     // glslls needs the UBO declarations the p_<id> defines reference, so the
     // sidecar pulls in the right base header per authoring model.
     QString baseHeader;
 
-    if (model == PackModel::Pointer) {
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (!metaFile.open(QIODevice::ReadOnly)) {
-            errStream << name << ": cannot read metadata.json\n";
-            return 1;
-        }
-        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
-        if (!doc.isObject()) {
-            errStream << name << ": invalid metadata.json\n";
-            return 1;
-        }
-        PointerShaderEffect eff = PointerShaderEffect::fromJson(doc.object());
-        eff.sourceDir = QDir(packDir).absolutePath();
-        if (!eff.isValid()) {
-            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
-            return 1;
-        }
-        preamble = PointerShaderRegistry::paramPreamble(eff);
+    switch (model) {
+    case PackModel::Pointer:
+        preamble = preambleFromEffectMetadata<PointerShaderEffect, PointerShaderRegistry>(packDir, name, errStream);
         baseHeader = QStringLiteral("pointer_uniforms.glsl");
-    } else if (model == PackModel::Surface) {
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (!metaFile.open(QIODevice::ReadOnly)) {
-            errStream << name << ": cannot read metadata.json\n";
-            return 1;
-        }
-        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
-        if (!doc.isObject()) {
-            errStream << name << ": invalid metadata.json\n";
-            return 1;
-        }
-        SurfaceShaderEffect eff = SurfaceShaderEffect::fromJson(doc.object());
-        eff.sourceDir = QDir(packDir).absolutePath();
-        if (!eff.isValid()) {
-            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
-            return 1;
-        }
-        preamble = SurfaceShaderRegistry::paramPreamble(eff);
+        break;
+    case PackModel::Surface:
+        preamble = preambleFromEffectMetadata<SurfaceShaderEffect, SurfaceShaderRegistry>(packDir, name, errStream);
         baseHeader = QStringLiteral("surface_uniforms.glsl");
-    } else if (model == PackModel::Animation) {
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (!metaFile.open(QIODevice::ReadOnly)) {
-            errStream << name << ": cannot read metadata.json\n";
-            return 1;
-        }
-        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
-        if (!doc.isObject()) {
-            errStream << name << ": invalid metadata.json\n";
-            return 1;
-        }
-        AnimationShaderEffect eff = AnimationShaderEffect::fromJson(doc.object());
-        eff.sourceDir = QDir(packDir).absolutePath();
-        // Mirror the validate path: reject metadata missing the required id /
-        // fragmentShader fields rather than silently emitting a sidecar from a
-        // half-parsed pack. (isValid() checks field presence, not file
-        // existence, so emit-preamble-before-writing-the-shader still works.)
-        if (!eff.isValid()) {
-            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
-            return 1;
-        }
-        preamble = AnimationShaderRegistry::paramPreamble(eff);
+        break;
+    case PackModel::Animation:
+        preamble = preambleFromEffectMetadata<AnimationShaderEffect, AnimationShaderRegistry>(packDir, name, errStream);
         baseHeader = QStringLiteral("animation_uniforms.glsl");
-    } else {
+        break;
+    case PackModel::Overlay: {
         QString parseErr;
         const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
         if (!parseErr.isEmpty()) {
@@ -164,6 +149,11 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
         }
         preamble = ShaderRegistry::paramPreamble(info);
         baseHeader = QStringLiteral("common.glsl");
+        break;
+    }
+    }
+    if (!preamble) {
+        return 1;
     }
 
     const QLatin1String sidecarName(ShaderIncludeResolver::GeneratedPreambleInclude);
@@ -179,7 +169,7 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
       << "// Re-run --emit-preamble after you change the pack's parameters.\n"
       << "#include <" << baseHeader << ">\n"
       << "\n"
-      << (preamble.isEmpty() ? QStringLiteral("// (this pack declares no named parameters)\n") : preamble);
+      << (preamble->isEmpty() ? QStringLiteral("// (this pack declares no named parameters)\n") : *preamble);
     s.flush();
 
     const QString sidecarPath = QDir(packDir).filePath(sidecarName);
@@ -248,15 +238,17 @@ int main(int argc, char** argv)
         }
     }
     if (args.isEmpty()) {
-        errStream << "usage: plasmazones-shader-validate [--quiet] "
-                     "[--overlay|--animation|--surface|--pointer] "
+        errStream << "usage: plasmazones-shader-validate [--quiet|-q] "
+                     "[--overlay|-o|--animation|-a|--surface|-s|--pointer|-p] "
                      "[--emit-preamble] [--] <pack-dir-or-root> [...]\n"
-                  << "  (no model flag)   detect each pack's model from its shared/ dir  [default]\n"
-                  << "  --overlay         force zone/overlay packs (data/overlays/*)\n"
-                  << "  --animation       force transition/animation packs (data/animations/*)\n"
-                  << "  --surface         force surface-layer packs (data/surface/*)\n"
-                  << "  --pointer         force pointer packs (data/pointer/*)\n"
-                  << "  --emit-preamble   write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
+                  << "  (no model flag)      detect each pack's model from its shared/ dir  [default]\n"
+                  << "  --overlay, -o        force zone/overlay packs (data/overlays/*); -o selects a model, "
+                     "not an output file\n"
+                  << "  --animation, -a      force transition/animation packs (data/animations/*)\n"
+                  << "  --surface, -s        force surface-layer packs (data/surface/*)\n"
+                  << "  --pointer, -p        force pointer packs (data/pointer/*)\n"
+                  << "  --quiet, -q          print only failing packs\n"
+                  << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
         return 2;
     }
 

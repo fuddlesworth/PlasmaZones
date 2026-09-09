@@ -9,7 +9,7 @@
     "layer": "below",
     "reach": 44,
     "reachParam": "spread",
-    "trailSeconds": 1.2,
+    "trailSeconds": 1.7,
     "parameters": [
         {
             "id": "spread",
@@ -58,7 +58,7 @@
             "min": 0.2,
             "max": 1.2,
             "step": 0.05,
-            "description": "How long the whole thing lasts, from the click to fully gone (seconds)"
+            "description": "How long the brackets take to close in and then fade, not counting the hold (seconds)"
         },
         {
             "id": "hold",
@@ -68,7 +68,7 @@
             "min": 0.0,
             "max": 0.5,
             "step": 0.01,
-            "description": "How long the brackets sit at rest before they start to fade (seconds)"
+            "description": "How long the brackets sit at rest between closing in and fading. It is added on top of the duration (seconds)"
         },
         {
             "id": "spin",

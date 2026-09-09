@@ -4,8 +4,12 @@
 // The pointer arm of plasmazones-shader-validate — see packvalidators.h.
 // Reproduces the pointer runtime's GLSL assembly (PointerShaderEffect + the
 // pPointer entry scaffold + the generated p_<id> preamble + include expansion
-// over PointerShaderRegistry::includePathsFor) and bakes the fragment stage,
-// the buffer passes and the shared vertex stage through headless glslang.
+// over PointerShaderRegistry::includePathsFor) and bakes every stage TWICE:
+// once on the preview (Qt-RHI, UBO) dialect through headless QShaderBaker,
+// and once on the compositor (PLASMAZONES_KWIN, default-block uniforms)
+// dialect through glslang in default mode, because the compositor is where
+// every pointer pack actually ships and the two dialects do not declare the
+// same identifiers.
 //
 // The pointer-specific lints are the fields no sibling family has: the `layer`
 // token, `reach` / `reachParam`, and `trailSeconds`. Each of those is silently
@@ -13,6 +17,10 @@
 // below, reach and trailSeconds are clamped, a reachParam naming nothing
 // numeric is ignored), so every one of them is linted against the RAW metadata
 // — a lint over the parsed struct could never surface the author's mistake.
+// The sampler lints (needsCursor, textures, the multipass channels) exist
+// because the contract itself says the static gate for them lives here: an
+// undeclared sampler reads texture unit 0 on the compositor, which is
+// undefined content rather than a clean transparent texel.
 
 #include "packvalidators.h"
 
@@ -50,23 +58,17 @@ namespace PlasmaZones::ShaderValidate {
 
 namespace {
 
-// The `p_<id>` name list a pointer pack declares, for the did-you-mean hint.
-// The sibling overloads live in packvalidatorcommon.cpp because more than one
-// arm consumes them; this one has a single caller.
-QStringList pointerParamNames(const QList<PointerShaderEffect::ParameterInfo>& params)
-{
-    QStringList declared;
-    declared.reserve(params.size());
-    for (const PointerShaderEffect::ParameterInfo& p : params) {
-        declared << QStringLiteral("p_") + p.id;
-    }
-    return declared;
-}
-
 // The lowest gate value the preview's fastest moment may open to before the
 // pack counts as invisible there. Below this a stage that should be showing
 // the effect is showing nothing a user could judge.
 constexpr double kMinPreviewGate = 0.15;
+
+// The smallest reach, in logical px, a reachParam may let the user pick. The
+// damage rect is the trail's bounding box inflated by the reach, so a reach
+// this small clips a pack to a sliver around the path: nothing the pack
+// paints further out ever reaches the screen, and the user sees a broken
+// pack rather than a small one.
+constexpr double kMinReachParamFloor = 4.0;
 
 // GLSL smoothstep, so the lint computes the same number pointerSpeedGate does.
 double smoothstepAt(double edge0, double edge1, double x)
@@ -107,12 +109,12 @@ QString withoutComments(const QString& source)
     return out;
 }
 
-// Whether `source` reads `p_<id>` as a whole token. A plain `contains` would
-// count `p_width` as a use of `p_wid`, and would then stay silent about a
-// parameter nothing reads.
-bool mentionsParam(const QString& source, const QString& id)
+// Whether `source` reads `token` as a whole identifier. A plain `contains`
+// would count `p_width` as a use of `p_wid`, and would then stay silent about
+// a parameter nothing reads; the same goes for `uTexture1` inside
+// `uTexture10` or `iChannel0` inside `iChannel0Resolution`.
+bool mentionsToken(const QString& source, const QString& token)
 {
-    const QString token = QStringLiteral("p_") + id;
     int at = 0;
     while ((at = source.indexOf(token, at)) >= 0) {
         const int before = at - 1;
@@ -129,13 +131,18 @@ bool mentionsParam(const QString& source, const QString& id)
     return false;
 }
 
+bool mentionsParam(const QString& source, const QString& id)
+{
+    return mentionsToken(source, QStringLiteral("p_") + id);
+}
+
 // The `p_<id>` names a pack passes as the `activationSpeed` argument of
 // pointerSpeedGate(). Parsed rather than regexed because the first argument is
 // routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so the
 // split has to happen at the top-level comma.
-QStringList speedGateParamNames(const QString& rawSource)
+QStringList speedGateParamNames(const QString& strippedSource)
 {
-    const QString source = withoutComments(rawSource);
+    const QString& source = strippedSource;
     const QLatin1String callee("pointerSpeedGate");
     QStringList found;
     int at = 0;
@@ -178,20 +185,96 @@ QStringList speedGateParamNames(const QString& rawSource)
     return found;
 }
 
+// A stage's source, or an empty string when it cannot be read. Missing and
+// unreadable stages are linted elsewhere; the scans here just skip them.
+QString readStage(const QString& path)
+{
+    QFile f(path);
+    if (!QFile::exists(path) || !f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    return QString::fromUtf8(f.readAll());
+}
+
+// Assemble one stage on the COMPOSITOR dialect exactly as
+// pointerdecorationshader.cpp does and compile it through glslangValidator.
+// Returns 1 on failure, 0 on success.
+//
+// The main fragment gets the pPointer entry scaffold, include expansion, the
+// p_<id> preamble and then the shared KWin define block after #version. A
+// buffer pass and a declared vertex stage get include expansion and the
+// define block only: the compositor splices NO preamble into them (buffer
+// sources address parameters by raw customParams slot, by contract), so
+// splicing one here would pass a buffer that fails live.
+//
+// The splice order mirrors the runtime: each spliceAfterVersion lands its
+// block immediately below #version, so splicing the preamble first and the
+// define block second leaves the define block ABOVE the preamble, which is
+// what the compositor produces.
+//
+// COVERAGE BOUNDARY, the same one the animation arm records: the source is
+// handed to glslang with the pack's `#version 450` intact, while KWin
+// recompiles at the GL context's core version. A construct legal at 450 and
+// illegal there still passes here. What this does cover is every identifier
+// the two dialects disagree on, which is the class that shipped uncaught
+// while only the preview branch was baked.
+int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const QString& path, const QString& label,
+                        const QString& stage, const QStringList& includePaths, bool scaffold)
+{
+    if (!QFile::exists(path)) {
+        return 0; // an absent stage is already linted by the caller
+    }
+    const QString tool = glslangValidatorPath();
+    if (tool.isEmpty()) {
+        // Hard failure rather than a skip, for the reason the animation arm
+        // gives: a pack cannot reach a release with the branch it ships on
+        // uncompiled, and a quiet degrade is how that happened before.
+        out << "  " << label.leftJustified(15)
+            << "ERROR\n    neither glslangValidator nor glslang found on PATH. One of them is required to "
+               "compile the compositor dialect every pointer pack ships on (install the glslang package)\n";
+        return 1;
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << path << "\n";
+        return 1;
+    }
+    const QString raw = QString::fromUtf8(f.readAll());
+    const QString assembled = scaffold
+        ? PhosphorShaders::assembleEntryPoint(raw, PointerShaderRegistry::pointerEntryPrologue(),
+                                              PointerShaderRegistry::pointerEntryCandidates())
+        : raw;
+    QString err;
+    QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
+    if (src.isEmpty()) {
+        out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+        return 1;
+    }
+    if (scaffold) {
+        src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
+    }
+    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
+    return reportCompositorCompile(out, label, stage, src, tool);
+}
+
 } // namespace
 
 // Validate one POINTER pack directory (data/pointer/*). Reproduces the pointer
-// runtime's fragment assembly on the preview (Qt-RHI) path — the pPointer entry
-// scaffold (an entry-only pack gets a generated main(); a pack with its own
-// main() passes through unchanged) + include expansion + the generated p_<id>
-// preamble — then bakes through headless glslang. Returns the error count.
+// runtime's fragment assembly — the pPointer entry scaffold (an entry-only
+// pack gets a generated main(); a pack with its own main() passes through
+// unchanged) + include expansion + the generated p_<id> preamble — and bakes
+// it on BOTH dialects. Returns the error count.
 //
-// As with the animation and surface arms, the kwin-effect classic-GL branch
-// (`#define PLASMAZONES_KWIN`, default-block uniforms) is NOT baked here:
-// QShaderBaker compiles Vulkan-dialect GLSL and rejects default-block uniforms.
-// Baking the #else branch validates the UBO contract in pointer_uniforms.glsl;
-// the PLASMAZONES_KWIN plumbing is identical for every pack and exercised by
-// the live compositor compile.
+// Unlike the animation and surface arms, the compositor branch (`#define
+// PLASMAZONES_KWIN`, default-block uniforms) IS baked here, out of process
+// through glslang in default mode, and it is the bake that matters: every
+// shipping pointer pack compiles through that branch, while the Qt-RHI
+// #else branch is only the settings preview. The two branches declare
+// different identifiers (the preview's UBO carries qt_Matrix, qt_Opacity and
+// the rest of BaseUniforms), so a pack that bakes clean on the preview can
+// still fail on the path that ships. The preview bake stays too, since a
+// pack that previews as a compile error is broken in the browser where packs
+// are chosen.
 int validatePointerPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -326,13 +409,26 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                          "at load)")
                          .arg(eff.reachParam, declared->type)
                          .arg(eff.reach);
-        } else if (declared->maxValue.isValid() && declared->maxValue.toDouble() > PointerShaderEffect::kMaxReach) {
-            lints << QStringLiteral(
-                         "reachParam '%1' allows up to %2, past the %3 reach cap (clamped at load, so the "
-                         "pack paints outside its damage rect)")
-                         .arg(eff.reachParam)
-                         .arg(declared->maxValue.toDouble())
-                         .arg(PointerShaderEffect::kMaxReach);
+        } else {
+            if (declared->maxValue.isValid() && declared->maxValue.toDouble() > PointerShaderEffect::kMaxReach) {
+                lints << QStringLiteral(
+                             "reachParam '%1' allows up to %2, past the %3 reach cap (clamped at load, so the "
+                             "pack paints outside its damage rect)")
+                             .arg(eff.reachParam)
+                             .arg(declared->maxValue.toDouble())
+                             .arg(PointerShaderEffect::kMaxReach);
+            }
+            // The floor matters as much as the cap: a reach the user can drag
+            // down to a few pixels clips the pack to nothing around the path.
+            if (declared->minValue.isValid() && declared->minValue.toDouble() < kMinReachParamFloor) {
+                lints << QStringLiteral(
+                             "reachParam '%1' allows a minimum of %2 logical px, below the %3 px floor (a reach "
+                             "that small clips the pack to nothing: the damage rect is the path inflated by "
+                             "the reach, and nothing painted outside it reaches the screen)")
+                             .arg(eff.reachParam)
+                             .arg(declared->minValue.toDouble())
+                             .arg(kMinReachParamFloor);
+            }
         }
     }
 
@@ -355,6 +451,22 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         }
     }
 
+    // ── stage text, comment-stripped, for every scan below ──
+    // Assembled once: the parameter sweep, the speed-gate lint and the
+    // sampler lints all read the same text, and they must agree on what a
+    // stage is. Main fragment, buffer passes and the declared vertex stage;
+    // the shared pointer.vert is not a pack stage and reads no parameters.
+    const QString fragText = withoutComments(readStage(eff.fragmentShaderPath));
+    QString bufferText;
+    for (const QString& buf : eff.bufferShaderPaths) {
+        bufferText += withoutComments(readStage(buf));
+        bufferText += QLatin1Char('\n');
+    }
+    const QString vertText =
+        eff.vertexShaderPath.isEmpty() ? QString() : withoutComments(readStage(eff.vertexShaderPath));
+    const QString allStages = fragText + QLatin1Char('\n') + bufferText + QLatin1Char('\n') + vertText;
+    const bool anyStage = !fragText.isEmpty() || !bufferText.isEmpty() || !vertText.isEmpty();
+
     // ── declared but never used ──
     // A parameter the shader never reads still costs a slot and still draws a
     // control in the settings app, so the user is handed a slider that moves
@@ -362,35 +474,26 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // saying here: the pack works, and the control is dead.
     //
     // Every stage is scanned, not just the fragment, since a parameter may
-    // legitimately be read only by a buffer pass or the vertex stage.
-    {
-        QStringList stagePaths{eff.fragmentShaderPath};
-        if (!eff.vertexShaderPath.isEmpty()) {
-            stagePaths << eff.vertexShaderPath;
-        }
-        for (const QString& buf : eff.bufferShaderPaths) {
-            stagePaths << buf;
-        }
-        QString allStages;
-        for (const QString& path : stagePaths) {
-            QFile f(path);
-            if (QFile::exists(path) && f.open(QIODevice::ReadOnly)) {
-                allStages += QString::fromUtf8(f.readAll());
-                allStages += QLatin1Char('\n');
+    // legitimately be read only by a buffer pass or the vertex stage. A
+    // buffer pass gets no p_<id> preamble on any runtime, so it can only reach
+    // the parameters through their raw customParams / customColors lanes; a
+    // buffer stage that reads a pool by slot is therefore taken to read every
+    // parameter in that pool, because by-name attribution is impossible there
+    // and the alternative is a lint that fires on every multipass pack that
+    // does the only thing it can.
+    if (anyStage) {
+        const bool bufferReadsScalars = mentionsToken(bufferText, QStringLiteral("customParams"));
+        const bool bufferReadsColors = mentionsToken(bufferText, QStringLiteral("customColors"));
+        for (const PointerShaderEffect::ParameterInfo& p : eff.parameters) {
+            if (!PhosphorShaders::isValidParamId(p.id)) {
+                continue; // already linted above, and it has no p_ define
             }
-        }
-        if (!allStages.isEmpty()) {
-            const QString stripped = withoutComments(allStages);
-            for (const PointerShaderEffect::ParameterInfo& p : eff.parameters) {
-                if (!PhosphorShaders::isValidParamId(p.id)) {
-                    continue; // already linted above, and it has no p_ define
-                }
-                if (!mentionsParam(stripped, p.id)) {
-                    lints << QStringLiteral(
-                                 "parameter '%1' is declared but no stage reads p_%1 (it still takes a "
-                                 "slot and still draws a control that does nothing)")
-                                 .arg(p.id);
-                }
+            const bool bySlot = p.type == QLatin1String("color") ? bufferReadsColors : bufferReadsScalars;
+            if (!bySlot && !mentionsParam(allStages, p.id)) {
+                lints << QStringLiteral(
+                             "parameter '%1' is declared but no stage reads p_%1 (it still takes a "
+                             "slot and still draws a control that does nothing)")
+                             .arg(p.id);
             }
         }
     }
@@ -406,43 +509,64 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     //
     // Only the default is linted, not the range: a user who raises the
     // threshold themselves has asked for a pack that waits for a fast flick.
-    if (QFile::exists(eff.fragmentShaderPath)) {
-        QFile gateFrag(eff.fragmentShaderPath);
-        if (gateFrag.open(QIODevice::ReadOnly)) {
-            const QStringList gateIds = speedGateParamNames(QString::fromUtf8(gateFrag.readAll()));
-            for (const QString& gateId : gateIds) {
-                const auto declared = std::find_if(eff.parameters.cbegin(), eff.parameters.cend(),
-                                                   [&gateId](const PointerShaderEffect::ParameterInfo& p) {
-                                                       return p.id == gateId;
-                                                   });
-                if (declared == eff.parameters.cend()) {
-                    lints << QStringLiteral(
-                                 "pointerSpeedGate() is passed p_%1, which is no declared parameter (it "
-                                 "expands to an unwritten slot, so the gate reads whatever is in it)")
-                                 .arg(gateId);
-                    continue;
-                }
-                bool numeric = false;
-                const double threshold = declared->defaultValue.toDouble(&numeric);
-                // A default of 0 is the documented "no threshold" case and
-                // always draws, which is what the packs that ship the
-                // parameter at 0 rely on.
-                if (!numeric || threshold <= 0.0) {
-                    continue;
-                }
-                const double gate =
-                    smoothstepAt(threshold, threshold * 2.0, PointerShaderContract::kPreviewPeakSpeedPxPerSecond);
-                if (gate < kMinPreviewGate) {
-                    lints << QStringLiteral(
-                                 "parameter '%1' gates drawing on speed and defaults to %2 px/s, but the "
-                                 "preview pointer never exceeds %3 px/s, so the gate opens to at most %4 "
-                                 "of full and the pack previews as an empty stage")
-                                 .arg(gateId)
-                                 .arg(threshold, 0, 'g', 4)
-                                 .arg(PointerShaderContract::kPreviewPeakSpeedPxPerSecond, 0, 'g', 4)
-                                 .arg(gate, 0, 'f', 2);
-                }
+    // Scanned over the same assembled stage text as the parameter sweep, so a
+    // gate placed in a buffer pass or the vertex stage is seen too.
+    if (anyStage) {
+        const QStringList gateIds = speedGateParamNames(allStages);
+        for (const QString& gateId : gateIds) {
+            const auto declared = std::find_if(eff.parameters.cbegin(), eff.parameters.cend(),
+                                               [&gateId](const PointerShaderEffect::ParameterInfo& p) {
+                                                   return p.id == gateId;
+                                               });
+            if (declared == eff.parameters.cend()) {
+                lints << QStringLiteral(
+                             "pointerSpeedGate() is passed p_%1, which is no declared parameter (it "
+                             "expands to an unwritten slot, so the gate reads whatever is in it)")
+                             .arg(gateId);
+                continue;
             }
+            bool numeric = false;
+            const double threshold = declared->defaultValue.toDouble(&numeric);
+            // A default of 0 is the documented "no threshold" case and
+            // always draws, which is what the packs that ship the
+            // parameter at 0 rely on.
+            if (!numeric || threshold <= 0.0) {
+                continue;
+            }
+            const double gate =
+                smoothstepAt(threshold, threshold * 2.0, PointerShaderContract::kPreviewPeakSpeedPxPerSecond);
+            if (gate < kMinPreviewGate) {
+                lints << QStringLiteral(
+                             "parameter '%1' gates drawing on speed and defaults to %2 px/s, but the "
+                             "preview pointer never exceeds %3 px/s, so the gate opens to at most %4 "
+                             "of full and the pack previews as an empty stage")
+                             .arg(gateId)
+                             .arg(threshold, 0, 'g', 4)
+                             .arg(PointerShaderContract::kPreviewPeakSpeedPxPerSecond, 0, 'g', 4)
+                             .arg(gate, 0, 'f', 2);
+            }
+        }
+    }
+
+    // ── cursor sprite ──
+    // The contract puts the static gate for these here. On the compositor an
+    // unbound sampler reads texture unit 0, which is whatever happened to be
+    // bound last, not a transparent texel, so a shader that samples the
+    // sprite without declaring needsCursor paints undefined content. The
+    // other direction is merely waste: a sprite bound and uploaded every
+    // frame for nothing.
+    const bool declaredNeedsCursor = root.value(QLatin1String("needsCursor")).toBool(false);
+    if (anyStage) {
+        const bool readsCursor = mentionsToken(allStages, QString::fromLatin1(PointerShaderContract::kUCursorSprite));
+        if (readsCursor && !declaredNeedsCursor) {
+            lints << QStringLiteral(
+                "a stage samples uCursorSprite but the pack does not declare `needsCursor` (the sampler is "
+                "unbound, and on the compositor it reads whatever texture unit 0 holds)");
+        }
+        if (declaredNeedsCursor && !readsCursor) {
+            lints << QStringLiteral(
+                "needsCursor is declared but no stage samples uCursorSprite (the sprite is bound and uploaded "
+                "every frame for nothing)");
         }
     }
 
@@ -474,6 +598,35 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         if (!wrap.isEmpty() && !PointerShaderContract::isValidWrapToken(wrap)) {
             lints
                 << QStringLiteral("texture wrap not in {clamp,repeat,mirror}: %1 (cleared to clamp at load)").arg(wrap);
+        }
+    }
+    // Slot use against the declaration, both ways: uTexture<N> without a
+    // declared slot N is the same unit-0 read the cursor lint describes, and
+    // a declared slot nothing samples is an image decoded and uploaded for
+    // nothing. Counted from the RAW array, since that is what fromJson slots
+    // (an over-cap entry is dropped and its sampler is unbound).
+    if (anyStage) {
+        const int declaredSlots =
+            std::min(static_cast<int>(declaredTextures.size()), PointerShaderContract::kMaxUserTextureSlots);
+        static const QStringList kTextureSamplers = {QString::fromLatin1(PointerShaderContract::kUTexture1),
+                                                     QString::fromLatin1(PointerShaderContract::kUTexture2),
+                                                     QString::fromLatin1(PointerShaderContract::kUTexture3)};
+        for (int slot = 0; slot < kTextureSamplers.size(); ++slot) {
+            const bool reads = mentionsToken(allStages, kTextureSamplers.at(slot));
+            const bool declaredSlot = slot < declaredSlots;
+            if (reads && !declaredSlot) {
+                lints << QStringLiteral(
+                             "a stage samples %1 but the pack declares no texture in slot %2 (the sampler is "
+                             "unbound, and on the compositor it reads whatever texture unit 0 holds)")
+                             .arg(kTextureSamplers.at(slot))
+                             .arg(slot);
+            } else if (!reads && declaredSlot) {
+                lints << QStringLiteral(
+                             "texture slot %1 is declared but no stage samples %2 (the image is decoded and "
+                             "uploaded for nothing)")
+                             .arg(slot)
+                             .arg(kTextureSamplers.at(slot));
+            }
         }
     }
 
@@ -509,12 +662,44 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 lints << QStringLiteral("buffer shader missing: %1 (multipass is turned off at load)").arg(bufName);
             }
         }
-        const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
+        const QJsonValue scaleVal = root.value(QLatin1String("bufferScale"));
+        // A non-numeric value (the string "0.5", a plausible slip since the
+        // path fields ARE strings) coerces to the 1.0 default at load with no
+        // diagnostic anywhere.
+        if (!scaleVal.isUndefined() && !scaleVal.isDouble()) {
+            lints << QStringLiteral("bufferScale is not a number (falls back to 1.0 at load)");
+        }
+        const double rawScale = scaleVal.toDouble(1.0);
         if (rawScale < PointerShaderEffect::kMinBufferScale || rawScale > PointerShaderEffect::kMaxBufferScale) {
             lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
                          .arg(PointerShaderEffect::kMinBufferScale)
                          .arg(PointerShaderEffect::kMaxBufferScale)
                          .arg(rawScale);
+        }
+        // The channels are the whole point of a multipass pack. A main pass
+        // that never samples iChannel<N> pays for every buffer draw and shows
+        // none of it, and a `bufferFeedback` pack whose buffer never reads its
+        // own channel keeps no state, which is the one thing feedback is for.
+        if (anyStage) {
+            static const QStringList kChannels = {QString::fromLatin1(PointerShaderContract::kIChannel0),
+                                                  QString::fromLatin1(PointerShaderContract::kIChannel1),
+                                                  QString::fromLatin1(PointerShaderContract::kIChannel2),
+                                                  QString::fromLatin1(PointerShaderContract::kIChannel3)};
+            const auto readsAnyChannel = [](const QString& text) {
+                return std::any_of(kChannels.cbegin(), kChannels.cend(), [&text](const QString& ch) {
+                    return mentionsToken(text, ch);
+                });
+            };
+            if (!readsAnyChannel(fragText)) {
+                lints << QStringLiteral(
+                    "multipass is true but the main fragment never samples an iChannel (every buffer pass "
+                    "is drawn and nothing reads it)");
+            }
+            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && !readsAnyChannel(bufferText)) {
+                lints << QStringLiteral(
+                    "bufferFeedback is true but no buffer pass samples an iChannel (its previous frame is "
+                    "bound and never read, so nothing persists)");
+            }
         }
     } else {
         // Both of these are silently dropped by fromJson when multipass is off,
@@ -537,6 +722,24 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
         lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
     }
+    // A declared vertex stage that reads the Qt scene-graph members is the
+    // shared pointer.vert, or a copy of it, named as the pack's own. Those two
+    // identifiers exist only in the preview's UBO branch: on the compositor
+    // the stage fails to compile and the pack silently falls back to the
+    // built-in vertex source, so the preview and the preview bake both pass
+    // while the declared stage is dead where the pack ships. The compositor
+    // bake below would fail it too, but with a bare undeclared-identifier
+    // error that does not say why.
+    if (!vertText.isEmpty()
+        && (mentionsToken(vertText, QStringLiteral("qt_Matrix"))
+            || mentionsToken(vertText, QStringLiteral("qt_Opacity")))) {
+        lints << QStringLiteral(
+                     "vertexShader %1 reads qt_Matrix / qt_Opacity, which exist only in the preview's UBO branch: "
+                     "shared/pointer.vert is the preview's stage, and a pack naming it (or a copy of it) as its "
+                     "own gets a vertex stage that fails to compile on the compositor and is silently replaced "
+                     "by the built-in one")
+                     .arg(QFileInfo(eff.vertexShaderPath).fileName());
+    }
 
     if (lints.isEmpty()) {
         out << "  metadata       OK\n";
@@ -548,11 +751,15 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         }
     }
 
-    // The runtime include roots for this pack: {<packRoot>/shared, <packRoot>}.
+    // The runtime include roots for this pack: {<packRoot>/shared, <packRoot>}
+    // plus the installed shared helpers.
     const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
-    const QStringList paramNames = pointerParamNames(eff.parameters);
+    const QStringList paramNames = declaredParamNames(eff.parameters);
+    // Stages that get no p_<id> preamble cannot see any p_<id>, so the
+    // did-you-mean hint would only ever suggest a name they cannot use.
+    const QStringList noParams;
 
-    // ── fragment stage (reproduce the runtime assembly) ──
+    // ── fragment stage, preview dialect (reproduce the runtime assembly) ──
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -579,10 +786,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             }
         }
     }
+    // ── fragment stage, compositor dialect ──
+    errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"), includePaths,
+                                  /*scaffold=*/true);
 
     // ── multipass buffer passes ──
     // Buffer passes carry their own main() (no entry scaffold, no param
-    // preamble), same as the surface and overlay arms.
+    // preamble), same as the surface and overlay arms, on both dialects.
     for (const QString& buf : eff.bufferShaderPaths) {
         if (!QFile::exists(buf)) {
             continue; // missing buffers already linted above
@@ -603,15 +813,22 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             ++errors;
         } else {
             const ShaderCompiler::Result result = ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
-            errors += reportCompile(out, label, result, paramNames);
+            errors += reportCompile(out, label, result, noParams);
         }
+        errors += bakeCompositorStage(out, eff, buf, label, QStringLiteral("frag"), includePaths,
+                                      /*scaffold=*/false);
     }
 
     // ── vertex stage ──
-    // Mirror the runtime: an explicit per-pack `vertexShader` wins, else a
-    // `pointer.vert` beside the fragment, else the shared `pointer.vert` from
-    // the include paths. It ships its own main(), so no scaffold and no param
-    // preamble apply.
+    // Mirror the preview runtime: an explicit per-pack `vertexShader` wins,
+    // else a `pointer.vert` beside the fragment, else the shared `pointer.vert`
+    // from the include paths. It ships its own main(), so no scaffold and no
+    // param preamble apply.
+    //
+    // Only a DECLARED vertex stage is baked on the compositor dialect. The
+    // shared pointer.vert is the preview's stage alone: the compositor never
+    // compiles it and uses its own TU-local vertex source instead, so baking
+    // it there would fail every pack on a stage that never runs there.
     {
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
@@ -646,9 +863,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 } else {
                     const ShaderCompiler::Result result =
                         ShaderCompiler::compile(expanded.toUtf8(), QShader::VertexStage);
-                    errors += reportCompile(out, label, result, paramNames);
+                    errors += reportCompile(out, label, result, noParams);
                 }
             }
+        }
+        if (!eff.vertexShaderPath.isEmpty()) {
+            errors += bakeCompositorStage(out, eff, eff.vertexShaderPath, QFileInfo(eff.vertexShaderPath).fileName(),
+                                          QStringLiteral("vert"), includePaths, /*scaffold=*/false);
         }
     }
 

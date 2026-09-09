@@ -686,6 +686,7 @@ install(DIRECTORY data/animations/
 install(DIRECTORY data/surface/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/surface
     PATTERN ".*" EXCLUDE
+    PATTERN "p_generated.glsl" EXCLUDE
 )
 
 # Install bundled pointer shader packs (pointer trails, halos, click ripples;
@@ -697,6 +698,7 @@ install(DIRECTORY data/surface/
 install(DIRECTORY data/pointer/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/pointer
     PATTERN ".*" EXCLUDE
+    PATTERN "p_generated.glsl" EXCLUDE
 )
 
 # Install bundled scripted tiling algorithms

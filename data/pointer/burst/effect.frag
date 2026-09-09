@@ -79,7 +79,12 @@ vec4 pPointer(vec2 uv) {
     float speed = max(p_speed, 0.0) * scale;
     float gravity = max(p_gravity, 0.0) * scale;
     float travel = speed * life + 0.5 * gravity * life * life;
-    float budget = max(reach - 3.0 * radius, 0.0);
+    // The bit's own drawn extent comes out of the budget, floored at a share
+    // of the reach: at the smallest reach and the largest bit the bare
+    // subtraction left two pixels of travel, which froze the spray on the
+    // press point. A big bit on a small reach now overruns the rect a little
+    // instead of never leaving.
+    float budget = max(reach - 3.0 * radius, reach * 0.35);
     float k = (travel > budget && travel > 0.0) ? (budget / travel) : 1.0;
     speed *= k;
     gravity *= k;
