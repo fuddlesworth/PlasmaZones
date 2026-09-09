@@ -1,6 +1,24 @@
 {
     "releases": [
         {
+            "version": "3.4.16",
+            "date": "2026-09-09",
+            "highlights": [
+                "New: Pointer packs decorate the mouse cursor with trails, halos, click rings and more. Thirteen ship, configured under Appearance → Decorations → Surfaces → Pointer with the same chain editor as every other surface (#1083)",
+                "New: Decorations stop on a screen showing a fullscreen window, on by default, so a game or a video keeps the frame budget to itself (#1083)",
+                "New: Zone overlay shader assignments can be saved as a named set and applied again later, under Appearance → Overlays → Library → Sets (#1006)",
+                "New: Packages are rebuilt on their own when Arch, Debian, Fedora or openSUSE ships a new KWin, so the effect keeps loading after a distro update (#1086)",
+                "Changed: Overlay shader assignment moved from the layout editor into a new Appearance → Overlays section, and the overlay shader rule can now target one layout (#1006)",
+                "Changed: Animation timing is saved with the rest of your settings, so profiles and motion sets carry a whole event instead of half of one (#1084)",
+                "Changed: The Library pages under Animations, Decorations and Overlays are all called Sets (#1088)",
+                "Changed: The bundled Luau runtime is updated from 0.730 to 0.737 (#1090)",
+                "Fixed: Pressing the float shortcut a second time puts a tiled window back in the layout (#1085)",
+                "Fixed: Glass and blur decorations on the OSD and popups fade out with them again (#1087)",
+                "Fixed: Animation previews that drift or spin on their own clock no longer hold still (#1087)",
+                "Fixed: The shader validator compiles every animation pack for both the preview and the compositor, so a pack cannot pass validation and still fail live (#1089)"
+            ]
+        },
+        {
             "version": "3.4.15",
             "date": "2026-09-07",
             "highlights": [
