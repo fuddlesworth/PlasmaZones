@@ -137,9 +137,13 @@ vec4 pPointer(vec2 uv) {
         float edge = cometWindow(dp, reach);
         burst = decay * edge * (ball * 0.5 + ball * grain * 1.5) * p_clickBurst;
         // The head itself lifts with the burst rather than only the grain.
-        // Added, not scaled: a click on a resting pointer has headCore at 0,
-        // and scaling nothing lifts nothing.
-        headCore = min(headCore + decay * 0.4 * p_clickBurst, 1.0);
+        // Added, not scaled: a click on a resting pointer has headCore at 0
+        // (its idle fade is out), and scaling nothing lifts nothing. The lift
+        // is shaped by the head's own disc, not a flat constant: a constant
+        // here paints every pixel of the pass quad and shows up as a filled
+        // box the size of the damage rect on every click.
+        float headDisc = 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead);
+        headCore = min(headCore + decay * 0.4 * p_clickBurst * headDisc, 1.0);
     }
 
     float alpha = clamp(headCore + headGlow + tail + tailGrain * p_sparkle + burst, 0.0, 1.0);
