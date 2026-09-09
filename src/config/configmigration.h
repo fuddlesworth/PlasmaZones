@@ -355,7 +355,10 @@ public:
 
     /// The overlay-shader half of v8: lift zone-overlay shader assignments
     /// from the layout-settings sidecar into the config's OverlayShaderTree,
-    /// stripping the relocated keys from the sidecar.
+    /// stripping the relocated keys from the sidecar, and rewrite every
+    /// OverrideOverlayShader rule written against the old per-layout property
+    /// onto the tree's node shape (the global-default node made explicit, so
+    /// the rule keeps meaning "every layout in this context").
     ///
     /// It has no chain step of its own. The lift needs filesystem access and
     /// must not run on sparse profile deltas, so like the v4 layout-settings

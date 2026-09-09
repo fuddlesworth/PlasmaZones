@@ -9,6 +9,14 @@
 #include <QRegularExpression>
 #include <QTest>
 
+#include <PhosphorRules/ActionParams.h>
+#include <PhosphorRules/ActionTypes.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleSet.h>
+
 #include "config/configdefaults.h"
 #include "config/configmigration.h"
 #include "core/types/overlayshadertree.h"
@@ -421,6 +429,92 @@ private Q_SLOTS:
         const QJsonObject sidecar = readJson(ConfigDefaults::layoutSettingsFilePath());
         QVERIFY(!sidecar.contains(layoutA()));
         QVERIFY(!sidecar.contains(layoutC));
+    }
+
+    /// The rules half of the relocation. A rule written against the old
+    /// shape, where the overlay shader was a property of the layout and the
+    /// action carried only the shader, is rewritten onto the tree's node
+    /// shape with the global-default node made explicit (`layoutId: ""`),
+    /// which is the faithful translation: "this context, whichever layout"
+    /// becomes "this context, every layout". Everything else on the action
+    /// and on the rule survives verbatim; a rule already carrying a node is
+    /// left alone; a sibling action of another type is not touched; and the
+    /// second run is byte-identical, so the rewrite is a one-time migration
+    /// rather than a rewrite on every start. Runs with NO sidecar present,
+    /// which pins that the sidecar's early return cannot skip it.
+    void testLift_oldShapeOverlayRulesBecomeGlobalNodeRules()
+    {
+        namespace PWR = PhosphorRules;
+        IsolatedConfigGuard guard;
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
+
+        const auto makeRule = [](const QString& name, const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 500;
+            r.match =
+                PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+            r.actions = actions;
+            return r;
+        };
+        PWR::RuleAction oldShape;
+        oldShape.type = QString(PWR::ActionType::OverrideOverlayShader);
+        oldShape.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("cosmic-flow"));
+        oldShape.params.insert(QString(PWR::ActionParam::Params), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        PWR::RuleAction sibling;
+        sibling.type = QString(PWR::ActionType::OverrideOverlayStyle);
+        sibling.params.insert(QString(PWR::ActionParam::Value), QString(PWR::OverlayStyleToken::Preview));
+        PWR::RuleAction alreadyNode;
+        alreadyNode.type = QString(PWR::ActionType::OverrideOverlayShader);
+        alreadyNode.params.insert(QString(PWR::ActionParam::LayoutId), layoutA());
+        alreadyNode.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("neon-city"));
+
+        PWR::RuleSet seed;
+        QVERIFY(seed.addRule(makeRule(QStringLiteral("old"), {oldShape, sibling})));
+        QVERIFY(seed.addRule(makeRule(QStringLiteral("node"), {alreadyNode})));
+        QVERIFY(seed.saveToFile(ConfigDefaults::rulesFilePath()));
+
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+
+        const auto loaded = PWR::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
+        QVERIFY(loaded.has_value());
+        QCOMPARE(loaded->count(), 2);
+        for (const PWR::Rule& rule : loaded->rules()) {
+            if (rule.name == QStringLiteral("old")) {
+                QCOMPARE(rule.actions.size(), 2);
+                const QJsonObject params = rule.actions.at(0).params;
+                QVERIFY2(params.contains(QString(PWR::ActionParam::LayoutId)),
+                         "the old-shape rule was not rewritten onto the node shape");
+                QVERIFY2(params.value(QString(PWR::ActionParam::LayoutId)).toString().isEmpty(),
+                         "the old-shape rule was pinned to a layout rather than the global node");
+                QCOMPARE(params.value(QString(PWR::ActionParam::EffectId)).toString(), QStringLiteral("cosmic-flow"));
+                QCOMPARE(params.value(QString(PWR::ActionParam::Params))
+                             .toObject()
+                             .value(QStringLiteral("speed"))
+                             .toDouble(),
+                         1.5);
+                // The sibling action is another type and is not the rewrite's
+                // business, so it must not have grown a node.
+                QVERIFY(!rule.actions.at(1).params.contains(QString(PWR::ActionParam::LayoutId)));
+                QCOMPARE(rule.actions.at(1).params.value(QString(PWR::ActionParam::Value)).toString(),
+                         QString(PWR::OverlayStyleToken::Preview));
+                QVERIFY(rule.enabled);
+                QCOMPARE(rule.priority, 500);
+            } else {
+                QCOMPARE(rule.name, QStringLiteral("node"));
+                QCOMPARE(rule.actions.at(0).params.value(QString(PWR::ActionParam::LayoutId)).toString(), layoutA());
+                QCOMPARE(rule.actions.at(0).params.value(QString(PWR::ActionParam::EffectId)).toString(),
+                         QStringLiteral("neon-city"));
+            }
+        }
+
+        // One-time: nothing is left in the old shape, so the second run finds
+        // nothing to rewrite and does not touch the file.
+        const QByteArray after = readBytes(ConfigDefaults::rulesFilePath());
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        QCOMPARE(readBytes(ConfigDefaults::rulesFilePath()), after);
     }
 
     void testLift_missingSidecarIsNoOpSuccess()

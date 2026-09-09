@@ -1,18 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Dot-path JSON helpers shared across the per-version migration steps. These
-// walk a nested QJsonObject by a dot-separated group path, preserving sibling
-// sub-groups at every ancestor. Inline so each consumer TU (the migration
-// steps configmigration_v2/v4/v5/v6.cpp, plus ProfileStore's delta
-// translation) gets one definition without an ODR clash.
+// Helpers shared across the per-version migration steps. The dot-path JSON
+// helpers walk a nested QJsonObject by a dot-separated group path, preserving
+// sibling sub-groups at every ancestor; withRuleSet at the end is the one
+// rules.json read-modify-write scaffold every finalizer that touches the rule
+// store goes through. Inline so each consumer TU (the migration steps
+// configmigration_v2/v4/v5/v6.cpp, the v4 and v8 finalizers, plus
+// ProfileStore's delta translation) gets one definition without an ODR clash.
 
 #pragma once
 
+#include "configdefaults.h"
+
+#include <PhosphorRules/RuleSet.h>
+
+#include <QFile>
 #include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QStringList>
+
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -126,6 +135,54 @@ inline void moveGroupAtPath(QJsonObject& root, const QString& fromDotPath, const
 
     setGroupAtSegments(root, toSegments, leaf);
     removeGroupAtSegments(root, fromSegments);
+}
+
+/// Load rules.json, hand the mutable set to @p mutate, and save only when it
+/// reports a change.
+///
+/// Shared by every finalizer that rewrites the rule store: the two v4 sidecar
+/// fix-ups to rows that code seeded, and the v8 relocation of overlay-shader
+/// rules onto the tree's node shape. All of them need the same scaffold: gate
+/// on the conversion having happened, tolerate a missing or unloadable store
+/// as "nothing of ours to fix", and never write unless something actually
+/// changed. Each caller still loads the store for itself — this is a DRY
+/// extraction, not a perf one.
+///
+/// Not serialised against a RUNNING daemon that already holds the rule set in
+/// memory: `ensureJsonConfig` runs once at process startup, so launching the
+/// settings app beside a live daemon can rewrite rules.json underneath it. The
+/// exposure is the same one `pruneRetiredProviderDefaultRule` has always had,
+/// and it converges — a fix-up only fires while the shape it repairs is still
+/// on disk, so a clobbering save is repaired again on the next daemon start
+/// and stops firing for good once it sticks.
+///
+/// @param jsonPath config.json; only gates on the conversion having happened.
+/// @param what     fix-up name, for the failure warning.
+/// @return true on success or a clean no-op; false only on a write failure.
+inline bool withRuleSet(const QString& jsonPath, const char* what,
+                        const std::function<bool(PhosphorRules::RuleSet&)>& mutate)
+{
+    if (!QFile::exists(jsonPath)) {
+        return true;
+    }
+    const QString rulesPath = ConfigDefaults::rulesFilePath();
+    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+    if (!setOpt.has_value()) {
+        // No rules.json yet (conversion not established), or a store this
+        // build cannot load. Either way there is nothing of ours to repair,
+        // and prevalidateRulesFile owns the unloadable-store case.
+        return true;
+    }
+    PhosphorRules::RuleSet ruleSet = *setOpt;
+    if (!mutate(ruleSet)) {
+        return true; // nothing to change — no write
+    }
+    if (!ruleSet.saveToFile(rulesPath)) {
+        qWarning("ConfigMigration::%s: failed to write %s", what, qPrintable(rulesPath));
+        return false;
+    }
+    qInfo("ConfigMigration::%s: rewrote %s", what, qPrintable(rulesPath));
+    return true;
 }
 
 } // namespace PlasmaZones

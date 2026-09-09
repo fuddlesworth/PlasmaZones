@@ -7,6 +7,11 @@
 #include "configmigration_util.h"
 
 #include <PhosphorConfig/JsonBackend.h>
+#include <PhosphorRules/ActionParams.h>
+#include <PhosphorRules/ActionTypes.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleSet.h>
 
 #include <QFile>
 #include <QJsonArray>
@@ -96,10 +101,59 @@ bool stripShaderKeys(QJsonObject& sidecar)
     }
     return dirty;
 }
+/// The rules half of the overlay relocation: rewrite every OverrideOverlayShader
+/// action written against the old shape onto the tree's node shape.
+///
+/// Before v8 the overlay shader was a property of the layout, and the rule
+/// action overrode that property for whatever layout the matched context
+/// resolved to. It carried only the shader. In v8 the shader is a node of the
+/// OverlayShaderTree, a global default plus per-layout overrides, and the
+/// action names the node it overrides in `layoutId` the way the animation
+/// action names its event. The faithful translation of an old rule is the
+/// GLOBAL node: "this context, every layout" is exactly what "this context,
+/// whichever layout is active" meant, so the rewrite stamps `layoutId: ""`
+/// and touches nothing else. Assigning the layout that happened to be active
+/// at migration time instead would narrow the rule to that one layout and
+/// silently stop it applying after the user's next layout switch.
+///
+/// The rewrite is what makes the migration a migration rather than a
+/// tolerated legacy: after it runs, no rule on disk is in the old shape, the
+/// descriptor's "absent layoutId means the global node" reading is never
+/// exercised by stored data, and a rule file is exactly what the editor would
+/// have written. Idempotent by shape (a second run finds nothing lacking the
+/// key and writes nothing) and crash-safe (withRuleSet saves atomically or
+/// not at all), so it rides the finalize pass on every start like the sidecar
+/// lift beside it.
+bool relocateOverlayShaderRulesToNodes(const QString& jsonPath)
+{
+    return withRuleSet(jsonPath, "relocateOverlayShaderRulesToNodes", [](PhosphorRules::RuleSet& ruleSet) {
+        bool changed = false;
+        // A copy: updateRule replaces entries in the set being walked.
+        const QList<PhosphorRules::Rule> rules = ruleSet.rules();
+        for (PhosphorRules::Rule rule : rules) {
+            bool ruleChanged = false;
+            for (PhosphorRules::RuleAction& action : rule.actions) {
+                if (action.type != PhosphorRules::ActionType::OverrideOverlayShader
+                    || action.params.contains(PhosphorRules::ActionParam::LayoutId)) {
+                    continue;
+                }
+                action.params.insert(QString(PhosphorRules::ActionParam::LayoutId), QString());
+                ruleChanged = true;
+            }
+            if (ruleChanged && ruleSet.updateRule(rule)) {
+                changed = true;
+            }
+        }
+        return changed;
+    });
+}
+
 } // namespace
 
 // v8's overlay-shader half moves zone-overlay shader assignments out of the
-// layout-settings sidecar into the config's Overlays/OverlayShaderTree blob.
+// layout-settings sidecar into the config's Overlays/OverlayShaderTree blob,
+// and rewrites the rules that addressed the old per-layout property onto the
+// tree's node shape (relocateOverlayShaderRulesToNodes above).
 // There is no chain step for it: the config root carries nothing to transform,
 // and the sidecar lift needs filesystem access and must NOT run on the sparse
 // profile deltas the chain also processes (it would stamp the user's live
@@ -109,9 +163,16 @@ bool stripShaderKeys(QJsonObject& sidecar)
 // migrateV7ToV8's alone.
 bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
 {
+    // The rules half first, and unconditionally: it does not depend on the
+    // sidecar existing (a user can have overlay rules and no per-layout
+    // settings at all), and the sidecar lift below must not be able to skip
+    // it by returning early. Its own failure is reported through the combined
+    // result, never allowed to block the lift.
+    const bool rulesOk = relocateOverlayShaderRulesToNodes(jsonPath);
+
     const QString sidecarPath = ConfigDefaults::layoutSettingsFilePath();
     if (!QFile::exists(sidecarPath)) {
-        return true; // nothing to relocate — fresh install or already clean
+        return rulesOk; // nothing to relocate — fresh install or already clean
     }
 
     QJsonObject sidecar;
