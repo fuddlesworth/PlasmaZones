@@ -52,7 +52,7 @@ void EditorController::setEditorModeInternal(int mode)
     // applies the launch wholesale (mode included), so it stays meaningful
     // across a mode change — dropping it would strand that open dialog
     // acting on nothing.
-    // The rest of the layout session (zones, shader, gap overrides, bounds)
+    // The rest of the layout session (zones, gap overrides, bounds)
     // deliberately stays loaded when entering template mode: QML gates every
     // reader on the mode, and each route back into layout mode
     // (createNewLayout, loadLayout, the forced plain-screen launch) rebuilds

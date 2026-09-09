@@ -15,8 +15,8 @@
     <p>
       The PlasmaZones Layout Editor is the visual companion to the
       PlasmaZones window placement system for KDE Plasma. Use it to author
-      named zone layouts, drag zone boundaries on a live canvas, assign
-      shaders, configure per-zone appearance, and pick the layout that
+      named zone layouts, drag zone boundaries on a live canvas,
+      configure per-zone appearance, and pick the layout that
       should activate on each monitor. It also edits the scrolling
       templates that set the starting columns of a strip.
     </p>
@@ -24,7 +24,6 @@
     <ul>
       <li>Drag-to-resize zones with snap-to-grid and zone-mirror tools</li>
       <li>Fixed-geometry and relative-geometry zones for resolution-independent layouts</li>
-      <li>Per-zone shader effects with live previews</li>
       <li>Per-monitor and per-activity layout assignments</li>
       <li>Import / export layout JSON for sharing</li>
       <li>Starting columns and size presets for scrolling templates</li>

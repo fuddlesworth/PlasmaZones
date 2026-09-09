@@ -92,7 +92,7 @@ set(plasmazones_settings_SRCS
     # methods (sectionForPath / eventLabel / parentChain).
     pages/animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
-    # Consumed by AnimationsPageController + SnappingShadersPageController.
+    # Consumed by AnimationsPageController + OverlaysPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
     services/shaderpackinstaller.h
     services/shaderpackinstaller.cpp
@@ -129,8 +129,9 @@ set(plasmazones_settings_SRCS
     pages/snappingbehaviorcontroller.cpp
     pages/snappingeffectscontroller.h
     pages/snappingeffectscontroller.cpp
-    pages/snappingshaderspagecontroller.h
-    pages/snappingshaderspagecontroller.cpp
+    pages/overlayspagecontroller.h
+    pages/overlayspagecontroller.cpp
+    pages/overlayspagecontroller_sets.cpp
     pages/snappingzoneselectorcontroller.h
     pages/snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
@@ -332,11 +333,12 @@ qt_add_qml_module(plasmazones-settings
         qml/components/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
-        # each with a Behavior page. Shaders lives under Configuration. The
-        # window border / title-bar appearance AND the unified gaps are shared
-        # across modes and live on the top-level WindowAppearancePage.
+        # each with a Behavior page. The overlay's own appearance and its
+        # shader assignments moved out to Appearance → Overlays (grouped
+        # further down). The window border / title-bar appearance AND the
+        # unified gaps are shared across modes and live on the top-level
+        # WindowAppearancePage.
         qml/pages/snapping/SnappingOverlayBehaviorPage.qml
-        qml/pages/snapping/SnappingOverlayAppearancePage.qml
         qml/pages/snapping/SnappingZoneSelectorPage.qml
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
@@ -491,7 +493,13 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsMotionSetsPage.qml
         qml/pages/animations/AnimationsPresetsPage.qml
         qml/pages/animations/AnimationsShadersPage.qml
-        qml/pages/snapping/SnappingShadersPage.qml
+        # Appearance → Overlays: how the zone overlay looks, which shader each
+        # layout draws, and the Library holding the pack browser and saved sets.
+        qml/pages/overlays/OverlaysAppearancePage.qml
+        qml/pages/overlays/OverlaysLibraryPage.qml
+        qml/pages/overlays/OverlaysAssignmentsPage.qml
+        qml/pages/overlays/OverlayShaderAssignmentCard.qml
+        qml/pages/overlays/OverlaySetsPage.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
         # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
         # list with per-pack params) and border/titlebar field overrides via

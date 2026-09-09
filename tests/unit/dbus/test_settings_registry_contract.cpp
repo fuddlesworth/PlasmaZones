@@ -87,7 +87,7 @@ private Q_SLOTS:
         m_shaderRegistry = new ShaderRegistry(nullptr);
         m_profileRegistry = new PhosphorAnimation::PhosphorProfileRegistry(nullptr);
         m_parent = new QObject(nullptr);
-        m_adaptor = new SettingsAdaptor(m_settings, m_shaderRegistry, m_profileRegistry, m_parent);
+        m_adaptor = new SettingsAdaptor(m_settings, m_profileRegistry, m_parent);
     }
 
     void cleanup()

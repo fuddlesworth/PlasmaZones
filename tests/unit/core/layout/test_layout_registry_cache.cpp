@@ -212,15 +212,39 @@ private Q_SLOTS:
         for (int i = 0; i < n; ++i) {
             (void)mgr->assignmentEntryForScreen(QStringLiteral("DP-25"), 0, QString());
         }
-        const qint64 ns = t.nsecsElapsed();
-        const double nsPerCall = double(ns) / n;
-        qDebug("cached-hit @ N=50 rules: %.0f ns/call (total %lld ns over %d iters)", nsPerCall,
-               static_cast<long long>(ns), n);
-        // Linear walk through 50 context rules with match.evaluate() is
-        // ~10–50 µs (10000–50000 ns) on a modern CPU. The cache must drop
-        // that by at least an order of magnitude. Pick a generous ceiling
-        // so CI noise doesn't flap the test.
-        QVERIFY2(nsPerCall < 5000.0, qPrintable(QStringLiteral("cached hit too slow: %1 ns/call").arg(nsPerCall)));
+        const double cachedNs = double(t.nsecsElapsed()) / n;
+
+        // The SAME work with the cache defeated, measured in the same run on
+        // the same machine: a fresh screen id every iteration is a miss every
+        // iteration, so this is the linear walk through 50 context rules with
+        // match.evaluate() that the cache exists to avoid.
+        //
+        // A RATIO, not an absolute ns ceiling. The claim being pinned is "the
+        // cache drops the cost by an order of magnitude", and the old 5000
+        // ns/call constant was only a proxy for it — a proxy that measured the
+        // machine as much as the code, and flapped when ctest ran the suite in
+        // parallel and the benchmark lost the CPU (6209 ns/call at -j12, well
+        // under a microsecond alone). Contention slows both legs together, so
+        // the ratio survives what the constant did not.
+        const int missN = 2000;
+        QElapsedTimer missTimer;
+        missTimer.start();
+        for (int i = 0; i < missN; ++i) {
+            (void)mgr->assignmentEntryForScreen(QStringLiteral("DP-miss-%1").arg(i), 0, QString());
+        }
+        const double uncachedNs = double(missTimer.nsecsElapsed()) / missN;
+
+        qDebug("@ N=50 rules: cached %.0f ns/call, uncached %.0f ns/call (%.1fx)", cachedNs, uncachedNs,
+               uncachedNs / cachedNs);
+
+        // 5x rather than the full order of magnitude the comment describes:
+        // the point is to catch the cache not working at all (a ratio near
+        // 1.0), and a threshold that sits just under the real number is how a
+        // benchmark starts flapping again.
+        QVERIFY2(uncachedNs > cachedNs * 5.0,
+                 qPrintable(QStringLiteral("cache is not buying anything: cached %1 ns/call vs uncached %2 ns/call")
+                                .arg(cachedNs)
+                                .arg(uncachedNs)));
     }
 
     // ─────────────────────────────────────────────────────────────────────

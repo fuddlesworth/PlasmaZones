@@ -48,6 +48,9 @@ ColumnLayout {
     property bool enableReset: enableRandomize
     property bool enableImage: false
     property bool enableGroups: true
+    /// Forwarded to ParameterEditor: the pack is not installed, so the empty
+    /// state must not claim it declares no parameters.
+    property bool subjectMissing: false
     property bool compact: true
     /// Two-way alias onto the inner editor: the editor self-assigns on
     /// accordion toggle, and an alias keeps host reads/writes in sync
@@ -86,6 +89,7 @@ ColumnLayout {
         enableReset: root.enableReset
         enableImage: root.enableImage
         enableGroups: root.enableGroups
+        subjectMissing: root.subjectMissing
         compact: root.compact
         onValueChanged: function (paramId, value) {
             root.valueChanged(root.effectId, paramId, value);

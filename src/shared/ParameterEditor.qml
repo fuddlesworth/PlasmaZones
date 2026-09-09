@@ -58,6 +58,11 @@ ColumnLayout {
     property bool enableReset: enableRandomize
     property bool enableGroups: true
     property bool enableImage: true
+    /// Set when the pack whose parameters these are is NOT INSTALLED, so the
+    /// empty state can say that instead of claiming the pack declares no
+    /// parameters. An absent pack and a parameterless one both arrive here as
+    /// an empty `parameters`, and only the caller can tell them apart.
+    property bool subjectMissing: false
     /// Compact mode renders rows in the settings-app style: title left,
     /// fixed-width control on the right, indented to match `SettingsRow`.
     /// Default (false) keeps the editor's wide-slider aesthetic.
@@ -460,7 +465,10 @@ ColumnLayout {
         // `parameters: []` — undefined would otherwise hide every layout
         // branch and produce a blank component.
         visible: !root.parameters || root.parameters.length === 0
-        text: i18nc("@info", "No configurable parameters.")
+        // An uninstalled pack reaches this with an empty `parameters` too, and
+        // saying it has none would be a claim nothing here can support. The
+        // picker above already labels it as missing; this agrees with it.
+        text: root.subjectMissing ? i18nc("@info", "This pack is not installed, so its settings cannot be shown.") : i18nc("@info", "No configurable parameters.")
         wrapMode: Text.WordWrap
         opacity: 0.7
     }

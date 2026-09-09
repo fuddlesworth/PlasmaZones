@@ -45,6 +45,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     s.versionKey = ConfigKeys::versionKey();
 
     appendShadersSchema(s);
+    appendOverlayShadersSchema(s);
     appendAppearanceSchema(s);
     appendOrderingSchema(s);
     appendAnimationsSchema(s);
@@ -885,6 +886,9 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
     };
 }
+
+// Overlays lives in settingsschema_overlayshaders.cpp, split
+// out for file size the way the scrolling and tiling domains were.
 
 // ─── PhosphorZones::Zone Selector ──────────────────────────────────────────────────────────
 // Pops up at the edge of the screen during drag to let users pick which zone

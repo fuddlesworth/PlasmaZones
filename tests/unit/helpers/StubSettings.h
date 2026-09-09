@@ -4,7 +4,11 @@
 #pragma once
 
 #include "config/configdefaults.h"
+#include "config/settingsschema.h"
 #include "core/interfaces/interfaces.h"
+#include "core/types/overlayshadertree.h"
+
+#include <PhosphorConfig/Schema.h>
 
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
@@ -1855,7 +1859,7 @@ public:
     }
     void setScrollingDropIndicatorOpacity(double opacity) override
     {
-        if (qFuzzyCompare(m_scrollingDropIndicatorOpacity, opacity))
+        if (qFuzzyCompare(1.0 + m_scrollingDropIndicatorOpacity, 1.0 + opacity))
             return;
         m_scrollingDropIndicatorOpacity = opacity;
         Q_EMIT scrollingDropIndicatorOpacityChanged();
@@ -2129,12 +2133,32 @@ public:
     }
     void setMotionProfileTreeJson(const QString& json) override
     {
-        setMotionProfileTree(QJsonDocument::fromJson(json.toUtf8()).object().toVariantMap());
+        // Guarded like the decoration and overlay facades below. Without the
+        // malformed check, ANY unparseable string silently reset the tree to
+        // empty rather than being ignored, which is neither what production
+        // does nor what a caller passing junk would expect a stub to do.
+        if (json.isEmpty()) {
+            setMotionProfileTree({});
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setMotionProfileTree(doc.object().toVariantMap());
     }
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
     {
         return m_decorationProfileTree;
     }
+    /// DELIBERATE OMISSION: stores what it is given. Production's setter
+    /// prunes the tree through a JSON round trip and then STRIPS every
+    /// override field equal to the ConfigDefaults seed, re-injecting that seed
+    /// on read. Neither half is replicated here, so a stub-backed test must
+    /// not assert edit-back-to-seed behaviour: production would clear the
+    /// override and this keeps it. No decoration test depends on that today.
+    /// The overlay tree next door IS faithful, because eleven slots stand on
+    /// its persistence boundary.
     void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& value) override
     {
         if (m_decorationProfileTree == value) {
@@ -2156,11 +2180,71 @@ public:
         // Dropping the value made this the one key the effect fetches by SettingProperty
         // that no stub-backed test could move — while the comment below boasted "real
         // storage, not no-op setters".
+        // Empty string means "reset to the empty tree", matching the real
+        // Settings facade's handling of "" specifically. It does NOT claim
+        // parity beyond that: see the typed setter's omission note above.
+        if (json.isEmpty()) {
+            setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree{});
+            return;
+        }
         const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         if (doc.isNull() || !doc.isObject()) {
             return;
         }
         setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+    }
+    OverlayShaderTree overlayShaderTree() const override
+    {
+        return m_overlayShaderTree;
+    }
+    void setOverlayShaderTree(const OverlayShaderTree& value) override
+    {
+        // Route through the SAME validator the production store applies to
+        // this key, rather than storing verbatim. The overlay tree is the one
+        // stubbed value with a real persistence boundary behind it (non-UUID
+        // override keys dropped, keys normalized to the braced form, string
+        // lengths and parameter/override counts bounded, nested parameter
+        // values refused), and a controller that writes something the
+        // sanitizer would alter must fail here rather than pass against a
+        // stub that is more permissive than the thing it stands in for.
+        //
+        // Sanitize BEFORE the changed-check, matching Store::write, which
+        // compares the already-coerced value. Comparing the raw argument
+        // would emit a second time on a repeat write of anything the
+        // sanitizer touches.
+        //
+        // Note the sanitizer round-trips parameters through QJsonObject, so a
+        // parameter that is not JSON-representable is dropped and an int comes
+        // back as a qlonglong. That is production behaviour, not stub
+        // weirdness, but it will surprise a future slot that stores a
+        // non-scalar parameter and compares it back.
+        const OverlayShaderTree sanitized = sanitizeThroughSchema(value);
+        if (m_overlayShaderTree == sanitized) {
+            return;
+        }
+        m_overlayShaderTree = sanitized;
+        Q_EMIT overlayShaderTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString overlayShaderTreeJson() const override
+    {
+        // Same coherence contract as the decoration facade above.
+        return QString::fromUtf8(QJsonDocument(overlayShaderTree().toJson()).toJson(QJsonDocument::Compact));
+    }
+    void setOverlayShaderTreeJson(const QString& json) override
+    {
+        // The real Settings treats "" as "reset to the empty tree" (and
+        // emits); silently ignoring it here would make a stub-backed
+        // clear a no-op that production performs.
+        if (json.isEmpty()) {
+            setOverlayShaderTree(OverlayShaderTree{});
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
     }
 
     // Decorations.Performance (ISettings). Real storage, not no-op setters: the
@@ -2242,7 +2326,11 @@ public:
         }
         const double clamped = qBound(ConfigDefaults::decorationBlurScaleMultiplierMin(), value,
                                       ConfigDefaults::decorationBlurScaleMultiplierMax());
-        if (qFuzzyCompare(m_decorationBlurScaleMultiplier, clamped)) {
+        // 1.0 + x, not the bare compare: qFuzzyCompare is undefined against
+        // zero and returns false for (0.0, 0.0), so a zero-valued write would
+        // invert the guard and emit on a no-op. Same idiom as every other
+        // double setter in this file.
+        if (qFuzzyCompare(1.0 + m_decorationBlurScaleMultiplier, 1.0 + clamped)) {
             return;
         }
         m_decorationBlurScaleMultiplier = clamped;
@@ -2450,8 +2538,8 @@ public:
     //
     // Every setter below pairs the field-specific signal with the umbrella
     // `settingsChanged()` emit. The concrete Settings class does the same
-    // via the P_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros (settings.cpp
-    // ~2759-2784) — the stub matches so tests can rely on `settingsChanged()`
+    // via the P_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros
+    // (src/config/settings/settings_detail.h) — the stub matches so tests can rely on `settingsChanged()`
     // firing on any setter, regardless of which ISettings backend is wired.
     QString editorDuplicateShortcut() const override
     {
@@ -2950,6 +3038,22 @@ public:
     }
 
 private:
+    /// Apply the production schema's own validator for the overlay tree key.
+    /// Reached through cachedSettingsSchema() rather than by calling the
+    /// sanitizer directly: that function has internal linkage, and this is the
+    /// same functor the store wires onto the key, so the stub cannot drift
+    /// from production by construction.
+    static OverlayShaderTree sanitizeThroughSchema(const OverlayShaderTree& value)
+    {
+        const PhosphorConfig::KeyDef* def =
+            cachedSettingsSchema().findKey(ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey());
+        if (!def || !def->validator) {
+            return value;
+        }
+        const QVariant coerced = def->validator(QVariant(value.toJson().toVariantMap()));
+        return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(coerced.toMap()));
+    }
+
     QHash<QString, QVariantMap> m_perScreenAutotile;
     QHash<QString, QVariantMap> m_perScreenScrolling;
     QHash<QString, QVariantMap> m_perScreenZoneSelector;
@@ -3045,6 +3149,13 @@ private:
     QVariantMap m_motionProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
+    // Left default-constructed rather than seeded from
+    // ConfigDefaults::overlayShaderTree(), which is the empty tree — same
+    // situation as m_shaderProfileTree two lines up. The setter routes through
+    // the production validator, so what the stub STORES matches production
+    // even though the initial value is written here rather than read from
+    // ConfigDefaults.
+    OverlayShaderTree m_overlayShaderTree;
     QColor m_borderColor = ConfigDefaults::borderFallbackColor();
     QColor m_highlightColor = ConfigDefaults::highlightFallbackColor();
     QColor m_inactiveColor = ConfigDefaults::inactiveFallbackColor();

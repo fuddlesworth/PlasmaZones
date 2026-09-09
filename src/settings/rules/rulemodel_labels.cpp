@@ -508,9 +508,32 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                                : PhosphorI18n::tr("%1 curve: %2").arg(event, curveLabel);
     }
     if (action.type == ActionType::OverrideOverlayShader) {
-        const QString id = action.params.value(PhosphorRules::ActionParam::EffectId).toString();
-        return id.isEmpty() ? PhosphorI18n::tr("Overlay shader")
-                            : PhosphorI18n::tr("Overlay shader: %1").arg(resolveWith(id, overlayShaderLookup));
+        // Node-shaped like the animation shader label above: the layout the
+        // rule overrides leads when there is one, so two overrides in one rule
+        // never summarise identically, and the global-default node keeps the
+        // node-less wording every existing rule already reads as. The node
+        // resolves through the snapping-layout lookup because it IS a layout
+        // uuid keyed into the same layouts model; a deleted layout falls back
+        // to its raw id, matching every sibling. An engaged-empty shader is
+        // the "no shader" sentinel and says so, rather than reading as a rule
+        // that has not been configured yet.
+        const QString node = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
+        const QString layout = node.isEmpty() ? QString() : resolveWith(node, snappingLayoutLookup);
+        const QJsonValue effect = action.params.value(PhosphorRules::ActionParam::EffectId);
+        if (effect.isUndefined()) {
+            // Only a staged editor row: the validator refuses the key's absence
+            // at load, so a saved rule never reaches this arm.
+            return layout.isEmpty() ? PhosphorI18n::tr("Overlay shader")
+                                    : PhosphorI18n::tr("%1 overlay shader").arg(layout);
+        }
+        const QString id = effect.toString();
+        if (id.isEmpty()) {
+            return layout.isEmpty() ? PhosphorI18n::tr("Block overlay shader")
+                                    : PhosphorI18n::tr("Block %1 overlay shader").arg(layout);
+        }
+        const QString shader = resolveWith(id, overlayShaderLookup);
+        return layout.isEmpty() ? PhosphorI18n::tr("Overlay shader: %1").arg(shader)
+                                : PhosphorI18n::tr("%1 overlay shader: %2").arg(layout, shader);
     }
     if (action.type == ActionType::OverrideOverlayStyle) {
         const QString v = action.params.value(PhosphorRules::ActionParam::Value).toString();

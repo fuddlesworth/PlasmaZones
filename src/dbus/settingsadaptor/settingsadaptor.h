@@ -22,7 +22,6 @@ namespace PlasmaZones {
 
 class ISettings;
 class Settings; // Forward declaration for concrete type
-class ShaderRegistry;
 
 /**
  * @brief D-Bus adaptor for settings operations
@@ -49,10 +48,6 @@ class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor, public Q
 
 public:
     /// @param settings Settings interface (required).
-    /// @param shaderRegistry Per-process shader registry. Borrowed; must
-    ///        outlive the adaptor. Optional in tests / unit fixtures —
-    ///        when null, every shader-related method returns an empty
-    ///        result and the on-disk hot-reload connection is skipped.
     /// @param profileRegistry Per-process motion-profile registry holding
     ///        the merged per-event `PhosphorAnimation::Profile` set (the
     ///        same registry the daemon's SurfaceAnimator path resolves
@@ -61,12 +56,11 @@ public:
     ///        registered and consumers fall back to the global duration.
     /// @param parent Qt parent (D-Bus adaptors are owned by their adapted
     ///        QObject via Qt parent-child).
-    explicit SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry = nullptr,
-                             PhosphorAnimation::PhosphorProfileRegistry* profileRegistry = nullptr,
+    explicit SettingsAdaptor(ISettings* settings, PhosphorAnimation::PhosphorProfileRegistry* profileRegistry = nullptr,
                              QObject* parent = nullptr);
     ~SettingsAdaptor() override;
 
-    /// Null the borrowed ISettings / ShaderRegistry pointers, sever their
+    /// Null the borrowed ISettings and profile-registry pointers, sever their
     /// signal wiring, and flush any pending debounced save. Called from
     /// Daemon::stop() before the owning unique_ptr members destroy the
     /// backing objects — after detach() the adaptor's D-Bus slots hit the
@@ -164,62 +158,6 @@ public Q_SLOTS:
      *         cannot be surfaced here since the setters return void.
      */
     bool setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values);
-
-    /**
-     * @brief Get list of available shader effects
-     * @return List of shader metadata (id, name, description, etc.)
-     */
-    QVariantList availableShaders();
-
-    /**
-     * @brief Get detailed information about a specific shader
-     * @param shaderId UUID of the shader to query
-     * @return Shader metadata map, or empty map if not found
-     */
-    QVariantMap shaderInfo(const QString& shaderId);
-
-    /**
-     * @brief Get default parameter values for a shader
-     * @param shaderId UUID of the shader to query
-     * @return Map of parameter IDs to default values
-     */
-    QVariantMap defaultShaderParams(const QString& shaderId);
-
-    /**
-     * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
-     * @param shaderId UUID of the shader
-     * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
-     * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
-     */
-    QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params);
-
-    /**
-     * @brief Check if shader effects are enabled (compiled with shader support)
-     * @return true if shaders are available
-     */
-    bool shadersEnabled();
-
-    /**
-     * @brief Check if user-installed shaders are supported
-     * @return true if user shaders can be loaded
-     */
-    bool userShadersEnabled();
-
-    /**
-     * @brief Get the user shader installation directory path
-     * @return Path to ~/.local/share/plasmazones/overlays
-     */
-    QString userShaderDirectory();
-
-    /**
-     * @brief Open the user shader directory in the file manager
-     */
-    void openUserShaderDirectory();
-
-    /**
-     * @brief Refresh the shader registry (reload all shaders)
-     */
-    void refreshShaders();
 
     /**
      * @brief Asynchronous window list request (fire-and-forget).
@@ -331,17 +269,7 @@ private:
      */
     void scheduleSave();
 
-    /**
-     * @brief Drop all cached ShaderRegistry results.
-     *
-     * Called from refreshShaders() and from ShaderRegistry::shadersChanged
-     * so the editor and KCM never see stale shader metadata after a
-     * hot-reload. Cheap — just clears three hashes.
-     */
-    void invalidateShaderCaches();
-
     ISettings* m_settings; // Interface type (DIP)
-    ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives adaptor
     PhosphorAnimation::PhosphorProfileRegistry* m_profileRegistry = nullptr; ///< Borrowed; outlives adaptor
 
     // Registry pattern
@@ -367,23 +295,10 @@ private:
     QTimer* m_motionTreeNotifyTimer = nullptr;
     static constexpr int MotionTreeNotifyDebounceMs = 50;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // ShaderRegistry caches
-    //
-    // Memoizes availableShaders() / shaderInfo() / defaultShaderParams() so
-    // repeated editor + KCM queries don't hit ShaderRegistry on every call.
-    // Invalidated on refreshShaders() and on the registry's own shadersChanged
-    // signal. Marked mutable so const-ish read paths can populate them.
-    // ═══════════════════════════════════════════════════════════════════════
-    QVariantList m_cachedAvailableShaders;
-    bool m_cachedAvailableShadersValid = false;
-    QHash<QString, QVariantMap> m_cachedShaderInfo;
-    QHash<QString, QVariantMap> m_cachedShaderDefaults;
     /// Memoized JSON array of animation-shader search paths. A member, not a
     /// function-local static: as a static it lived for the whole process, so a
-    /// mid-session XDG_DATA_HOME change was never picked up, it survived
-    /// detach(), and neither refreshShaders() nor invalidateShaderCaches()
-    /// could clear it. Empty means "not yet resolved".
+    /// mid-session XDG_DATA_HOME change was never picked up and it survived
+    /// detach(), which could not clear it. Empty means "not yet resolved".
     QString m_cachedShaderSearchPaths;
 };
 
