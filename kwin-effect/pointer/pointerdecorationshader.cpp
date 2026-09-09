@@ -271,6 +271,14 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
     // Named-param preamble (`#define p_<id> customParamsN_x` / `customColorN`)
     // for the pack's declared parameters, spliced after #version.
     expanded = PhosphorShaders::spliceAfterVersion(expanded, PPS::PointerShaderRegistry::paramPreamble(eff));
+    // HDR colour management for the MAIN pass only. The pack authors sRGB and
+    // the generated main() writes through PZ_FINALIZE_COLOR, which the shared
+    // header defaults to identity; this override converts into the render
+    // target's colour description, with paintOutput pushing the colorspace
+    // uniforms it reads. The buffer stages below keep the identity default:
+    // their targets are intermediate and stay in the pack's own space. After
+    // include expansion, because the block's `#include` is KWin's to resolve.
+    expanded = PhosphorShaders::spliceAfterVersion(expanded, ShaderInternal::kwinFinalizeColorBlock());
     // Select the PLASMAZONES_KWIN branch of pointer_uniforms.glsl (classic-GL
     // default-block uniforms).
     const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
@@ -312,8 +320,12 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
         }
     }
 
-    auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
-                                                                        vertWithKwinDefine, fragWithKwinDefine);
+    // TransformColorspace is DECLARATIVE here, as decoration_render.cpp
+    // records: with a custom fragment source the traits feed only listDefines,
+    // and the conversion is explicit in the spliced block above. Declared so
+    // the program's traits describe what it does.
+    auto shader = KWin::ShaderManager::instance()->generateCustomShader(
+        KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace, vertWithKwinDefine, fragWithKwinDefine);
     // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns
     // nullptr when compilation or linking fails, so the null check IS the
     // validity test.

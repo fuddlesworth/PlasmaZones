@@ -133,12 +133,13 @@ void PointerDecorationPass::rebuildChain()
         // reach is LOGICAL px, possibly overridden by the pack's reachParam
         // against this layer's parameter overrides. It sets the damage rect,
         // so a pack painting past it is clipped rather than smeared.
-        m_maxReachLogical = std::max(m_maxReachLogical, eff.resolvedReach(parameters));
+        const double reach = eff.resolvedReach(parameters);
+        m_maxReachLogical = std::max(m_maxReachLogical, reach);
         m_maxTrailSeconds = std::max(m_maxTrailSeconds, eff.trailSeconds);
         if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
             m_anyAboveLayer = true;
         }
-        m_engagedLayers.push_back(EngagedLayer{effectId, eff, parameters});
+        m_engagedLayers.push_back(EngagedLayer{effectId, eff, parameters, reach});
     }
     // A chain whose every layer resolved away is NOT engaged: the cost rule
     // is about live layers, not about a non-empty profile.

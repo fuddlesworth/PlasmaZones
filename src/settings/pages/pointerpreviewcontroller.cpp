@@ -94,15 +94,20 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     }
 
     // Extension BEFORE the sources — see the header's ordering note.
-    shaderItem->setUniformExtension(std::make_shared<PhosphorPointerShaders::PointerUniformExtension>());
+    auto ext = std::make_shared<PhosphorPointerShaders::PointerUniformExtension>();
+    // The reach the pack may bound itself to, in logical px; the extension
+    // scales it per frame. Re-set by updatePreviewParams because a reachParam
+    // makes it follow a slider.
+    ext->setReachLogicalPx(effect.resolvedReach(friendlyParams));
+    shaderItem->setUniformExtension(ext);
 
     // `{<packRoot>/shared, <packRoot>}`, so `#include <pointer_lib.glsl>`
     // resolves to the same shared helpers the compositor and the validator
     // expand against.
-    const QStringList includePaths = Registry::includePathsFor(effect.sourceDir);
-    if (!includePaths.isEmpty()) {
-        shaderItem->setShaderIncludePaths(includePaths);
-    }
+    // Always set, for the same reason the buffer block below is: a reconfigure
+    // of the same item must replace what the previous pack installed, not
+    // leave it standing when the new answer happens to be empty.
+    shaderItem->setShaderIncludePaths(Registry::includePathsFor(effect.sourceDir));
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
     // The `#define p_<id> customParamsN_x` block, spliced after `#version` at
     // bake time. Its slot allocation mirrors translatePointerParams exactly, so
@@ -147,8 +152,13 @@ void PointerPreviewController::updatePreviewParams(QQuickItem* item, const QStri
     }
     const QVariantMap translated =
         PhosphorPointerShaders::PointerShaderRegistry::translatePointerParams(effect, friendlyParams);
-    if (!translated.isEmpty()) {
-        shaderItem->setShaderParams(translated);
+    // Unconditional, like the buffer block in configurePreviewItem: a map
+    // that translates to nothing must clear the lanes a previous upload left,
+    // not leave stale values standing on the item.
+    shaderItem->setShaderParams(translated);
+    if (const auto ext = std::dynamic_pointer_cast<PhosphorPointerShaders::PointerUniformExtension>(
+            shaderItem->uniformExtension())) {
+        ext->setReachLogicalPx(effect.resolvedReach(friendlyParams));
     }
 }
 

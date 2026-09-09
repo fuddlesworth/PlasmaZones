@@ -89,7 +89,11 @@ uniform vec4 uPointerState;
 uniform vec4 uCursorRect;
 
 // .x = 1.0 when uCursorSprite is bound (metadata `needsCursor` honoured),
-// else 0.0. .y .z .w reserved, always 0.
+// else 0.0.
+// .y = this pack's resolved reach in DEVICE px — the radius the host inflates
+//      the damage rect by around every live sample. Read it through
+//      pointerReach() and clamp your own extents to it: nothing painted
+//      further out reaches the screen. .z .w reserved, always 0.
 uniform vec4 uPointerFlags;
 
 // Trail history, NEWEST FIRST. .xy canvas px, .z age in seconds (0 = this
@@ -141,7 +145,7 @@ layout(std140, binding = 0) uniform PointerUniforms {
     vec4 uPointerRelease;        // offset 704 (16)  — same shape as uPointerPress
     vec4 uPointerState;          // offset 720 (16)  — .x buttons mask, .y idle s, .z scale, .w trail count
     vec4 uCursorRect;            // offset 736 (16)  — cursor sprite rect, canvas px (x, y, w, h)
-    vec4 uPointerFlags;          // offset 752 (16)  — .x has cursor sprite; .yzw reserved 0
+    vec4 uPointerFlags;          // offset 752 (16)  — .x has cursor sprite; .y reach in device px; .zw reserved 0
     vec4 uPointerTrail[32];      // offset 768 (512) — newest first: .xy px, .z age s, .w speed
 };                               // total 1280 bytes, no trailing pad
 
@@ -159,5 +163,24 @@ layout(binding = 10) uniform sampler2D uTexture3;
 // which a multipass pack includes.
 
 #endif // PLASMAZONES_KWIN
+
+// ─── Final-colour hook (HDR colour management) ─────────────────────────
+// The generated entry main() routes its fragColor write through
+// PZ_FINALIZE_COLOR(...). The guarded default below is identity, which is
+// right for the preview and for every buffer stage (an intermediate target
+// stays in the pack's own colour space).
+//
+// The compositor's MAIN pass overrides it before this header is included:
+// pointerdecorationshader.cpp splices KWin's colormanagement.glsl plus
+// `#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)` after `#version`. A
+// pointer pack authors new sRGB content and composites it straight into
+// KWin's blending space, which on an HDR or wide-gamut output is not sRGB —
+// without the conversion every pack reads dim and desaturated there. Same
+// mechanism as the animation family's; the strip and desktop-switch passes
+// deliberately do NOT convert because their inputs are captures that already
+// live in the blending space.
+#ifndef PZ_FINALIZE_COLOR
+#define PZ_FINALIZE_COLOR(c) (c)
+#endif
 
 #endif // PLASMAZONES_POINTER_UNIFORMS_GLSL

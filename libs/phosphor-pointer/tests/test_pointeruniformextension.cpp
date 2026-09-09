@@ -108,6 +108,7 @@ void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
     state.trail.append(QVector4D(3.0f, 4.0f, 0.016f, 850.0f));
 
     PointerUniformExtension ext;
+    ext.setReachLogicalPx(48.0);
     ext.apply(state);
 
     std::vector<char> buffer(1280, char{0});
@@ -139,6 +140,7 @@ void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
 
     const auto flags = vec4At(buffer, offsetof(PointerUniformsTail, uPointerFlags));
     QCOMPARE(flags[0], 1.0f); // cursor sprite bound
+    QCOMPARE(flags[1], 96.0f); // reach: 48 logical px at scale 2 — apply must not clobber it
 
     const auto newest = vec4At(buffer, offsetof(PointerUniformsTail, uPointerTrail));
     QCOMPARE(newest[0], 1.0f);

@@ -223,6 +223,10 @@ private:
         QString effectId;
         PhosphorPointerShaders::PointerShaderEffect effect;
         QVariantMap parameters;
+        /// `resolvedReach(parameters)`, logical px. Pushed to the pack as
+        /// `uPointerFlags.y` (scaled) so it can bound itself to the same
+        /// number the damage rect is built from.
+        double reachLogical = 0.0;
     };
 
     /// An array of @p N uniform locations, every slot "unset" (-1). `{}` would
@@ -328,14 +332,15 @@ private:
     static void pushFrameUniforms(KWin::GLShader* shader, const PointerUniformLocations& loc,
                                   const CompiledPointerPack& pack,
                                   const PhosphorPointerShaders::PointerFrameState& state, const QSize& deviceSize,
-                                  const QRectF& cursorRect, double timeSeconds, bool hasCursorSprite);
+                                  const QRectF& cursorRect, double timeSeconds, bool hasCursorSprite,
+                                  float reachDevicePx);
 
     /// Run @p pack's buffer stages into its ping-pong targets for this frame,
     /// leaving each stage's fresh output ready to bind as iChannelN on the
     /// main pass. Returns false when the targets cannot be allocated, which
     /// makes the caller skip the layer for this frame rather than draw it
     /// with unbound channels.
-    bool runBufferPasses(CompiledPointerPack& pack, const PhosphorPointerShaders::PointerShaderEffect& eff,
+    bool runBufferPasses(CompiledPointerPack& pack, const EngagedLayer& layer,
                          const PhosphorPointerShaders::PointerFrameState& state, const QSize& deviceSize,
                          const QRectF& cursorRect, double timeSeconds);
 

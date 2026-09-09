@@ -383,9 +383,12 @@ QString PointerShaderRegistry::pointerEntryPrologue()
 
 QList<PhosphorShaders::EntryCandidate> PointerShaderRegistry::pointerEntryCandidates()
 {
+    // The write goes through PZ_FINALIZE_COLOR, which pointer_uniforms.glsl
+    // defaults to identity and the compositor's main pass overrides with the
+    // sRGB-to-output conversion (see the hook's note in that header).
     static const QString pointerMain = QStringLiteral(
         "void main() {\n"
-        "    fragColor = pPointer(vTexCoord);\n"
+        "    fragColor = PZ_FINALIZE_COLOR(pPointer(vTexCoord));\n"
         "}\n");
     return {PhosphorShaders::EntryCandidate{QStringLiteral("pPointer"), pointerMain}};
 }

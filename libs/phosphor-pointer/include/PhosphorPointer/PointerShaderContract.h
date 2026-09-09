@@ -101,7 +101,11 @@ inline constexpr const char* kUPointerState = "uPointerState";
 inline constexpr const char* kUCursorRect = "uCursorRect";
 
 /// `vec4 uPointerFlags` — `.x` = 1.0 when `uCursorSprite` is bound
-/// (`needsCursor` honoured), else 0. `.y .z .w` reserved 0. UBO offset 752.
+/// (`needsCursor` honoured), else 0. `.y` = the pack's resolved reach in
+/// DEVICE px (metadata `reach` / `reachParam` after resolution and scaling),
+/// the radius the host inflates the damage rect by; packs read it through
+/// `pointerReach()` so their extents and the host's rect cannot drift apart.
+/// `.z .w` reserved 0. UBO offset 752.
 inline constexpr const char* kUPointerFlags = "uPointerFlags";
 
 /// `vec4 uPointerTrail[32]` — newest first. `.xy` canvas px, `.z` age in

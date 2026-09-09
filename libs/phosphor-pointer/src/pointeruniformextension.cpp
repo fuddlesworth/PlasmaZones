@@ -7,6 +7,7 @@
 
 #include <QMutexLocker>
 
+#include <algorithm>
 #include <cstring>
 
 namespace PhosphorPointerShaders {
@@ -93,7 +94,19 @@ void PointerUniformExtension::setCursorRect(const QRectF& rect)
 void PointerUniformExtension::setHasCursorSprite(bool has)
 {
     QMutexLocker lock(&m_mutex);
-    setVec4Locked(m_data.uPointerFlags, has ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+    // .y is the reach, owned by setReachLogicalPx / apply — keep it.
+    setVec4Locked(m_data.uPointerFlags, has ? 1.0f : 0.0f, m_data.uPointerFlags[1], 0.0f, 0.0f);
+}
+
+void PointerUniformExtension::setReachLogicalPx(double reach)
+{
+    QMutexLocker lock(&m_mutex);
+    m_reachLogicalPx = std::max(reach, 0.0);
+    // Re-derive the device value against the scale already in the state lane
+    // so a reach change lands this frame rather than on the next apply.
+    const float scale = m_data.uPointerState[2] > 0.0f ? m_data.uPointerState[2] : 1.0f;
+    setVec4Locked(m_data.uPointerFlags, m_data.uPointerFlags[0], static_cast<float>(m_reachLogicalPx) * scale, 0.0f,
+                  0.0f);
 }
 
 void PointerUniformExtension::setTrail(const QList<QVector4D>& trail)
@@ -129,7 +142,14 @@ void PointerUniformExtension::apply(const PointerFrameState& state)
     setRelease(state.releasePos, state.releaseSecondsSince, state.releaseButton);
     setState(state.buttons, state.idleSeconds, state.scale);
     setCursorRect(state.cursorRect);
-    setHasCursorSprite(state.hasSprite);
+    {
+        // Both flag lanes in one write: the sprite flag from the frame, the
+        // reach from the pack, scaled by this frame's canvas scale.
+        QMutexLocker lock(&m_mutex);
+        const float scale = state.scale > 0.0 ? static_cast<float>(state.scale) : 1.0f;
+        setVec4Locked(m_data.uPointerFlags, state.hasSprite ? 1.0f : 0.0f, static_cast<float>(m_reachLogicalPx) * scale,
+                      0.0f, 0.0f);
+    }
     setTrail(state.trail);
 }
 

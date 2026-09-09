@@ -31,6 +31,16 @@ float pointerScale() {
     return uPointerState.z > 0.0 ? uPointerState.z : 1.0;
 }
 
+// This pack's resolved reach in DEVICE px: the radius the host inflates the
+// damage rect by around every live sample, and so the furthest anything
+// painted can be from one and still reach the screen. The same number the
+// pack's metadata `reach` / `reachParam` declares, after the host resolves it
+// against the user's parameter values and scales it — read it from here rather
+// than mirroring the metadata by hand, so the two cannot drift.
+float pointerReach() {
+    return max(uPointerFlags.y, 0.0);
+}
+
 // This fragment's canvas position, TOP-DOWN device px. `uv` is the incoming
 // vTexCoord. The compositor's render target is bottom-origin (Y-up), so the Y
 // is flipped there to reach the top-down space the position uniforms use.

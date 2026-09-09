@@ -90,6 +90,26 @@ using ShaderInternal::shaderClockNowMs;
 /// fallback exists to surface third-party packs that violate the
 /// contract with a useful journal entry rather than a cryptic GLSL
 /// error.
+const QString& ShaderInternal::kwinFinalizeColorBlock()
+{
+    // Mirrors KWin's base.frag step for step: encoding → nits, colorimetry
+    // transform, tonemap, destination encoding. Deliberately NOT
+    // sourceEncodingToNitsInDestinationColorspace(), which folds
+    // doTonemapping() in at the end and would tonemap twice — a double
+    // compression on HDR, precisely the case this exists for.
+    static const QString block = QStringLiteral(
+        "#include \"colormanagement.glsl\"\n"
+        "vec4 pzFinalizeColor(vec4 c) {\n"
+        "    c = encodingToNits(c, sourceNamedTransferFunction,\n"
+        "                       sourceTransferFunctionParams.x, sourceTransferFunctionParams.y);\n"
+        "    c.rgb = (colorimetryTransform * vec4(c.rgb, 1.0)).rgb;\n"
+        "    c.rgb = doTonemapping(c.rgb);\n"
+        "    return nitsToDestinationEncoding(c);\n"
+        "}\n"
+        "#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)\n");
+    return block;
+}
+
 QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
 {
     // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM

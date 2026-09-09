@@ -95,8 +95,14 @@ public:
     /// `uCursorRect` in canvas px.
     void setCursorRect(const QRectF& rect);
 
-    /// `uPointerFlags.x`.
+    /// `uPointerFlags.x`. Leaves `.y` (the reach) alone.
     void setHasCursorSprite(bool has);
+
+    /// The pack's resolved reach in LOGICAL px, as `resolvedReach()` gives
+    /// it. Held here rather than passed per frame because it changes with the
+    /// pack or its parameters, not with the pointer; `apply` multiplies it by
+    /// the frame's scale on the way to `uPointerFlags.y`.
+    void setReachLogicalPx(double reach);
 
     /// `uPointerTrail` (truncated to `kMaxTrailPoints`, the rest zeroed) and
     /// `uPointerState.w` = the count actually filled.
@@ -109,6 +115,7 @@ private:
     void setVec4Locked(float (&dst)[4], float x, float y, float z, float w);
 
     PointerUniformsTail m_data;
+    double m_reachLogicalPx = 0.0;
     mutable QMutex m_mutex;
     std::atomic<bool> m_dirty{true};
 };

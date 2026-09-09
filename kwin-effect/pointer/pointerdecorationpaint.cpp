@@ -109,7 +109,7 @@ void PointerDecorationPass::drawFullscreenQuad()
 void PointerDecorationPass::pushFrameUniforms(KWin::GLShader* shader, const PointerUniformLocations& loc,
                                               const CompiledPointerPack& pack, const PPS::PointerFrameState& state,
                                               const QSize& deviceSize, const QRectF& cursorRect, double timeSeconds,
-                                              bool hasCursorSprite)
+                                              bool hasCursorSprite, float reachDevicePx)
 {
     // Every push is gated on a location: a pack that never references a
     // contract uniform links without it, the slot stays -1, and the uniform
@@ -158,7 +158,9 @@ void PointerDecorationPass::pushFrameUniforms(KWin::GLShader* shader, const Poin
                                      float(cursorRect.height())));
     }
     if (loc.uPointerFlags >= 0) {
-        shader->setUniform(loc.uPointerFlags, QVector4D(hasCursorSprite ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f));
+        // .y is the same reach the damage rect is inflated by, so a pack can
+        // clamp its own extents to the edge it will actually be clipped at.
+        shader->setUniform(loc.uPointerFlags, QVector4D(hasCursorSprite ? 1.0f : 0.0f, reachDevicePx, 0.0f, 0.0f));
     }
     // uPointerTrail[0..31]. Entries past the filled count are pushed as ZERO
     // rather than skipped: the contract promises them zero, and a skipped
@@ -252,10 +254,11 @@ KWin::GLTexture* PointerDecorationPass::cursorSpriteTexture()
 
 // ── Multipass buffer stages ─────────────────────────────────────────────────
 
-bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const PPS::PointerShaderEffect& eff,
+bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const EngagedLayer& layer,
                                             const PPS::PointerFrameState& state, const QSize& deviceSize,
                                             const QRectF& cursorRect, double timeSeconds)
 {
+    const PPS::PointerShaderEffect& eff = layer.effect;
     const size_t passCount = pack.bufferPasses.size();
     if (passCount == 0) {
         return true;
@@ -327,7 +330,7 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const PPS
         // iResolution describes the space the stage's uv arithmetic runs in,
         // which is its own (possibly downscaled) target, NOT the output.
         pushFrameUniforms(stage.shader.get(), stage.loc, pack, state, wantSize, cursorRect, timeSeconds,
-                          /*hasCursorSprite=*/false);
+                          /*hasCursorSprite=*/false, float(layer.reachLogical * state.scale));
         int unit = bindPackTextures(stage.shader.get(), stage.loc, pack, 0);
         for (size_t ch = 0; ch < passCount && ch < 4; ++ch) {
             const int chLoc = stage.loc.iChannel[ch];
@@ -451,7 +454,7 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         // Buffer stages render into their own FBOs, so they run OUTSIDE the
         // on-screen bracket's viewport and blend state and restore both after.
         if (!pack->bufferPasses.empty()) {
-            if (!runBufferPasses(*pack, layer.effect, state, deviceSize, cursorRect, timeSeconds)) {
+            if (!runBufferPasses(*pack, layer, state, deviceSize, cursorRect, timeSeconds)) {
                 qCWarning(lcEffect) << "Pointer pack" << layer.effectId
                                     << "could not allocate its buffer targets — layer skipped this frame";
                 continue;
@@ -472,8 +475,17 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
 
         KWin::ShaderBinder binder(pack->shader.get());
         pack->shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
+        // The pack authors sRGB and this draws straight into KWin's blending
+        // space, which on an HDR or wide-gamut output is not sRGB. The main
+        // program was compiled with the pzFinalizeColor conversion spliced in
+        // (pointerdecorationshader.cpp), and these are the uniforms it reads.
+        // Identity on an SDR sRGB target. Same fix the tab pills and the
+        // window-animation present path carry; the buffer stages above do NOT
+        // convert, because their targets are intermediate.
+        pack->shader->setColorspaceUniforms(KWin::ColorDescription::sRGB, renderTarget.colorDescription(),
+                                            KWin::RenderingIntent::Perceptual);
         pushFrameUniforms(pack->shader.get(), pack->loc, *pack, state, deviceSize, cursorRect, timeSeconds,
-                          sprite != nullptr);
+                          sprite != nullptr, float(layer.reachLogical * state.scale));
 
         int unit = bindPackTextures(pack->shader.get(), pack->loc, *pack, 0);
         if (sprite) {
