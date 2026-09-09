@@ -28,10 +28,6 @@
 
 const int kMaxTrail = 32;
 const int kMaxSparks = 48;
-// Mirrors "reach" in metadata.json, in logical px. The host derives the damage
-// rect from that number and the shader has no uniform for it, so the two are
-// kept in step by hand: change one and change this.
-const float kReachPx = 96.0;
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -47,18 +43,23 @@ vec4 pPointer(vec2 uv) {
     float launch = 220.0 * max(p_spread, 0.0) * scale;
     float budget = clamp(p_count, 1.0, float(kMaxSparks));
 
-    // Ballistic envelope, then the shrink that keeps it inside the declared
-    // reach, the same way Burst does it.
+    // Ballistic envelope, then the shrink that keeps it inside Reach, exactly
+    // the way Burst does it — including giving the user the same escape valve.
     //
-    // Left unshrunk, a spark's launch plus its fall runs well past `reach` in
-    // the metadata at the shipped defaults, and further still at the maxima.
-    // The host sizes the damage rect from that number and nothing is painted
-    // outside it, so the far half of every spark's flight was being cut off on
-    // a straight edge rather than fading. Compressing the flight into the
-    // budget costs no visible sparks — those were already clipped away — and
-    // loses the rectangle.
+    // Left unshrunk, a spark's launch plus its fall runs well past the reach
+    // the metadata declares. The host sizes the damage rect from that number
+    // and nothing is painted outside it, so the far part of every spark's
+    // flight was cut off on a straight edge instead of fading. Shrinking speed
+    // and gravity together keeps the arc's shape and lands it on the budget.
+    //
+    // Reach is a PARAMETER rather than a constant for the reason Burst's is: a
+    // fixed budget makes Spread and Gravity stop changing how far a spark
+    // actually gets once the shrink is biting, which is most of their range.
+    // With Reach in hand the user raises the budget instead of wondering why
+    // the sliders stopped working.
+    float reachPx = max(p_reach, 1.0) * scale;
     float travel = launch * life + 0.5 * gravity * life * life;
-    float envelope = max(kReachPx * scale - size * 3.0, 0.0);
+    float envelope = max(reachPx - size * 3.0, 0.0);
     float k = (travel > envelope && travel > 0.0) ? (envelope / travel) : 1.0;
     launch *= k;
     gravity *= k;

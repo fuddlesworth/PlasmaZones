@@ -7,9 +7,18 @@
     "category": "Particles",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 96,
+    "reach": 200,
     "trailSeconds": 1.0,
     "parameters": [
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 200.0,
+            "min": 48.0,
+            "max": 480.0,
+            "description": "Furthest a spark may travel from the path. Launch speed and gravity are scaled down together to stay inside it (px)"
+        },
         {
             "id": "count",
             "name": "Sparks per step",
@@ -96,5 +105,6 @@
             "default": "#ffa855f7",
             "description": "Colour a spark fades toward before it is gone"
         }
-    ]
+    ],
+    "reachParam": "reach"
 }

@@ -1032,9 +1032,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // true while it is minimized, sent to another desktop, or moved to another
     // output, so without these the covered set stays stale and a monitor with
     // nothing on it goes on being undecorated. Each is pre-gated on the window
-    // actually being fullscreen because windowFrameGeometryChanged fires every
-    // frame of a drag and the sweep walks the whole stacking order; the
-    // refresh's own set comparison makes a no-change call cost one compare.
+    // actually being fullscreen: the refresh walks the entire stacking order,
+    // and the overwhelming majority of windows firing these are not fullscreen
+    // and cannot move the answer. The refresh's own set comparison then makes a
+    // no-change call cost one compare.
     connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
         if (w && w->isFullScreen()) {
             refreshFullscreenSuppression();

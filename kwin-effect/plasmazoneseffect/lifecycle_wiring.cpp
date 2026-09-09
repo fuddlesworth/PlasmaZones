@@ -917,6 +917,15 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, refreshSuppression);
     connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, refreshSuppression);
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, refreshSuppression);
+    // Show Desktop parks a fullscreen window without changing its desktop, its
+    // activity or its minimized flag, so this is the only edge that can tell
+    // the walk its isHiddenByShowDesktop() term has flipped. Without it the
+    // term is worse than absent: any unrelated trigger arriving mid-peek
+    // rebuilds the set with the window excluded, re-decorates that monitor,
+    // and leaves it that way after the peek ends until something else fires.
+    connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [refreshSuppression](bool) {
+        refreshSuppression();
+    });
 }
 
 } // namespace PlasmaZones

@@ -104,7 +104,13 @@ vec4 pPointer(vec2 uv) {
     }
 
     // The small along-the-length offset that gives the tube depth.
-    vec3 rgb = phosphorGradient(fract(hueBase + 0.04 * hueAge));
+    // CLAMP, not fract. The along-the-length offset is what gives the tube its
+    // depth, but wrapping it puts rose next to cyan wherever the walk is near
+    // the top of the ramp — the same maximum-contrast seam the ping-pong above
+    // removes, just running along the stroke instead of across the whole tube.
+    // The base is scaled to leave room for the offset so the walk still
+    // reaches both ends.
+    vec3 rgb = phosphorGradient(clamp(hueBase * 0.96 + 0.04 * hueAge, 0.0, 1.0));
     // The core is close to white at its centre, which is what makes it read as
     // light instead of as a coloured line.
     float whiten = core * 0.55;

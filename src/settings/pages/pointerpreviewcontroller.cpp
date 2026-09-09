@@ -208,8 +208,13 @@ void PointerPreviewController::resetPointer(QQuickItem* item)
     // Only this canvas. Another preview may be mid-trail on the same
     // controller, and dropping its ring here would be the very cross-canvas
     // clobbering the per-item keying exists to prevent.
-    if (item) {
-        m_states.remove(item);
+    // Reset in place rather than erasing the entry. The pane calls this on
+    // every clock restart, and erasing would make the next drivePointer
+    // re-insert and connect a SECOND destroyed handler on the same live item —
+    // one more per restart, for as long as the canvas exists.
+    const auto it = m_states.find(item);
+    if (it != m_states.end()) {
+        *it = PointerState{};
     }
 }
 

@@ -114,12 +114,13 @@ namespace {
 /// This browser lists both families and its import affordance is one card for
 /// the page, not one per row, so there is no selection to route on and the type
 /// filter is an exclusion set that is usually "show both". The pack itself is
-/// the only thing that knows, and it does: the two schemas set
-/// `additionalProperties: false`, so `layer` / `reach` / `trailSeconds` are
-/// rejected by the surface schema and `needsBackdrop` / `multipass` /
-/// `bufferShaders` by the pointer one. A pack declaring none of them is
-/// ambiguous and stays on the surface path, which is where every pack went
-/// before this existed.
+/// the only thing that knows, and it does: the surface schema sets
+/// `additionalProperties: false` and declares none of `layer`, `trailSeconds`
+/// or `reachParam`, so a pack carrying any of them cannot be a surface pack.
+/// The reverse does not hold — the pointer schema allows several keys the
+/// surface family also uses — which is why the test only ever looks for the
+/// pointer-only markers. A pack declaring none of them is ambiguous and stays
+/// on the surface path, which is where every pack went before this existed.
 bool droppedPackIsPointer(const QString& sourceUrl)
 {
     const QString dir = QUrl(sourceUrl).isLocalFile() ? QUrl(sourceUrl).toLocalFile() : sourceUrl;

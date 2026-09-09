@@ -115,14 +115,20 @@ vec4 pPointer(vec2 uv) {
         float k = sincePress / kClickLife;
         radius += push * exp(-4.5 * k) * sin(k * 14.0) * (1.0 - k);
     }
-    // Keep the dots and their glow inside the damage rect the host derives
-    // from `radius`, without letting the reservation eat the ring.
+    // Reserve room for the dot inside the damage rect the host derives from
+    // `radius`, without letting the reservation eat the ring.
     //
     // The reservation alone is not safe at the extremes: Dot size runs to 10
     // and Orbit radius starts at 8, so `radiusMax - 3*dotSize` goes negative
     // and every dot stacks on the centre — a legal pair of settings that turns
     // the pack into a single blob. Floor it at a fraction of the requested
     // radius so a large dot narrows the ring instead of deleting it.
+    //
+    // The floor does not fully close the overrun, and neither did the bare
+    // reservation: when a dot's own drawn extent is a large share of the whole
+    // reach there is no radius that fits both, because `reach` here tracks the
+    // orbit radius alone and the shader has no uniform for the budget it is
+    // spending. Bounded and much reduced, not eliminated.
     radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize, radiusMax * 0.4)) * scale;
 
     vec2 centre = orbitLaggedCentre(count, max(p_lag, 0.0));
@@ -162,10 +168,16 @@ vec4 pPointer(vec2 uv) {
         // Compact support, like the shapes in Halo and Flash. A bare gaussian
         // is still around a tenth of a unit of coverage where the reservation
         // above runs out, so it met the damage rect's edge at a visible level
-        // and was cut off square. Taking it to exactly zero just inside that
-        // edge trades an invisible amount of glow for losing the straight line.
-        float r = sqrt(q);
-        float halo = exp(-q / 8.0) * 0.35 * (1.0 - smoothstep(2.0, 3.0, r));
+        // and was cut off square.
+        //
+        // Cut on the UNSTRETCHED distance. `da` is divided by the smear
+        // stretch, so a cutoff in that space would sit at up to three times
+        // further along the travel axis than across it — which is exactly the
+        // direction the reservation above does not cover. Measuring in plain
+        // dot radii bounds the dot at the same 3 the reservation reserves,
+        // whichever way the smear points.
+        float rUnstretched = length(vec2(along, across)) / max(dotPx, 1e-4);
+        float halo = exp(-q / 8.0) * 0.35 * (1.0 - smoothstep(2.0, 3.0, rUnstretched));
         float cover = clamp(body + halo, 0.0, 1.0) * live;
         if (cover <= 0.0) {
             continue;
