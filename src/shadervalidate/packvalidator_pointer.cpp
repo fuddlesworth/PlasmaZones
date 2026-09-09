@@ -63,6 +63,121 @@ QStringList pointerParamNames(const QList<PointerShaderEffect::ParameterInfo>& p
     return declared;
 }
 
+// The lowest gate value the preview's fastest moment may open to before the
+// pack counts as invisible there. Below this a stage that should be showing
+// the effect is showing nothing a user could judge.
+constexpr double kMinPreviewGate = 0.15;
+
+// GLSL smoothstep, so the lint computes the same number pointerSpeedGate does.
+double smoothstepAt(double edge0, double edge1, double x)
+{
+    if (edge1 <= edge0) {
+        return x < edge0 ? 0.0 : 1.0;
+    }
+    double t = (x - edge0) / (edge1 - edge0);
+    t = std::clamp(t, 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// GLSL source with comments blanked, so a call that only appears in a comment
+// cannot be mistaken for a real one. Newlines are kept so nothing else shifts.
+QString withoutComments(const QString& source)
+{
+    QString out = source;
+    const int n = out.size();
+    for (int i = 0; i < n - 1; ++i) {
+        if (out[i] == QLatin1Char('/') && out[i + 1] == QLatin1Char('/')) {
+            while (i < n && out[i] != QLatin1Char('\n')) {
+                out[i++] = QLatin1Char(' ');
+            }
+        } else if (out[i] == QLatin1Char('/') && out[i + 1] == QLatin1Char('*')) {
+            while (i < n) {
+                const bool end = i < n - 1 && out[i] == QLatin1Char('*') && out[i + 1] == QLatin1Char('/');
+                if (out[i] != QLatin1Char('\n')) {
+                    out[i] = QLatin1Char(' ');
+                }
+                ++i;
+                if (end) {
+                    out[i] = QLatin1Char(' ');
+                    break;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+// Whether `source` reads `p_<id>` as a whole token. A plain `contains` would
+// count `p_width` as a use of `p_wid`, and would then stay silent about a
+// parameter nothing reads.
+bool mentionsParam(const QString& source, const QString& id)
+{
+    const QString token = QStringLiteral("p_") + id;
+    int at = 0;
+    while ((at = source.indexOf(token, at)) >= 0) {
+        const int before = at - 1;
+        const int after = at + token.size();
+        const bool boundedLeft =
+            before < 0 || !(source[before].isLetterOrNumber() || source[before] == QLatin1Char('_'));
+        const bool boundedRight =
+            after >= source.size() || !(source[after].isLetterOrNumber() || source[after] == QLatin1Char('_'));
+        if (boundedLeft && boundedRight) {
+            return true;
+        }
+        at += token.size();
+    }
+    return false;
+}
+
+// The `p_<id>` names a pack passes as the `activationSpeed` argument of
+// pointerSpeedGate(). Parsed rather than regexed because the first argument is
+// routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so the
+// split has to happen at the top-level comma.
+QStringList speedGateParamNames(const QString& rawSource)
+{
+    const QString source = withoutComments(rawSource);
+    const QLatin1String callee("pointerSpeedGate");
+    QStringList found;
+    int at = 0;
+    while ((at = source.indexOf(callee, at)) >= 0) {
+        int i = at + callee.size();
+        while (i < source.size() && source[i].isSpace()) {
+            ++i;
+        }
+        if (i >= source.size() || source[i] != QLatin1Char('(')) {
+            at += callee.size();
+            continue;
+        }
+        // Walk the argument list, remembering where the top-level comma fell.
+        int depth = 0;
+        int comma = -1;
+        int j = i;
+        for (; j < source.size(); ++j) {
+            const QChar c = source[j];
+            if (c == QLatin1Char('(')) {
+                ++depth;
+            } else if (c == QLatin1Char(')')) {
+                if (--depth == 0) {
+                    break;
+                }
+            } else if (c == QLatin1Char(',') && depth == 1 && comma < 0) {
+                comma = j;
+            }
+        }
+        if (comma > 0 && j < source.size()) {
+            const QString arg = source.mid(comma + 1, j - comma - 1).trimmed();
+            if (arg.startsWith(QLatin1String("p_"))) {
+                const QString id = arg.mid(2);
+                if (PhosphorShaders::isValidParamId(id) && !found.contains(id)) {
+                    found << id;
+                }
+            }
+        }
+        at = j > at ? j : at + callee.size();
+    }
+    return found;
+}
+
 } // namespace
 
 // Validate one POINTER pack directory (data/pointer/*). Reproduces the pointer
@@ -237,6 +352,97 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         } else if (trailValue.toDouble() > 60.0) {
             lints
                 << QStringLiteral("trailSeconds out of range (0, 60]: %1 (clamped at load)").arg(trailValue.toDouble());
+        }
+    }
+
+    // ── declared but never used ──
+    // A parameter the shader never reads still costs a slot and still draws a
+    // control in the settings app, so the user is handed a slider that moves
+    // and changes nothing. Nothing repairs this at load, which is why it needs
+    // saying here: the pack works, and the control is dead.
+    //
+    // Every stage is scanned, not just the fragment, since a parameter may
+    // legitimately be read only by a buffer pass or the vertex stage.
+    {
+        QStringList stagePaths{eff.fragmentShaderPath};
+        if (!eff.vertexShaderPath.isEmpty()) {
+            stagePaths << eff.vertexShaderPath;
+        }
+        for (const QString& buf : eff.bufferShaderPaths) {
+            stagePaths << buf;
+        }
+        QString allStages;
+        for (const QString& path : stagePaths) {
+            QFile f(path);
+            if (QFile::exists(path) && f.open(QIODevice::ReadOnly)) {
+                allStages += QString::fromUtf8(f.readAll());
+                allStages += QLatin1Char('\n');
+            }
+        }
+        if (!allStages.isEmpty()) {
+            const QString stripped = withoutComments(allStages);
+            for (const PointerShaderEffect::ParameterInfo& p : eff.parameters) {
+                if (!PhosphorShaders::isValidParamId(p.id)) {
+                    continue; // already linted above, and it has no p_ define
+                }
+                if (!mentionsParam(stripped, p.id)) {
+                    lints << QStringLiteral(
+                                 "parameter '%1' is declared but no stage reads p_%1 (it still takes a "
+                                 "slot and still draws a control that does nothing)")
+                                 .arg(p.id);
+                }
+            }
+        }
+    }
+
+    // ── speed gate defaults ──
+    // Every lint above catches metadata the loader silently repairs. This one
+    // catches the opposite: a pack that loads perfectly, compiles cleanly, and
+    // then draws nothing. pointerSpeedGate() is smoothstep(a, 2a, speed), so a
+    // threshold whose DEFAULT sits above what the preview's pointer can reach
+    // leaves the gate shut across the whole lap, and the pack shows an empty
+    // stage in the browser where users pick packs. The windtrail pack shipped
+    // exactly that way, past a clean run of every other lint here.
+    //
+    // Only the default is linted, not the range: a user who raises the
+    // threshold themselves has asked for a pack that waits for a fast flick.
+    if (QFile::exists(eff.fragmentShaderPath)) {
+        QFile gateFrag(eff.fragmentShaderPath);
+        if (gateFrag.open(QIODevice::ReadOnly)) {
+            const QStringList gateIds = speedGateParamNames(QString::fromUtf8(gateFrag.readAll()));
+            for (const QString& gateId : gateIds) {
+                const auto declared = std::find_if(eff.parameters.cbegin(), eff.parameters.cend(),
+                                                   [&gateId](const PointerShaderEffect::ParameterInfo& p) {
+                                                       return p.id == gateId;
+                                                   });
+                if (declared == eff.parameters.cend()) {
+                    lints << QStringLiteral(
+                                 "pointerSpeedGate() is passed p_%1, which is no declared parameter (it "
+                                 "expands to an unwritten slot, so the gate reads whatever is in it)")
+                                 .arg(gateId);
+                    continue;
+                }
+                bool numeric = false;
+                const double threshold = declared->defaultValue.toDouble(&numeric);
+                // A default of 0 is the documented "no threshold" case and
+                // always draws, which is what the packs that ship the
+                // parameter at 0 rely on.
+                if (!numeric || threshold <= 0.0) {
+                    continue;
+                }
+                const double gate =
+                    smoothstepAt(threshold, threshold * 2.0, PointerShaderContract::kPreviewPeakSpeedPxPerSecond);
+                if (gate < kMinPreviewGate) {
+                    lints << QStringLiteral(
+                                 "parameter '%1' gates drawing on speed and defaults to %2 px/s, but the "
+                                 "preview pointer never exceeds %3 px/s, so the gate opens to at most %4 "
+                                 "of full and the pack previews as an empty stage")
+                                 .arg(gateId)
+                                 .arg(threshold, 0, 'g', 4)
+                                 .arg(PointerShaderContract::kPreviewPeakSpeedPxPerSecond, 0, 'g', 4)
+                                 .arg(gate, 0, 'f', 2);
+                }
+            }
         }
     }
 

@@ -142,6 +142,62 @@ PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const 
     return result;
 }
 
+/// The pointer twin of `validate`. The fragment defines its own
+/// pointerSpeedGate rather than including pointer_lib.glsl, because a fixture
+/// in a QTemporaryDir has no `shared/` sibling for the include to resolve
+/// against and a failed include would bury the lint under a compile error.
+/// The stub's own signature is not a call, so the scan under test ignores it,
+/// which is itself worth having exercised.
+PackResult validatePointer(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata,
+                           const QString& body)
+{
+    const QString dir = tmp.filePath(name);
+    QDir().mkpath(dir);
+    QFile meta(dir + QStringLiteral("/metadata.json"));
+    if (!meta.open(QIODevice::WriteOnly)) {
+        return {};
+    }
+    meta.write(QJsonDocument(metadata).toJson());
+    meta.close();
+
+    QFile frag(dir + QStringLiteral("/effect.frag"));
+    if (!frag.open(QIODevice::WriteOnly)) {
+        return {};
+    }
+    frag.write(
+        "float pointerSpeedGate(float speed, float activationSpeed) {\n"
+        "    return smoothstep(activationSpeed, activationSpeed * 2.0, speed);\n"
+        "}\n");
+    frag.write(body.toUtf8());
+    frag.close();
+
+    PackResult result;
+    QTextStream stream(&result.report);
+    result.errors = PlasmaZones::ShaderValidate::validatePointerPack(dir, stream);
+    stream.flush();
+    return result;
+}
+
+/// A pointer pack declaring one float parameter `activationSpeed` at `def`.
+QJsonObject pointerPackWithGate(const QString& id, double def)
+{
+    QJsonObject param;
+    param.insert(QStringLiteral("id"), QStringLiteral("activationSpeed"));
+    param.insert(QStringLiteral("name"), QStringLiteral("Activation speed"));
+    param.insert(QStringLiteral("type"), QStringLiteral("float"));
+    param.insert(QStringLiteral("default"), def);
+    param.insert(QStringLiteral("min"), 0.0);
+    param.insert(QStringLiteral("max"), 2000.0);
+
+    QJsonObject obj;
+    obj.insert(QStringLiteral("id"), id);
+    obj.insert(QStringLiteral("name"), id);
+    obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("effect.frag"));
+    obj.insert(QStringLiteral("trailSeconds"), 1.0);
+    obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+    return obj;
+}
+
 /// `multipass` is set because the buffer lints gate on it, matching the
 /// runtime: parseShaderMetadata takes isMultipass from this key alone, so a
 /// pack that lists bufferShaders without it is inert and its buffer list is
@@ -953,6 +1009,75 @@ private Q_SLOTS:
             obj.insert(QStringLiteral("bufferWrap"), QStringLiteral("tile"));
             const PackResult r = validateOverlay(tmp, QStringLiteral("ov-single"), obj);
             QVERIFY2(r.report.contains(QStringLiteral("bufferWrap value 'tile'")), qPrintable(r.report));
+        }
+    }
+
+    /// A pointer pack whose speed-gate DEFAULT sits above the preview
+    /// pointer's peak draws nothing on the whole preview lap, so it shows an
+    /// empty stage in the browser where packs are chosen. That is how the
+    /// windtrail pack shipped: it loaded, it compiled, every metadata lint
+    /// passed, and it rendered nothing. No lint could see it, because every
+    /// other lint here asks whether the loader had to repair the metadata,
+    /// and nothing had to be repaired.
+    ///
+    /// Both directions are asserted. A test that only checked the bad default
+    /// would still pass if the lint were widened to fire on everything, which
+    /// would be worse than no lint at all.
+    void speedGateDefaultAbovePreviewPeakIsLinted()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        const QString body = QStringLiteral(
+            "vec4 pPointer(vec2 uv) {\n"
+            "    float g = pointerSpeedGate(uPointerVelocity.z, p_activationSpeed);\n"
+            "    return vec4(g);\n"
+            "}\n");
+        const QLatin1String marker("previews as an empty stage");
+
+        {
+            // 400 was windtrail's shipped default. smoothstep(400, 800, 324)
+            // is exactly 0, so the gate never opened at any point of the lap.
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-shut"),
+                                                 pointerPackWithGate(QStringLiteral("pt-shut"), 400.0), body);
+            QVERIFY2(r.report.contains(marker), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("activationSpeed")), qPrintable(r.report));
+        }
+        {
+            // The value windtrail now ships. smoothstep(120, 240, 324) is 1.
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-open"),
+                                                 pointerPackWithGate(QStringLiteral("pt-open"), 120.0), body);
+            QVERIFY2(!r.report.contains(marker), qPrintable(r.report));
+        }
+        {
+            // 0 is the documented "no threshold" case: pointerSpeedGate
+            // short-circuits to 1.0, which is what the packs shipping the
+            // parameter at 0 rely on to keep their old behaviour.
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-zero"),
+                                                 pointerPackWithGate(QStringLiteral("pt-zero"), 0.0), body);
+            QVERIFY2(!r.report.contains(marker), qPrintable(r.report));
+        }
+        {
+            // A pack that never gates on speed must never be linted for it,
+            // however high a numeric parameter of its own happens to default.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-ungated"), 900.0);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-ungated"), obj,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) {\n"
+                                                                "    return vec4(p_activationSpeed * 0.001);\n"
+                                                                "}\n"));
+            QVERIFY2(!r.report.contains(marker), qPrintable(r.report));
+        }
+        {
+            // A call that survives only in a comment is not a call. Without
+            // the comment strip this fixture would be linted.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-comment"), 900.0);
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-comment"), obj,
+                                QStringLiteral("vec4 pPointer(vec2 uv) {\n"
+                                               "    // pointerSpeedGate(uPointerVelocity.z, p_activationSpeed)\n"
+                                               "    return vec4(p_activationSpeed * 0.001);\n"
+                                               "}\n"));
+            QVERIFY2(!r.report.contains(marker), qPrintable(r.report));
         }
     }
 };

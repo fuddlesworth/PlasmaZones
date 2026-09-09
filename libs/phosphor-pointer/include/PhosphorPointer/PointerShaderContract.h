@@ -156,6 +156,23 @@ inline constexpr int kMaxBufferPasses = 2;
 /// Maximum number of declared parameters a pack may carry across both pools.
 inline constexpr int kMaxDeclaredParameters = 48;
 
+/// Peak speed, in px per second, that the settings preview's simulated pointer
+/// ever reaches. The preview stage is PreviewCanvas.size (420x236) and its
+/// pointer traces a Lissajous figure eight over a 4 second lap, so the two
+/// axes have amplitude 158.1 px at 1.571 rad/s and 66.1 px at 3.142 rad/s.
+/// Both terms peak together at the start of the lap, giving
+/// hypot(158.1 * 1.571, 66.1 * 3.142) which is a little under 324.
+///
+/// It lives here because it is a fact about how every pointer pack is judged,
+/// and the validator lints a pack's speed-gate default against it: a default
+/// above this means the gate never opens on the lap, so the pack previews as a
+/// blank stage however well it behaves on a real desktop. That is how the
+/// windtrail pack shipped invisible.
+///
+/// PointerPreviewCanvas.qml owns the lap this is derived from. Changing the
+/// stage size, the lap duration or the inset changes this number too.
+inline constexpr double kPreviewPeakSpeedPxPerSecond = 324.0;
+
 /// The accepted texture `wrap` vocabulary (forwarder onto the canonical
 /// predicate in `<PhosphorShaders/CustomParamsKey.h>`).
 inline bool isValidWrapToken(const QString& wrap)
