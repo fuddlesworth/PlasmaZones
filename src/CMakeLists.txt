@@ -400,7 +400,7 @@ install(TARGETS plasmazones_core
 # which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland.
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Rendering Library (ZoneShaderItem, shared between daemon and editor)
+# Rendering Library (ZoneShaderItem, shared between the daemon and the settings app)
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
     daemon/rendering/zoneentryscaffold.h

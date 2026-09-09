@@ -4,14 +4,15 @@
 import QtQuick
 
 /**
- * @brief Snapping → Shaders — installed overlay shader-pack browser.
+ * @brief Appearance → Overlays → Library → Shaders — installed overlay
+ * shader-pack browser.
  *
  * Thin wrapper around the pack-agnostic `ShaderBrowserPage`. The actual
  * UI (drop zone, filter bar, grouped card grid, detail dialog) lives in
  * the shared component; this file only provides the bridge (the
- * OverlaysPageController surface) and snapping-domain copy.
+ * OverlaysPageController surface) and overlay-domain copy.
  *
- * Shader assignment lives on the sibling Shaders page
+ * Shader assignment lives on the Layouts page
  * (OverlaysAssignmentsPage — global default + per-layout
  * overrides); this page exists so users can survey what's installed,
  * see parameter metadata, and jump to the user shader directory to drop

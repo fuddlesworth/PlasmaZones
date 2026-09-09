@@ -822,7 +822,7 @@ SettingsController::SettingsController(QObject* parent)
     // + user search paths (`plasmazones/overlays`), so no extra path
     // bookkeeping is needed here. Assignments live in the config as the
     // OverlayShaderTree (Settings::overlayShaderTree — global baseline +
-    // per-layout overrides); the snapping pages edit that tree and resolve
+    // per-layout overrides); the Overlays pages edit that tree and resolve
     // layout names through m_localLayoutManager's catalogue.
     //
     // The page controller is a `unique_ptr<>` declared after

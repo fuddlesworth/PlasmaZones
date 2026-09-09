@@ -7,7 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Snapping → Overlay → Appearance. How the drag-time zone overlay LOOKS: zone
+// Appearance → Overlays → Appearance. How the drag-time zone overlay LOOKS: zone
 // colours, opacity, borders and labels (the former "Zones" page) merged with
 // the overlay effects (numbers, flash — the former "Effects" page). Binds
 // snappingZonesPage for border and label bounds. The shader frame rate

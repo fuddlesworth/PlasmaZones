@@ -4,7 +4,7 @@
 import QtQuick
 
 /**
- * @brief Appearance → Overlays → Sets.
+ * @brief Appearance → Overlays → Library → Overlay Sets.
  *
  * An overlay set is a snapshot of the zone-overlay shader assignments — the
  * global default plus every per-layout override — persisted as one JSON file

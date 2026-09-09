@@ -1017,14 +1017,15 @@ QtObject {
         }
     }
 
-    // Overlay-shader picker for OverrideOverlayShader actions — the overlay/
-    // snapping shader registry (Snapping → Shaders page), distinct from the
+    // Overlay-shader picker for OverrideOverlayShader actions — the zone
+    // overlay shader registry (Appearance → Overlays), distinct from the
     // animation shaders above. Wire value is the shader id.
     property Component _overlayShaderEditor: Component {
-        // Cascading category menu of the overlay/snapping shaders — the same
-        // registry the "Snapping → Shaders" page edits and whose ids the
-        // OverlayShaderTree assignments store — grouped by category. Distinct from _shaderEffectEditor, which
-        // lists the ANIMATION shaders. No path-aware dim/incompatible state here
+        // Cascading category menu of the zone overlay shaders, grouped by
+        // category. Same registry the Appearance → Overlays pages browse and
+        // whose ids the OverlayShaderTree assignments store. Distinct from
+        // _shaderEffectEditor, which lists the ANIMATION shaders. No
+        // path-aware dim/incompatible state here
         // (overlay shaders are event-agnostic, unlike the per-event animation
         // shaders). Wire value is the shader id; an unknown/uninstalled id
         // renders as "(missing: <id>)".

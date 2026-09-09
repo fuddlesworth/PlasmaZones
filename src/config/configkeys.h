@@ -410,10 +410,10 @@ public:
     // Config Keys — Overlays
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // OverlayShaderTree JSON blob — zone-overlay shader assignments
-    // (global baseline + per-layout overrides), nested under
-    // Overlays. Replaces the pre-v7 per-layout
-    // shaderId/shaderParams that lived in the layout-settings sidecar.
+    // OverlayShaderTree JSON blob — zone-overlay shader assignments (global
+    // baseline + per-layout overrides), nested under Overlays. Replaces the
+    // pre-v8 per-layout shaderId/shaderParams that lived in the
+    // layout-settings sidecar.
     P_CONFIG_KEY(overlayShaderTreeKey, "OverlayShaderTree")
 
     // ═══════════════════════════════════════════════════════════════════════════

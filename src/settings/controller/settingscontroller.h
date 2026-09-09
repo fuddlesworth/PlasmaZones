@@ -1069,8 +1069,9 @@ private:
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
-    /// Settings-side mirror of the daemon's overlay-shader registry —
-    /// drives the read-only Snapping → Shaders browser. Same parent /
+    /// Settings-side mirror of the daemon's overlay-shader registry — drives
+    /// the Appearance → Overlays pages, both the read-only Library browser and
+    /// the Layouts assignment page that writes the tree. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.
     /// The companion `m_overlaysPage` is declared further down as
     /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
@@ -1205,7 +1206,7 @@ private:
     /// first and would double-free this object on close.
     std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
 
-    /// Snapping→Shaders page sub-controller. Same rationale as
+    /// Appearance→Overlays page sub-controller. Same rationale as
     /// `m_tilingAlgorithmPage`: borrows `m_localLayoutManager` (the registry
     /// walked by `shaderEffectUsages` for the "Used in:" reverse-lookup), so it
     /// MUST be a `unique_ptr<>` declared AFTER that registry — the unique_ptr

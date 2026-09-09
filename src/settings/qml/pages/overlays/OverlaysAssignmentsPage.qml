@@ -6,7 +6,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Snapping → Shaders — zone-overlay shader assignments.
+ * @brief Appearance → Overlays → Layouts — zone-overlay shader assignments.
  *
  * Edits the OverlayShaderTree through the overlaysPage bridge: one
  * always-present global-default card (path "") followed by one override

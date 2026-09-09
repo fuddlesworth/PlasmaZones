@@ -325,11 +325,12 @@ qt_add_qml_module(plasmazones-settings
         qml/components/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
-        # each with a Behavior page. Shaders lives under Configuration. The
-        # window border / title-bar appearance AND the unified gaps are shared
-        # across modes and live on the top-level WindowAppearancePage.
+        # each with a Behavior page. The overlay's own appearance and its
+        # shader assignments moved out to Appearance → Overlays (grouped
+        # further down). The window border / title-bar appearance AND the
+        # unified gaps are shared across modes and live on the top-level
+        # WindowAppearancePage.
         qml/pages/snapping/SnappingOverlayBehaviorPage.qml
-        qml/pages/overlays/OverlaysAppearancePage.qml
         qml/pages/snapping/SnappingZoneSelectorPage.qml
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
@@ -484,6 +485,9 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsMotionSetsPage.qml
         qml/pages/animations/AnimationsPresetsPage.qml
         qml/pages/animations/AnimationsShadersPage.qml
+        # Appearance → Overlays: how the zone overlay looks, which shader each
+        # layout draws, and the Library holding the pack browser and saved sets.
+        qml/pages/overlays/OverlaysAppearancePage.qml
         qml/pages/overlays/OverlaysLibraryPage.qml
         qml/pages/overlays/OverlaysAssignmentsPage.qml
         qml/pages/overlays/OverlayShaderAssignmentCard.qml

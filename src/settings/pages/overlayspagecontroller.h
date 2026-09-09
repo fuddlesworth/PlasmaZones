@@ -29,7 +29,7 @@ class IZoneLayoutRegistry;
 
 namespace PlasmaZones {
 
-/// Q_PROPERTY surface for the "Snapping → Overlay Shaders" pages: the
+/// Q_PROPERTY surface for the "Appearance → Overlays" pages: the
 /// assignment page (global default + per-layout overrides) and the
 /// pack browser.
 ///
