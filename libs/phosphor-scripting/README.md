@@ -67,7 +67,8 @@ if (out.status == LuauEngine::CallStatus::Ok) {
 ## Vendored Luau
 
 Luau is vendored as a committed source tarball (`extern/luau-<ver>.tar.gz`,
-pinned to 0.723), extracted at configure time via `file(ARCHIVE_EXTRACT)` and
+pinned to the version in `PHOSPHORSCRIPTING_LUAU_VERSION` in this library's
+`CMakeLists.txt`), extracted at configure time via `file(ARCHIVE_EXTRACT)` and
 built as part of this library, so source tarballs and offline distro builds are
 self-contained with no network. Pass `-DPLASMAZONES_SYSTEM_LUAU=ON` to link a
 system-provided Luau instead. The Luau libraries are linked **PRIVATE** and the
