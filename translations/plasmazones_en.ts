@@ -11532,7 +11532,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="820"/>
-        <source>Exit Fullscreen (F11)</source>
+        <source>Exit fullscreen (F11)</source>
+        <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>

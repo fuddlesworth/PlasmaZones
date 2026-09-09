@@ -817,7 +817,7 @@ Window {
             }
 
             QQC.Label {
-                text: i18n("Exit Fullscreen (F11)")
+                text: i18nc("@action:button", "Exit fullscreen (F11)")
                 anchors.verticalCenter: parent.verticalCenter
             }
         }

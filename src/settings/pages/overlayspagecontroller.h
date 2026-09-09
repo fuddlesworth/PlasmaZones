@@ -63,13 +63,13 @@ class OverlaysPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
+    /// The overlay-set store, bound by OverlaySetsPage as its `bridge`.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
+
     /// The shared zone-shader preview feed for this (zone/overlay) browser, or
     /// null. Present only on the zone-shader bridge — the animation bridge has
     /// no equivalent, so ShaderBrowserDetailDialog gates its live preview pane
     /// on `bridge.previewController` being set.
-    /// The overlay-set store, bound by OverlaySetsPage as its `bridge`.
-    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
-
     Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
 
 public:
@@ -151,7 +151,13 @@ public:
     /// A card needs all three together on every refresh, and each of the
     /// separate getters re-reads the config key and re-parses the whole tree,
     /// so calling them in sequence parsed it three times per card. This parses
-    /// once. The separate getters remain for callers that genuinely want one.
+    /// once, and it is what the QML actually calls.
+    ///
+    /// The three separate getters above have no QML caller. They are kept for
+    /// the unit tests, which read each one on its own to pin what the three
+    /// answers mean apart — an absent override, an override whose shaderId is
+    /// empty, and the baseline showing through — and that is what makes this
+    /// merged read checkable against them rather than self-consistent.
     Q_INVOKABLE QVariantMap nodeState(const QString& path) const;
 
     /// Engage @p effectId (with @p params) at @p path — the baseline for

@@ -298,13 +298,14 @@ void OverlaysPageController::initSetsStore()
     // assignment; the store coalesces the burst to one emission per event-loop
     // turn. The signal carries arguments the slot does not take, which Qt
     // allows.
+    //
+    // This covers the layout catalogue too, even though a layout add or remove
+    // changes which entries are applicable without any assignment changing:
+    // the constructor forwards ILayoutSourceRegistry::contentsChanged into
+    // shaderProfileChanged, so it arrives here. A second direct connection
+    // from that signal to this slot used to sit below and was pure
+    // duplication.
     connect(this, &OverlaysPageController::shaderProfileChanged, m_sets, &ShaderSetStore::notifyLiveStateChanged);
-    // A layout added or removed changes which entries are applicable, so the
-    // badges must re-evaluate even though no assignment changed.
-    if (m_layoutRegistry) {
-        connect(m_layoutRegistry, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged, m_sets,
-                &ShaderSetStore::notifyLiveStateChanged);
-    }
 }
 
 } // namespace PlasmaZones

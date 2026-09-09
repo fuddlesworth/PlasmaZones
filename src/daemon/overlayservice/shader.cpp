@@ -82,11 +82,15 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     if (overlayOverride.shaderId) {
         return {*overlayOverride.shaderId, overlayOverride.shaderParams};
     }
-    if (!m_settings || !screenLayout) {
+    if (!screenLayout) {
         return {};
     }
     // m_overlayShaderTree is the cached settings tree (see the member doc);
-    // reading through ISettings here would re-parse the store per call.
+    // reading through ISettings here would re-parse the store per call. No
+    // m_settings check: this reads the cache and never the interface, and
+    // setSettings clears the cache when settings detach, so a detached service
+    // resolves through an empty tree to the same empty profile a null check
+    // would have returned.
     return m_overlayShaderTree.resolve(screenLayout->id().toString());
 }
 
