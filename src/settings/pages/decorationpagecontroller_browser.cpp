@@ -19,7 +19,11 @@
 
 #include <QDesktopServices>
 #include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLatin1Char>
+#include <QLatin1String>
 #include <QLoggingCategory>
 #include <QStandardPaths>
 #include <QUrl>
@@ -103,12 +107,48 @@ QString DecorationPageController::userShaderDirectoryPath() const
     return QDir::cleanPath(base + ConfigDefaults::userSurfaceSubdir());
 }
 
+namespace {
+
+/// Which family a dropped pack belongs to, read from its own metadata.
+///
+/// This browser lists both families and its import affordance is one card for
+/// the page, not one per row, so there is no selection to route on and the type
+/// filter is an exclusion set that is usually "show both". The pack itself is
+/// the only thing that knows, and it does: the two schemas set
+/// `additionalProperties: false`, so `layer` / `reach` / `trailSeconds` are
+/// rejected by the surface schema and `needsBackdrop` / `multipass` /
+/// `bufferShaders` by the pointer one. A pack declaring none of them is
+/// ambiguous and stays on the surface path, which is where every pack went
+/// before this existed.
+bool droppedPackIsPointer(const QString& sourceUrl)
+{
+    const QString dir = QUrl(sourceUrl).isLocalFile() ? QUrl(sourceUrl).toLocalFile() : sourceUrl;
+    QFile metadata(QDir(dir).filePath(QStringLiteral("metadata.json")));
+    if (!metadata.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    const QJsonObject obj = QJsonDocument::fromJson(metadata.readAll()).object();
+    return obj.contains(QLatin1String("layer")) || obj.contains(QLatin1String("trailSeconds"))
+        || obj.contains(QLatin1String("reachParam"));
+}
+
+} // namespace
+
 bool DecorationPageController::installShaderPack(const QString& sourceUrl)
 {
-    const auto result = ShaderPackInstaller::install(sourceUrl, userShaderDirectoryPath());
+    // A pointer pack dropped into the surface directory is not an error the
+    // user ever sees: the install reports success and the pack simply never
+    // appears, because the pointer registry scans a different root.
+    const bool pointer = droppedPackIsPointer(sourceUrl);
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString target =
+        pointer ? QDir::cleanPath(base + ConfigDefaults::userPointerSubdir()) : userShaderDirectoryPath();
+
+    const auto result = ShaderPackInstaller::install(sourceUrl, target);
     if (result != ShaderPackInstaller::Result::Success) {
         const QString message = ShaderPackInstaller::errorMessage(result);
-        qCWarning(lcConfig) << "installShaderPack (surface):" << message << "— source:" << sourceUrl;
+        qCWarning(lcConfig) << "installShaderPack" << (pointer ? "(pointer):" : "(surface):") << message
+                            << "— source:" << sourceUrl;
         Q_EMIT toastRequested(message);
         return false;
     }
