@@ -105,6 +105,12 @@ target_compile_features(PhosphorShellPickerQml PUBLIC cxx_std_20)
 target_include_directories(PhosphorShellPickerQml
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE
+        # Qt 6.10+ qmltyperegistrar emits basename #includes in the generated
+        # *_qmltyperegistrations.cpp; the header subdirectory must be on the
+        # path. Unity builds masked this by batching the generated TU with
+        # sources that already include the headers.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorShellPicker>
 )
 
 target_link_libraries(PhosphorShellPickerQml

@@ -103,10 +103,13 @@ private Q_SLOTS:
         const auto tree = settings.decorationProfileTree();
         QCOMPARE(tree, ConfigDefaults::decorationProfileTree());
         QVERIFY2(!tree.baseline().chain.has_value(), "default baseline must carry no chain (fully neutral)");
-        QCOMPARE(tree.overriddenPaths(),
-                 (QStringList{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
-                              QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")}
-                  + PhosphorSurfaceShaders::decorationShellPhosphorLeafPaths()));
+        QStringList expectedPaths{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
+                                  QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")};
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
+        // The Phosphor shell's chrome seeds ride behind the shell gate.
+        expectedPaths += PhosphorSurfaceShaders::decorationShellPhosphorLeafPaths();
+#endif
+        QCOMPARE(tree.overriddenPaths(), expectedPaths);
 
         // Every card surface resolves to the same border + theme-tinted shadow.
         const QStringList cardSurfaces{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
