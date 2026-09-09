@@ -2133,12 +2133,32 @@ public:
     }
     void setMotionProfileTreeJson(const QString& json) override
     {
-        setMotionProfileTree(QJsonDocument::fromJson(json.toUtf8()).object().toVariantMap());
+        // Guarded like the decoration and overlay facades below. Without the
+        // malformed check, ANY unparseable string silently reset the tree to
+        // empty rather than being ignored, which is neither what production
+        // does nor what a caller passing junk would expect a stub to do.
+        if (json.isEmpty()) {
+            setMotionProfileTree({});
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setMotionProfileTree(doc.object().toVariantMap());
     }
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
     {
         return m_decorationProfileTree;
     }
+    /// DELIBERATE OMISSION: stores what it is given. Production's setter
+    /// prunes the tree through a JSON round trip and then STRIPS every
+    /// override field equal to the ConfigDefaults seed, re-injecting that seed
+    /// on read. Neither half is replicated here, so a stub-backed test must
+    /// not assert edit-back-to-seed behaviour: production would clear the
+    /// override and this keeps it. No decoration test depends on that today.
+    /// The overlay tree next door IS faithful, because eleven slots stand on
+    /// its persistence boundary.
     void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& value) override
     {
         if (m_decorationProfileTree == value) {
@@ -2160,8 +2180,9 @@ public:
         // Dropping the value made this the one key the effect fetches by SettingProperty
         // that no stub-backed test could move — while the comment below boasted "real
         // storage, not no-op setters".
-        // Empty string means "reset to the empty tree", like the real
-        // Settings facade (which clears and emits on "").
+        // Empty string means "reset to the empty tree", matching the real
+        // Settings facade's handling of "" specifically. It does NOT claim
+        // parity beyond that: see the typed setter's omission note above.
         if (json.isEmpty()) {
             setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree{});
             return;
@@ -2292,7 +2313,11 @@ public:
         }
         const double clamped = qBound(ConfigDefaults::decorationBlurScaleMultiplierMin(), value,
                                       ConfigDefaults::decorationBlurScaleMultiplierMax());
-        if (qFuzzyCompare(m_decorationBlurScaleMultiplier, clamped)) {
+        // 1.0 + x, not the bare compare: qFuzzyCompare is undefined against
+        // zero and returns false for (0.0, 0.0), so a zero-valued write would
+        // invert the guard and emit on a no-op. Same idiom as every other
+        // double setter in this file.
+        if (qFuzzyCompare(1.0 + m_decorationBlurScaleMultiplier, 1.0 + clamped)) {
             return;
         }
         m_decorationBlurScaleMultiplier = clamped;
@@ -3111,6 +3136,12 @@ private:
     QVariantMap m_motionProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
+    // Left default-constructed rather than seeded from
+    // ConfigDefaults::overlayShaderTree(), which is the empty tree — same
+    // situation as m_shaderProfileTree two lines up. The setter routes through
+    // the production validator, so what the stub STORES matches production
+    // even though the initial value is written here rather than read from
+    // ConfigDefaults.
     OverlayShaderTree m_overlayShaderTree;
     QColor m_borderColor = ConfigDefaults::borderFallbackColor();
     QColor m_highlightColor = ConfigDefaults::highlightFallbackColor();

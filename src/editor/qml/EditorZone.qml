@@ -47,8 +47,12 @@ Item {
     property var snapIndicator: null
     // Fixed geometry support
     property bool isFixedZone: zoneData ? (zoneData.geometryMode === 1) : false
-    property real screenWidth: controller ? controller.targetScreenSize.width : 1920
-    property real screenHeight: controller ? controller.targetScreenSize.height : 1080
+    // The real screen rather than a hardcoded 1920x1080: these divide the
+    // fixed-zone pixel coordinates in every toCanvas*/toRelative* conversion
+    // below, so a wrong reference size lays fixed zones out at the wrong
+    // scale. Matches the fallback DimensionTooltip is given in EditorWindow.
+    property real screenWidth: controller ? controller.targetScreenSize.width : Screen.width
+    property real screenHeight: controller ? controller.targetScreenSize.height : Screen.height
     property int operationState: EditorZone.State.Idle
     // Track if this zone is part of an active divider operation
     // When true, syncFromZoneData() is blocked to prevent overwriting divider updates

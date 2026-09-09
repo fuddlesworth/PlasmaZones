@@ -593,6 +593,18 @@ void EditorController::createNewLayout()
         m_zoneManager->setReferenceScreenSize(newSize);
     }
 
+    // The visibility allow-lists are per-layout state like everything else
+    // reset above, and saveLayout serializes them unconditionally. Left alone,
+    // a New Layout started from one restricted to a single screen, desktop or
+    // activity inherited those restrictions and saved them into the new
+    // layout, which then did not appear anywhere the user had not thought to
+    // look. The emits matter as much as the clear: VisibilitySettingsDialog
+    // re-derives its checkboxes only from these three signals, so clearing
+    // without emitting would leave the dialog showing the inherited lists.
+    m_allowedScreens.clear();
+    m_allowedDesktopsInt.clear();
+    m_allowedActivities.clear();
+
     ++m_zonesVersion;
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
@@ -604,6 +616,9 @@ void EditorController::createNewLayout()
     Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
     Q_EMIT aspectRatioClassChanged();
+    Q_EMIT allowedScreensChanged();
+    Q_EMIT allowedDesktopsChanged();
+    Q_EMIT allowedActivitiesChanged();
 }
 
 bool EditorController::loadLayout(const QString& layoutId)
