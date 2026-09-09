@@ -1886,6 +1886,11 @@ target_link_libraries(test_overlays_page_controller
         Qt6::Test
         Qt6::Core
         Qt6::Gui
+        # Named, not left to the coincidental link: two slots build a real
+        # LayoutRegistry (with the RuleStore its ctor needs) because a null
+        # registry makes every label identical and the sort vacuous.
+        PhosphorZones::PhosphorZones
+        PhosphorRules::PhosphorRules
         PhosphorShaders::PhosphorShaders  # ShaderRegistry base the ctor connects to
         PhosphorAudio::PhosphorAudio  # shaderpreviewcontroller.h -> ishaderpreviewbackend.h include chain
         PhosphorControl::PhosphorControl

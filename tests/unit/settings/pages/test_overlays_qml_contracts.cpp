@@ -179,7 +179,19 @@ private Q_SLOTS:
         // flag would restore the old behaviour for all but a handful of packs,
         // since that flag means "this shader SAMPLES the wallpaper", which is a
         // different feed entirely (livePreviewPane._wallpaperTex).
-        QVERIFY2(!src.contains(QStringLiteral("source: root._shaderInfo.wallpaper")),
+        //
+        // Asserted over the backdrop Image's whole BLOCK rather than against
+        // one exact spelling: a re-gate would not be written the way the old
+        // code happened to spell it, and it could sit on `visible` or on an
+        // enclosing condition just as easily as on `source`. The block is the
+        // window from the Image that carries the binding to that Image's close.
+        const int bindingAt = src.indexOf(QStringLiteral("source: root._zoneWallpaperUrl"));
+        QVERIFY(bindingAt > 0);
+        const int blockStart = src.lastIndexOf(QStringLiteral("Image {"), bindingAt);
+        const int blockEnd = src.indexOf(QLatin1Char('}'), bindingAt);
+        QVERIFY(blockStart > 0 && blockEnd > blockStart);
+        const QString block = src.mid(blockStart, blockEnd - blockStart);
+        QVERIFY2(!block.contains(QStringLiteral("_shaderInfo")) && !block.contains(QStringLiteral("seWallpaper")),
                  "the backdrop is gated on the pack sampling the wallpaper, but it must be drawn for every pack");
     }
 

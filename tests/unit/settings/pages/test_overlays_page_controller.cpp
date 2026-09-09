@@ -14,24 +14,37 @@
  *     arm otherwise; clearOverride removes an override, returns false when
  *     none exists, and rejects ""
  *   - shaderEffectUsages lists the baseline row first, then override rows
- *     sorted case-insensitively by label, with an EMPTY label for a layout
- *     the registry cannot name (the browser renders label || path)
+ *     sorted case-insensitively by label, and names a layout the registry
+ *     cannot find with the shared absent-layout wording rather than leaving
+ *     the label empty (an empty label made the browser fall back to the raw
+ *     36-character UUID)
+ *   - assignableLayouts sorts the live rows and appends every override the
+ *     registry cannot name, flagged `missing` — the only UI path to a dead
+ *     override
  *   - shaderProfileChanged re-fires from ISettings::overlayShaderTreeChanged,
  *     naming the node when this controller made the write and reporting a
  *     whole-tree change when anything else did
  *   - nodeState agrees with the three separate reads it replaces
  *
- * Constructed with null shader and layout registries: the paths exercised
- * here are registry-independent (the registries only feed the pack listing
- * and layout enumeration), and the constructor documents nullptr seams for
- * exactly this use. Settings is StubSettings, whose overlay tree accessors
- * store and emit for real.
+ * Most slots construct with null shader and layout registries: those paths are
+ * registry-independent (the registries only feed the pack listing and layout
+ * enumeration), and the constructor documents nullptr seams for exactly this
+ * use. The two slots that DO need naming and sorting build a real
+ * LayoutRegistry, because a null registry makes every label identical and any
+ * sort or name lookup vacuous. Settings is StubSettings, whose overlay tree
+ * accessors store and emit for real.
  */
 
 #include <QSignalSpy>
 #include <QTest>
+#include <QUuid>
+
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include "core/types/overlayshadertree.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubSettings.h"
 #include "settings/pages/overlayspagecontroller.h"
 
@@ -45,6 +58,17 @@ const QString kLayoutB = QStringLiteral("{bbbb0000-0000-0000-0000-000000000000}"
 class TestOverlaysPageController : public QObject
 {
     Q_OBJECT
+
+private:
+    /// A registry holding @p names, in the order given, with the ids the
+    /// caller can read back off the returned layouts.
+    static PhosphorZones::LayoutRegistry* registryWith(const QStringList& names, QObject* parent)
+    {
+        auto* registry = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), parent);
+        for (const QString& name : names)
+            registry->addLayout(new PhosphorZones::Layout(name));
+        return registry;
+    }
 
 private Q_SLOTS:
     void testNullSeams_returnEmptyAndNoop()
@@ -100,6 +124,74 @@ private Q_SLOTS:
         QVERIFY(c.clearOverride(kLayoutA));
         QVERIFY(!c.hasOverride(kLayoutA));
         QVERIFY(!c.clearOverride(kLayoutA)); // second clear finds nothing
+    }
+
+    /// assignableLayouts with a real registry: the live rows come first sorted
+    /// case-insensitively by name, and every override the registry cannot name
+    /// is appended after them flagged `missing`. That append is the ONLY UI
+    /// path to a dead override, so without it an assignment for a deleted
+    /// layout is invisible and unclearable. Nothing else covers the registry
+    /// half of this controller.
+    void testAssignableLayouts_liveRowsSortedThenOrphanOverridesAppended()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        QObject owner;
+        auto* registry = registryWith({QStringLiteral("zebra"), QStringLiteral("Alpha")}, &owner);
+        const QString zebraId = registry->layoutByName(QStringLiteral("zebra"))->id().toString();
+        const QString alphaId = registry->layoutByName(QStringLiteral("Alpha"))->id().toString();
+
+        StubSettings settings;
+        OverlaysPageController c(nullptr, registry, &settings, nullptr);
+        c.setShaderOverride(zebraId, QStringLiteral("pack"), {});
+        c.setShaderOverride(kLayoutA, QStringLiteral("pack"), {}); // no such layout here
+
+        const QVariantList rows = c.assignableLayouts();
+        QCOMPARE(rows.size(), 3);
+        // Case-insensitive: "Alpha" before "zebra" despite the capital.
+        QCOMPARE(rows.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Alpha"));
+        QCOMPARE(rows.at(0).toMap().value(QStringLiteral("id")).toString(), alphaId);
+        QVERIFY(!rows.at(0).toMap().value(QStringLiteral("missing")).toBool());
+        QCOMPARE(rows.at(1).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("zebra"));
+        // The orphan is appended AFTER the live rows, named by nothing, flagged.
+        const QVariantMap orphan = rows.at(2).toMap();
+        QCOMPARE(orphan.value(QStringLiteral("id")).toString(), kLayoutA);
+        QVERIFY(orphan.value(QStringLiteral("name")).toString().isEmpty());
+        QVERIFY2(orphan.value(QStringLiteral("missing")).toBool(), "the dead override was not flagged missing");
+        // A layout the registry HAS is never duplicated into the orphan tail.
+        QCOMPARE(rows.at(1).toMap().value(QStringLiteral("id")).toString(), zebraId);
+        QVERIFY(!rows.at(1).toMap().value(QStringLiteral("missing")).toBool());
+    }
+
+    /// The label sort in shaderEffectUsages, which the null-registry slot below
+    /// cannot exercise: with no registry every label is the same absent-layout
+    /// string, so deleting the sort stays green there.
+    ///
+    /// The rows arrive in overriddenLayouts() order, which is sorted by UUID.
+    /// Naming is therefore assigned AFTER the ids are known, so that the id
+    /// order is the exact reverse of the label order — otherwise a run whose
+    /// random ids happened to agree with the labels would pass with no sort at
+    /// all, which is what a first draft of this slot did.
+    void testShaderEffectUsages_layoutRowsSortCaseInsensitivelyByLabel()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        QObject owner;
+        auto* registry = registryWith({QStringLiteral("one"), QStringLiteral("two")}, &owner);
+        QStringList ids{registry->layout(0)->id().toString(), registry->layout(1)->id().toString()};
+        ids.sort();
+        registry->layoutById(QUuid::fromString(ids.at(0)))->setName(QStringLiteral("zebra"));
+        registry->layoutById(QUuid::fromString(ids.at(1)))->setName(QStringLiteral("Alpha"));
+        const QString zebraId = ids.at(0);
+        const QString alphaId = ids.at(1);
+
+        StubSettings settings;
+        OverlaysPageController c(nullptr, registry, &settings, nullptr);
+        c.setShaderOverride(zebraId, QStringLiteral("shared-pack"), {});
+        c.setShaderOverride(alphaId, QStringLiteral("shared-pack"), {});
+
+        const QVariantList usages = c.shaderEffectUsages(QStringLiteral("shared-pack"));
+        QCOMPARE(usages.size(), 2);
+        QCOMPARE(usages.at(0).toMap().value(QStringLiteral("label")).toString(), QStringLiteral("Alpha"));
+        QCOMPARE(usages.at(1).toMap().value(QStringLiteral("label")).toString(), QStringLiteral("zebra"));
     }
 
     void testShaderEffectUsages_orderingAndStaleLabels()
