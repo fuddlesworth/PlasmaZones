@@ -222,6 +222,58 @@ private Q_SLOTS:
         QVERIFY(!readJson(ConfigDefaults::layoutSettingsFilePath()).contains(layoutA()));
     }
 
+    /// The marker records WHICH ids were merged, not merely that a merge
+    /// happened, so an assignment reaching the sidecar after the first run
+    /// (a restored backup, a layout file copied from another machine, a
+    /// reappearing system layout) is still lifted rather than stripped away
+    /// silently. A bare "already lifted" flag would drop it.
+    void testLift_assignmentArrivingAfterTheMarkerIsStillLifted()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(seedFixture());
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        QVERIFY(treeFromConfig(readJson(ConfigDefaults::configFilePath()))
+                    .value(QStringLiteral("overrides"))
+                    .toObject()
+                    .contains(layoutA()));
+
+        // A layout the first run never saw turns up in the sidecar afterwards.
+        const QString newcomer = QStringLiteral("{eeee0000-0000-0000-0000-000000000000}");
+        QVERIFY(
+            writeJson(ConfigDefaults::layoutSettingsFilePath(),
+                      QJsonObject{{newcomer, QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("aurora")}}}}));
+
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        const QJsonObject overrides =
+            treeFromConfig(readJson(ConfigDefaults::configFilePath())).value(QStringLiteral("overrides")).toObject();
+        QCOMPARE(overrides.value(newcomer).toObject().value(QStringLiteral("shaderId")).toString(),
+                 QStringLiteral("aurora"));
+        // The first run's entry is untouched, and the newcomer's sidecar copy
+        // is stripped like any other.
+        QVERIFY(overrides.contains(layoutA()));
+        QVERIFY(!readJson(ConfigDefaults::layoutSettingsFilePath()).contains(newcomer));
+    }
+
+    /// QUuid::fromString accepts an unbraced spelling while every reader asks
+    /// with the braced one, so the lift must key the tree on the canonical
+    /// form or the entry would sit there matching nothing.
+    void testLift_unbracedSidecarKeyIsNormalized()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(),
+                          QJsonObject{{QStringLiteral("ffff0000-0000-0000-0000-000000000000"),
+                                       QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("aurora")}}}}));
+
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        const QJsonObject overrides =
+            treeFromConfig(readJson(ConfigDefaults::configFilePath())).value(QStringLiteral("overrides")).toObject();
+        QVERIFY2(overrides.contains(QStringLiteral("{ffff0000-0000-0000-0000-000000000000}")),
+                 "unbraced sidecar key was not normalized to the braced form the resolver uses");
+        QVERIFY2(!overrides.contains(QStringLiteral("ffff0000-0000-0000-0000-000000000000")),
+                 "the unbraced spelling survived alongside the braced one");
+    }
+
     void testLift_removedOverrideIsNotResurrectedOnRetry()
     {
         IsolatedConfigGuard guard;
