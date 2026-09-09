@@ -24,8 +24,19 @@ Kirigami.Dialog {
     standardButtons: Kirigami.Dialog.Close
     preferredWidth: Kirigami.Units.gridUnit * 22
     padding: Kirigami.Units.largeSpacing
-    // Refresh checkbox/spinbox state every time the dialog opens,
-    // so stale imperative assignments from Connections are overwritten.
+    // Refresh checkbox/spinbox state every time the dialog opens, so stale
+    // imperative assignments from Connections are overwritten.
+    //
+    // EVERY control below is driven imperatively, not by a declarative binding,
+    // and that is the whole design rather than an inconsistency. A QQC2 control
+    // severs its value binding permanently the first time the user touches it,
+    // so a control that carried both would show the right value until first use
+    // and a stale one for the rest of the dialog's life. This dialog is
+    // persistent (it survives close and reopen across layout switches), which
+    // is exactly when that stale value becomes visible. The re-sync here and
+    // the Connections below are the only thing keeping these controls honest.
+    // The two comments further down call this out for the combos, where the
+    // failure is most surprising, and it applies to all of them.
     onOpened: {
         if (!root.editorController)
             return;

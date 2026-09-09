@@ -18,6 +18,13 @@ import QtQuick
  * skipped with a count, rather than the whole set being refused.
  *
  * Everything below is domain copy over the shared ShaderSetsPage.
+ *
+ * The strings here carry no i18nc context, and adding one now would be a
+ * REGRESSION rather than an improvement. A Qt Linguist catalogue is keyed on
+ * (source, comment), so giving a shipped string a context retires the existing
+ * entry and opens a fresh untranslated one. These are already extracted and
+ * translated in seven languages. Give a NEW string its context when you write
+ * it; do not retrofit one onto these.
  */
 ShaderSetsPage {
     bridge: settingsController.overlaysPage.setsBridge

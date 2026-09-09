@@ -466,6 +466,12 @@ Item {
         // Uses separate active/inactive opacity values
         color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, Theme.zoneHighlightAlpha) : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, Theme.zoneInactiveAlpha))
         border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)))
+        // Raw pixels on purpose, like the nearby minSize. These are the editor's
+        // FALLBACK border widths for the no-custom-appearance case, and their
+        // job is to match what the overlay actually draws, which is a pixel
+        // count carried by the settings (zoneBorderWidth) and not a Kirigami
+        // spacing unit. Rounding them to Kirigami.Units would make the editor
+        // preview stop agreeing with the overlay it previews.
         border.width: useCustom ? customBorderWidth : (isSelected ? 3 : 2)
         radius: useCustom ? customBorderRadius : (Kirigami.Units.smallSpacing * 1.5)
         // Accessibility: Screen reader announcements

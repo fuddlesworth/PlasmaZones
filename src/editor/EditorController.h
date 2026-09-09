@@ -897,6 +897,13 @@ private:
 
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;
+    // m_zoneManager and m_undoController are NON-NULL for this object's whole
+    // lifetime: both are constructed in the ctor's init-list as child QObjects
+    // and neither is ever reassigned. The scattered null guards on them (and
+    // servicesReady above) are belt-and-braces, not a real state the code can
+    // be in, which is why derefs elsewhere in src/editor/controller/ that skip
+    // the guard are correct rather than oversights. Do not "fix" the asymmetry
+    // by adding guards; if you touch it, remove the dead ones.
     ZoneManager* m_zoneManager = nullptr;
     SnappingService* m_snappingService = nullptr;
     TemplateService* m_templateService = nullptr;

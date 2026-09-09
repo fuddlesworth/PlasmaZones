@@ -525,8 +525,12 @@ void SettingsController::buildApplicationController()
     // `configure`, the Library bucket is `folder-open`, its sets page is
     // `color-palette`, and its pack browser is `preferences-desktop-display`.
     // A reader who has learnt one of these trees can then read the others.
+    // NOT preferences-desktop-color: that is Snapping → Overlay's icon, and a
+    // top-level Appearance category wearing a Snapping leaf's icon reads as the
+    // same page in two places. The Appearance parents each take a distinct one
+    // (Decorations preferences-desktop-theme, Animations media-playback-start).
     regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
-               QStringLiteral("preferences-desktop-color"));
+               QStringLiteral("preferences-desktop-effects"));
     // Appearance leads, the way Decoration → General does, with the divider
     // closing the config block before the Library bucket.
     regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),

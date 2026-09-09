@@ -22,6 +22,13 @@ import org.plasmazones.common as PZCommon
  * Reactive-latch pattern: imperative refresh from the controller on
  * `shaderProfileChanged` / `shaderEffectsChanged`, not function bindings
  * that re-query C++ every repaint.
+ *
+ * Some strings here carry an i18nc context and some do not, and the split is
+ * not an oversight to tidy up. A Qt Linguist catalogue is keyed on (source,
+ * comment), so giving a shipped string a context retires the existing entry
+ * and opens a fresh untranslated one. The uncontexted strings below are
+ * already extracted and translated in seven languages. Give a NEW string its
+ * context when you write it; do not retrofit one onto these.
  */
 Item {
     id: root
