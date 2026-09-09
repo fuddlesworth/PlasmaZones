@@ -106,6 +106,11 @@ QVariantList OverlaysPageController::assignableLayouts() const
         QVariantMap entry;
         entry.insert(QLatin1String("id"), id);
         entry.insert(QLatin1String("name"), layout->name());
+        // Present on EVERY row, including the live ones. The page feeds these
+        // into a ListModel, whose roles are fixed by the first row appended, so
+        // a live row missing the key would leave the flag undefined for the
+        // orphan rows that follow it.
+        entry.insert(QLatin1String("missing"), false);
         out.append(entry);
     }
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {

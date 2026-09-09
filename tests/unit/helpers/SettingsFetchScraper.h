@@ -174,6 +174,13 @@ inline QString readSource(const QString& path, QString* whyFailed)
 
 /// Index of the brace/paren matching the one at @p open, or -1. String and char literals
 /// are skipped so a brace inside GLSL or a quote inside a literal cannot throw off the count.
+///
+/// It does NOT skip comments, and it does not need to: every caller passes source that came
+/// through readSource, which runs withoutComments first. That is load-bearing rather than
+/// incidental. Handed raw source, the char-literal skip below would open on an apostrophe in
+/// an ordinary prose comment ("the daemon's overlay") and run to the next quote character
+/// anywhere in the file, swallowing every brace between and landing the match in the wrong
+/// place, which reads as a passing test. Feed this raw source and it will lie to you.
 inline qsizetype matchDelimiter(const QString& s, qsizetype open, QChar closeCh)
 {
     const QChar openCh = s.at(open);
@@ -204,17 +211,31 @@ inline qsizetype matchDelimiter(const QString& s, qsizetype open, QChar closeCh)
 
 /// Split an argument or parameter list on its TOP-LEVEL commas (a nested call, template
 /// argument list, or braced initializer keeps its own commas).
+///
+/// Angle brackets are counted only where they can be a TEMPLATE argument list, meaning the
+/// `<` sits directly against the identifier before it with no space, the way `QMap<K, V>`
+/// is written and the way clang-format guarantees a comparison is not. Counting every `<`
+/// and `>` drove the depth negative on any argument carrying a comparison or an arrow, and
+/// from there every top-level comma after it failed to split: the argument list came back
+/// as one blob, the key never matched, and the check passed having compared nothing.
 inline QStringList splitTopLevel(const QString& args)
 {
+    const auto isIdentChar = [](QChar ch) {
+        return ch.isLetterOrNumber() || ch == QLatin1Char('_');
+    };
     QStringList out;
     int depth = 0;
     qsizetype start = 0;
     for (qsizetype i = 0; i < args.size(); ++i) {
         const QChar c = args.at(i);
-        if (c == QLatin1Char('(') || c == QLatin1Char('[') || c == QLatin1Char('{') || c == QLatin1Char('<')) {
+        if (c == QLatin1Char('<') && i > 0 && isIdentChar(args.at(i - 1))) {
             ++depth;
-        } else if (c == QLatin1Char(')') || c == QLatin1Char(']') || c == QLatin1Char('}') || c == QLatin1Char('>')) {
+        } else if (c == QLatin1Char('>') && depth > 0 && !(i > 0 && args.at(i - 1) == QLatin1Char('-'))) {
             --depth;
+        } else if (c == QLatin1Char('(') || c == QLatin1Char('[') || c == QLatin1Char('{')) {
+            ++depth;
+        } else if (c == QLatin1Char(')') || c == QLatin1Char(']') || c == QLatin1Char('}')) {
+            depth = std::max(0, depth - 1);
         } else if (c == QLatin1Char(',') && depth == 0) {
             out << args.mid(start, i - start).trimmed();
             start = i + 1;

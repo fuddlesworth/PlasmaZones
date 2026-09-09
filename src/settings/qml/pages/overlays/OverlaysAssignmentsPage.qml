@@ -23,29 +23,55 @@ SettingsFlickable {
 
     readonly property var bridge: settingsController.overlaysPage
 
-    property var _layouts: []
+    // A ListModel rather than a plain array, because assigning an array resets
+    // the Repeater wholesale: every delegate is destroyed and recreated,
+    // dropping the per-card latch and collapse state. Skipping the assignment
+    // when nothing moved is not enough on its own, because the list genuinely
+    // does move under the user's hands. Toggling a "Deleted layout" card off
+    // writes a clearOverride, which drops that row and rebuilds every OTHER
+    // card as a side effect of the row the user just acted on.
+    //
+    // The sync below touches only the rows that actually differ, so an
+    // unrelated card keeps its delegate and its state.
+    ListModel {
+        id: layoutModel
+    }
 
-    // Reassigning a plain array resets the Repeater wholesale (every card
-    // delegate is destroyed and recreated, dropping per-card latch and
-    // collapse state), so only publish a new array when the list content
-    // actually changed. shaderProfileChanged fires for every tree write,
-    // including the card's own parameter edits, where the layout list is
-    // identical.
     function _refreshLayouts() {
         var next = page.bridge ? page.bridge.assignableLayouts() : [];
-        var cur = page._layouts;
-        if (next.length === cur.length) {
-            var same = true;
-            for (var i = 0; i < next.length; i++) {
-                if (next[i].id !== cur[i].id || next[i].name !== cur[i].name || next[i].missing !== cur[i].missing) {
-                    same = false;
+        // Walk both lists in step. A row whose id still matches is updated in
+        // place (a rename), never replaced. An id that has gone takes its row
+        // with it; a new id is inserted where it belongs.
+        var i = 0;
+        while (i < next.length) {
+            if (i >= layoutModel.count) {
+                layoutModel.append(next[i]);
+                i++;
+                continue;
+            }
+            if (layoutModel.get(i).id === next[i].id) {
+                var row = layoutModel.get(i);
+                if (row.name !== next[i].name || row.missing !== next[i].missing)
+                    layoutModel.set(i, next[i]);
+                i++;
+                continue;
+            }
+            // Does the current row still exist further down the new list? If
+            // not it is gone; if so, something was inserted before it.
+            var stillThere = false;
+            for (var j = i + 1; j < next.length; j++) {
+                if (next[j].id === layoutModel.get(i).id) {
+                    stillThere = true;
                     break;
                 }
             }
-            if (same)
-                return;
+            if (stillThere)
+                layoutModel.insert(i, next[i]);
+            else
+                layoutModel.remove(i);
         }
-        page._layouts = next;
+        while (layoutModel.count > next.length)
+            layoutModel.remove(layoutModel.count - 1);
     }
 
     Component.onCompleted: page._refreshLayouts()
@@ -84,13 +110,16 @@ SettingsFlickable {
         }
 
         Repeater {
-            model: page._layouts
+            model: layoutModel
 
             OverlayShaderAssignmentCard {
-                required property var modelData
+                // The row object rather than three required roles: one of the
+                // roles is called `id`, which is a reserved attribute name in
+                // QML and cannot be declared as a property.
+                required property var model
 
                 Layout.fillWidth: true
-                assignmentPath: modelData.id
+                assignmentPath: model.id
                 // A deleted layout has no name left to show, so two stale
                 // overrides would otherwise render as the same label with no
                 // way to tell which card clears which. The id's leading group
@@ -99,7 +128,7 @@ SettingsFlickable {
                 // The absent-layout wording comes from the controller so this
                 // page, the set coverage chip and the browser's usage list all
                 // render the same state the same way.
-                cardLabel: modelData.missing ? page.bridge.absentLayoutLabel(modelData.id) : (modelData.name.length > 0 ? modelData.name : i18n("Unnamed Layout"))
+                cardLabel: model.missing ? page.bridge.absentLayoutLabel(model.id) : (model.name.length > 0 ? model.name : i18n("Unnamed Layout"))
             }
         }
     }
