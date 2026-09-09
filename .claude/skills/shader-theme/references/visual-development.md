@@ -45,7 +45,8 @@ mechanisms, not merely different colors or parameter values. Use actual shader o
 One diagnostic patch should show whether the material model works at all; a second view
 must place it at the proposed window footprint beside unchanged content. This distinguishes
 a weak material model from a good model squeezed into too little space. These studies are
-scratch artifacts, not extra deliverable packs. Validate their shader paths before rendering.
+scratch artifacts, not extra deliverable packs. Run gate 2 of `validation.md` on them before
+rendering, so a study that fails to compile is not mistaken for a weak material.
 
 The art director chooses from the rendered studies or revises the proposed mechanism if
 neither works. Color, geometry and lighting should account for the requested appearance;
@@ -66,11 +67,19 @@ to survive visual critique before implementing the rest of the coverage matrix.
 
 ## Capture actual shader output
 
-Use the runtime's assembly, parameter translation and sampling contracts. Read
-`tools/shader-render/README.md` before using the existing overlay renderer. It does not
-render window animations or surface chains. For those, use live preview capture or a
-targeted scratchpad harness with the actual host assembly. Record any differences from
-the real host; mocks and generated concept images cannot prove shader output quality.
+Use the runtime's assembly, parameter translation and sampling contracts. The only
+scripted capture in the repo is `plasmazones-shader-render` (read
+`tools/shader-render/README.md` first), and it renders OVERLAY packs only, at device scale
+1.0. Nothing scripts a capture of window animations, surface chains or the settings preview:
+the nested-KWin harness's `ScreenShot2` path (`scripts/nested-kwin/capture-output.py`)
+bypasses the effect chain by its own docstring and never shows PlasmaZones decorations or
+animations, and the nested-shell capture covers shell clients only. So animation, decoration
+and settings-preview evidence is MANUAL: run the live session, or
+`PZ_NESTED_VISIBLE=1 scripts/nested-kwin/run-nested.sh`, apply the packs, and capture from
+the HOST with `spectacle`, `grim` or `wf-recorder`, recording the conditions listed below.
+When no session is available, say so and report the "prototype" outcome; do not substitute
+a nested screenshot, a mock or a generated concept image, none of which can prove shader
+output quality. Record any differences from the real host.
 
 Keep evidence in `scratchpad/<theme>/renders/`, outside pack directories. Record defaults
 and overrides, backend, scale, fixture/background, event, direction and duration alongside
@@ -85,8 +94,11 @@ the visual baseline. View a native-size crop as well as any automatically scaled
 sheet so resizing by the viewer does not erase the very cue under review.
 
 - Decorations: untreated and treated content, light and dark applications, focused and
-  unfocused, small and large windows, native scale and a scaled display. Inspect the whole
-  chain together. Magnified detail is supplemental, not proof of visibility at normal size.
+  unfocused, small and large windows, native scale and a scaled display. The scripted
+  renderer pins scale 1.0, so scaled-display evidence needs a live or nested session running
+  at that scale; without one, mark the scale criterion unverified rather than inferring it.
+  Inspect the whole chain together. Magnified detail is supplemental, not proof of visibility
+  at normal size.
 - Overlays: readable labels and clear selection over light, dark and busy backgrounds.
   Composite transparent output before judging color or contrast; an image viewer's alpha
   background is not the user's desktop.

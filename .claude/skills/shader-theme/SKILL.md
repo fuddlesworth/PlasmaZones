@@ -24,7 +24,12 @@ against the brief. Compilation and contract review do not establish visual quali
 /shader-theme <description> [--into repo|user] [--scope minimal|full] [--name <slug>]
 ```
 
-- `--into user` (default): prototype in ignored `scratchpad/<theme>/`, then deliver packs to
+These flags are read from the request text; nothing parses them, so do not look for a
+parser.
+
+- `--into user` (default): prototype in ignored `scratchpad/<theme>/`, laid out as
+  `references/validation.md` section 0 prescribes (a `data/<family>/` tree with the shared
+  helpers symlinked in, so the gates run unchanged), then deliver packs to
   `~/.local/share/plasmazones/...`. Local skill tests stay out of bundled inventories.
 - `--into repo`: explicitly requested bundled packs go under
   `data/animations|overlays|surface|curves`, licensed and test-gated like bundled packs.
@@ -82,7 +87,7 @@ separate from the visual choices below; do not compare against the bundled catal
 | tab switch | animations | tab | full |
 | ambience / margin | surface | paddingParam | full |
 | curves (settle, release) | curves | | core |
-| decoration set, motion set (both halves per event) | profiles | | core |
+| decoration set, motion set (both halves per event), overlay set (global baseline) | profiles | | core |
 
 ### 3. Establish the visual direction before expanding coverage
 
@@ -116,8 +121,9 @@ For each requested pack:
 3. Write `effect.frag` and any vertex or buffer shaders required by the implementation.
    Follow the family's entry, include, parameter and licence contracts. Every declared
    parameter must be used; every `p_` read must be declared.
-4. Run gate 1 and gate 2 from `references/validation.md` on that pack immediately. Fix until
-   exit 0 before starting the next pack. Never batch validation to the end.
+4. Run gate 1 and gate 2 from `references/validation.md` on that pack immediately, from the
+   scratchpad layout section 0 of that file prescribes. Fix until exit 0 before starting the
+   next pack. Never batch validation to the end.
 
 Technical checks per pack:
 - Verify both legs and the endpoint behaviour required by the event class.
@@ -137,36 +143,18 @@ Follow `references/profiles.md`:
   `shadow` when requested).
 - `<theme>.json` motion set, `"version": 2`, carrying BOTH halves of every event it covers:
   the timing (`curve` by name, `duration`) AND the pack, as a nested
-  `"shader": { "effectId": "<pack id>" }`.
+  `"shader": { "effectId": "<pack id>" }`. A motion set that carries only timing applies
+  cleanly and changes nothing visible. Follow "Motion set: rules that bite" in
+  `references/profiles.md` and run its verification script before reporting.
+- `<theme>.json` overlay set with a single `overrides` entry at `path: "overlay:global"`
+  naming the new overlay pack by its registry UUID (`shaderId`), no per-layout overrides
+  (layout UUIDs are per machine) and no `baseline` key. Without it the overlay pack you built
+  is never assigned.
 
-A motion set that carries only timing is the single most likely thing to go wrong here, and
-it fails silently: the set applies, the durations change, and every animation keeps whatever
-pack it had. Format 1 (timing only) is still READ for old files, so nothing warns you. The
-rules that actually bite:
-
-- **`"version": 2` is mandatory** when any entry carries a `shader` key. A build older than
-  format 2 refuses a v2 set outright, which is the correct clean failure — do not write
-  version 1 with shader keys hoping for the best.
-- **A `shader` key is only legal on a path the daemon consumes as a shader leg.** The SSOT is
-  `shaderConsumedLeafEventPaths()` in `src/core/types/animationshadersupportedpaths.h`, plus
-  every ancestor of those leaves. `eventPathSupportsShaderLeg()` refuses anything else, so the
-  entry is dropped on apply. Read that header; do not infer the list from the event taxonomy.
-- **The pack's `appliesTo` must cover the path's class.** Nothing validates this — an
-  `appliesTo: ["desktop"]` pack on `window.appearance.open` is accepted and then never plays.
-- **The format permits the pack half ALONE**, which preserves existing timing. For a new
-  theme, supply both halves so its reviewed pacing survives application. Use shader-only
-  entries when the user asks to retain timing, and record that dependency in the report.
-- **No `baseline` key**, at any version. The set validator refuses a set that carries one even
-  when empty.
-- Filename MUST be `slugify(name) + ".json"`, 4-space indent, alphabetically sorted keys.
-
-Then VERIFY the file rather than reading it back: for every entry carrying a `shader`, confirm
-the path appears in the SSOT header and that the named pack's `metadata.json` `appliesTo`
-covers that path's class. A one-off script over the set file is the right amount of effort;
-eyeballing a sixteen-entry file is not.
-
-- For `--into repo`, set files are delivered in the scratchpad and the report, since the repo
-  ships no set files. For `--into user`, write them to the user dirs directly.
+Set files are written to `$T/sets/<kind>/` in the scratchpad (`$T` as defined in
+`references/validation.md` section 0). For `--into repo` they are
+delivered there and in the report, since the repo ships no set files. For `--into user`, copy
+them to the user dirs as gate 6 in `references/validation.md` shows.
 
 ### 6. Validate everything
 
@@ -205,9 +193,10 @@ Lead with what exists and whether it is verified. Then:
   different claims and the second one is common: say which it is in the first two sentences.
 - a table of every pack (id, family, class, event paths it is assigned to)
 - the curves and their parameters
-- where the set files and profile snippet are and how to apply them (Settings > Decorations >
-  Decoration Sets and Settings > Animations > Motion Sets — a format-2 motion set carries the
-  packs too, so there is no separate step for them)
+- where the three set files are and how to apply them (Settings → Appearance → Decorations →
+  Library → Decoration Sets, Settings → Appearance → Animations → Library → Motion Sets, and
+  Settings → Appearance → Overlays → Library → Overlay Sets, each followed by the page's Apply;
+  a format-2 motion set carries the packs too, so there is no separate step for them)
 - links to rendered evidence, the visual verdict and any unresolved visual findings
 - every gate with its real exit status, and anything left unverified (a live session smoke
   test you could not run, glslang missing, tests not built)
@@ -220,14 +209,13 @@ Do not commit. The user commits.
 - Writing a shader from memory of the uniform contract. Read the shared header first.
 - A pack that fails its event contract on the reverse leg.
 - An em-dash or clause-splicing semicolon in any description. Two sentences instead.
-- A surface colour param written as `#RRGGBB`. Surface packs use Qt form `#AARRGGBB`
-  (alpha first); overlays and animations use `#RRGGBB`. See `references/overlays-surface.md`.
-- A motion set that carries only timing. It applies cleanly, changes the durations, and
-  leaves every animation on the pack it already had, with nothing anywhere to say so. Every
-  event the theme owns needs its `"shader": { "effectId": ... }` half and the file needs
-  `"version": 2`.
-- A pack assigned to a path whose class its `appliesTo` does not cover. Accepted on write,
-  never plays.
+- A colour param written CSS-style as `#RRGGBBAA`. Every family parses colour strings with
+  `QColor`, which reads eight hex digits as `#AARRGGBB` (alpha FIRST); `#RRGGBB` (opaque) and
+  `#AARRGGBB` are both fine in every family, but an alpha-last value is silently misread,
+  not rejected. See `references/overlays-surface.md`.
+- A motion set without its `shader` half, or a pack on a path its `appliesTo` does not cover.
+  The first changes nothing visible, the second is accepted on write and never plays. See
+  "Motion set: rules that bite" in `references/profiles.md`.
 - Shipping `preview.png` inside a pack as a substitute for live previews. Rendered review
   images and clips belong in the scratchpad and are required evidence for visual claims.
 - Adding a category outside the canonical list without extending the test deliberately.

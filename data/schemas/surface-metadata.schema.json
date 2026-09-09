@@ -78,8 +78,8 @@
                 "group": { "type": "string" },
                 "type": {
                     "type": "string",
-                    "enum": ["float", "int", "bool", "color", "image"],
-                    "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
+                    "enum": ["float", "int", "bool", "color"],
+                    "description": "Marshalling type of the uniform. Images are declared under `textures`, not as parameters. An unknown type cannot be bound, so it is rejected."
                 },
                 "default": {
                     "type": ["number", "string", "boolean"],

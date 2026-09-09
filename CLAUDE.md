@@ -165,9 +165,10 @@ On Linux (native):
 # reads like success. Pass it explicitly or the "always run tests" rule above
 # silently runs nothing. BUILD_TOOLS=ON adds shader-render and friends.
 #
-# TEST-TIME DEPENDENCY: the shader_validate_animations gate shells out to
-# `glslangValidator` (or the newer `glslang`; either name works) to compile the
-# compositor-only animation packs, and HARD-FAILS when neither is on PATH
+# TEST-TIME DEPENDENCY: the shader_validate_animations and
+# shader_validate_pointer gates shell out to `glslangValidator` (or the newer
+# `glslang`; either name works) to compile every animation and pointer pack for
+# the compositor's classic-GL branch, and HARD-FAIL when neither is on PATH
 # rather than skipping. Install your distro's glslang package before running
 # ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
 #
