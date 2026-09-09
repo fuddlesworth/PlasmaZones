@@ -460,9 +460,9 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/animations/AnimationsPresetsPage.qml"), QStringLiteral("bookmarks"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("animations-motionsets"), QStringLiteral("animations-library"),
-               PhosphorI18n::tr("Motion Sets"), QStringLiteral("pages/animations/AnimationsMotionSetsPage.qml"),
-               QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("animations-motionsets"), QStringLiteral("animations-library"), PhosphorI18n::tr("Sets"),
+               QStringLiteral("pages/animations/AnimationsMotionSetsPage.qml"), QStringLiteral("color-palette"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-shaders"), QStringLiteral("animations-library"), PhosphorI18n::tr("Shaders"),
                QStringLiteral("pages/animations/AnimationsShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"),
@@ -513,9 +513,9 @@ void SettingsController::buildApplicationController()
                QStringLiteral("input-mouse"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
-    regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
-               PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),
-               QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"), PhosphorI18n::tr("Sets"),
+               QStringLiteral("pages/decoration/DecorationSetsPage.qml"), QStringLiteral("color-palette"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
@@ -558,7 +558,7 @@ void SettingsController::buildApplicationController()
 
     regVirtual(QStringLiteral("overlays-library"), QStringLiteral("overlays"), PhosphorI18n::tr("Library"), QString(),
                QStringLiteral("folder-open"), /*collapsible=*/true);
-    regVirtual(QStringLiteral("overlays-sets"), QStringLiteral("overlays-library"), PhosphorI18n::tr("Overlay Sets"),
+    regVirtual(QStringLiteral("overlays-sets"), QStringLiteral("overlays-library"), PhosphorI18n::tr("Sets"),
                QStringLiteral("pages/overlays/OverlaySetsPage.qml"), QStringLiteral("color-palette"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regPage(m_overlaysPage.get(), QStringLiteral("overlays-library"), PhosphorI18n::tr("Shaders"),

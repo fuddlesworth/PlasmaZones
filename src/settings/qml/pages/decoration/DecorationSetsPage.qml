@@ -20,12 +20,12 @@ ShaderSetsPage {
     importAnchor: "importDecorationSets"
     savedAnchor: "savedDecorationSets"
 
-    infoBannerText: i18n("Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn't cover are left unchanged.")
-    saveDescription: i18n("Capture every per-surface override as a named decoration set.")
-    importDescription: i18n("Decoration sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
-    emptyStateText: i18n("No decoration sets saved yet.")
-    nameFieldAccessibleName: i18n("Decoration set name")
-    descriptionFieldAccessibleName: i18n("Decoration set description")
+    infoBannerText: i18n("Sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn't cover are left unchanged.")
+    saveDescription: i18n("Capture every per-surface override as a named set.")
+    importDescription: i18n("Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
+    emptyStateText: i18n("No sets saved yet.")
+    nameFieldAccessibleName: i18n("Set name")
+    descriptionFieldAccessibleName: i18n("Set description")
 
     // Coverage chips are keyed on the root segment of a surface path
     // ("window.tiled" → "window"), matching the five Decoration surface pages.

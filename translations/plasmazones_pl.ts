@@ -1443,7 +1443,7 @@
         <location filename="../src/editor/controller/layout.cpp" line="109"/>
         <source>VS%1</source>
         <comment>@item fallback name for an unnamed virtual screen</comment>
-        <translation type="unfinished"></translation>
+        <translation>WE%1</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1160"/>
@@ -2802,7 +2802,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="340"/>
         <source>Layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Układ</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="353"/>
@@ -2842,7 +2842,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="417"/>
         <source>Global default changes the shader for every layout in the matched context. Pick a layout to change only that layout, and only while it is the active one there.</source>
-        <translation type="unfinished"></translation>
+        <translation>Globalne domyślne zmienia shader dla każdego układu w dopasowanym kontekście. Wybierz układ, aby zmienić tylko ten układ, i tylko wtedy, gdy jest tam aktywny.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="457"/>
@@ -2850,7 +2850,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1085"/>
         <source>None</source>
         <comment>@item no overlay shader assigned</comment>
-        <translation type="unfinished">Brak</translation>
+        <translation>Brak</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="220"/>
@@ -4661,22 +4661,22 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="527"/>
         <source>%1 overlay shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Shader nakładki „%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="531"/>
         <source>Block overlay shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Blokuj shader nakładki</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="532"/>
         <source>Block %1 overlay shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Blokuj shader nakładki „%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="536"/>
         <source>%1 overlay shader: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Shader nakładki „%1”: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="548"/>
@@ -6509,11 +6509,6 @@
         <translation>profil</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="242"/>
-        <source>motion set</source>
-        <translation>zestaw ruchu</translation>
-    </message>
-    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="77"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="198"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="242"/>
@@ -7196,12 +7191,8 @@
         <translation>powierzchnia</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="267"/>
-        <source>decoration set</source>
-        <translation>zestaw dekoracji</translation>
-    </message>
-    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="141"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="242"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="267"/>
         <source>set</source>
         <translation>zestaw</translation>
@@ -7324,32 +7315,32 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="263"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="271"/>
         <source>cursor</source>
-        <translation type="unfinished"></translation>
+        <translation>kursor</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="264"/>
         <source>trail</source>
-        <translation type="unfinished"></translation>
+        <translation>ślad</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="264"/>
         <source>click</source>
-        <translation type="unfinished"></translation>
+        <translation>kliknięcie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="264"/>
         <source>ripple</source>
-        <translation type="unfinished"></translation>
+        <translation>fala</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="265"/>
         <source>halo</source>
-        <translation type="unfinished"></translation>
+        <translation>poświata</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="265"/>
         <source>sparks</source>
-        <translation type="unfinished"></translation>
+        <translation>iskry</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="285"/>
@@ -7888,17 +7879,17 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="139"/>
         <source>override</source>
-        <translation type="unfinished"></translation>
+        <translation>zastąpienie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="141"/>
         <source>bundle</source>
-        <translation type="unfinished"></translation>
+        <translation>pakiet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="142"/>
         <source>share</source>
-        <translation type="unfinished"></translation>
+        <translation>udostępnianie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="230"/>
@@ -7916,22 +7907,22 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="702"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="708"/>
         <source>Stop while a window is fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>Zatrzymaj, gdy okno jest na pełnym ekranie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="532"/>
         <source>fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>pełny ekran</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="532"/>
         <source>game</source>
-        <translation type="unfinished"></translation>
+        <translation>gra</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="532"/>
         <source>video</source>
-        <translation type="unfinished"></translation>
+        <translation>wideo</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="536"/>
@@ -10466,6 +10457,13 @@
         <translation>Przeciąganie okna</translation>
     </message>
     <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="464"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="517"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="561"/>
+        <source>Sets</source>
+        <translation>Zestawy</translation>
+    </message>
+    <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="487"/>
         <source>Surfaces</source>
         <translation>Powierzchnie</translation>
@@ -10481,12 +10479,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="86"/>
         <source>Pointer</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="517"/>
-        <source>Decoration Sets</source>
-        <translation>Zestawy dekoracji</translation>
+        <translation>Wskaźnik</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="279"/>
@@ -10540,16 +10533,6 @@
         <translation>Nastawy</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="464"/>
-        <source>Motion Sets</source>
-        <translation>Zestawy ruchu</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="561"/>
-        <source>Overlay Sets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/settings/services/shaderpackinstaller.cpp" line="303"/>
         <source>Shader pack installed.</source>
         <translation>Zainstalowano paczkę shaderów.</translation>
@@ -10597,17 +10580,17 @@
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="345"/>
         <source>“%1” could not be used here. It may be for another page, or it may need packs or entries this version does not have.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nie można tutaj użyć „%1”. Może dotyczyć innej strony lub wymagać paczek albo wpisów, których ta wersja nie ma.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="358"/>
         <source>Could not finish applying “%1”. Some of it may have been applied, and Discard undoes the whole thing.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nie udało się dokończyć stosowania „%1”. Część mogła zostać zastosowana, a Odrzuć cofa całość.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="370"/>
         <source>“%1” was saved by an older version, so it does not cover everything a set covers now. Anything it leaves out is unchanged.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1” zapisano w starszej wersji, więc nie obejmuje wszystkiego, co zestaw obejmuje teraz. Wszystko, co pomija, pozostaje bez zmian.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="435"/>
@@ -10752,7 +10735,7 @@
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="468"/>
         <source>Could not capture the current settings.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nie udało się przechwycić bieżących ustawień.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="505"/>
@@ -10763,7 +10746,7 @@
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="660"/>
         <source>That set could not be imported here. It may be for another page, or it may need packs or entries this version does not have.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nie można tutaj zaimportować tego zestawu. Może dotyczyć innej strony lub wymagać paczek albo wpisów, których ta wersja nie ma.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="702"/>
@@ -10820,7 +10803,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="222"/>
         <source>That file is too large to be a settings file.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ten plik jest za duży, aby być plikiem ustawień.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="237"/>
@@ -10891,7 +10874,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="552"/>
         <source>Your settings were imported, but PlasmaZones is still running the old ones. Restart PlasmaZones, or the imported settings may be overwritten.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ustawienia zostały zaimportowane, ale PlasmaZones nadal używa starych. Uruchom PlasmaZones ponownie, bo inaczej zaimportowane ustawienia mogą zostać nadpisane.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="565"/>
@@ -11651,7 +11634,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="820"/>
         <source>Exit fullscreen (F11)</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Wyjdź z pełnego ekranu (F11)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="848"/>
@@ -13012,7 +12995,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="174"/>
         <source>Missing shader %1</source>
         <comment>@item the assigned overlay shader pack is not installed</comment>
-        <translation type="unfinished"></translation>
+        <translation>Brak shadera %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="318"/>
@@ -13024,13 +13007,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="330"/>
         <source>Global default overlay shader</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Globalny domyślny shader nakładki</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="330"/>
         <source>Overlay shader for %1</source>
         <comment>@label:listbox overlay shader for a named layout</comment>
-        <translation type="unfinished"></translation>
+        <translation>Shader nakładki dla układu %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="558"/>
@@ -14707,7 +14690,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="89"/>
         <source>Timing inherits from: %1. The animation is not inherited from outside %2.</source>
         <comment>%1 is an inheritance chain, %2 an event-path root</comment>
-        <translation type="unfinished"></translation>
+        <translation>Czas trwania dziedziczony z: %1. Animacja nie jest dziedziczona spoza %2.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="91"/>
@@ -15078,33 +15061,52 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="36"/>
-        <source>Motion sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</source>
-        <translation type="unfinished"></translation>
+        <source>Sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Motion sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>Zestawy łączą paczki animacji i czas trwania dla poszczególnych zdarzeń w jeden plik JSON do udostępniania. Zastosowanie zestawu scala go z bieżącymi zastąpieniami. Zdarzenia, których nie obejmuje, pozostają bez zmian.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="37"/>
-        <source>Capture every per-event animation pack and its timing as a named motion set.</source>
-        <translation type="unfinished"></translation>
+        <source>Capture every per-event animation pack and its timing as a named set.</source>
+        <oldsource>Capture every per-event animation pack and its timing as a named motion set.</oldsource>
+        <translation>Przechwyć każdą paczkę animacji dla poszczególnych zdarzeń wraz z jej czasem trwania jako nazwany zestaw.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="38"/>
-        <source>Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
-        <translation>Zestawy ruchu to pojedyncze pliki JSON w Twoim katalogu danych. Upuść tutaj plik zestawu, aby go zaimportować, lub użyj przycisków poniżej.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="37"/>
+        <source>Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
+        <oldsource>Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</oldsource>
+        <translation>Zestawy to pojedyncze pliki JSON w Twoim katalogu danych. Upuść tutaj plik zestawu, aby go zaimportować, lub użyj przycisków poniżej.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="39"/>
-        <source>No motion sets saved yet.</source>
-        <translation>Nie zapisano jeszcze żadnych zestawów ruchu.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="26"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="38"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="52"/>
+        <source>No sets saved yet.</source>
+        <oldsource>No motion sets saved yet.</oldsource>
+        <translation>Nie zapisano jeszcze żadnych zestawów.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="40"/>
-        <source>Motion set name</source>
-        <translation>Nazwa zestawu ruchu</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="27"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="39"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
+        <source>Set name</source>
+        <oldsource>Motion set name</oldsource>
+        <translation>Nazwa zestawu</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="41"/>
-        <source>Motion set description</source>
-        <translation>Opis zestawu ruchu</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="28"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="40"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="54"/>
+        <source>Set description</source>
+        <oldsource>Motion set description</oldsource>
+        <translation>Opis zestawu</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="48"/>
@@ -15184,7 +15186,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="78"/>
         <source>“%1” will overwrite every per-event override it covers. The change is not saved yet, so Discard still undoes it.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1” nadpisze każde zastąpienie dla poszczególnych zdarzeń, które obejmuje. Zmiana nie jest jeszcze zapisana, więc Odrzuć nadal ją cofa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="15"/>
@@ -15807,33 +15809,15 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="23"/>
-        <source>Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
-        <translation>Zestawy dekoracji łączą łańcuchy paczek dla poszczególnych powierzchni w jeden plik JSON do udostępniania. Zastosowanie zestawu scala go z bieżącą dekoracją. Powierzchnie, których nie obejmuje, pozostają bez zmian.</translation>
+        <source>Sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>Zestawy łączą łańcuchy paczek dla poszczególnych powierzchni w jeden plik JSON do udostępniania. Zastosowanie zestawu scala go z bieżącą dekoracją. Powierzchnie, których nie obejmuje, pozostają bez zmian.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="24"/>
-        <source>Capture every per-surface override as a named decoration set.</source>
-        <translation>Przechwyć każde zastąpienie dla poszczególnych powierzchni jako nazwany zestaw dekoracji.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="25"/>
-        <source>Decoration sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
-        <translation>Zestawy dekoracji to pojedyncze pliki JSON w Twoim katalogu danych. Upuść tutaj plik zestawu, aby go zaimportować, lub użyj przycisków poniżej.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="26"/>
-        <source>No decoration sets saved yet.</source>
-        <translation>Nie zapisano jeszcze żadnych zestawów dekoracji.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="27"/>
-        <source>Decoration set name</source>
-        <translation>Nazwa zestawu dekoracji</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="28"/>
-        <source>Decoration set description</source>
-        <translation>Opis zestawu dekoracji</translation>
+        <source>Capture every per-surface override as a named set.</source>
+        <oldsource>Capture every per-surface override as a named decoration set.</oldsource>
+        <translation>Przechwyć każde zastąpienie dla poszczególnych powierzchni jako nazwany zestaw.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="37"/>
@@ -15863,7 +15847,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="45"/>
         <source>Pointer</source>
         <comment>@label decoration surface group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Wskaźnik</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="52"/>
@@ -15877,24 +15861,24 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="55"/>
         <source>“%1” will replace the decoration on every surface it covers. The change is not saved yet, so Discard still undoes it.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1” zastąpi dekorację na każdej powierzchni, którą obejmuje. Zmiana nie jest jeszcze zapisana, więc Odrzuć nadal ją cofa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="24"/>
         <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, Popups, Shell, and Pointer pages.</source>
-        <translation type="unfinished"></translation>
+        <translation>Przeglądaj zainstalowane paczki dekoracji. Dodawaj paczki do łańcucha powierzchni na stronach Okna, OSD, Okna wyskakujące, Powłoka i Wskaźnik.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="32"/>
         <source>Surface</source>
         <comment>@item decoration pack family (windows, OSDs, popups, shell)</comment>
-        <translation type="unfinished"></translation>
+        <translation>Powierzchnia</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="37"/>
         <source>Pointer</source>
         <comment>@item decoration pack family (the mouse pointer)</comment>
-        <translation type="unfinished"></translation>
+        <translation>Wskaźnik</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="44"/>
@@ -16191,7 +16175,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
         <source>Drop every decoration on a monitor while a window on it is fullscreen, the mouse pointer included. Other monitors keep theirs. A fullscreen game or video has no frame to decorate, and it is the last place you want to spend graphics work.</source>
-        <translation type="unfinished"></translation>
+        <translation>Usuń każdą dekorację z monitora, gdy okno na nim jest na pełnym ekranie, łącznie ze wskaźnikiem myszy. Inne monitory zachowują swoje. Gra lub film na pełnym ekranie nie ma ramki do dekorowania i jest ostatnim miejscem, w którym warto obciążać kartę graficzną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="716"/>
@@ -17476,19 +17460,19 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="202"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="383"/>
         <source>Use this profile?</source>
-        <translation type="unfinished"></translation>
+        <translation>Użyć tego profilu?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="203"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="384"/>
         <source>You have changes you have not saved yet. Switching to “%1” replaces them with that profile&apos;s settings.</source>
-        <translation type="unfinished"></translation>
+        <translation>Masz jeszcze niezapisane zmiany. Przełączenie na „%1” zastąpi je ustawieniami tego profilu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="207"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="388"/>
         <source>Use profile</source>
-        <translation type="unfinished"></translation>
+        <translation>Użyj profilu</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="129"/>
@@ -19177,7 +19161,7 @@
         <translation>Nowa karta</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="709"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="719"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PackPreview.qml.cpp" line="427"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="98"/>
@@ -19187,7 +19171,7 @@
         <translation>Podgląd niedostępny</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="709"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="719"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PackPreview.qml.cpp" line="424"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="98"/>
@@ -19196,43 +19180,43 @@
         <translation>Nie udało się skompilować shadera tej paczki.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="723"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="733"/>
         <source>Previewing a desktop switch, there and back, on stand-in desktops.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przełączenia pulpitu tam i z powrotem na zastępczych pulpitach.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="725"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="735"/>
         <source>Previewing a window move on a sample window.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przeniesienia okna na przykładowym oknie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="727"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="737"/>
         <source>Previewing a window being dragged back and forth.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd okna przeciąganego w tę i z powrotem.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="729"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="739"/>
         <source>Previewing a tab switch between two sample windows.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przełączenia karty między dwoma przykładowymi oknami.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="731"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="741"/>
         <source>Previewing a scroll settling on a stand-in strip.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przewijania zatrzymującego się na zastępczym pasie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="733"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="743"/>
         <source>Previewing open, minimize, restore and close on a sample window.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd otwarcia, minimalizacji, przywrócenia i zamknięcia na przykładowym oknie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="747"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="757"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="196"/>
         <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
         <comment>@info shader preview limitation</comment>
@@ -19540,18 +19524,6 @@
         <translation>Nazwa zestawu…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
-        <source>Set name</source>
-        <translation>Nazwa zestawu</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="54"/>
-        <source>Set description</source>
-        <translation>Opis zestawu</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="345"/>
         <source>Export Set</source>
         <translation>Eksportuj zestaw</translation>
@@ -19563,14 +19535,9 @@
         <translation>Zestaw PlasmaZones (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="52"/>
-        <source>No sets saved yet.</source>
-        <translation>Nie zapisano jeszcze żadnych zestawów.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="154"/>
         <source>This captures your current values, including the changes you have not saved yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>Przechwytuje bieżące wartości, łącznie ze zmianami, których jeszcze nie zapisano.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="198"/>
@@ -19849,7 +19816,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysLibraryPage.qml.cpp" line="24"/>
         <source>Browse the zone overlay shaders you have installed. To assign one, either as the global default or for a single layout, go to the Layouts page.</source>
         <comment>@info banner on the overlay shader browser</comment>
-        <translation type="unfinished"></translation>
+        <translation>Przeglądaj zainstalowane shadery nakładki stref. Aby przypisać któryś jako globalny domyślny lub dla pojedynczego układu, przejdź na stronę Układy.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysLibraryPage.qml.cpp" line="30"/>
@@ -20036,17 +20003,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="269"/>
         <source>Not decorated. Add a pointer pack to style the cursor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Bez dekoracji. Dodaj paczkę wskaźnika, aby ostylować kursor.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="339"/>
         <source>No pointer packs.</source>
-        <translation type="unfinished"></translation>
+        <translation>Brak paczek wskaźnika.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="340"/>
         <source>No pointer packs. Add one below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Brak paczek wskaźnika. Dodaj jedną poniżej.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="341"/>
@@ -20057,7 +20024,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="341"/>
         <source>Add pointer pack</source>
-        <translation type="unfinished"></translation>
+        <translation>Dodaj paczkę wskaźnika</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="342"/>
@@ -20068,7 +20035,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="342"/>
         <source>Stack another pack onto the pointer&apos;s chain</source>
-        <translation type="unfinished"></translation>
+        <translation>Dodaj kolejną paczkę do łańcucha wskaźnika</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="343"/>
@@ -20079,12 +20046,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="343"/>
         <source>No pointer packs are installed</source>
-        <translation type="unfinished"></translation>
+        <translation>Nie zainstalowano żadnych paczek wskaźnika</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="344"/>
         <source>Add a pointer pack to the pointer&apos;s chain</source>
-        <translation type="unfinished"></translation>
+        <translation>Dodaj paczkę wskaźnika do łańcucha wskaźnika</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="388"/>
@@ -20830,7 +20797,7 @@
         <location filename=".qml-stubs/src/shared/ParameterEditor.qml.cpp" line="471"/>
         <source>This pack is not installed, so its settings cannot be shown.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta paczka nie jest zainstalowana, więc nie można pokazać jej ustawień.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/ParameterRow.qml.cpp" line="347"/>
@@ -23597,8 +23564,8 @@
         <translation>Brak</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="528"/>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="563"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="558"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="593"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="374"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="120"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PackPreview.qml.cpp" line="93"/>
@@ -23607,13 +23574,13 @@
         <translation>Przykładowe okno</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="530"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="560"/>
         <source>Another Window</source>
         <comment>@title second stand-in window in a shader preview</comment>
         <translation>Inne okno</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="581"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="611"/>
         <source>Previous Tab</source>
         <comment>@title outgoing tab in the animation preview</comment>
         <translation>Poprzednia karta</translation>
@@ -23855,110 +23822,92 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="111"/>
         <source>Pause</source>
         <comment>@option:check pointer preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Wstrzymaj</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="121"/>
         <source>Show cursor</source>
         <comment>@option:check pointer preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Pokaż kursor</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPackNotices.qml.cpp" line="48"/>
         <source>This pack paints over the cursor, so PlasmaZones hides the system cursor and draws it after the pack.</source>
         <comment>@info pointer preview note</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta paczka rysuje na kursorze, więc PlasmaZones ukrywa kursor systemowy i rysuje go po paczce.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPackNotices.qml.cpp" line="55"/>
         <source>This pack samples the cursor image. The preview stands a plain arrow in for your cursor theme.</source>
         <comment>@info pointer preview limitation</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta paczka próbkuje obraz kursora. W podglądzie zwykła strzałka zastępuje Twój zestaw kursorów.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="129"/>
         <source>Layout %1 (not on this computer)</source>
-        <translation type="unfinished"></translation>
+        <translation>Układ %1 (nie ma go na tym komputerze)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="294"/>
         <source>%n layouts in this set are not on this computer, so they were skipped. Everything else was applied.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n układu z tego zestawu nie ma na tym komputerze, więc został pominięty. Cała reszta została zastosowana.</numerusform>
+            <numerusform>%n układów z tego zestawu nie ma na tym komputerze, więc zostały pominięte. Cała reszta została zastosowana.</numerusform>
+            <numerusform>%n układów z tego zestawu nie ma na tym komputerze, więc zostały pominięte. Cała reszta została zastosowana.</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="10"/>
         <source>Pointer decoration surface</source>
-        <translation type="unfinished"></translation>
+        <translation>Powierzchnia dekoracji wskaźnika</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="11"/>
         <source>Decoration for the mouse pointer.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekoracja wskaźnika myszy.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="15"/>
         <source>Mouse Pointer</source>
-        <translation type="unfinished"></translation>
+        <translation>Wskaźnik myszy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="35"/>
-        <source>Overlay sets bundle your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</source>
-        <translation type="unfinished"></translation>
+        <source>Sets bundle your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Overlay sets bundle your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>Zestawy łączą przypisania shaderów nakładki stref w jeden plik JSON do udostępniania. Zastosowanie zestawu scala go z bieżącymi przypisaniami. Układy, których nie obejmuje, pozostają bez zmian.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="36"/>
-        <source>Capture the global default and every per-layout override as a named overlay set.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="37"/>
-        <source>Overlay sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="38"/>
-        <source>No overlay sets saved yet.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="39"/>
-        <source>Overlay set name</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="40"/>
-        <source>Overlay set description</source>
-        <translation type="unfinished"></translation>
+        <source>Capture the global default and every per-layout override as a named set.</source>
+        <oldsource>Capture the global default and every per-layout override as a named overlay set.</oldsource>
+        <translation>Przechwyć globalne domyślne i każde zastąpienie dla poszczególnych układów jako nazwany zestaw.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="51"/>
         <source>%n Assignment</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n przypisanie</numerusform>
+            <numerusform>%n przypisania</numerusform>
+            <numerusform>%n przypisań</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="54"/>
         <source>“%1” will replace the overlay shader on everything it covers. The change is not saved yet, so Discard still undoes it.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1” zastąpi shader nakładki we wszystkim, co obejmuje. Zmiana nie jest jeszcze zapisana, więc Odrzuć nadal ją cofa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="99"/>
         <source>The global default applies to every layout. Each layout card can override it. To install more packs, go to the Library&apos;s Shaders page.</source>
         <comment>@info banner on the overlay shader assignments page</comment>
-        <translation type="unfinished"></translation>
+        <translation>Globalne domyślne dotyczy każdego układu. Każda karta układu może je zastąpić. Aby zainstalować więcej paczek, przejdź na stronę Shadery w Bibliotece.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/PackPreview.qml.cpp" line="426"/>
         <source>Loading preview…</source>
         <comment>@info:placeholder shader preview</comment>
-        <translation type="unfinished">Wczytywanie podglądu…</translation>
+        <translation>Wczytywanie podglądu…</translation>
     </message>
 </context>
 </TS>

@@ -33,12 +33,12 @@ ShaderSetsPage {
     importAnchor: "importMotionSets"
     savedAnchor: "savedMotionSets"
 
-    infoBannerText: i18n("Motion sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn't cover are left unchanged.")
-    saveDescription: i18n("Capture every per-event animation pack and its timing as a named motion set.")
-    importDescription: i18n("Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
-    emptyStateText: i18n("No motion sets saved yet.")
-    nameFieldAccessibleName: i18n("Motion set name")
-    descriptionFieldAccessibleName: i18n("Motion set description")
+    infoBannerText: i18n("Sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn't cover are left unchanged.")
+    saveDescription: i18n("Capture every per-event animation pack and its timing as a named set.")
+    importDescription: i18n("Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
+    emptyStateText: i18n("No sets saved yet.")
+    nameFieldAccessibleName: i18n("Set name")
+    descriptionFieldAccessibleName: i18n("Set description")
 
     // Coverage chips are keyed on the root segment of an event path
     // ("window.appearance.open" → "window").

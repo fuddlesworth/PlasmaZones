@@ -239,7 +239,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("preset"), PhosphorI18n::tr("curve"), PhosphorI18n::tr("easing"),
                              PhosphorI18n::tr("profile")});
     search->setPageKeywords(QStringLiteral("animations-motionsets"),
-                            {PhosphorI18n::tr("motion set"), PhosphorI18n::tr("profile"), PhosphorI18n::tr("motion")});
+                            {PhosphorI18n::tr("set"), PhosphorI18n::tr("profile"), PhosphorI18n::tr("motion")});
     search->setPageKeywords(QStringLiteral("animations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect")});
 
@@ -263,9 +263,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("mouse"),
                              PhosphorI18n::tr("trail"), PhosphorI18n::tr("click"), PhosphorI18n::tr("ripple"),
                              PhosphorI18n::tr("halo"), PhosphorI18n::tr("glow"), PhosphorI18n::tr("sparks")});
-    search->setPageKeywords(QStringLiteral("decorations-sets"),
-                            {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
-                             PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
+    search->setPageKeywords(
+        QStringLiteral("decorations-sets"),
+        {PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
     search->setPageKeywords(QStringLiteral("decorations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("surface"), PhosphorI18n::tr("pack"),
                              PhosphorI18n::tr("pointer"), PhosphorI18n::tr("cursor"), PhosphorI18n::tr("border"),
