@@ -437,6 +437,17 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     if (!m_engaged || !screen || screen != m_output || suppressedOn(screen) || !KWin::effects) {
         return;
     }
+    if (cursorHiddenElsewhere()) {
+        // Someone else hid the sprite (a software KVM forwarding this desktop's
+        // pointer to another machine, a client that installed a null cursor).
+        // Drawing nothing here IS the erase: the compositor is already
+        // repainting this region, so the previous frame's trail goes with it.
+        // Tested after the output identity check rather than beside it so the
+        // cursorImage() read stays one per frame on the pointer's output, not
+        // one per output.
+        releaseCursorHide(screen);
+        return;
+    }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     if (!m_history.isLive(nowMs, m_maxTrailSeconds)) {
         // The chain went quiet. Release a hide taken by an `above` layer on a

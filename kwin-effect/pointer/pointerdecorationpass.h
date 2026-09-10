@@ -52,6 +52,13 @@ namespace PlasmaZones {
 /// timer and no spring: the only wake-ups are slotMouseChanged (notePointer)
 /// and, while live, the pass's own per-frame repaint request.
 ///
+/// A burst also ends early when the sprite it decorates goes away, whoever
+/// took it (cursorHiddenElsewhere). The trail is then DROPPED rather than
+/// merely left unpainted: dropTrail damages the band the last frame covered
+/// and empties the history, and it is the emptied history — not the hide —
+/// that ends liveness, so the pass is still in the paint chain for the cycle
+/// that performs the erase.
+///
 /// COST RULE. A chain with no live layer must cost nothing per frame. Every
 /// entry point early-returns on `m_engaged`, a cached verdict rebuilt only
 /// when the enable flag, the profile or the registry changes: with the
@@ -192,7 +199,11 @@ public:
     /// pointer's output per frame. Called from postPaintScreen. When the
     /// chain has just gone quiet this is also where a cursor hide taken by an
     /// `above` layer is released, covering the case where the pointer's
-    /// output stopped painting entirely.
+    /// output stopped painting entirely. It is likewise the only per-cycle
+    /// hook the pass has, so it is where a sprite hidden by someone else
+    /// drops the trail — the case notePointer cannot cover, because a client
+    /// that hides the cursor on an idle timeout does so precisely when no
+    /// pointer event is coming.
     void scheduleRepaints();
 
     /// Give the cursor back because ANOTHER pass is taking @p screen's frame
@@ -407,6 +418,31 @@ private:
     }
 
     // ── pointerdecorationpass.cpp ───────────────────────────────────────────
+
+    /// Is the compositor's cursor hidden by something other than this pass?
+    ///
+    /// A pointer decoration decorates a pointer. When the sprite is gone the
+    /// trail has nothing under it, and drawing one anyway paints a comet
+    /// chasing an invisible cursor. Software KVMs are the case that made this
+    /// visible: Deskflow hides the sprite on the host while the user works on
+    /// the other machine, but keeps driving the real pointer across this
+    /// desktop so the remote motion mirrors, so `cursorPos` stays live and
+    /// every liveness test still passes.
+    ///
+    /// Two mechanisms hide a cursor and both count. KWin's own hide is what
+    /// `isCursorHidden` reports, and this pass takes that same hide for an
+    /// `above` chain, hence the `m_cursorHidden` exclusion — our own hide must
+    /// not read as a reason to stop drawing. A client that installs a null
+    /// cursor surface leaves the hide counter alone and empties the image
+    /// instead, which is why the image is tested independently rather than as
+    /// a fallback: that one is legible even while we hold a hide of our own.
+    bool cursorHiddenElsewhere() const;
+
+    /// Drop the live trail because the pointer stopped being a pointer worth
+    /// decorating, repainting away what is still on screen first. @p next
+    /// becomes the pass's output (it may be the current one, unlike
+    /// `repaintStaleTrail`, which only damages an output being left).
+    void dropTrail(KWin::LogicalOutput* next, qint64 nowMs);
 
     /// Rebuild m_engaged / m_engagedLayers / m_maxReachLogical /
     /// m_maxTrailSeconds / m_sampleWindowSeconds from the enable flag, the

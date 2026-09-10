@@ -226,6 +226,16 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
         return;
     }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (cursorHiddenElsewhere()) {
+        // The sprite is gone but the pointer is still being driven (a software
+        // KVM forwarding motion to another machine). Write no history and
+        // request no repaint beyond the one that clears what is already
+        // drawn: sampling here is what would keep a trail chasing a cursor
+        // nobody can see. The next event after the sprite comes back starts a
+        // fresh chain, which is the same reset an output crossing takes.
+        dropTrail(screen, nowMs);
+        return;
+    }
     if (suppressedOn(screen)) {
         // The fullscreen gate covers this output. Record the canvas so a later
         // un-suppress (or a move to another output) still sees the crossing and
@@ -307,10 +317,43 @@ void PointerDecorationPass::repaintStaleTrail(KWin::LogicalOutput* next, qint64 
     }
 }
 
+void PointerDecorationPass::dropTrail(KWin::LogicalOutput* next, qint64 nowMs)
+{
+    // Damage what the pass last painted BEFORE the history goes, since the
+    // rect is derived from it. Unlike repaintStaleTrail this damages the
+    // pass's own output even when it is the one being kept: the trail is
+    // being dropped where it stands, and a hardware-plane cursor moving off
+    // it damages nothing, so without this the last frame stays frozen on
+    // screen until something unrelated repaints that band.
+    if (m_output && KWin::effects) {
+        const QRectF stale = damageLogicalRect(m_output, nowMs);
+        if (!stale.isEmpty()) {
+            KWin::effects->addRepaint(KWin::RectF(stale));
+        }
+    }
+    m_output = next;
+    resetHistory();
+    m_lastSpriteCanvasRect = QRectF();
+    m_hasTimeOrigin = false;
+    updateCursorHiding();
+}
+
 bool PointerDecorationPass::isLive() const
 {
     // Suppressed counts as not live, so the effect is not held in the paint
     // chain on our account while the pointer sits over a fullscreen window.
+    // It leaves holdsCursorHide() to keep the effect in the chain long enough
+    // to hand a hide of our own back.
+    //
+    // A sprite hidden by someone else deliberately does NOT read that way.
+    // This verdict is what isActive() puts the effect in the chain on, and an
+    // effect dropped from the chain gets neither paintOutput nor
+    // scheduleRepaints — so answering false the moment the sprite goes would
+    // retire the pass BEFORE anything damaged the trail it left on screen,
+    // freezing the last frame there. setSuppressedOutputs has a signal to do
+    // that tidy-up on; a hide has none, so the pass stays live until the
+    // scheduleRepaints that drops the trail, and the emptied history is what
+    // ends liveness one cycle later.
     if (!m_engaged || suppressedOn(m_output)) {
         return false;
     }
@@ -415,6 +458,20 @@ void PointerDecorationPass::scheduleRepaints()
         return;
     }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (cursorHiddenElsewhere()) {
+        // The sprite went while the pointer sat still, so no pointer event is
+        // coming to notice it — a client that hides the cursor after an idle
+        // timeout is the ordinary case, and it hides precisely because motion
+        // stopped. This is the only per-cycle hook the pass has, so the drop
+        // happens here: damage the band the last frame painted and empty the
+        // history. The emptied history is what makes isLive() false on the
+        // next cycle, so the pass retires AFTER the erase rather than before
+        // it, and this costs one cycle rather than one per frame. Idempotent
+        // once the history is empty, so a pass held in the chain by a cursor
+        // hide of its own repeats it for free.
+        dropTrail(m_output, nowMs);
+        return;
+    }
     if (!m_history.isLive(nowMs, m_maxTrailSeconds)) {
         // Gone quiet. Drop the iTime origin so the next burst starts at zero,
         // and hand the cursor back — this is the path that covers a pointer
@@ -441,6 +498,24 @@ bool PointerDecorationPass::cursorOnOutput(KWin::LogicalOutput* screen) const
     return screen && KWin::effects && KWin::effects->screenAt(KWin::effects->cursorPos().toPoint()) == screen;
 }
 
+bool PointerDecorationPass::cursorHiddenElsewhere() const
+{
+    if (!KWin::effects) {
+        return false;
+    }
+    // Two independent mechanisms, either of which counts, so the order below
+    // decides nothing but which read is skipped when the first already
+    // answered. A client-installed blank cursor empties the IMAGE and leaves
+    // the hide counter alone, which is why it is a test of its own rather
+    // than a fallback: it is the one signal still legible while this pass
+    // holds a hide, where the counter can only speak for an owner that is
+    // not us.
+    if (KWin::effects->cursorImage().isNull()) {
+        return true;
+    }
+    return KWin::effects->isCursorHidden() && !m_cursorHidden;
+}
+
 bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
 {
     if (m_cursorHidden || !m_anyAboveLayer || suppressedOn(screen) || !KWin::effects || !cursorOnOutput(screen)) {
@@ -463,7 +538,8 @@ void PointerDecorationPass::updateCursorHiding()
         return;
     }
     const bool stillLive = m_engaged && m_anyAboveLayer && m_output && !suppressedOn(m_output)
-        && cursorOnOutput(m_output) && m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
+        && !cursorHiddenElsewhere() && cursorOnOutput(m_output)
+        && m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
     if (stillLive) {
         return;
     }

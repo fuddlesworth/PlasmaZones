@@ -695,16 +695,20 @@ public:
     /// just-dropped ACTIVE column at the on-screen position the drop
     /// indicator promised — its strip position minus @p oldViewOffset, the
     /// view offset captured BEFORE the commit's insert — then move the view
-    /// the MINIMUM that makes the column fully visible (the Never fit),
-    /// regardless of the configured centering policy. The policy's OnOverflow
-    /// arm centers a column too wide to share the viewport with either
-    /// neighbour, which after a drop hides every other window and reads as
-    /// the drop having flown away; the minimal fit keeps whatever neighbour
-    /// still fits on screen beside it. A maximized-to-edges column keeps its
-    /// one correct position (focusAnchorFor's reason). SETS the detach
-    /// latch: the drop owns the view the way a pan does, or the applyLayout
-    /// the commit runs next would hand it straight back to the centering
-    /// policy; the next focus change re-attaches as usual.
+    /// the MINIMUM that makes the column fully visible (the Never fit). The
+    /// policy's OnOverflow arm centers a column too wide to share the viewport
+    /// with either neighbour, which after a drop hides every other window and
+    /// reads as the drop having flown away, and the minimal fit keeps whatever
+    /// neighbour still fits on screen beside it. A maximized-to-edges column
+    /// keeps its one correct position (focusAnchorFor's reason). This arm SETS
+    /// the detach latch, so the drop owns the view the way a pan does and the
+    /// centering policy cannot take it back until the next focus change.
+    ///
+    /// The EXCEPTION is a policy that pins the focused column to the middle
+    /// whatever put it there — CenterFocusedColumn::Always, and the
+    /// lone-column rule (isCenteringActiveColumn). There the drop centers
+    /// through centerActiveColumn and leaves the view ATTACHED, which is the
+    /// same verdict an open, a move-to-last or a plain focus step reaches.
     void reanchorForDropCommit(int oldViewOffset, const ScrollLayoutParams& params);
     /// Drag-begin settle (ScrollEngine::beginDragInsertPreview): after the
     /// detach take shortens the strip, pull a view that now hangs past the
