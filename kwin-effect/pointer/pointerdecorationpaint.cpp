@@ -36,6 +36,7 @@
 #include <QVector4D>
 
 #include <algorithm>
+#include <vector>
 #include <array>
 #include <cmath>
 
@@ -285,6 +286,15 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
     // the scissor test enabled and the guard paintOutput holds restores it,
     // so disabling here cannot leak past the pass.
     glDisable(GL_SCISSOR_TEST);
+    // A reset dropped the samples this canvas was accumulated from, so what it
+    // holds is the previous burst. The reallocation below clears only when the
+    // SIZE changed, and an output crossing between two same-size outputs (or
+    // an un-suppress on the same one) changes nothing it looks at — so without
+    // this the old glow is read back as feedback on the new burst's first
+    // frame, when pointerIdleSeconds() is ~0 and the idle cut does not damp it.
+    // Cleared here rather than at the reset because the GL work needs the
+    // paint thread's current context.
+    const bool feedbackStale = m_bufferFeedbackStale;
     if (pack.bufferSize != wantSize || pack.bufferTex.size() != passCount) {
         // Reallocate on a size change (an output resize, a scale change) or on
         // a first run. Both slots of every pair go, because the feedback
@@ -328,6 +338,23 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
                 KWin::GLFramebuffer::popFramebuffer();
                 pack.bufferTex[i][static_cast<size_t>(slot)] = std::move(tex);
                 pack.bufferFbo[i][static_cast<size_t>(slot)] = std::move(fbo);
+            }
+        }
+    }
+
+    if (feedbackStale) {
+        // Both slots, because bufferFront only says which one the NEXT read
+        // takes; the other is one swap away from being read too.
+        for (size_t i = 0; i < passCount; ++i) {
+            for (size_t slot = 0; slot < 2; ++slot) {
+                KWin::GLFramebuffer* const fbo = pack.bufferFbo[i][slot].get();
+                if (!fbo) {
+                    continue;
+                }
+                KWin::GLFramebuffer::pushFramebuffer(fbo);
+                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                glClear(GL_COLOR_BUFFER_BIT);
+                KWin::GLFramebuffer::popFramebuffer();
             }
         }
     }
@@ -486,6 +513,16 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     bool anyLayerDrawn = false;
+    // The pack cache is keyed by pack id, so a chain naming the same pack
+    // twice (which the decoration tree explicitly allows) hands both layers
+    // ONE CompiledPointerPack. Running its buffer stages once per layer would
+    // swap the ping-pong twice in a frame: the second run would read the
+    // output the first just wrote as if it were the previous frame's, apply
+    // the persistence decay a second time, and leave the first layer's main
+    // draw sampling a slot the second run had since overwritten. Each pack's
+    // stages therefore run at most once per frame, and the later layer reuses
+    // the front slot the first run left.
+    std::vector<const CompiledPointerPack*> ranBufferPasses;
     for (const EngagedLayer& layer : m_engagedLayers) {
         CompiledPointerPack* const pack = compiledPack(layer);
         if (!pack || !pack->shader) {
@@ -493,10 +530,12 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         }
         // Buffer stages render into their own FBOs, so they run OUTSIDE the
         // on-screen bracket's viewport and blend state and restore both after.
-        if (!pack->bufferPasses.empty()) {
+        if (!pack->bufferPasses.empty()
+            && std::find(ranBufferPasses.begin(), ranBufferPasses.end(), pack) == ranBufferPasses.end()) {
             if (!runBufferPasses(*pack, layer, state, deviceSize, cursorRect, timeSeconds)) {
                 continue; // targets unallocatable; warned and latched in runBufferPasses
             }
+            ranBufferPasses.push_back(pack);
             // runBufferPasses pushed and popped its own targets, which
             // restores KWin's framebuffer binding but neither the viewport
             // nor the blend state it set for the (possibly downscaled)
@@ -563,6 +602,11 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         unbindUnits(0, unit);
         anyLayerDrawn = true;
     }
+
+    // After the whole chain, not inside runBufferPasses: that runs once per
+    // pack, so clearing it there would leave every layer after the first
+    // reading the stale canvas for this frame.
+    m_bufferFeedbackStale = false;
 
     if (!anyLayerDrawn) {
         // Every layer latched or was skipped. Give the cursor back rather than

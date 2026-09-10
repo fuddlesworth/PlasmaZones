@@ -59,16 +59,29 @@ void PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationP
     // cannot, which is the right discipline for a call arriving between
     // frames.
     releaseGl();
+    // Taken before the rebuild, while the rect still describes what is on
+    // screen: damageLogicalRect answers from the CURRENT chain, so once
+    // rebuildChain has narrowed the reach or dropped the `above` layer there
+    // is no longer anything that describes the band the last frame painted.
+    const QRectF stale = staleTrailRect();
     rebuildChain();
+    // Unconditional, not just on an emptied chain. A rebuild that keeps the
+    // chain engaged can still take the `above` layer away, and the sprite blit
+    // is gated on m_anyAboveLayer: leaving the hide in place then means the
+    // compositor's cursor stays hidden while nothing here draws a replacement.
+    // Every other release path waits for the history to go quiet, so a user who
+    // keeps moving the mouse would have no pointer at all until they stopped.
+    // The call costs nothing when no hide is held and keeps one that is still
+    // wanted, so it is safe on every path.
+    updateCursorHiding();
     if (!m_engaged) {
-        // Emptying the chain mid-trail must not leave the pointer invisible
-        // behind an `above` layer's hide, and must not leave the history to be
-        // picked up by a later chain as a stale burst.
-        updateCursorHiding();
-        m_history.reset();
+        // Emptying the chain mid-trail must not leave the history to be picked
+        // up by a later chain as a stale burst.
+        resetHistory();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
     }
+    repaintStale(stale);
 }
 
 void PointerDecorationPass::setSuppressedOutputs(const QSet<KWin::LogicalOutput*>& outputs)
@@ -88,10 +101,21 @@ void PointerDecorationPass::setSuppressedOutputs(const QSet<KWin::LogicalOutput*
     // chain does in setProfile: hand the cursor back before an `above` layer's
     // hide outlives the last frame that would have drawn the sprite, and drop
     // the history so a later un-suppress does not pick it up as a stale burst.
+    //
+    // The rect has to be taken before m_suppressedOutputs is consulted again:
+    // damageDeviceRect answers empty for a suppressed screen, so after the
+    // assignment above there is nothing left that describes the band the last
+    // frame painted. Without the repaint the trail stays frozen over a
+    // fullscreen window that may never repaint on its own — a paused game is
+    // the case that bites.
+    const QRectF stale = m_output && KWin::effects
+        ? damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs(), /*ignoreSuppression=*/true)
+        : QRectF();
     updateCursorHiding();
-    m_history.reset();
+    resetHistory();
     m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
+    repaintStale(stale);
 }
 
 void PointerDecorationPass::rebuildChain()
@@ -185,7 +209,7 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
         // than on the next scheduleRepaints.
         repaintStaleTrail(screen, nowMs);
         m_output = screen;
-        m_history.reset();
+        resetHistory();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
         updateCursorHiding();
@@ -198,7 +222,7 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
         // one trailSeconds window. Start clean, after asking the old output
         // to repaint the trail it still shows.
         repaintStaleTrail(screen, nowMs);
-        m_history.reset();
+        resetHistory();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
         m_output = screen;
@@ -260,13 +284,18 @@ bool PointerDecorationPass::isLive() const
 
 // ── Damage ──────────────────────────────────────────────────────────────────
 
-QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs)
+QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression)
 {
     // Suppressed here too, not only in the callers: this rect is both the
     // repaint REQUEST and the draw quad, so an empty one is what actually
     // guarantees a covered output is neither asked for a frame nor painted,
     // however a future caller reaches it.
-    if (!m_engaged || !screen || suppressedOn(screen)) {
+    //
+    // ignoreSuppression is for the one caller that needs the rect of what is
+    // ALREADY on screen at the moment suppression closes over the output: the
+    // gate has been applied by then, so the honest answer is empty, and that
+    // is precisely the band still needing a repaint.
+    if (!m_engaged || !screen || (!ignoreSuppression && suppressedOn(screen))) {
         return {};
     }
     const qreal scale = screen->scale();
@@ -297,9 +326,9 @@ QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint
     return rect.intersected(QRectF(QPointF(0.0, 0.0), deviceSize));
 }
 
-QRectF PointerDecorationPass::damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs)
+QRectF PointerDecorationPass::damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression)
 {
-    const QRectF device = damageDeviceRect(screen, nowMs);
+    const QRectF device = damageDeviceRect(screen, nowMs, ignoreSuppression);
     if (device.isEmpty()) {
         return {};
     }
@@ -447,31 +476,54 @@ void PointerDecorationPass::releaseGl()
     m_cursorSpriteKey = 0;
 }
 
+void PointerDecorationPass::resetHistory()
+{
+    m_history.reset();
+    m_bufferFeedbackStale = true;
+}
+
+QRectF PointerDecorationPass::staleTrailRect()
+{
+    return m_output && KWin::effects ? damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs()) : QRectF();
+}
+
+void PointerDecorationPass::repaintStale(const QRectF& stale) const
+{
+    if (stale.isEmpty() || !KWin::effects) {
+        return;
+    }
+    KWin::effects->addRepaint(KWin::RectF(stale));
+}
+
 void PointerDecorationPass::invalidateShaderCache()
 {
     releaseGl();
-    // The trail on screen right now, taken BEFORE the rebuild: once the chain
-    // disengages damageLogicalRect answers empty, and the caller deliberately
-    // requests no repaint of its own, so a mid-trail disengage would leave
-    // the last frame's trail frozen where it was.
-    const QRectF stale =
-        m_output && KWin::effects ? damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs()) : QRectF();
+    // The trail on screen right now, taken BEFORE the rebuild: damageLogicalRect
+    // answers from the CURRENT chain, and the caller deliberately requests no
+    // repaint of its own.
+    const QRectF stale = staleTrailRect();
     // A reload can add the pack a chain names, or remove one it resolved to,
     // and it can change reach / trailSeconds / layer — all of which feed the
     // engaged-chain cache, not just the compiled shaders.
     rebuildChain();
+    // Unconditional, for the reason setProfile gives: a rebuild can drop the
+    // `above` layer without disengaging the chain.
+    updateCursorHiding();
     if (!m_engaged) {
         // The same tidy-up setProfile does when a chain empties: a reload that
         // removes the chain's pack and a later one that restores it must not
         // replay the trail the pointer left in between.
-        updateCursorHiding();
-        m_history.reset();
+        resetHistory();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
-        if (!stale.isEmpty()) {
-            KWin::effects->addRepaint(KWin::RectF(stale));
-        }
     }
+    // Also unconditional. A rebuild that keeps the chain engaged but SHRINKS
+    // the reach, or drops the only `above` layer, leaves the band between the
+    // old extent and the new one undamaged: every later frame asks only for
+    // the new, smaller rect, so the outer ring of the last frame painted at
+    // the old reach stays on screen. This is one addRepaint on a settings or
+    // reload event, not per frame.
+    repaintStale(stale);
 }
 
 void PointerDecorationPass::outputGeometryChanged()
@@ -484,9 +536,17 @@ void PointerDecorationPass::outputGeometryChanged()
     // restarts from the pointer's next position instead of streaking across
     // the rescaled screen. The sprite rect is in the old scale's device px,
     // so it goes too.
-    m_history.reset();
+    //
+    // Taken first, for the same reason as the other reset paths: from the next
+    // frame on the rect answers from an empty ring, so the band the last frame
+    // painted has nothing left to describe it. A resolution change usually
+    // forces a full output repaint, but a virtual-layout change does not
+    // necessarily re-render the output's contents.
+    const QRectF stale = staleTrailRect();
+    resetHistory();
     m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
+    repaintStale(stale);
 }
 
 void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)
@@ -498,7 +558,7 @@ void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)
     // and by the damage math; the history is keyed to this output's canvas
     // and means nothing without it.
     m_output = nullptr;
-    m_history.reset();
+    resetHistory();
     m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
     // The pointer is about to land somewhere else (or nowhere); a hide taken
@@ -535,7 +595,7 @@ void PointerDecorationPass::reset()
         m_cursorHidden = false;
     }
     releaseGl();
-    m_history.reset();
+    resetHistory();
     m_lastSpriteCanvasRect = QRectF();
     m_output = nullptr;
     m_hasTimeOrigin = false;

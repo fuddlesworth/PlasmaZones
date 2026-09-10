@@ -318,6 +318,11 @@ private:
         bool bufferAllocFailed = false;
     };
 
+    /// Set by resetHistory(), consumed by runBufferPasses on the next live
+    /// frame, which clears both slots of every pair. Kept on the pass rather
+    /// than the pack because the packs outlive a reset in the cache.
+    bool m_bufferFeedbackStale = false;
+
     // ── pointerdecorationshader.cpp ─────────────────────────────────────────
 
     /// Populate the registry's XDG search paths, once. Same order as
@@ -404,9 +409,22 @@ private:
     /// This frame's damage in @p screen's device-px canvas, already clipped
     /// to the output. Empty when nothing is live. Not const: it records the
     /// sprite rect it saw (m_lastSpriteCanvasRect) for the next call's union.
-    QRectF damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs);
+    QRectF damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression = false);
     /// The same rect in GLOBAL LOGICAL px, the space addRepaint speaks.
-    QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs);
+    QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression = false);
+    /// The rect the trail currently on screen occupies, for a caller about to
+    /// drop it. Must be taken BEFORE the state that describes it is torn down.
+    QRectF staleTrailRect();
+    /// Drop the sampled history AND mark the multipass feedback canvas stale.
+    /// The two belong together: a feedback pack's buffer holds the burst the
+    /// history just discarded, and runBufferPasses only reallocates (and so
+    /// only clears) when the target SIZE changes. An output crossing between
+    /// two same-size outputs, or an un-suppress on the same one, would
+    /// otherwise let the previous burst's glow bleed into the next one's
+    /// first frames. Every reset goes through here so no future path can
+    /// clear one without the other.
+    void resetHistory();
+    void repaintStale(const QRectF& stale) const;
 
     /// The cursor sprite's rect in @p screen's device-px canvas, hotspot
     /// applied. A null rect when the compositor reports no cursor image.
