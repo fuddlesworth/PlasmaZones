@@ -612,14 +612,19 @@ void ScrollStrip::reanchorForDropCommit(int oldViewOffset, const ScrollLayoutPar
     // The drop OWNS the view the way a pan does, so the latch is SET, not
     // cleared — and above the degenerate-area guard, for
     // reanchorAfterFocusChange's reason (the latch answers "who owns the
-    // view", which needs no layout maths). Without it the applyLayout the
-    // commit runs immediately afterwards re-applies the centering policy
-    // through updateViewForFocus and undoes this anchor on the same pass,
-    // under OnOverflow for exactly the over-wide column this function exists
-    // to keep beside its neighbour. (Always never reaches here — it took the
-    // centering arm above, which keeps the view attached on purpose.)
-    // The next focus change re-attaches through reanchorAfterFocusChange,
-    // same as any pan.
+    // view", which needs no layout maths). Always never reaches here — it took
+    // the centering arm above, which keeps the view attached on purpose.
+    //
+    // The commit's own applyLayout is NOT what the latch defends against on
+    // this pass: the fit below always leaves the column fully visible, and
+    // updateViewForFocus's own fully-visible early-return covers that for
+    // every non-centering policy (a probe that cleared the latch here still
+    // left commitLandsTheDropWhereTheIndicatorPromised's view at 0). What the
+    // latch buys is every LATER pass — a work-area change, a neighbour
+    // closing, any relayout that leaves the column no longer fully visible
+    // would otherwise re-apply the policy and undo the drop's position under
+    // a user who has not touched the strip since. The next focus change
+    // re-attaches through reanchorAfterFocusChange, same as any pan.
     m_viewDetached = true;
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there): every arm below would write garbage over the persisted anchor.

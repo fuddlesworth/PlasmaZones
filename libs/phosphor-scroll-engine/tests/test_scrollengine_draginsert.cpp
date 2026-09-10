@@ -2098,10 +2098,13 @@ void TestScrollEngineDragInsert::commitLandsTheDropWhereTheIndicatorPromised()
     QCOMPARE(state->strip().columnOfWindow(QStringLiteral("b")), 0);
     // Flush left, as promised — NOT centered (the overflow verdict would put
     // the anchor at 150 and the view at -150, with "a" entirely off screen).
-    // And it survives the commit's own applyLayout: the drop owns the view
-    // the way a pan does, so updateViewForFocus cannot hand it back to the
-    // policy on the same pass.
     QCOMPARE(viewX(engine, QStringLiteral("S1")), 0);
+    // And the drop owns the view the way a pan does. The anchor above would
+    // survive this pass without the latch (the fit leaves the column fully
+    // visible, which is updateViewForFocus's own early-return), so the latch
+    // is pinned here on its own: it is what stops a LATER relayout — one that
+    // leaves the column no longer fully visible — from handing the view back
+    // to the centering policy.
     QVERIFY(state->strip().viewDetached());
     // The neighbour's near edge is on screen (its column starts at 900 on a
     // 1200px viewport), which is what "the strip did not fly away" means.
