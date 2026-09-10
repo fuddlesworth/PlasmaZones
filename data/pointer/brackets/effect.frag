@@ -29,16 +29,11 @@ vec4 buttonColour(float button) {
     return p_colorLeft;
 }
 
-// Distance from `q` to the straight segment a..b. Written out rather than
-// reusing the trail helpers, which work on pointer history and not on marks.
+// Distance from `q` to the straight segment a..b, through the shared
+// point-taking helper; the position along the arm is not needed.
 float armDistance(vec2 q, vec2 a, vec2 b) {
-    vec2 ab = b - a;
-    float len2 = dot(ab, ab);
-    if (len2 < 1e-6) {
-        return length(q - a);
-    }
-    float t = clamp(dot(q - a, ab) / len2, 0.0, 1.0);
-    return length(q - (a + ab * t));
+    float t;
+    return pointerSegmentDistanceFrom(q, a, b, t);
 }
 
 // Coverage of the four corner brackets for a point `q` already relative to the
@@ -76,6 +71,9 @@ float response(vec2 px, vec2 origin, float since, float duration, float hold, fl
     float start = spread * kCornerFraction;
     float rest = start * clamp(p_rest, 0.0, 1.0);
     float d = mix(start, rest, ease);
+    // Capped at the corner's distance from the press point: the arms run from
+    // the corner back toward it, and a longer arm would cross the centre and
+    // meet its opposite. The metadata description tells the user so.
     float arm = min(spread * clamp(p_arm, 0.0, 1.0), d * kArmMax);
 
     // A small turn that unwinds as the marks arrive, so they settle square.
@@ -100,7 +98,7 @@ float response(vec2 px, vec2 origin, float since, float duration, float hold, fl
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float duration = clamp(p_duration, 0.15, kDurationMax);
+    float duration = clamp(p_duration, 0.2, kDurationMax);
     float hold = clamp(p_hold, 0.0, kHoldMax);
     float total = duration + hold;
     float spread = max(p_spread, 16.0) * scale;

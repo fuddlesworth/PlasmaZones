@@ -22,7 +22,6 @@
 
 #include <pointer_noise.glsl>
 
-const int kMaxTrail = 32;
 const float kTrailSeconds = 0.8;
 const float kBurstSeconds = 0.35;
 
@@ -40,25 +39,33 @@ vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
     float tailSeconds = clamp(p_length, 0.05, kTrailSeconds);
-    float radius = 0.5 * max(p_width, 0.5) * scale;
     // The reach in device px: both the reject box and the outer edge of every
-    // glow, so the two cannot disagree. Read from the parameter the metadata's
-    // reachParam names, which is the same number pointerReach() reports after
-    // the host resolves it, so the declared control is what the shader reads.
-    float reach = max(p_reach, 1.0) * scale;
+    // glow, so the two cannot disagree. Read from the uniform the host filled
+    // from the parameter the metadata's reachParam names, so the damage rect
+    // and the shader can never drift apart.
+    float reach = pointerReach();
+    // The solid head disc and tail body carry a 0.75 px feather past their
+    // radius that the gaussian windows do not cover, so the radius is held
+    // that far inside the reach: at the widest stroke on the smallest reach
+    // the core would otherwise poke past the damage rect and be cut flat.
+    float radius = min(0.5 * max(p_width, 0.5) * scale, reach - 0.75);
     // Grain cell, in device px. Well above a pixel so it reads as twinkling
     // flecks rather than per-pixel dither.
     float grainCell = max(4.0 * scale, 1.0);
 
+    // One gate for the whole comet, from the filtered speed: the raw per-event
+    // velocity reads 0 whenever two events share a millisecond, which would
+    // blink the head and the newest tail segment on and off.
+    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+
     // Head: a soft dot on the newest sample that dims as the pointer idles,
     // and is fully out by the end of the live window. It sits on the smoothed
-    // path like the tail does, and the live pointer speed gates it, so below
+    // path like the tail does, and the speed gate applies to it too, so below
     // the activation speed the whole comet is absent rather than leaving a
     // headlight behind.
-    float headGate = pointerSpeedGate(uPointerVelocity.z, p_activationSpeed);
     vec2 headPos = pointerSmoothedAt(0, count, p_smoothing);
     float idle = pointerIdleSeconds();
-    float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, kTrailSeconds, idle)) * headGate;
+    float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, kTrailSeconds, idle)) * gate;
     float dHead = length(px - headPos);
     // The head's disc, shared with the click lift below so the two cannot
     // disagree about where the head ends.
@@ -69,7 +76,10 @@ vec4 pPointer(vec2 uv) {
 
     float tail = 0.0;
     float tailGrain = 0.0;
-    for (int i = 0; i < kMaxTrail - 1; ++i) {
+    // The smoothed far end of one segment is the near end of the next, so it
+    // is carried across iterations rather than looked up twice per segment.
+    vec2 pa = headPos;
+    for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
         if (i + 1 >= count) {
             break;
         }
@@ -78,22 +88,17 @@ vec4 pPointer(vec2 uv) {
         if (a.z >= tailSeconds) {
             break;
         }
-        float gate = min(pointerSpeedGate(a.w, p_activationSpeed), pointerSpeedGate(b.w, p_activationSpeed));
-        if (gate <= 0.0) {
-            continue;
-        }
-        // The smoothed endpoints are looked up once and handed to the
-        // distance helper, rather than letting it look them up again.
-        vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
         vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
         vec2 lo = min(pa, pb) - reach;
         vec2 hi = max(pa, pb) + reach;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
+            pa = pb;
             continue;
         }
 
         float t;
         float d = pointerSegmentDistanceFrom(px, pa, pb, t);
+        pa = pb;
         float age = clamp(mix(a.z, b.z, t) / tailSeconds, 0.0, 1.0);
         float life = (1.0 - age) * gate;
         float w = radius * life;
@@ -108,10 +113,11 @@ vec4 pPointer(vec2 uv) {
             // ride with the stroke instead of sitting on the screen like
             // dither. A slow time step re-rolls them so they twinkle rather
             // than crawl, with two independent offsets so the re-roll is not
-            // a diagonal walk that repeats after a few steps.
-            float step = floor(iTime * 12.0);
+            // a diagonal walk that repeats after a few steps. `tick`, not
+            // `step`, which is a GLSL builtin.
+            float tick = floor(iTime * 12.0);
             vec2 cell = floor(vec2(float(i) * 8.0 + t * 8.0, d / grainCell))
-                + vec2(hashSin1(step), hashSin1(step + 7.0)) * 512.0;
+                + vec2(hash13(vec2(tick, 7.0)), hash13(vec2(tick, 19.0))) * 512.0;
             float g = hash13(cell);
             tailGrain = smoothstep(0.75, 1.0, g) * soft * 3.0;
         }
@@ -133,8 +139,8 @@ vec4 pPointer(vec2 uv) {
         float ball = exp(-(dp * dp) / (2.0 * ballSigma * ballSigma));
         // Burst grain is addressed in the press point's own frame, with the
         // same two-offset re-roll as the tail grain.
-        float step = floor(iTime * 20.0);
-        vec2 cell = floor(rel / grainCell) + vec2(hashSin1(step + 3.0), hashSin1(step + 11.0)) * 512.0;
+        float tick = floor(iTime * 20.0);
+        vec2 cell = floor(rel / grainCell) + vec2(hash13(vec2(tick, 3.0)), hash13(vec2(tick, 11.0))) * 512.0;
         float g = hash13(cell);
         float grain = smoothstep(0.55, 1.0, g);
         float edge = cometWindow(dp, reach);

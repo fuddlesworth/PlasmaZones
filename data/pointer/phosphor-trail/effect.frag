@@ -20,12 +20,12 @@
 // lights fragments the tube already covers, so it stays inside the declared
 // reach and reads as the stroke itself lighting up.
 //
-// `activationSpeed` and `smoothing` come from the shared pointerSpeedGate()
-// and pointerSmoothedAt(), so this pack, Comet, Sparks and WindTrail all
-// threshold and smooth identically. Both default to 0, which is the
-// no-threshold, raw-path behaviour.
+// `activationSpeed` gates the whole tube once through the shared
+// pointerSpeedGate() on pointerFilteredSpeed(), and `smoothing` goes through
+// pointerSmoothedAt(), so this pack, Comet, Sparks and WindTrail all gate on
+// the same filtered figure and trace the same curve. Both default to 0,
+// which is the no-threshold, raw-path behaviour.
 
-const int kMaxTrail = 32;
 const float kFlareSeconds = 0.4;
 
 vec4 pPointer(vec2 uv) {
@@ -34,11 +34,23 @@ vec4 pPointer(vec2 uv) {
         return vec4(0.0);
     }
 
+    // One gate for the whole tube, from the filtered speed: the raw per-sample
+    // figure is one event pair and reads 0 whenever two events share a
+    // millisecond, which gated per segment would blink patches of the tube.
+    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+    if (gate <= 0.0) {
+        return vec4(0.0);
+    }
+
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
     float lifetime = max(p_lifetime, 0.05);
     float halfWidth = 0.5 * max(p_width, 0.5) * scale;
     float sigma = halfWidth * 2.2 + 1.5 * scale;
+    // Four sigma, where the bloom is under a thousandth, rather than three,
+    // where it was still a visible 1.5% and cut off square. Bounded by the
+    // reach too, since four sigma at the widest stroke is past it.
+    float limit = min(sigma * 4.0, pointerReach());
 
     // Press pulse, gone well inside trailSeconds.
     float flare = 0.0;
@@ -61,15 +73,24 @@ vec4 pPointer(vec2 uv) {
     // period twice the setting.
     //
     // The walk rate is nudged onto a divisor of the iTime wrap
-    // (pointerWrapSafeRate) so the colour does not jump when iTime wraps.
+    // (pointerWrapSafeRate) so the colour does not jump when iTime wraps in
+    // the preview. On the compositor iTime restarts at 0 for every burst of
+    // pointer activity instead, so the quarter-cycle offset starts each burst
+    // in the middle of the ramp (blue to purple) rather than always at the
+    // rose end, and ordinary use sees the whole spectrum rather than mostly
+    // its top.
     float cycle = max(p_colorCycle, 0.0);
-    float hueBase = cycle > 0.0 ? abs(fract(iTime * pointerWrapSafeRate(1.0 / (cycle * 2.0))) * 2.0 - 1.0) : 0.35;
+    float hueBase =
+        cycle > 0.0 ? abs(fract(iTime * pointerWrapSafeRate(1.0 / (cycle * 2.0)) + 0.25) * 2.0 - 1.0) : 0.35;
 
     float core = 0.0;
     float halo = 0.0;
     float hueAge = 0.0;
 
-    for (int i = 0; i < kMaxTrail - 1; ++i) {
+    // The smoothed far end of one segment is the near end of the next, so it
+    // is carried across iterations rather than looked up twice.
+    vec2 pa = pointerSmoothedAt(0, count, p_smoothing);
+    for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
         if (i + 1 >= count) {
             break;
         }
@@ -78,20 +99,28 @@ vec4 pPointer(vec2 uv) {
         if (a.z >= lifetime) {
             break;
         }
-        float gate = min(pointerSpeedGate(a.w, p_activationSpeed), pointerSpeedGate(b.w, p_activationSpeed));
-        if (gate <= 0.0) {
+        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
+        // Reject box from the RAW samples i-1..i+2, before the distance
+        // maths: a smoothed sample is a convex blend of its raw neighbours
+        // (clamped into the filled window, as pointerSmoothedAt clamps them),
+        // so the smoothed segment lies inside the box of those four, inflated
+        // by the bloom's limit. Exact, never clips.
+        vec2 rawPrev = pointerTrailAt(max(i - 1, 0)).xy;
+        vec2 rawNext = pointerTrailAt(min(i + 2, count - 1)).xy;
+        vec2 rawLo = min(min(a.xy, b.xy), min(rawPrev, rawNext)) - limit;
+        vec2 rawHi = max(max(a.xy, b.xy), max(rawPrev, rawNext)) + limit;
+        if (any(lessThan(px, rawLo)) || any(greaterThan(px, rawHi))) {
+            pa = pb;
             continue;
         }
         float t;
-        float d = pointerSmoothSegmentDistance(px, i, count, p_smoothing, t);
-        // Four sigma, where the bloom is under a thousandth, rather than three,
-        // where it was still a visible 1.5% and cut off square. Bounded by the
-        // reach too, since four sigma at the widest stroke is past it.
-        if (d > min(sigma * 4.0, pointerReach())) {
+        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
+        pa = pb;
+        if (d > limit) {
             continue;
         }
         float age = clamp(mix(a.z, b.z, t) / lifetime, 0.0, 1.0);
-        float fade = (1.0 - age) * (1.0 - age) * gate;
+        float fade = (1.0 - age) * (1.0 - age);
         // The antialias feather is DEVICE px and stays unscaled, the family
         // convention: scaling it makes the stroke's edge twice as soft on a 2x
         // display as every sibling pack's.
@@ -122,6 +151,6 @@ vec4 pPointer(vec2 uv) {
     float whiten = core * 0.55;
     rgb = mix(rgb, vec3(1.0), clamp(whiten + 0.6 * flare, 0.0, 1.0));
 
-    float alpha = clamp(cover * (1.0 + 0.5 * flare), 0.0, 1.0);
+    float alpha = clamp(cover * (1.0 + 0.5 * flare), 0.0, 1.0) * gate;
     return premul(min(rgb * (1.0 + 1.2 * flare), vec3(1.0)), alpha);
 }

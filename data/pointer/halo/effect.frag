@@ -54,7 +54,10 @@ vec4 pPointer(vec2 uv) {
         float body = exp(-(d * d) / (2.0 * sigma * sigma));
         body *= 1.0 - smoothstep(radius * 0.8, radius, d);
 
-        float speed = uPointerVelocity.z;
+        // The filtered speed, not the raw per-event velocity, which reads 0
+        // whenever two events share a millisecond and would blink both the
+        // gate and the gain.
+        float speed = pointerFilteredSpeed();
         float gain = 1.0 + p_speedGain * clamp(speed / kFullSpeed, 0.0, 1.0);
         float gate = pointerSpeedGate(speed, p_activationSpeed);
 

@@ -23,7 +23,7 @@ vec4 buttonColour(float button) {
 // given line thickness (device px). Radius eases out (cubic) to `maxRadius`.
 float ring(vec2 px, vec2 origin, float since, float duration, float maxRadius, float thickness) {
     float t = since / duration;
-    if (t < 0.0 || t >= 1.0) {
+    if (t >= 1.0) {
         return 0.0;
     }
     float ease = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);

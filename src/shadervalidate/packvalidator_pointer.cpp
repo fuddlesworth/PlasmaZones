@@ -494,6 +494,14 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             if (!PhosphorShaders::isValidParamId(p.id)) {
                 continue; // already linted above, and it has no p_ define
             }
+            // The reachParam parameter is consumed by the HOST: it sizes the
+            // damage rect and is handed back to every stage as uPointerFlags.y
+            // (pointerReach()), which is how the shared helpers tell a pack to
+            // read its budget so the two cannot drift. A pack that reads it
+            // only that way has a live control, not a dead one.
+            if (!eff.reachParam.isEmpty() && p.id == eff.reachParam) {
+                continue;
+            }
             const bool bySlot = p.type == QLatin1String("color") ? bufferReadsColors : bufferReadsScalars;
             if (!bySlot && !mentionsParam(allStages, p.id)) {
                 lints << QStringLiteral(
@@ -705,6 +713,17 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 lints << QStringLiteral(
                     "bufferFeedback is true but no buffer pass samples an iChannel (its previous frame is "
                     "bound and never read, so nothing persists)");
+            }
+            // The preview's multi-buffer path draws every pass into a single
+            // cleared target per frame and keeps a feedback pair only for the
+            // single-buffer path, so a two-pass feedback pack persists on the
+            // compositor and starts from black in the browser every frame.
+            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && declaredBuffers.size() > 1) {
+                lints << QStringLiteral(
+                             "bufferFeedback with %1 buffer passes persists on the compositor only: the settings "
+                             "preview keeps a previous frame for a single buffer pass, so the browser shows this "
+                             "pack without its state")
+                             .arg(declaredBuffers.size());
             }
         }
     } else {

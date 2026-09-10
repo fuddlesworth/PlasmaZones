@@ -7,7 +7,6 @@
     "category": "Click",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 44,
     "reachParam": "spread",
     "trailSeconds": 1.7,
     "parameters": [
@@ -38,7 +37,7 @@
             "min": 0.05,
             "max": 1.0,
             "step": 0.01,
-            "description": "Length of each bracket arm, as a share of the spread"
+            "description": "Length of each bracket arm, as a share of the spread. An arm is never longer than its corner's distance from the click, so the arms cannot cross"
         },
         {
             "id": "thickness",

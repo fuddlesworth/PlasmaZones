@@ -26,6 +26,12 @@
 // stops laying down glow, so the canvas empties within trailSeconds and the
 // host can stop repainting. Left ungated it would refresh the resting spot
 // forever and a frozen dot would be left behind when the pass went quiet.
+//
+// The decay is per frame, so at a low refresh rate the canvas is not empty
+// when the host goes quiet at trailSeconds. The idle envelope below is the
+// same wall-clock cut effect.frag applies to its coverage: it takes the
+// stored energy to zero over the same window, so the stroke the pointer left
+// before a pause is not still on the canvas when the next stroke starts.
 
 #version 450
 
@@ -36,12 +42,15 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 const float kFreshSeconds = 0.05;
+const float kIdleCutStart = 0.6;
+const float kIdleCutSeconds = 1.0;
 
 void main() {
     float persistence = clamp(customParams[0].x, 0.0, 0.97);
     float radius = max(customParams[0].y, 1.0) * pointerScale();
 
-    float energy = texture(iChannel0, vTexCoord).r * persistence;
+    float idleCut = 1.0 - smoothstep(kIdleCutStart, kIdleCutSeconds, pointerIdleSeconds());
+    float energy = texture(iChannel0, vTexCoord).r * persistence * idleCut;
     // Below one 8-bit step the canvas is empty in every way that matters, so
     // snap it to zero rather than let the decay asymptote leave a faint
     // residue that never clears.

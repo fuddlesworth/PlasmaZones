@@ -90,12 +90,14 @@ float pointerSegmentDistance(vec2 p, int i, out float t) {
 // A rate in cycles per second nudged to the nearest value that completes a
 // whole number of cycles per iTime wrap.
 //
-// iTime wraps at 1024 s (kShaderTimeWrap in BaseUniforms.h). The overlay
-// family rides the wrap through iTimeHi, but the pointer contract never sets
-// that counterpart on either runtime, so a phase derived from iTime alone
-// snaps at every wrap unless the rate divides the wrap period. Rounding
-// `rate * 1024` to an integer makes it divide exactly, and the nudge is at
-// most 1/2048 cycles per second, below anything a user could pick out. Use
+// In the PREVIEW iTime wraps at 1024 s (kShaderTimeWrap in BaseUniforms.h).
+// The overlay family rides the wrap through iTimeHi, but the pointer contract
+// never sets that counterpart, so a phase derived from iTime alone snaps at
+// every wrap unless the rate divides the wrap period. Rounding `rate * 1024`
+// to an integer makes it divide exactly, and the nudge is at most 1/2048
+// cycles per second, below anything a user could pick out. On the COMPOSITOR
+// iTime restarts at 0 for each burst of pointer activity and never wraps, so
+// there the nudge is harmless and a phase simply begins again per burst. Use
 // this for anything periodic that runs while the pointer rests; a hash seed
 // stepped from iTime does not need it, since a re-roll at the wrap is just
 // another re-roll.

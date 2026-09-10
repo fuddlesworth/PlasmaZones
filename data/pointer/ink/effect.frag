@@ -24,8 +24,6 @@
 // path pack, so two packs in one chain trace the same curve from the same
 // pointer. It defaults to 0.5, the value the pack used to hardcode.
 
-const int kMaxTrail = 32;
-
 // Speed at which the stroke reaches its thinnest, in px/s.
 const float kThinSpeed = 1200.0;
 
@@ -42,7 +40,10 @@ vec4 pPointer(vec2 uv) {
     // ── The stroke ──
     if (count >= 2) {
         float cull = halfWidth * 1.5 + 2.0 * scale;
-        for (int i = 0; i < kMaxTrail - 1; ++i) {
+        // The smoothed far end of one segment is the near end of the next,
+        // so it is carried across iterations rather than looked up twice.
+        vec2 pa = pointerSmoothedAt(0, count, p_smoothing);
+        for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
             if (i + 1 >= count) {
                 break;
             }
@@ -52,21 +53,26 @@ vec4 pPointer(vec2 uv) {
                 break;
             }
 
-            vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
             vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-            vec2 ab = pb - pa;
-            float len = length(ab);
-            if (len < 1e-4) {
+            if (distance(pa, pb) < 1e-4) {
+                // A stationary pair lays down no stroke. The preview appends
+                // one every interval while its pointer rests, and drawing
+                // those would keep the rest point wet there when the
+                // compositor, which gets no event from a resting pointer,
+                // lets it dry.
+                pa = pb;
                 continue;
             }
             vec2 lo = min(pa, pb) - cull;
             vec2 hi = max(pa, pb) + cull;
             if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
+                pa = pb;
                 continue;
             }
 
-            float t = clamp(dot(px - pa, ab) / (len * len), 0.0, 1.0);
-            float d = length(px - (pa + ab * t));
+            float t;
+            float d = pointerSegmentDistanceFrom(px, pa, pb, t);
+            pa = pb;
             float age = mix(a.z, b.z, t);
             if (age >= lifetime) {
                 continue;

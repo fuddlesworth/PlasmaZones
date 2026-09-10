@@ -7,7 +7,6 @@
     "category": "Click",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 180,
     "reachParam": "reach",
     "trailSeconds": 0.9,
     "parameters": [

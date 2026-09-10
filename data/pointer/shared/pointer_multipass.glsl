@@ -7,9 +7,12 @@
 // Single-pass packs never include it, so they declare no extra samplers.
 //
 // Each buffer pass renders into an FBO; its output is bound as iChannelN for
-// downstream passes and the main effect. With `bufferFeedback` the previous
-// frame's output of the same pass is bound as iChannel0 while it runs, which
-// is how a pack keeps its own persistent state (a decaying trail canvas).
+// downstream passes and the main effect. With `bufferFeedback` buffer pass N
+// sees its OWN previous frame's output as iChannelN while it runs, which is
+// how a pack keeps its own persistent state (a decaying trail canvas). The
+// preview keeps a feedback pair only for a single buffer pass, so a
+// feedback pack with two passes persists on the compositor alone; the
+// validator lints that shape.
 // iChannelResolution[N].xy (the pixel size of iChannelN) stays in the core
 // contract (pointer_uniforms.glsl) because it is a pinned UBO member.
 

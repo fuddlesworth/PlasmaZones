@@ -832,6 +832,21 @@ private Q_SLOTS:
                          "parameter 'activationSpeed' is declared but no stage reads p_activationSpeed")),
                      qPrintable(r.report));
         }
+        {
+            // The reachParam parameter is consumed by the host and handed back
+            // as uPointerFlags.y, so a pack that reads it only through
+            // pointerReach() (the shape comet, orbit and sparks have) has a
+            // live control and must not be told it is dead.
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-reach-via-uniform"),
+                QJsonArray{pointerParam(QStringLiteral("radius"), QStringLiteral("float"), 64.0, 4.0, 256.0)});
+            obj.insert(QStringLiteral("reachParam"), QStringLiteral("radius"));
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-reach-via-uniform"), obj,
+                                QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(pointerReach() * 0.0); }\n"));
+            QVERIFY2(!r.report.contains(QStringLiteral("parameter 'radius' is declared but no stage reads")),
+                     qPrintable(r.report));
+        }
     }
 
     /// The multipass, texture and cursor lints the pointer arm was missing
@@ -902,6 +917,35 @@ private Q_SLOTS:
             QVERIFY2(!r.report.contains(QStringLiteral("parameter 'persistence' is declared but no stage reads")),
                      qPrintable(r.report));
             QVERIFY2(!r.report.contains(QStringLiteral("bufferFeedback is true but no buffer pass samples")),
+                     qPrintable(r.report));
+        }
+        {
+            // The preview keeps a feedback pair for a single buffer pass only,
+            // so a two-pass feedback pack persists on the compositor and
+            // starts from black in the browser. The author is told.
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-mp-two-feedback"),
+                QJsonArray{pointerParam(QStringLiteral("persistence"), QStringLiteral("float"), 0.9, 0.0, 1.0)});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("a.frag"), QStringLiteral("b.frag")}));
+            obj.insert(QStringLiteral("bufferFeedback"), true);
+            const QString bufferSrc = QStringLiteral(
+                "#version 450\n"
+                "uniform vec4 customParams[8];\n"
+                "uniform sampler2D iChannel0;\n"
+                "layout(location = 0) in vec2 vTexCoord;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() {\n"
+                "    fragColor = texture(iChannel0, vTexCoord) * customParams[0].x;\n"
+                "}\n");
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-mp-two-feedback"), QStringLiteral("a.frag"), bufferSrc));
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-mp-two-feedback"), QStringLiteral("b.frag"), bufferSrc));
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-mp-two-feedback"), obj,
+                                QStringLiteral("uniform sampler2D iChannel1;\n"
+                                               "vec4 pPointer(vec2 uv) { return texture(iChannel1, uv); }\n"));
+            QVERIFY2(r.report.contains(
+                         QStringLiteral("bufferFeedback with 2 buffer passes persists on the compositor only")),
                      qPrintable(r.report));
         }
         {

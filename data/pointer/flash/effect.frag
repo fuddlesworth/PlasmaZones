@@ -11,8 +11,9 @@
 //
 // NOT A RING. The bloom is brightest at the middle at every moment of its
 // life and its falloff is monotonic outward, so the silhouette never opens up
-// into an annulus. It grows by 18 percent over its life, which is a swell in
-// place rather than an outward travel. Click Ripple owns the expanding ring.
+// into an annulus. It swells from 82 percent of its size to full over its
+// life, a swell in place rather than an outward travel. Click Ripple owns the
+// expanding ring.
 //
 // The fade is pow(1 - t, 4): almost all the light is spent in the first third
 // of the life, so it snaps rather than lingering, and it is exactly zero at
@@ -26,8 +27,6 @@
 // their outer edge, and both edges are clamped to `spikeLength` (the parameter
 // `reachParam` names), so nothing is painted outside the damage rect the host
 // derives from it.
-
-const float kDegreesToRadians = 0.01745329252;
 
 vec4 flashColour(float button) {
     if (button > 2.5) {
@@ -83,7 +82,7 @@ vec4 pPointer(vec2 uv) {
     if (spikes > 0) {
         float len = limit * grow;
         float width = max(p_spikeWidth, 0.25) * scale;
-        float base = p_spikeAngle * kDegreesToRadians;
+        float base = radians(p_spikeAngle);
         for (int i = 0; i < 12; ++i) {
             if (i >= spikes) {
                 break;
@@ -96,7 +95,9 @@ vec4 pPointer(vec2 uv) {
             }
             float across = abs(rel.x * dir.y - rel.y * dir.x);
             float taper = 1.0 - along / len;
-            float w = max(width * taper, 0.35);
+            // The tip floor is a device-px hairline, scaled like the width it
+            // floors so the tip is the same share of the spike on any display.
+            float w = max(width * taper, 0.35 * scale);
             if (across >= w) {
                 continue;
             }

@@ -21,10 +21,19 @@
 // lengthens as the burst ages. It is a fan, not a ring: the expanding ring
 // belongs to Click Ripple.
 //
-// FADE: everything is multiplied by an idle envelope that reaches exactly
-// zero at kQuietSeconds, and the click burst dies at kBurstLife. Both are
-// below the metadata trailSeconds, so nothing is left on screen when the host
+// FADE: the trail arcs are multiplied by an idle envelope that reaches
+// exactly zero at kQuietSeconds, and the click burst dies at kBurstLife on
+// its own clock (a click on a parked pointer still bursts). Both are below
+// the metadata trailSeconds, so nothing is left on screen when the host
 // stops asking for frames.
+//
+// ENDPOINTS come only from samples younger than kQuietSeconds. The ring is
+// never purged while the pointer rests and it is spread over the longest
+// window of the whole chain, so after a pause, or beside a longer-lived pack,
+// most of its slots hold positions the pointer left seconds ago. An arc
+// hashed onto one of those would strike along a path the user has moved on
+// from, or be cut off at the edge of the damage rect, which only covers the
+// samples inside this pack's own window.
 
 #include <pointer_noise.glsl>
 
@@ -35,19 +44,6 @@ const float kBurstLife = 0.34;
 // Speed (device px/s) at which the pack is fully awake. Deliberately low: the
 // settings preview's simulated pointer peaks near 324 px/s.
 const float kFullSpeed = 200.0;
-
-// Distance from p to the segment a..b. Local to this pack: the shared
-// pointerSegmentDistance works on trail indices, and an arc's vertices are
-// hashed points that are not on the path.
-float arcSegmentDistance(vec2 p, vec2 a, vec2 b) {
-    vec2 ab = b - a;
-    float len2 = dot(ab, ab);
-    if (len2 < 1e-6) {
-        return length(p - a);
-    }
-    float t = clamp(dot(p - a, ab) / len2, 0.0, 1.0);
-    return length(p - (a + ab * t));
-}
 
 // Nearest distance from p to the jagged polyline a..b. `seed` fixes the jag
 // pattern, `amp` is the maximum sideways push in device px.
@@ -67,7 +63,8 @@ float arcDistance(vec2 p, vec2 a, vec2 b, vec2 seed, float amp) {
         float taper = sin(t * 3.14159265);
         float j = hash13(seed + vec2(float(k) * 13.7, 4.3)) - 0.5;
         vec2 v = (k == kSegments) ? b : base + perp * (j * 2.0 * amp * taper);
-        best = min(best, arcSegmentDistance(p, prev, v));
+        float t_;
+        best = min(best, pointerSegmentDistanceFrom(p, prev, v, t_));
         prev = v;
     }
     return best;
@@ -89,12 +86,15 @@ vec4 pPointer(vec2 uv) {
     // Idle envelope: exactly zero once the pointer has been still for
     // kQuietSeconds, which is inside the metadata trailSeconds.
     float live = clamp(1.0 - pointerIdleSeconds() / kQuietSeconds, 0.0, 1.0);
-    float speed = uPointerVelocity.z;
+    // Both from the filtered speed (see pointerFilteredSpeed): the raw
+    // velocity is one event pair and reads 0 whenever two events share a
+    // millisecond, which would blink the gate and the arc count.
+    float speed = pointerFilteredSpeed();
     float activity = clamp(speed / kFullSpeed, 0.0, 1.0);
     float gate = pointerSpeedGate(speed, p_activationSpeed);
 
     float roll = floor(iTime * rate);
-    float phase = clamp(fract(iTime * rate), 0.0, 1.0);
+    float phase = fract(iTime * rate);
     // Sharp attack, straight decay: the arc strikes and dies inside its window.
     float strike = smoothstep(0.0, 0.12, phase) * (1.0 - phase);
 
@@ -107,7 +107,17 @@ vec4 pPointer(vec2 uv) {
     // Number of lit arcs grows with speed; the last one fades in fractionally.
     float budget = 1.0 + (clamp(float(int(p_arcs + 0.5)), 1.0, float(kMaxArcs)) - 1.0) * activity;
     float arcAlpha = live * gate * strike * intensity * (0.35 + 0.65 * activity);
-    if (arcAlpha > 0.0 && count >= 2) {
+    // The newest-first index of the last sample still inside the quiet
+    // window. Ages are monotonic in the index, so the first one at or past
+    // the window ends the live run (see ENDPOINTS in the header).
+    int last = 0;
+    for (int i = 1; i < kPointerTrailCapacity && arcAlpha > 0.0; ++i) {
+        if (i >= count || pointerTrailAt(i).z >= kQuietSeconds) {
+            break;
+        }
+        last = i;
+    }
+    if (arcAlpha > 0.0 && last >= 1) {
         for (int j = 0; j < kMaxArcs; ++j) {
             if (float(j) >= budget) {
                 break;
@@ -116,7 +126,6 @@ vec4 pPointer(vec2 uv) {
             vec2 seed = vec2(roll * 1.731 + float(j) * 37.19, float(j) * 11.53 + 5.0);
             vec3 h = hash23(seed);
 
-            int last = count - 1;
             int i0 = int(h.x * float(last) * 0.999);
             int span = 1 + int(h.y * 3.999);
             int i1 = min(i0 + span, last);

@@ -5,8 +5,12 @@
 // proportion to its speed. Sparks are seeded from the sample's canvas
 // position (not its ring index, which shifts as new samples arrive) so a
 // spark keeps its launch direction and speed from frame to frame while its
-// sample ages. Each spark follows a ballistic arc under `gravity`, shrinks
-// and fades over `life`, and shifts colour from colorA to colorB. Coverage
+// sample ages. The one exception is the newest sample, whose position the
+// sampler refreshes in place for up to one sample interval before it is
+// left behind; its sparks are at age zero and barely displaced, so the
+// re-roll is not visible. Each spark follows a ballistic arc under
+// `gravity`, shrinks and fades over `life`, and shifts colour from colorA to
+// colorB. Coverage
 // is accumulated additively then clamped. Everything is gone once a
 // sample's age passes `life`, which stays within the metadata's
 // trailSeconds.
@@ -19,14 +23,16 @@
 // outside the speed gate, so a click still answers when the pointer is
 // sitting still.
 //
-// `activationSpeed` and `smoothing` come from the shared pointerSpeedGate()
-// and pointerSmoothedAt(), the same two the other trail packs use, so every
-// pack in a chain thresholds and smooths identically. Both default to 0,
-// which is the no-threshold, raw-path behaviour the pack shipped with.
+// `activationSpeed` gates the whole pack once through the shared
+// pointerSpeedGate() on pointerFilteredSpeed(), and `smoothing` goes through
+// pointerSmoothedAt(), the same two the other trail packs use, so every pack
+// in a chain gates on the same filtered figure and smooths identically. The
+// per-sample speed still decides how MANY sparks a sample sheds, since that
+// is a property of the path at that point. Both default to 0, which is the
+// no-threshold, raw-path behaviour the pack shipped with.
 
 #include <pointer_noise.glsl>
 
-const int kMaxTrail = 32;
 const int kMaxSparks = 48;
 // Speed (device px/s) at which a sample sheds its full budget. Deliberately
 // low: the settings preview's simulated pointer peaks near 324 px/s.
@@ -37,6 +43,12 @@ vec4 pPointer(vec2 uv) {
     if (count < 1) {
         return vec4(0.0);
     }
+
+    // One gate for the path sparks, from the filtered speed: the raw
+    // per-sample figure reads 0 whenever two events share a millisecond,
+    // which gated per sample would blink patches of sparks. The click burst
+    // below sits outside it.
+    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
@@ -59,8 +71,9 @@ vec4 pPointer(vec2 uv) {
     // fixed budget makes Spread and Gravity stop changing how far a spark
     // actually gets once the shrink is biting, which is most of their range.
     // With Reach in hand the user raises the budget instead of wondering why
-    // the sliders stopped working.
-    float reachPx = max(p_reach, 1.0) * scale;
+    // the sliders stopped working. Read from the uniform the host filled from
+    // that parameter, so the damage rect and the shader cannot drift.
+    float reachPx = pointerReach();
     float travel = launch * life + 0.5 * gravity * life * life;
     float envelope = max(reachPx - size * 3.0, 0.0);
     float shrink = (travel > envelope && travel > 0.0) ? (envelope / travel) : 1.0;
@@ -72,8 +85,8 @@ vec4 pPointer(vec2 uv) {
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
-    for (int i = 0; i < kMaxTrail; ++i) {
-        if (i >= count) {
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || gate <= 0.0) {
             break;
         }
         vec4 s = pointerTrailAt(i);
@@ -87,14 +100,9 @@ vec4 pPointer(vec2 uv) {
         if (i >= 8 && (i & 1) == 1) {
             continue;
         }
-        // Below the activation speed this sample sheds nothing at all. The
-        // shed decision comes before the distance test so a sample that sheds
+        // Spark budget for this sample scales with its speed. The shed
+        // decision comes before the distance test so a sample that sheds
         // nothing costs nothing, whichever order the two would have rejected.
-        float gate = pointerSpeedGate(s.w, p_activationSpeed);
-        if (gate <= 0.0) {
-            continue;
-        }
-        // Spark budget for this sample scales with its speed.
         float shed = budget * clamp(s.w / kFullSpeed, 0.0, 1.0) * gate;
         int sparks = int(ceil(shed));
         if (sparks < 1) {

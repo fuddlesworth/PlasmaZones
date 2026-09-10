@@ -98,8 +98,8 @@ uniform vec4 uPointerPress;
 uniform vec4 uPointerRelease;
 
 // .x pressed-button bitmask as a float (1 left, 2 right, 4 middle),
-// .y seconds since the last motion, .z logical-to-device scale,
-// .w trail point count actually filled (0..32).
+// .y seconds since the last motion (1e6 before any motion this session),
+// .z logical-to-device scale, .w trail point count actually filled (0..32).
 uniform vec4 uPointerState;
 
 // Cursor sprite rect in canvas px (x, y, w, h), hotspot already applied so it

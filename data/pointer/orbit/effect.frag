@@ -13,9 +13,9 @@
 //     the trail by interpolating between the two samples that straddle that
 //     age. Standing still that is the cursor itself; moving fast the ring
 //     hangs behind the cursor as if dragged.
-//   • The orbit radius follows an averaged speed over the trail window rather
-//     than the instantaneous one, so it swells and draws back in smoothly
-//     instead of snapping.
+//   • The orbit radius follows the speed averaged over the samples of the
+//     last kSpeedWindowSeconds rather than the instantaneous one, so it
+//     swells and draws back in smoothly instead of snapping.
 //
 // Each dot is a round gaussian point, optionally stretched along its own
 // direction of travel (its orbital tangent plus the centre's motion) into a
@@ -31,51 +31,65 @@
 // of seconds of orbiting, then nothing, and the host stops repainting.
 
 const int kMaxDots = 6;
-const int kMaxTrail = 32;
 const float kFadeStart = 1.0;
 const float kQuietSeconds = 1.8;
 const float kClickLife = 0.55;
 // Speed (device px/s) at which the orbit is fully grown. Deliberately low:
 // the settings preview's simulated pointer peaks near 324 px/s.
 const float kFullSpeed = 220.0;
+// Age window the radius's averaged speed is read over. The ring is never
+// purged while the pointer rests and a park appends only one speed-0 sample
+// on the first move after it, so an average over EVERY slot would read the
+// previous stroke's speeds for a whole window after a pause and pop the ring
+// out to its old radius instead of growing it from rest.
+const float kSpeedWindowSeconds = 0.6;
 
-// One walk over the trail for the two fragment-invariant answers the ring
-// needs, folded together because both are the same loop over the same
-// samples and this runs per fragment:
-//
-//   • `centre`: the pointer position `lag` seconds ago, interpolated between
-//     the trail samples on either side of that age. Falls back to the newest
-//     sample when the trail does not reach that far back yet.
-//   • `meanSpeed`: the mean sample speed over the trail window, the eased
-//     stand-in for a smoothed speed the contract gives no state to keep.
-void orbitTrailWalk(int count, float lag, out vec2 centre, out float meanSpeed) {
+// The orbit centre: the pointer position `lag` seconds ago, interpolated
+// between the trail samples on either side of that age. Falls back to the
+// newest sample when the trail does not reach that far back yet. Stops at
+// the first sample past the lag, which at the default lag is the second or
+// third slot, so a fragment the reject box below throws out pays for almost
+// none of the walk.
+vec2 orbitCentre(int count, float lag) {
     vec4 newest = pointerTrailAt(0);
+    if (lag <= 0.0 || count < 2) {
+        return newest.xy;
+    }
     vec2 prev = newest.xy;
     float prevAge = newest.z;
-    float sum = newest.w;
-    bool centreFound = lag <= 0.0 || count < 2;
-    centre = newest.xy;
-    for (int i = 1; i < kMaxTrail; ++i) {
+    for (int i = 1; i < kPointerTrailCapacity; ++i) {
         if (i >= count) {
             break;
         }
         vec4 s = pointerTrailAt(i);
-        sum += s.w;
-        if (!centreFound) {
-            if (s.z >= lag) {
-                float span = max(s.z - prevAge, 1e-4);
-                centre = mix(prev, s.xy, clamp((lag - prevAge) / span, 0.0, 1.0));
-                centreFound = true;
-            } else {
-                prev = s.xy;
-                prevAge = s.z;
-            }
+        if (s.z >= lag) {
+            float span = max(s.z - prevAge, 1e-4);
+            return mix(prev, s.xy, clamp((lag - prevAge) / span, 0.0, 1.0));
         }
+        prev = s.xy;
+        prevAge = s.z;
     }
-    if (!centreFound) {
-        centre = prev;
+    return prev;
+}
+
+// Mean sample speed over the samples younger than kSpeedWindowSeconds, the
+// eased stand-in for a smoothed speed the contract gives no state to keep.
+// Ages are monotonic in the index, so the walk ends at the first old sample.
+float orbitMeanSpeed(int count) {
+    float sum = 0.0;
+    float n = 0.0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count) {
+            break;
+        }
+        vec4 s = pointerTrailAt(i);
+        if (s.z >= kSpeedWindowSeconds) {
+            break;
+        }
+        sum += s.w;
+        n += 1.0;
     }
-    meanSpeed = sum / float(max(count, 1));
+    return n > 0.0 ? sum / n : 0.0;
 }
 
 vec4 pPointer(vec2 uv) {
@@ -97,52 +111,48 @@ vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
     int dots = clamp(int(p_dots + 0.5), 1, kMaxDots);
-    float dotSize = max(p_dotSize, 0.25);
-    float radiusMax = max(p_radius, 2.0);
+    // The budget everything below has to fit in: the reach the host resolved
+    // from the `radius` parameter, in device px, read from the uniform so the
+    // damage rect and the shader cannot disagree about it.
+    float reachPx = pointerReach();
 
-    vec2 centre;
-    float meanSpeed;
-    orbitTrailWalk(count, max(p_lag, 0.0), centre, meanSpeed);
+    vec2 centre = orbitCentre(count, max(p_lag, 0.0));
+    // Nothing is painted further than the reach from the centre, so a
+    // fragment outside that box is done before the speed walk and the six
+    // dots' trigonometry. The damage rect spans the whole live trail (up to
+    // two seconds of path), which for a fast sweep is most of the screen.
+    if (any(greaterThan(abs(px - centre), vec2(reachPx)))) {
+        return vec4(0.0);
+    }
 
-    // Everything below is sized in LOGICAL px and converted once, so the reach
-    // clamp can be stated in the same units as the `radius` parameter.
-    float speedNorm = clamp(meanSpeed / kFullSpeed, 0.0, 1.0);
+    float speedNorm = clamp(orbitMeanSpeed(count) / kFullSpeed, 0.0, 1.0);
     float grow = clamp(p_speedGrowth, 0.0, 1.0);
     float baseFrac = mix(1.0, 0.35, grow);
-    float radius = radiusMax * (baseFrac + (1.0 - baseFrac) * speedNorm);
+    float radius = reachPx * (baseFrac + (1.0 - baseFrac) * speedNorm);
 
     // Click: a damped spring on the radius, at rest at both ends of its life.
     float sincePress = pointerSincePress();
-    float push = max(p_clickPush, 0.0);
+    float push = max(p_clickPush, 0.0) * scale;
     if (push > 0.0 && uPointerPress.w > 0.5 && sincePress < kClickLife) {
         float k = sincePress / kClickLife;
         radius += push * exp(-4.5 * k) * sin(k * 14.0) * (1.0 - k);
     }
-    // Reserve room for the dot inside the damage rect the host derives from
-    // `radius`, without letting the reservation eat the ring.
-    //
-    // The reservation alone is not safe at the extremes: Dot size runs to 10
-    // and Orbit radius starts at 8, so `radiusMax - 3*dotSize` goes negative
-    // and every dot stacks on the centre — a legal pair of settings that turns
-    // the pack into a single blob. Floor it at a fraction of the requested
-    // radius so a large dot narrows the ring instead of deleting it.
-    //
-    // The floor does not fully close the overrun, and neither did the bare
-    // reservation: when a dot's own drawn extent is a large share of the whole
-    // reach there is no radius that fits both, because `reach` here tracks the
-    // orbit radius alone and the shader has no uniform for the budget it is
-    // spending. Bounded and much reduced, not eliminated.
-    // Hoisted above the clamp because the reservation below has to know it: a
-    // smeared dot is elongated along the travel axis by this much, so
-    // reserving a fixed three dot radii would leave the smeared end hanging
-    // outside the rect no matter what the cutoff does.
+
+    // A dot's drawn extent is three dot radii (the compact window below),
+    // elongated along its travel by `stretch` when smeared. That extent comes
+    // out of the reach so the dot never meets the damage rect's edge: the
+    // ring radius is capped at reach minus the extent, and when a legal pair
+    // of settings (Dot size up to 10 against an Orbit radius from 8) leaves
+    // no room for both, the DOT is shrunk to fit rather than the ring being
+    // collapsed onto the centre or the extent being let hang outside the
+    // rect. The dot may take at most 60 percent of the reach, so the ring
+    // always keeps some radius to orbit on.
     float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
     float stretch = 1.0 + smear * 2.0;
-
-    radius = clamp(radius, 0.0, max(radiusMax - 3.0 * dotSize * stretch, radiusMax * 0.4)) * scale;
+    float dotPx = min(max(p_dotSize, 0.25) * scale, reachPx * 0.6 / (3.0 * stretch));
+    radius = clamp(radius, 0.0, reachPx - 3.0 * dotPx * stretch);
 
     vec2 drift = uPointerVelocity.xy;
-    float dotPx = dotSize * scale;
     // The spin rate is nudged onto a divisor of the iTime wrap so the ring
     // does not jump at the wrap; see pointerWrapSafeRate.
     float orbitRate = pointerWrapSafeRate(max(p_orbitRate, 0.0));
@@ -177,17 +187,15 @@ vec4 pPointer(vec2 uv) {
         float q = da * da + db * db;
         float body = exp(-q * 0.5);
         float halo = exp(-q / 8.0) * 0.35;
-        // Compact support, like the shapes in Halo and Flash. Both gaussians
-        // are still visible where the reservation above runs out, so the dot
-        // met the damage rect's edge at a level you could see and was cut off
-        // square.
+        // Compact support, like the shapes in Halo and Flash: exactly zero at
+        // three dot radii, which is the extent the radius cap above reserves
+        // inside the reach, so the two agree in every direction.
         //
         // The window goes on the SUM, in the same stretched space the shape is
         // drawn in. Windowing only the halo left `body` — the very term the
         // smear elongates — unbounded, and windowing in unstretched space
         // would clip the smear back toward a circle, which is the shape's whole
-        // point. Three dot radii in stretched space is what the reservation
-        // now reserves, so the two agree in every direction.
+        // point.
         float cover = clamp(body + halo, 0.0, 1.0) * (1.0 - smoothstep(2.0, 3.0, sqrt(q))) * live;
         if (cover <= 0.0) {
             continue;

@@ -30,8 +30,6 @@
 //
 // Coverage is the max over segments so a folded path does not stack.
 
-const int kMaxTrail = 32;
-
 // Speed at which the ribbon reaches full width, in px/s. The sqrt response is
 // normalised against this so `thickness` means the same width on any machine.
 const float kFullWidthSpeed = 900.0;
@@ -80,7 +78,10 @@ vec4 pPointer(vec2 uv) {
     float reach = pointerReach();
 
     float cover = 0.0;
-    for (int i = 0; i < kMaxTrail - 1; ++i) {
+    // The smoothed far end of one segment is the near end of the next, so it
+    // is carried across iterations rather than looked up twice per segment.
+    vec2 pa = pointerSmoothedAt(0, count, p_smoothing);
+    for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
         if (i + 1 >= count) {
             break;
         }
@@ -90,21 +91,32 @@ vec4 pPointer(vec2 uv) {
             break;
         }
 
-        vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
+        // Reject box from the RAW samples i-1..i+2, before the smoothing
+        // reads: a smoothed sample is a convex blend of its raw neighbours
+        // (clamped into the filled window, as pointerSmoothedAt clamps them),
+        // so the smoothed segment lies inside the box of those four, inflated
+        // by the reach. Exact, never clips, and a rejected fragment skips the
+        // smoothing lookup as well as the distance maths.
+        vec2 rawPrev = pointerTrailAt(max(i - 1, 0)).xy;
+        vec2 rawNext = pointerTrailAt(min(i + 2, count - 1)).xy;
+        vec2 rawLo = min(min(a.xy, b.xy), min(rawPrev, rawNext)) - reach;
+        vec2 rawHi = max(max(a.xy, b.xy), max(rawPrev, rawNext)) + reach;
+        if (any(lessThan(px, rawLo)) || any(greaterThan(px, rawHi))) {
+            pa = pointerSmoothedAt(i + 1, count, p_smoothing);
+            continue;
+        }
         vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-        vec2 ab = pb - pa;
-        float len = length(ab);
-        if (len < 1e-4) {
+        if (distance(pa, pb) < 1e-4) {
+            // A stationary pair has no ribbon to draw. The preview appends
+            // one every interval while its pointer rests, and drawing those
+            // would keep the rest point lit there when the compositor, which
+            // gets no event from a resting pointer, lets it age out.
+            pa = pb;
             continue;
         }
-        vec2 lo = min(pa, pb) - reach;
-        vec2 hi = max(pa, pb) + reach;
-        if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-            continue;
-        }
-
-        float t = clamp(dot(px - pa, ab) / (len * len), 0.0, 1.0);
-        float d = length(px - (pa + ab * t));
+        float t;
+        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
+        pa = pb;
 
         // Per-sample speed, normalised and square-rooted. This one stays raw
         // because it describes how fast the pointer was AT this point of the
