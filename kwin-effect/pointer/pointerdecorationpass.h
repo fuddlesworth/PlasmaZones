@@ -403,6 +403,31 @@ private:
 
     // ── pointerdecorationpass.cpp ───────────────────────────────────────────
 
+    /// Is the compositor's cursor hidden by something other than this pass?
+    ///
+    /// A pointer decoration decorates a pointer. When the sprite is gone the
+    /// trail has nothing under it, and drawing one anyway paints a comet
+    /// chasing an invisible cursor. Software KVMs are the case that made this
+    /// visible: Deskflow hides the sprite on the host while the user works on
+    /// the other machine, but keeps driving the real pointer across this
+    /// desktop so the remote motion mirrors, so `cursorPos` stays live and
+    /// every liveness test still passes.
+    ///
+    /// Two mechanisms hide a cursor and both count. KWin's own hide is what
+    /// `isCursorHidden` reports, and this pass takes that same hide for an
+    /// `above` chain, hence the `m_cursorHidden` exclusion — our own hide must
+    /// not read as a reason to stop drawing. A client that installs a null
+    /// cursor surface leaves the hide counter alone and empties the image
+    /// instead, which is why the image is tested independently rather than as
+    /// a fallback: that one is legible even while we hold a hide of our own.
+    bool cursorHiddenElsewhere() const;
+
+    /// Drop the live trail because the pointer stopped being a pointer worth
+    /// decorating, repainting away what is still on screen first. @p next
+    /// becomes the pass's output (it may be the current one, unlike
+    /// `repaintStaleTrail`, which only damages an output being left).
+    void dropTrail(KWin::LogicalOutput* next, qint64 nowMs);
+
     /// Rebuild m_engaged / m_engagedLayers / m_maxReachLogical /
     /// m_maxTrailSeconds / m_sampleWindowSeconds from the enable flag, the
     /// profile and the registry.
