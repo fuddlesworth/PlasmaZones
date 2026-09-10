@@ -160,7 +160,11 @@ void TestPointerCurve::testRenderedPathNeverChangesOnceDrawn()
     QVERIFY2(frames > 40, qPrintable(QStringLiteral("only %1 frames measured").arg(frames)));
     // EXACTLY still, not merely close. The reconstruction is a pure function
     // of samples that do not change, so the only tolerance needed is for the
-    // float round trip through the frame state.
+    // float round trip through the frame state, which is about 6e-5 px at
+    // these magnitudes. The 0.01 below is deliberately looser than that: it
+    // still sits three orders of magnitude under the 18.9 px a dropped sample
+    // produces, and tightening it toward the noise floor would make the guard
+    // brittle without making it discriminate anything more.
     QVERIFY2(worstShift < 0.01,
              qPrintable(QStringLiteral("drawn path moved %1 px after it was drawn").arg(worstShift)));
 }

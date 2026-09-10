@@ -115,10 +115,7 @@ vec4 pPointer(vec2 uv) {
         // so the box has to allow for that or a fragment the ribbon genuinely
         // covers is skipped and the ribbon is clipped.
         if (pointerSegmentOutside(px, i, live, a, b, reach + pointerCurveBulge(c0, c1, c2, c3))) {
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         if (distance(a.xy, b.xy) < 1.0) {
@@ -129,18 +126,12 @@ vec4 pPointer(vec2 uv) {
             // compositor, which gets no event from a resting pointer, lets it
             // age out. Tested on the raw samples, since the smoothing kernel
             // pulls the pair's endpoints apart toward the neighbour beyond.
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        pointerCurveAdvance(i + 3, live, p_smoothing);
 
         // Per-sample speed, normalised and square-rooted. This one stays raw
         // because it describes how fast the pointer was AT this point of the

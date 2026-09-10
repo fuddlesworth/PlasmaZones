@@ -102,10 +102,7 @@ vec4 pPointer(vec2 uv) {
                 // apart toward the neighbour beyond, and drawing that stub
                 // would keep the rest point wet where the compositor, which
                 // gets no event from a resting pointer, lets it dry.
-                c0 = c1;
-                c1 = c2;
-                c2 = c3;
-                c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+                pointerCurveAdvance(i + 3, live, p_smoothing);
                 continue;
             }
             // The box is over all four control points rather than the span's
@@ -118,19 +115,13 @@ vec4 pPointer(vec2 uv) {
             vec2 lo = min(min(c0, c1), min(c2, c3)) - cull - bulge;
             vec2 hi = max(max(c0, c1), max(c2, c3)) + cull + bulge;
             if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-                c0 = c1;
-                c1 = c2;
-                c2 = c3;
-                c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+                pointerCurveAdvance(i + 3, live, p_smoothing);
                 continue;
             }
 
             float t;
             float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             float age = mix(a.z, b.z, t);
             float remain = 1.0 - age / lifetime;
 

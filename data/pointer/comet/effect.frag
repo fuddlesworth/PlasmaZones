@@ -121,19 +121,13 @@ vec4 pPointer(vec2 uv) {
         vec2 lo = min(min(c0, c1), min(c2, c3)) - reach - bulge;
         vec2 hi = max(max(c0, c1), max(c2, c3)) + reach + bulge;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
 
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        pointerCurveAdvance(i + 3, live, p_smoothing);
         float age = clamp(mix(a.z, b.z, t) / tailSeconds, 0.0, 1.0);
         float life = 1.0 - age;
         float w = radius * life;

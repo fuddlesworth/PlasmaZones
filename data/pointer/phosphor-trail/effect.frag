@@ -159,10 +159,7 @@ vec4 pPointer(vec2 uv) {
         // cull is done on has to allow for it or a fragment the stroke
         // genuinely covers is skipped and the stroke is clipped.
         if (pointerSegmentOutside(px, i, live, a, b, limit + pointerCurveBulge(c0, c1, c2, c3))) {
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         if (distance(a.xy, b.xy) < 1.0) {
@@ -173,18 +170,12 @@ vec4 pPointer(vec2 uv) {
             // dot at the rest point where the compositor lets it age out.
             // Tested on the raw samples, since the smoothing kernel pulls the
             // pair's endpoints apart toward the neighbour beyond.
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        pointerCurveAdvance(i + 3, live, p_smoothing);
         if (d > limit) {
             continue;
         }
@@ -226,8 +217,13 @@ vec4 pPointer(vec2 uv) {
     // depth, but wrapping it puts rose next to cyan wherever the walk is near
     // the top of the ramp — the same maximum-contrast seam the ping-pong above
     // removes, just running along the stroke instead of across the whole tube.
-    // The base is scaled to leave room for the offset so the walk still
-    // reaches both ends.
+    // The base is scaled to leave room for the offset, so ACROSS THE STROKE
+    // the walk still reaches both ends: the two coefficients sum to 1, so the
+    // tail at a full base sits exactly at the top of the ramp. The head tops
+    // out at 0.88 of it, which is the room the offset needed and is what gives
+    // the tube its depth. Because they sum to 1 the clamp can never bind on
+    // the current coefficients; it is kept as the guard for retuning them,
+    // since a sum above 1 would wrap rose onto cyan rather than saturate.
     vec3 rgb = phosphorGradient(clamp(hueBase * 0.88 + 0.12 * hueAge, 0.0, 1.0));
     // The whitening is driven by the HOT term, not by the core's coverage.
     // Coverage is a plateau across the whole core width, so driving it from

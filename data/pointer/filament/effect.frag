@@ -136,27 +136,18 @@ vec4 pPointer(vec2 uv) {
         // cull is done on has to allow for it or a fragment the stroke
         // genuinely covers is skipped and the stroke is clipped.
         if (pointerSegmentOutside(px, i, live, a, b, limit + pointerCurveBulge(c0, c1, c2, c3))) {
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         if (distance(a.xy, b.xy) < 1.0) {
             // A stationary pair has no tube to draw; drawing one would hold a
             // dot under a parked pointer that the compositor never ages out.
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        pointerCurveAdvance(i + 3, live, p_smoothing);
         if (d > limit) {
             continue;
         }
@@ -209,7 +200,12 @@ vec4 pPointer(vec2 uv) {
 
     // A small offset along the length gives the tube depth. CLAMP, not fract:
     // wrapping puts rose next to cyan wherever the walk is near the top of
-    // the ramp.
+    // the ramp. The two coefficients sum to 1, so across the stroke the walk
+    // reaches both ends and the head tops out at 0.88 of the ramp, which is
+    // the room the offset needed. That also means the clamp cannot bind on
+    // these coefficients; it is the guard for retuning them, since a sum above
+    // 1 would wrap rose onto cyan rather than saturate. Kept in step with
+    // phosphor-trail, which shares this walk.
     vec3 rgb = phosphorGradient(clamp(hueBase * 0.88 + 0.12 * bestAge, 0.0, 1.0));
     float burst = packet * packetGain;
     rgb = mix(rgb, vec3(1.0), clamp(hot * 0.85 + 0.7 * burst, 0.0, 1.0));

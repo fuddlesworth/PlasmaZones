@@ -224,27 +224,18 @@ vec4 pPointer(vec2 uv) {
         // cull is done on has to allow for it or a fragment the stroke
         // genuinely covers is skipped and the stroke is clipped.
         if (pointerSegmentOutside(px, i, live, a, b, limit + pointerCurveBulge(c0, c1, c2, c3))) {
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         if (distance(a.xy, b.xy) < 1.0) {
             // A stationary pair has no tube to draw; drawing one would hold a
             // dot under a parked pointer that the compositor never ages out.
-            c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        pointerCurveAdvance(i + 3, live, p_smoothing);
         if (d > limit) {
             continue;
         }

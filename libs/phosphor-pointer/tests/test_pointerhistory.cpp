@@ -62,6 +62,7 @@ private Q_SLOTS:
     void testSimultaneousPressReportsTheDocumentedPrecedence();
     void testFrameStateCarriesTheCanvasScale();
     void testDamageRectDropsAPressOlderThanTheWindow();
+    void testSpeedFilterRespondsTheSameAtAnyTrailWindow();
     void testDamageRectAllowsForTheCurveOvershoot();
     void testDamageRectSurvivesANegativeReach();
 };
@@ -236,10 +237,11 @@ void TestPointerHistory::testVelocityDecaysWhenPointerStops()
 
 void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
 {
-    // A short stroke after a park, where the seed choice moves the answer
-    // by hundreds of px/s: the start is scored 0 and must be the boundary,
-    // the first scored sample the seed. Seeding from the 0 would give 92
-    // here; seeding from the first scored sample gives 100*0.54 + 200*0.46.
+    // A short stroke after a park, where the seed choice moves the answer by
+    // hundreds of px/s: the start is scored 0 and must be the boundary, the
+    // first scored sample the seed. Seeding from the 0 would give around 60
+    // here. Seeding from the first scored sample, and weighting the 200 by
+    // the 50 ms it spans (1 - exp(-0.050 / 0.050) = 0.632), gives 163.
     PointerHistory history;
     history.notePointer(QPointF(0.0, 0.0), 0);
     history.notePointer(QPointF(1000.0, 0.0), 5000); // park, then the start (speed 0)
@@ -248,8 +250,9 @@ void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
     const PointerFrameState state = history.frameState(5100, 1.0);
     QCOMPARE(state.trailSize(), 4);
     QCOMPARE(state.trailAt(2).w(), 0.0f); // the start
-    QVERIFY2(std::abs(state.filteredSpeed - 146.0) < 1.0,
-             qPrintable(QStringLiteral("filtered %1, expected 146").arg(state.filteredSpeed)));
+    const double seeded = 100.0 * std::exp(-1.0) + 200.0 * (1.0 - std::exp(-1.0));
+    QVERIFY2(std::abs(state.filteredSpeed - seeded) < 1.0,
+             qPrintable(QStringLiteral("filtered %1, expected %2").arg(state.filteredSpeed).arg(seeded)));
 
     // A start that a later in-interval event refreshed carries that event's
     // scored speed and seeds: at a 4 s window (130 ms interval) the start
@@ -266,7 +269,10 @@ void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
     const PointerFrameState two = refreshed.frameState(5140, 1.0);
     QCOMPARE(two.trailSize(), 3);
     QCOMPARE(qRound(two.trailAt(1).w()), 100);
-    const double expected = 100.0 * 0.54 + (30.0 / 0.09) * 0.46;
+    // The refresh moved the start slot's stamp to 5050, so the newer sample
+    // spans 90 ms and is weighted 1 - exp(-0.090 / 0.050).
+    const double a = 1.0 - std::exp(-0.090 / PointerHistory::kSpeedFilterTauSeconds);
+    const double expected = 100.0 * (1.0 - a) + (30.0 / 0.09) * a;
     QVERIFY2(std::abs(two.filteredSpeed - expected) < 1.0,
              qPrintable(QStringLiteral("filtered %1, expected %2").arg(two.filteredSpeed).arg(expected)));
 }
@@ -511,21 +517,35 @@ void TestPointerHistory::testStrokeBoundaryIsIndependentOfTheSampleInterval()
         history.notePointer(QPointF(x, 0.0), t);
     }
     const PointerFrameState state = history.frameState(t - 10, 1.0);
+    // A boundary placed at the sample interval would restart the filter at
+    // the newest slot and hand back exactly the head speed. It does not: the
+    // older slots still carry weight, so the two differ.
+    //
+    // Only slightly, and that is expected rather than a weak assertion. The
+    // filter has a 50 ms time constant and this window spaces the slots 130 ms
+    // apart, so each one is more than two constants from the last and the
+    // newest legitimately dominates. What is being pinned here is that the
+    // stroke was not CUT at the interval, which is a yes or no question; how
+    // much smoothing a 130 ms spacing buys is a different one, and the exact
+    // walk below pins that.
     const double head = state.newestTrail().w();
-    QVERIFY2(std::abs(state.filteredSpeed - head) > 300.0,
+    QVERIFY2(std::abs(state.filteredSpeed - head) > 1.0,
              qPrintable(QStringLiteral("filtered %1 collapsed to the head's %2").arg(state.filteredSpeed).arg(head)));
-    // Pinned to the walk itself: the exponential filter (a = 0.46) over the
-    // slots' speeds, oldest to newest, exactly as the frame state exposes
-    // them. The ring's oldest slot is the stroke's start (the first event,
-    // scored 0), which is the boundary and not the seed, so the walk seeds
-    // from the slot before it. The seed rule itself is pinned by
-    // testFilterSeedsFromTheFirstScoredSample on a ring short enough for the
-    // choice to matter; here the difference has decayed below the tolerance.
+    // Pinned to the walk itself: the exponential filter over the slots'
+    // speeds, oldest to newest, each weighted by the time it spans, exactly as
+    // the frame state exposes them. The ring's oldest slot is the stroke's
+    // start (the first event, scored 0), which is the boundary and not the
+    // seed, so the walk seeds from the slot before it. The seed rule itself is
+    // pinned by testFilterSeedsFromTheFirstScoredSample on a ring short enough
+    // for the choice to matter; here the difference has decayed below the
+    // tolerance.
     const int last = state.trailSize() - 1;
     const int seed = state.trailAt(last).w() <= 0.0f ? last - 1 : last;
     double expected = state.trailAt(seed).w();
     for (int i = seed - 1; i >= 0; --i) {
-        expected = expected * 0.54 + state.trailAt(i).w() * 0.46;
+        const double dt = double(state.trailAt(i + 1).z()) - double(state.trailAt(i).z());
+        const double a = 1.0 - std::exp(-std::max(dt, 0.0) / PointerHistory::kSpeedFilterTauSeconds);
+        expected = expected * (1.0 - a) + double(state.trailAt(i).w()) * a;
     }
     QVERIFY2(std::abs(state.filteredSpeed - expected) < 1.0,
              qPrintable(QStringLiteral("filtered %1, walk gives %2").arg(state.filteredSpeed).arg(expected)));
@@ -867,6 +887,46 @@ void TestPointerHistory::testDamageRectDropsAPressOlderThanTheWindow()
     QVERIFY2(!damage.contains(QPointF(2000.0, 2000.0)),
              "a press older than the window must not hold the damage rect open");
     QVERIFY(damage.contains(QPointF(140.0, 100.0)));
+}
+
+void TestPointerHistory::testSpeedFilterRespondsTheSameAtAnyTrailWindow()
+{
+    // The filter's response belongs to the pointer, not to the trail window.
+    // It used to fold each sample in with a fixed weight, and the sampler
+    // spaces samples by the window, so the same hand movement settled in about
+    // 49 ms at a 0.9 s window and about 210 ms at a 4 s one -- and the window
+    // is set by the LONGEST-lived pack in the chain, so a pack could have its
+    // speed gate retuned by a slider belonging to a different pack.
+    //
+    // Same events, same stamps, two windows: after a step in speed and a
+    // settling time of several time constants, both must have arrived.
+    const auto runStep = [](double trailSeconds) {
+        PointerHistory history;
+        history.setTrailSeconds(trailSeconds);
+        qint64 t = 0;
+        double x = 0.0;
+        // A second at 200 px/s, events every 10 ms.
+        for (int i = 0; i < 100; ++i, t += 10) {
+            x += 2.0;
+            history.notePointer(QPointF(x, 0.0), t);
+        }
+        // Then 250 ms at 2000 px/s, which is five time constants.
+        for (int i = 0; i < 25; ++i, t += 10) {
+            x += 20.0;
+            history.notePointer(QPointF(x, 0.0), t);
+        }
+        return history.frameState(t - 10, 1.0).filteredSpeed;
+    };
+
+    const double quick = runStep(0.9); // 30 ms sample spacing
+    const double slow = runStep(4.0); // 130 ms sample spacing
+    // Five time constants is over 99% of the way there at either spacing. The
+    // fixed-weight filter reached only about 70% at the 4 s window, so it
+    // missed this by hundreds of px/s.
+    QVERIFY2(std::abs(quick - 2000.0) < 100.0, qPrintable(QStringLiteral("0.9 s window settled at %1").arg(quick)));
+    QVERIFY2(std::abs(slow - 2000.0) < 100.0, qPrintable(QStringLiteral("4 s window settled at %1").arg(slow)));
+    QVERIFY2(std::abs(quick - slow) < 50.0,
+             qPrintable(QStringLiteral("windows disagree: %1 vs %2").arg(quick).arg(slow)));
 }
 
 void TestPointerHistory::testDamageRectAllowsForTheCurveOvershoot()

@@ -102,6 +102,16 @@ double PointerHistory::speedOver(const QPointF& earlierPos, qint64 earlierMs, co
 
 void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
 {
+    // Exported API, so the position is validated the way setTrailSeconds
+    // validates its own argument. A non-finite coordinate is not merely
+    // useless: QLineF::length() on it is not >= kMinSampleDistancePx, so it
+    // would be read as "did not move" and land as a rest slot, and from there
+    // it reaches the shader as a NaN vertex that poisons every span whose
+    // tangent touches it. Neither shipped host can produce one; the point is
+    // that this is the boundary where that is guaranteed.
+    if (!std::isfinite(devicePx.x()) || !std::isfinite(devicePx.y())) {
+        return;
+    }
     // Every speed here is read over the previous ACCEPTED motion event,
     // whether that one was appended or folded into the head. Before the
     // interval existed every event was a slot, so the previous slot was the
@@ -277,21 +287,30 @@ double PointerHistory::filteredSpeed() const
             }
         }
     }
-    // The same exponential filter the upstream windtrail effect runs on its
-    // own sampler (a = 0.46), seeded from that sample rather than 0 so a
-    // short stroke is not biased toward standing still.
+    // An exponential filter with a TIME constant, seeded from that sample
+    // rather than 0 so a short stroke is not biased toward standing still.
+    // Each sample's weight comes from the gap it actually spans, so the
+    // response is the same whatever the trail window spaced the ring at; see
+    // kSpeedFilterTauSeconds for why that matters.
     double filtered = sampleAt(seed).speed;
+    qint64 prevMs = sampleAt(seed).timeMs;
     for (int i = seed - 1; i >= newest; --i) {
         if (!sampleAt(i).motion) {
             continue;
         }
-        filtered = filtered * 0.54 + sampleAt(i).speed * 0.46;
+        const double dt = std::max(secondsBetween(sampleAt(i).timeMs, prevMs), 0.0);
+        const double a = 1.0 - std::exp(-dt / kSpeedFilterTauSeconds);
+        filtered = filtered * (1.0 - a) + sampleAt(i).speed * a;
+        prevMs = sampleAt(i).timeMs;
     }
     return std::max(filtered, 0.0);
 }
 
 void PointerHistory::seedPosition(const QPointF& devicePx, qint64 nowMs)
 {
+    if (!std::isfinite(devicePx.x()) || !std::isfinite(devicePx.y())) {
+        return;
+    }
     if (m_count > 0) {
         return;
     }

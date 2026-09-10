@@ -292,8 +292,38 @@ const float kPointerCurveTension = 0.25;
 // pointerSegmentOutside on top of the caller's own inflate, or a fragment the
 // curve genuinely covers can be culled and the stroke clipped.
 float pointerCurveBulge(vec2 c0, vec2 c1, vec2 c2, vec2 c3) {
-    return kPointerCurveTension * (1.0 / 3.0) * max(distance(c2, c0), distance(c3, c1));
+    // Component max, not length(). Every caller hands this to an AXIS-ALIGNED
+    // box, so the bound only has to cover each axis separately, and the
+    // excursion along an axis is at most a third of that axis's component of
+    // the longer tangent. That is both cheaper -- this is evaluated for every
+    // span for every fragment, ahead of the cull it feeds, so two sqrt here
+    // are two sqrt on the cheap path of seven packs -- and TIGHTER, because a
+    // vector's largest component never exceeds its length.
+    vec2 t1 = abs(c2 - c0);
+    vec2 t2 = abs(c3 - c1);
+    return kPointerCurveTension * (1.0 / 3.0) * max(max(t1.x, t1.y), max(t2.x, t2.y));
 }
+
+// Advance the four-point control window by one span.
+//
+// Every path pack walks its run with the same rolling window named c0..c3, and
+// has to shift it at EVERY exit from an iteration -- the cull's continue, the
+// stationary-pair continue, and the fall-through. That was twenty copies of
+// four assignments across seven packs, where dropping one line desynchronises
+// the window from the span with no compile error and no symptom beyond a
+// subtly wrong curve. One name, so a site is either right or absent.
+//
+// A macro rather than a function because the window lives in the caller's
+// locals. GLSL `inout` would work but would name the four points twice at
+// every site, which is the thing being removed.
+//
+// It expands to four statements, so it needs a braced body: never write it as
+// the whole of a brace-less `if`, or only the first assignment is conditional.
+#define pointerCurveAdvance(nextIndex, live, smoothing) \
+    c0 = c1;                                           \
+    c1 = c2;                                           \
+    c2 = c3;                                           \
+    c3 = pointerSmoothedAt((nextIndex), (live), (smoothing))
 
 // Point at `t` in 0..1 along the Catmull-Rom span between c1 and c2, with c0
 // and c3 the neighbours that set the tangents. A caller at either end of the
