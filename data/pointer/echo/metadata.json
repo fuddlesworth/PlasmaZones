@@ -1,0 +1,32 @@
+{
+    "id": "echo",
+    "name": "Echo",
+    "description": "The pointer leaves copies of itself behind. Each echo is the real cursor, stamped where the pointer was a moment ago and tinted further along the spectrum as it ages, from cyan just behind the tip to rose at the end of the trail. Move slowly and they read as separate ghosts, move quickly and they blur into one streak. A click throws the whole line of echoes bright for an instant.",
+    "author": "PlasmaZones",
+    "version": "0.1",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "needsCursor": true,
+    "reach": 96,
+    "trailSeconds": 2.0,
+    "trailWindowParam": "lifetime",
+    "parameters": [
+        { "id": "echoes", "name": "Echoes", "type": "float", "default": 7.0, "min": 2.0, "max": 10.0,
+          "description": "How many copies trail behind the pointer" },
+        { "id": "lifetime", "name": "Lifetime", "type": "float", "default": 0.5, "min": 0.15, "max": 1.5,
+          "description": "How far back in time the last echo sits (seconds)" },
+        { "id": "opacity", "name": "Opacity", "type": "float", "default": 0.75, "min": 0.05, "max": 1.0,
+          "description": "Brightness of the echo just behind the pointer" },
+        { "id": "tint", "name": "Tint", "type": "float", "default": 0.85, "min": 0.0, "max": 1.0,
+          "description": "How far each echo is pushed toward its spectrum colour, 0 to leave the cursor's own colours" },
+        { "id": "glow", "name": "Glow", "type": "float", "default": 0.8, "min": 0.0, "max": 3.0,
+          "description": "Soft light around each echo, 0 to leave only the cursor shape" },
+        { "id": "activationSpeed", "name": "Activation speed", "type": "float", "default": 0.0, "min": 0.0, "max": 2000.0,
+          "description": "Pointer speed below which no echoes are drawn (px per second), 0 to always draw" },
+        { "id": "smoothing", "name": "Smoothing", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0,
+          "description": "How much the path is smoothed before the echoes are placed on it" },
+        { "id": "clickFlare", "name": "Click flare", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0,
+          "description": "Brightness a click adds to every echo, 0 to disable" }
+    ]
+}

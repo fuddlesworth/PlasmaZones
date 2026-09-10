@@ -1,0 +1,31 @@
+{
+    "id": "prism",
+    "name": "Prism",
+    "description": "The pointer draws a stroke of light that splits into its colours. At rest the stroke is a single white filament. As the pointer speeds up the filament spreads across the width of the stroke into the full spectrum, cyan along one edge and rose along the other, and it draws back together the moment the hand slows. A click throws the split wide open for an instant.",
+    "author": "PlasmaZones",
+    "version": "0.1",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 96,
+    "trailSeconds": 2.0,
+    "trailWindowParam": "lifetime",
+    "parameters": [
+        { "id": "width", "name": "Width", "type": "float", "default": 9.0, "min": 2.0, "max": 30.0,
+          "description": "Width the spectrum is spread across (px)" },
+        { "id": "lifetime", "name": "Lifetime", "type": "float", "default": 0.9, "min": 0.2, "max": 2.0,
+          "description": "How long a point on the path stays lit (seconds)" },
+        { "id": "dispersion", "name": "Dispersion", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0,
+          "description": "How far the colours spread apart at full speed, 0 to keep one white filament" },
+        { "id": "spreadSpeed", "name": "Spread speed", "type": "float", "default": 260.0, "min": 60.0, "max": 2000.0,
+          "description": "Pointer speed at which the colours are fully spread (px per second)" },
+        { "id": "glow", "name": "Glow", "type": "float", "default": 1.2, "min": 0.0, "max": 3.0,
+          "description": "Strength of the soft bloom around the stroke" },
+        { "id": "activationSpeed", "name": "Activation speed", "type": "float", "default": 0.0, "min": 0.0, "max": 2000.0,
+          "description": "Pointer speed below which the stroke is not drawn (px per second), 0 to always draw" },
+        { "id": "smoothing", "name": "Smoothing", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0,
+          "description": "How much the path is smoothed before it is drawn, 0 to follow it exactly" },
+        { "id": "clickFlare", "name": "Click flare", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0,
+          "description": "How far a click throws the split open, 0 to disable" }
+    ]
+}

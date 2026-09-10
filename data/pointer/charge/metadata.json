@@ -1,0 +1,31 @@
+{
+    "id": "charge",
+    "name": "Charge",
+    "description": "Moving the pointer builds up a charge in the stroke behind it. A slow drift leaves a thin cyan line, and the longer and faster you move the hotter and wider it runs, climbing the spectrum toward rose. Stopping spends it. A bright pulse travels back down the whole stroke and leaves it quiet again, and a click spends it the same way wherever the pointer happens to be.",
+    "author": "PlasmaZones",
+    "version": "0.1",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 96,
+    "trailSeconds": 2.0,
+    "trailWindowParam": "lifetime",
+    "parameters": [
+        { "id": "width", "name": "Width", "type": "float", "default": 5.0, "min": 1.0, "max": 20.0,
+          "description": "Width of the stroke with no charge in it (px)" },
+        { "id": "swell", "name": "Swell", "type": "float", "default": 2.2, "min": 1.0, "max": 4.0,
+          "description": "How many times wider the stroke runs at full charge" },
+        { "id": "lifetime", "name": "Lifetime", "type": "float", "default": 0.9, "min": 0.2, "max": 2.0,
+          "description": "How long a point on the path stays lit (seconds)" },
+        { "id": "chargeSpeed", "name": "Charge speed", "type": "float", "default": 320.0, "min": 100.0, "max": 3000.0,
+          "description": "Sustained pointer speed that reaches full charge (px per second)" },
+        { "id": "discharge", "name": "Discharge", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0,
+          "description": "Brightness of the pulse that spends the charge, 0 to disable" },
+        { "id": "glow", "name": "Glow", "type": "float", "default": 1.2, "min": 0.0, "max": 3.0,
+          "description": "Strength of the soft bloom around the stroke" },
+        { "id": "activationSpeed", "name": "Activation speed", "type": "float", "default": 0.0, "min": 0.0, "max": 2000.0,
+          "description": "Pointer speed below which the stroke is not drawn (px per second), 0 to always draw" },
+        { "id": "smoothing", "name": "Smoothing", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0,
+          "description": "How much the path is smoothed before it is drawn, 0 to follow it exactly" }
+    ]
+}
