@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "spikeLength",
     "trailSeconds": 0.5,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "bloomSize",

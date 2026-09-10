@@ -465,6 +465,11 @@ private:
     QSet<KWin::LogicalOutput*> m_suppressedOutputs;
     double m_maxReachLogical = 0.0;
     double m_maxTrailSeconds = 0.0;
+    /// The longest trailSeconds among chain members that actually SAMPLE the
+    /// trail, which is what spaces the history ring. Separate from
+    /// m_maxTrailSeconds, which is the liveness deadline over every member:
+    /// a click pack needs frames without needing samples.
+    double m_sampleWindowSeconds = 0.0;
 
     /// The output the history's canvas belongs to. Changing it resets the
     /// history (see the class note on coordinate space).

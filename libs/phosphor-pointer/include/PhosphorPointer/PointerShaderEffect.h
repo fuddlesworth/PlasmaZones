@@ -98,7 +98,28 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
 
     /// How long, in seconds, after the last motion or button event the pack
     /// still needs frames. Default 1.0.
+    ///
+    /// This is a LIVENESS figure and nothing else. It says how long the host
+    /// keeps painting, not how the sampler spaces its slots — see
+    /// `samplesTrail` for why the two have to stay apart.
     double trailSeconds = 1.0;
+
+    /// Whether any of the pack's stages actually reads `uPointerTrail`.
+    ///
+    /// The host spreads the history's fixed number of slots over the longest
+    /// `trailSeconds` in the chain, so that one figure sets the spacing
+    /// between samples for EVERY pack sharing the ring. A click pack that
+    /// draws only at the press point still needs a long `trailSeconds` to keep
+    /// its animation running, and would otherwise coarsen the stroke of every
+    /// trail pack beside it while reading no samples of its own. Declaring
+    /// this false keeps such a pack out of the sampling decision without
+    /// shortening the frames it gets.
+    ///
+    /// Defaults TRUE, which is the conservative answer: a pack that says
+    /// nothing is assumed to read the trail and still has a say in the
+    /// spacing. The validator cross-checks the declaration against the stage
+    /// sources, so it cannot quietly drift away from what the shaders do.
+    bool samplesTrail = true;
 
     /// Bind the cursor sprite as `uCursorSprite`. Default false.
     bool needsCursor = false;

@@ -131,11 +131,27 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     // seconds since the pass engaged rather than a progress sweep. The item
     // free-runs it; the pane gates that through `playing`.
     shaderItem->setITime(0.0);
-    // The same window the compositor gives its sampler for this pack, so the
-    // preview's trail is spaced (and so is as long as) the one on screen.
+    // The same rule the compositor applies, on a chain of one: the window
+    // comes from the pack's own trailSeconds when the pack reads the trail,
+    // and is left at the floor when it does not. A preview canvas hosts a
+    // single pack, so "the longest trailSeconds among the chain members that
+    // sample" is just this pack's.
+    //
+    // What a preview therefore cannot show is a MIXED chain: on screen the
+    // ring is spaced by the longest sampling pack in the whole chain, so a
+    // short pack previewed on its own samples more finely here than it will
+    // once it sits behind a longer one. That is the documented cost of one
+    // ring per chain rather than one per layer (see PointerHistory).
+    //
     // The state is created here rather than on the first drivePointer so the
-    // window is in place before the first sample lands.
-    stateFor(shaderItem).history.setTrailSeconds(effect.trailSeconds);
+    // window is in place before the first sample lands, and the history is
+    // reset so a canvas reconfigured for a different pack does not carry the
+    // previous one's slots, which were anchored on another interval.
+    PointerState& state = stateFor(shaderItem);
+    state.history.reset();
+    state.nowMs = 0;
+    state.pressed = false;
+    state.history.setTrailSeconds(effect.samplesTrail ? effect.trailSeconds : 0.0);
     updatePreviewParams(item, packId, friendlyParams);
     return true;
 }

@@ -9,6 +9,7 @@
     "layer": "above",
     "reach": 160,
     "trailSeconds": 0.9,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "size",

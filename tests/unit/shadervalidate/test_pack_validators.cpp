@@ -123,6 +123,10 @@ QJsonObject pointerPack(const QString& id, const QJsonArray& params)
     obj.insert(QStringLiteral("name"), id);
     obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("effect.frag"));
     obj.insert(QStringLiteral("trailSeconds"), 1.0);
+    // Fixture bodies draw from the parameters, not from uPointerTrail, so the
+    // honest declaration is false. Without it every fixture carries the
+    // samplesTrail lint and the clean-pack assertion could never be clean.
+    obj.insert(QStringLiteral("samplesTrail"), false);
     obj.insert(QStringLiteral("parameters"), params);
     return obj;
 }
@@ -922,6 +926,39 @@ private Q_SLOTS:
             // new lint firing on every pack, showed up nowhere. This is the
             // canary for both.
             QVERIFY2(q.errors == 0, qPrintable(q.report));
+        }
+        {
+            // samplesTrail decides whether this pack's trailSeconds gets a say
+            // in how the shared history ring is spaced, so both directions of
+            // a wrong declaration matter and both are checked against the
+            // stage sources.
+            //
+            // Reading the trail while declaring false: the pack ends up
+            // drawing from slots spaced for somebody else.
+            QJsonObject reads = pointerPackWithGate(QStringLiteral("pt-trail-understated"), 0.0);
+            reads.insert(QStringLiteral("samplesTrail"), false);
+            const PackResult u = validatePointer(tmp, QStringLiteral("pt-trail-understated"), reads,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) {\n"
+                                                                "    vec4 s = pointerTrailAt(0);\n"
+                                                                "    return vec4(s.xy, 0.0, p_activationSpeed);\n"
+                                                                "}\n"));
+            QVERIFY2(u.report.contains(QStringLiteral("samplesTrail is false but a stage reads uPointerTrail")),
+                     qPrintable(u.report));
+
+            // And the other way: saying nothing (the default is true) while
+            // reading none of it, which is what coarsens every trail pack
+            // chained beside a click pack.
+            QJsonObject silent = pointerPack(
+                QStringLiteral("pt-trail-overstated"),
+                QJsonArray{pointerParam(QStringLiteral("activationSpeed"), QStringLiteral("float"), 0.0, 0.0, 2000.0)});
+            silent.remove(QStringLiteral("samplesTrail"));
+            const PackResult o = validatePointer(tmp, QStringLiteral("pt-trail-overstated"), silent, body);
+            QVERIFY2(o.report.contains(QStringLiteral("declare `samplesTrail: false`")), qPrintable(o.report));
+
+            // The honest declaration draws neither lint.
+            QJsonObject honest = pointerPackWithGate(QStringLiteral("pt-trail-honest"), 0.0);
+            const PackResult h = validatePointer(tmp, QStringLiteral("pt-trail-honest"), honest, body);
+            QVERIFY2(!h.report.contains(QStringLiteral("samplesTrail")), qPrintable(h.report));
         }
         {
             // A literal reach under the floor the reachParam arm enforces

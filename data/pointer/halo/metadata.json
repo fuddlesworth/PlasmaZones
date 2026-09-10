@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "radius",
     "trailSeconds": 0.9,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "radius",

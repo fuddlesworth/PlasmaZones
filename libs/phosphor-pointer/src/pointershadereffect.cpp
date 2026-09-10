@@ -97,6 +97,10 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
         qCWarning(lcPointerEffect) << "Pointer effect" << e.id
                                    << "declares trailSeconds 0, so it is never live and never draws";
     }
+    // Defaults TRUE, unlike its neighbours: an undeclared pack keeps its say
+    // in the chain's sample spacing, so an older pack that does read the trail
+    // is never silently dropped out of the decision.
+    e.samplesTrail = obj.value(QLatin1String("samplesTrail")).toBool(true);
     e.needsCursor = obj.value(QLatin1String("needsCursor")).toBool(false);
 
     e.isMultipass = obj.value(QLatin1String("multipass")).toBool(false);

@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "spread",
     "trailSeconds": 1.7,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "spread",

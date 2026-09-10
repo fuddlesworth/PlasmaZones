@@ -688,6 +688,49 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 "needsCursor is declared but no stage samples uCursorSprite (the sprite is bound and uploaded "
                 "every frame for nothing)");
         }
+
+        // samplesTrail decides whether this pack's trailSeconds gets a say in
+        // how the shared history ring is spaced, so a wrong answer is not
+        // cosmetic: declaring false while reading the trail leaves the pack
+        // drawing from slots spaced for somebody else, and declaring true (or
+        // saying nothing) while reading none of it coarsens the stroke of
+        // every trail pack chained beside it. Both directions are checked
+        // against the stage sources so the declaration cannot drift.
+        // The uniform itself appears only inside pointer_lib.glsl, which is
+        // spliced in at bake time and is not part of the pack's own sources,
+        // so looking for it alone would say "reads nothing" about every pack
+        // in the bundle. What a pack writes is one of the accessors. These are
+        // every helper in pointer_lib.glsl that reaches uPointerTrail, plus
+        // the uniform for a pack that indexes the array directly.
+        static const QLatin1String kTrailReaders[] = {
+            QLatin1String("pointerTrailAt"),
+            QLatin1String("pointerTrailCount"),
+            QLatin1String("pointerLiveCount"),
+            QLatin1String("pointerSmoothedAt"),
+            QLatin1String("pointerSegmentDistance"),
+            QLatin1String("pointerSegmentOutside"),
+            QLatin1String("pointerSmoothSegmentDistance"),
+        };
+        bool readsTrail = mentionsToken(allStages, QString::fromLatin1(PointerShaderContract::kUPointerTrail));
+        for (const QLatin1String& reader : kTrailReaders) {
+            if (readsTrail) {
+                break;
+            }
+            readsTrail = mentionsToken(allStages, QString(reader));
+        }
+        const QJsonValue samplesTrailValue = root.value(QLatin1String("samplesTrail"));
+        const bool declaredSamplesTrail = samplesTrailValue.toBool(true);
+        if (readsTrail && !declaredSamplesTrail) {
+            lints << QStringLiteral(
+                "samplesTrail is false but a stage reads uPointerTrail (the pack's own trailSeconds is then left "
+                "out of the chain's sample spacing, so it draws from slots spaced for another pack)");
+        }
+        if (!readsTrail && declaredSamplesTrail) {
+            lints << QStringLiteral(
+                "no stage reads uPointerTrail, so declare `samplesTrail: false` (otherwise this pack's "
+                "trailSeconds raises the sample spacing for every trail pack chained with it, while reading "
+                "none of it itself)");
+        }
     }
 
     // ── textures ──

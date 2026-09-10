@@ -124,6 +124,7 @@ void PointerDecorationPass::rebuildChain()
     m_anyAboveLayer = false;
     m_maxReachLogical = 0.0;
     m_maxTrailSeconds = 0.0;
+    m_sampleWindowSeconds = 0.0;
 
     // enabledChain() is effectiveChain() minus the per-layer disable toggles,
     // which is exactly the set of layers the renderer should paint. An empty
@@ -131,9 +132,9 @@ void PointerDecorationPass::rebuildChain()
     const QStringList chain = m_profile.enabledChain();
     if (chain.isEmpty()) {
         m_engaged = false;
-        // Kept in step with m_maxTrailSeconds on this path too, so the
-        // sampler never carries a window from a chain that no longer exists.
-        m_history.setTrailSeconds(m_maxTrailSeconds);
+        // Kept in step on this path too, so the sampler never carries a
+        // window from a chain that no longer exists.
+        m_history.setTrailSeconds(m_sampleWindowSeconds);
         return;
     }
     // Populating the search paths is what makes the registry scan the pack
@@ -165,6 +166,15 @@ void PointerDecorationPass::rebuildChain()
         const double reach = eff.resolvedReach(parameters);
         m_maxReachLogical = std::max(m_maxReachLogical, reach);
         m_maxTrailSeconds = std::max(m_maxTrailSeconds, eff.trailSeconds);
+        // Only packs that actually read the trail get a say in how the ring
+        // is spaced. trailSeconds means two different things — how long this
+        // pack needs frames, and how far apart the shared ring's slots sit —
+        // and a click pack legitimately wants a long one for the first reason
+        // while having no interest in the second. Letting it raise the
+        // spacing anyway coarsens the stroke of every trail pack beside it.
+        if (eff.samplesTrail) {
+            m_sampleWindowSeconds = std::max(m_sampleWindowSeconds, eff.trailSeconds);
+        }
         if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
             m_anyAboveLayer = true;
         }
@@ -177,7 +187,11 @@ void PointerDecorationPass::rebuildChain()
     // pack's tail can actually be as long as its trailSeconds says. Without
     // this the sampler kept every event and a fast mouse filled all 32 slots
     // in a few tens of ms, whatever the pack's length parameter said.
-    m_history.setTrailSeconds(m_maxTrailSeconds);
+    // The SAMPLING window, not the liveness one. With no trail-reading pack
+    // in the chain this is 0, which floors the interval — dense sampling
+    // nothing reads costs nothing, and it is the right state to hand the
+    // next chain that does read.
+    m_history.setTrailSeconds(m_sampleWindowSeconds);
 }
 
 // ── Pointer sampling ────────────────────────────────────────────────────────

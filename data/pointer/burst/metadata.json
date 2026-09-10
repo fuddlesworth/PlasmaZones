@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "reach",
     "trailSeconds": 0.9,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "count",

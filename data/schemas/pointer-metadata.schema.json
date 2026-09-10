@@ -23,7 +23,7 @@
         },
         "reach": {
             "type": "number",
-            "minimum": 0,
+            "minimum": 1,
             "maximum": 1024,
             "description": "How far (logical px, default 64) from any trail point or press point the pack may paint. The host derives the damage rect from it, so painting outside it gets clipped."
         },
@@ -35,7 +35,11 @@
             "type": "number",
             "exclusiveMinimum": 0,
             "maximum": 60,
-            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event."
+            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event. For a pack that reads uPointerTrail this also spaces the samples: the history has a fixed number of slots and spreads them across this window, so a longer window buys liveness at the cost of stroke resolution, and the longest window among the trail-reading packs in a chain sets the spacing for all of them. Set samplesTrail to false on a pack that needs frames without reading the trail, so its window stays out of that decision."
+        },
+        "samplesTrail": {
+            "type": "boolean",
+            "description": "Whether any stage reads uPointerTrail. Defaults true. A click pack that draws only at the press point should set it false, so its trailSeconds keeps its own animation running without coarsening the sample spacing of the trail packs beside it."
         },
         "needsCursor": {
             "type": "boolean",
