@@ -301,9 +301,9 @@ private:
      *        so QML `PhosphorMotionAnimation { profile: "<path>" }` resolves
      *        to the user's active animation settings and live-updates on edit.
      *
-     * Scans the XDG `plasmazones/curves` and `plasmazones/profiles` directories
-     * for user-authored definitions and installs live-reload watchers (via
-     * constructAnimationLoaders); seeds the shell animation family defaults
+     * Scans the XDG `plasmazones/curves` directories for user-authored curves
+     * and installs live-reload watchers (via constructAnimationLoaders); seeds
+     * the shell animation family defaults
      * (`seedShellAnimationFamilies`) and installs their owner tag as the
      * registry's low-precedence tag so seed entries never ship in the published
      * motion tree; publishes the three QML statics
@@ -316,7 +316,7 @@ private:
      *
      * Live updates route through the coalescing 0 ms trampoline
      * `requestAnimationProfilePublish`: `Settings::animationProfileChanged`,
-     * `ProfileLoader::profilesChanged`, and `CurveLoader::curvesChanged` all arm
+     * `Settings::motionProfileTreeChanged`, and `CurveLoader::curvesChanged` all arm
      * it, and the publish re-registers only when the registry observes a
      * value-or-owner change.
      */
@@ -374,13 +374,13 @@ private:
     /// kSettingsDrivenProfilePaths). Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
     /// trampoline `requestAnimationProfilePublish` on every
-    /// `animationProfileChanged` / `profilesChanged` /
+    /// `animationProfileChanged` / `motionProfileTreeChanged` /
     /// `curvesChanged` signal.
     void publishActiveAnimationProfile();
     /// Schedule a coalesced publish on the next event-loop tick. The
     /// settings-slider drag fires `animationProfileChanged` at ~30 Hz,
     /// and a curve-pack edit can fire `curvesChanged` and
-    /// `profilesChanged` back-to-back in the same tick. Funnelling
+    /// `motionProfileTreeChanged` back-to-back in the same tick. Funnelling
     /// through a single-shot 0-ms timer collapses every signal in the
     /// current event-loop iteration into one publish call. The
     /// registry's value-equality guard would already make duplicate
@@ -1011,8 +1011,11 @@ private:
     // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<PhosphorZones::LayoutComputeService> m_layoutComputeService;
 
-    /// Raw Global-path profile as the loader registered it, snapshot once per
-    /// loader reload and cleared on profilesChanged. The settings-driven
+    /// Raw Global-path profile as the timing-tree install left it, snapshotted
+    /// on demand by the publish and cleared whenever that install is redone
+    /// (`motionProfileTreeChanged`, `curvesChanged`) or on `stop()`. Those
+    /// clears are the ONLY correction path — there is no loader rescan behind
+    /// them any more, so do not read them as belt-and-braces. The settings-driven
     /// publish merges its fallbacks over THIS rather than over the registry's
     /// current entry, which is the merged result of the previous tick and
     /// would freeze the fallbacks at their first observed value. Keyed by path
@@ -1022,8 +1025,8 @@ private:
     QHash<QString, PhosphorAnimation::Profile> m_rawJsonProfiles;
     /// Per-daemon curve registry, replacing the `CurveRegistry::instance()`
     /// singleton so each composition root owns its own.
-    /// DECLARATION ORDER INVARIANT: must precede `m_settings`,
-    /// `m_curveLoader` and `m_profileLoader`, all of which borrow it, so
+    /// DECLARATION ORDER INVARIANT: must precede `m_settings` and
+    /// `m_curveLoader`, both of which borrow it, so
     /// reverse-order destruction tears every consumer down first and no
     /// Settings / loader teardown path can UAF. Also cleared from
     /// `PhosphorCurve::s_registry` in `~Daemon`, so the QML static helper
@@ -1033,11 +1036,10 @@ private:
     /// Per-daemon profile registry, replacing the
     /// `PhosphorProfileRegistry::instance()` singleton. Published via
     /// `setDefaultRegistry` so QML callsites resolve through the same
-    /// instance the daemon populates from Settings + ProfileLoader.
+    /// instance the daemon populates from Settings.
     /// DECLARATION ORDER INVARIANT: must precede `m_overlayService` (which
-    /// references it from its SurfaceAnimator) and `m_profileLoader`, so
-    /// reverse-order destruction tears the consumers down first and no
-    /// service / loader teardown path can UAF. `stop()` calls
+    /// references it from its SurfaceAnimator), so reverse-order destruction
+    /// tears the consumers down first and no service teardown path can UAF. `stop()` calls
     /// `setDefaultRegistry(nullptr)` to clear the QML static handle.
     PhosphorAnimation::PhosphorProfileRegistry m_profileRegistry;
     /// Per-daemon QtQuickClock manager — replaces the prior process-
@@ -1329,14 +1331,14 @@ private:
     /// before resetting this registry.
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
-    /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
-    /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG
-    /// data dirs and register discovered entries with `CurveRegistry`
-    /// / `PhosphorProfileRegistry` with live-reload enabled. Owned by
-    /// the daemon for process lifetime; QFileSystemWatcher survives
-    /// as long as the loader.
+    /// User-authored curve scanner. Scans `plasmazones/curves` from the XDG
+    /// data dirs and registers what it finds with `CurveRegistry`, with
+    /// live-reload enabled. Owned by the daemon for process lifetime; the
+    /// QFileSystemWatcher survives as long as the loader.
+    ///
+    /// Curves only — per-event timing has been a config key since schema v8
+    /// and is installed by `installMotionProfileTree`, not scanned.
     std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
-    std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
 
     /// Coalescing trampoline for the publish path — see
     /// `requestAnimationProfilePublish`. Single-shot, and a VALUE member (no

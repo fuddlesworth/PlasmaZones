@@ -18,7 +18,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Protocol API version as a decimal integer string (PhosphorProtocol::Service::ApiVersion) — NOT the compositor's release version. Peers below the daemon's minimum are rejected."/>
             </arg>
             <arg name="capabilities" type="as" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, animation, borders, modifiers."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, animation, borders, modifiers, gestures."/>
             </arg>
             <arg name="result" type="(sss)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::BridgeRegistrationResult"/>
@@ -35,6 +35,19 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="reportGesture">
+            <annotation name="org.gtk.GDBus.DocString" value="Report a completed touchpad gesture the compositor recognised on the shell's behalf. The daemon re-emits it as gestureReported for the shell, which maps it to a surface (three-finger swipe up opens the launcher, four-finger swipe up the dashboard, and so on). Only fires for gestures the bridge registered under the 'gestures' capability; progress is not reported."/>
+            <arg name="kind" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'swipe' or 'pinch'."/>
+            </arg>
+            <arg name="direction" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Swipe: 'up', 'down', 'left', 'right'. Pinch: 'expanding', 'contracting'."/>
+            </arg>
+            <arg name="fingerCount" type="u" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Finger count of the recognised gesture. The bundled KWin bridge sends 3 or 4; the daemon accepts 1 to 5 and drops anything outside that."/>
+            </arg>
+        </method>
+
         <!-- Lifecycle signals -->
         <signal name="bridgeRegistered">
             <annotation name="org.gtk.GDBus.DocString" value="A compositor bridge registered."/>
@@ -46,6 +59,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Modifier state reported by compositor."/>
             <arg name="modifiers" type="i"/>
             <arg name="mouseButtons" type="i"/>
+        </signal>
+        <signal name="gestureReported">
+            <annotation name="org.gtk.GDBus.DocString" value="A touchpad gesture the compositor reported through reportGesture, verbatim. The shell subscribes to this."/>
+            <arg name="kind" type="s"/>
+            <arg name="direction" type="s"/>
+            <arg name="fingerCount" type="u"/>
         </signal>
     </interface>
 </node>

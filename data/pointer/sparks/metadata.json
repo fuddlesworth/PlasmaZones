@@ -1,0 +1,110 @@
+{
+    "id": "sparks",
+    "name": "Sparks",
+    "description": "The pointer sheds small sparks as it moves. Faster motion throws more of them. Each spark leaves the path in its own direction, arcs under gravity and burns out after a short life, with its colour shifting from the first colour to the second as it goes. Clicking throws an extra handful of sparks out from the press point. The pointer can be made to shed nothing until it passes a chosen speed, and the path sparks launch from can be smoothed so an unsteady hand still gets a clean curve.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particles",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reachParam": "reach",
+    "trailSeconds": 1.0,
+    "trailWindowParam": "life",
+    "parameters": [
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 260.0,
+            "min": 48.0,
+            "max": 480.0,
+            "description": "Furthest a spark may travel from the path. Launch speed and gravity are scaled down together to stay inside it (px)"
+        },
+        {
+            "id": "count",
+            "name": "Sparks per step",
+            "type": "int",
+            "default": 24,
+            "min": 1,
+            "max": 48,
+            "description": "How many sparks a fast-moving pointer can shed from each point on its path"
+        },
+        {
+            "id": "size",
+            "name": "Spark size",
+            "type": "float",
+            "default": 2.0,
+            "min": 0.5,
+            "max": 8.0,
+            "description": "Radius of each spark (px)"
+        },
+        {
+            "id": "gravity",
+            "name": "Gravity",
+            "type": "float",
+            "default": 300.0,
+            "min": 0.0,
+            "max": 1200.0,
+            "description": "How strongly sparks fall (px per second squared)"
+        },
+        {
+            "id": "life",
+            "name": "Life",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.2,
+            "max": 1.0,
+            "description": "How long each spark burns (seconds)"
+        },
+        {
+            "id": "spread",
+            "name": "Spread",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How fast sparks fly away from the path"
+        },
+        {
+            "id": "activationSpeed",
+            "name": "Activation speed",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2000.0,
+            "description": "Pointer speed below which no sparks are shed (px per second), 0 to always shed them"
+        },
+        {
+            "id": "smoothing",
+            "name": "Smoothing",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much the path sparks launch from is smoothed, 0 to follow it exactly"
+        },
+        {
+            "id": "clickBurst",
+            "name": "Click burst",
+            "type": "int",
+            "default": 16,
+            "min": 0,
+            "max": 48,
+            "description": "How many extra sparks a click throws from the press point, 0 to disable"
+        },
+        {
+            "id": "colorA",
+            "name": "Birth colour",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Colour of a freshly shed spark"
+        },
+        {
+            "id": "colorB",
+            "name": "Burnout colour",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Colour a spark fades toward before it is gone"
+        }
+    ]
+}

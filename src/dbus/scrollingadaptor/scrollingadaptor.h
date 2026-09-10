@@ -244,6 +244,63 @@ public Q_SLOTS:
     void scrollView(const QString& screenId, int delta);
 
     /**
+     * @brief Focus the column at a strip index (the placement map's click)
+     *
+     * The map draws the whole strip (stripModelJson) and lets the user click
+     * a column; this is the verb behind that click. Routed to
+     * ScrollEngine::focusColumnAtIndex, which re-anchors the view under the
+     * same centering policy every other focus verb applies and activates the
+     * column's active window afterwards. Same silent gates as focusColumn
+     * (engine, empty screen id, ownership, per-context), plus a negative
+     * index, which is out of contract. An index past the last column clamps
+     * to it, the strip's own rule, and the already-active column answers
+     * with the no-target OSD like the sibling focus verbs.
+     *
+     * @param screenId Screen whose strip should move; an empty string is
+     *                 ignored
+     * @param index Strip index of the column, as stripModelJson numbers them
+     */
+    void focusColumnAt(const QString& screenId, int index);
+
+    /**
+     * @brief Move a column from one strip index to another (the map's drag)
+     *
+     * The structural twin of focusColumnAt: the map lets the user drag a
+     * column past its neighbours, and this commits where it was dropped.
+     * Routed to ScrollEngine::moveColumnToIndex, which leaves the moved
+     * column active and re-anchors the view like the keyboard move verbs.
+     * Same silent gates as focusColumnAt (engine, empty screen id,
+     * ownership, per-context) plus either index negative. An index past the
+     * last column, or from equal to to, names no move and answers with the
+     * no-target OSD rather than clamping: the map numbers its columns from
+     * stripModelJson, so an out-of-range index is a stale model, not a
+     * request for the last column.
+     *
+     * @param screenId Screen whose strip should change; an empty string is
+     *                 ignored
+     * @param from Strip index of the column to move
+     * @param to Strip index it should occupy afterwards
+     */
+    void moveColumnTo(const QString& screenId, int from, int to);
+
+    /**
+     * @brief Scroll the view by a pixel distance without moving focus
+     *
+     * The pixel twin of scrollView for a caller that already holds a distance
+     * along the strip (the map's drag pan). Same detached-view contract and
+     * the same gates as scrollView minus the step provider, which a pixel
+     * count does not need. A zero distance is a silent no-op HERE, before the
+     * engine: the engine would answer it with a no_movement OSD, and a drag
+     * that has not moved yet is not a pan the user should be told about.
+     *
+     * @param screenId Screen whose strip should move; an empty string is
+     *                 ignored
+     * @param px Signed distance along the strip's own axis, positive toward
+     *           the strip's end
+     */
+    void scrollViewByPx(const QString& screenId, int px);
+
+    /**
      * @brief Absolute width/height intents for the focused column and window
      *
      * The D-Bus home of niri's absolute set-column-width and
@@ -414,6 +471,30 @@ public Q_SLOTS:
      * @return JSON array string
      */
     QString visibleStripJson(const QString& screenId) const;
+
+    /**
+     * @brief The whole strip as a placement map draws it
+     *
+     * Returns a JSON object serializing ScrollEngine::stripModelForScreen:
+     * {axis, viewOffsetPx, viewportPx, stripExtentPx, activeColumn,
+     * columns[{index, stripPosPx, extentPx, display, activeTile, maximized,
+     * tiles[{windowId, crossPx, minimized}]}]}, keyed by
+     * PhosphorProtocol::Service::StripModelKey. Pixels along the strip's own
+     * axis throughout, columns on and off screen alike; the XML DocString
+     * carries each field's meaning. One params resolve and one relayout per
+     * call, the cost discipline visibleStripJson documents.
+     *
+     * Same ownership gate as visibleStripJson (reads are not context-gated),
+     * and for the same load-bearing reason: a strip built under a sibling
+     * context survives the screen leaving the scrolling set, and only the
+     * gate keeps this from describing it. Empty object when the screen is not
+     * scrolling; an owned screen with no strip yet answers a valid object
+     * with no columns.
+     *
+     * @param screenId Screen whose strip to describe
+     * @return JSON object string
+     */
+    QString stripModelJson(const QString& screenId) const;
 
     /**
      * @brief The screen's effective preset vocabulary, for inspection

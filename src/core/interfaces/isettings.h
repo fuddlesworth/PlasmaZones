@@ -39,6 +39,8 @@ class DecorationProfileTree;
 
 namespace PlasmaZones {
 
+class OverlayShaderTree;
+
 namespace isettings_detail {
 /// The drop indicator's colour when nothing can resolve one: the shipped zone
 /// highlight forced opaque. Shared by the two colour defaults below so the
@@ -203,6 +205,23 @@ public:
     virtual QString decorationProfileTreeJson() const = 0;
     virtual void setDecorationProfileTreeJson(const QString& json) = 0;
 
+    /// JSON-string facade over IAnimationSettings::motionProfileTree, for the
+    /// Q_PROPERTY meta-object dirty-tracking loop. Same role
+    /// `shaderProfileTreeJson` plays for the pack half.
+    virtual QString motionProfileTreeJson() const = 0;
+    virtual void setMotionProfileTreeJson(const QString& json) = 0;
+
+    // Zone-overlay shader assignments — an OverlayShaderTree (global baseline
+    // + per-layout-UUID overrides) under Overlays. Flat
+    // counterpart of the two trees above; same typed-getter + JSON-facade
+    // split so the Q_PROPERTY dirty-tracking loop and the D-Bus adaptor both
+    // ride the facade. No committed getter: per-page Discard rides the
+    // generic baseline-map path (the decoration one is Settings-only too).
+    virtual OverlayShaderTree overlayShaderTree() const = 0;
+    virtual void setOverlayShaderTree(const OverlayShaderTree& tree) = 0;
+    virtual QString overlayShaderTreeJson() const = 0;
+    virtual void setOverlayShaderTreeJson(const QString& json) = 0;
+
     // Decorations.Performance — an animated pack repaints every window carrying
     // it on every vsync, and that alone keeps the GPU in its top performance
     // state regardless of how cheap the per-frame work is. The three gates below
@@ -214,6 +233,13 @@ public:
     virtual void setDecorationPauseWhenIdle(bool value) = 0;
     virtual int decorationIdleTimeoutSec() const = 0;
     virtual void setDecorationIdleTimeoutSec(int value) = 0;
+    /// Draw no decoration on an output while a window on it is fullscreen —
+    /// windows, the shell surfaces and the pointer chain alike. Scoped per
+    /// output, so a fullscreen window on one monitor leaves the rest decorated.
+    /// The strongest of the WHEN gates where it applies: the suppressed
+    /// surfaces stop requesting frames rather than drawing nothing.
+    virtual bool decorationSuppressWhileFullscreen() const = 0;
+    virtual void setDecorationSuppressWhileFullscreen(bool value) = 0;
     /// Multiplier on the bufferScale each decoration pack declares for its
     /// buffer passes (the blur pyramid density). Not a WHEN gate like its
     /// group-mates: it shrinks the per-frame work instead, which is the lever
@@ -362,15 +388,16 @@ public:
         return false;
     }
 
-    // The four defaults below are spelled as literals rather than calling
+    // The five defaults below are spelled as literals rather than calling
     // their ConfigDefaults twins, because this interface header deliberately
     // does not depend on the config layer. A stub answering the opposite of
     // what the real Settings would is a silent behaviour split, so each is
     // pinned from the other side: settings/scrolling.cpp — a TU that sees
     // both — static_asserts the tab-indicator default, the drop-indicator
-    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() and
-    // ConfigDefaults::scrollingKeepFloatingAbove() against the literals here,
-    // and names this comment. Change any of them and fix both places.
+    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
+    // ConfigDefaults::scrollingKeepFloatingAbove() and
+    // ConfigDefaults::scrollingGroupSameAppAsTabs() against the literals
+    // here, and names this comment. Change any of them and fix both places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default because two readers reach it through this interface
@@ -609,6 +636,25 @@ public:
     {
     }
 
+    /// Open a fresh scrolling window as a tab of a column that already holds
+    /// a window of the same application (Scrolling.Behavior.GroupSameAppAsTabs).
+    /// Defaulted like the two toggles above so the D-Bus settings registry
+    /// registers the key through the interface (the preferred shape for new
+    /// keys). The engine reads it through IScrollSettings, which declares the
+    /// same defaulted getter; Settings overrides both with one body. Pinned to
+    /// ConfigDefaults::scrollingGroupSameAppAsTabs() by the static_assert in
+    /// settings/scrolling.cpp.
+    virtual bool scrollingGroupSameAppAsTabs() const
+    {
+        return false;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingRestoreFloatedWindowsOnLogin.
+    virtual void setScrollingGroupSameAppAsTabs(bool /*group*/)
+    {
+    }
+
     virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -770,6 +816,7 @@ Q_SIGNALS:
     void outerGapLeftChanged();
     void outerGapRightChanged();
     void adjacentThresholdChanged();
+
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();
     void minimumZoneDisplaySizePxChanged();
@@ -936,6 +983,17 @@ Q_SIGNALS:
     void snapToZone8ShortcutChanged();
     void snapToZone9ShortcutChanged();
 
+    // Focus Tab by Number Shortcuts
+    void scrollFocusTab1ShortcutChanged();
+    void scrollFocusTab2ShortcutChanged();
+    void scrollFocusTab3ShortcutChanged();
+    void scrollFocusTab4ShortcutChanged();
+    void scrollFocusTab5ShortcutChanged();
+    void scrollFocusTab6ShortcutChanged();
+    void scrollFocusTab7ShortcutChanged();
+    void scrollFocusTab8ShortcutChanged();
+    void scrollFocusTab9ShortcutChanged();
+
     // Rotate Windows Shortcuts
     void rotateWindowsClockwiseShortcutChanged();
     void rotateWindowsCounterclockwiseShortcutChanged();
@@ -998,6 +1056,10 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
+    void motionProfileTreeChanged();
+
+    // Zone overlay settings
+    void overlayShaderTreeChanged(); // zone-overlay shader assignments tree
 
     // Surface decoration settings
     void decorationProfileTreeChanged();
@@ -1005,6 +1067,7 @@ Q_SIGNALS:
     void decorationPauseWhenIdleChanged();
     void decorationIdleTimeoutSecChanged();
     void decorationBlurScaleMultiplierChanged();
+    void decorationSuppressWhileFullscreenChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();
@@ -1103,6 +1166,7 @@ Q_SIGNALS:
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();
     void scrollingFocusNewWindowsChanged();
+    void scrollingGroupSameAppAsTabsChanged();
     void scrollingFocusFollowsMouseChanged();
     void scrollingFocusFollowsMouseMaxScrollChanged();
     void scrollingStickyWindowHandlingChanged();
@@ -1126,6 +1190,8 @@ Q_SIGNALS:
     void scrollingConsumeOrExpelRightShortcutChanged();
     void scrollingCenterColumnShortcutChanged();
     void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingCycleTabShortcutChanged();
+    void scrollingCycleTabBackShortcutChanged();
     void scrollingToggleWindowedFullscreenShortcutChanged();
     void scrollingCycleColumnWidthShortcutChanged();
     void scrollingCycleColumnWidthBackShortcutChanged();

@@ -4,10 +4,13 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "dropproxy.h"
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
+#include <QDBusContext>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QObject>
 #include <QPoint>
 #include <QString>
@@ -18,6 +21,7 @@
 #include <QVector>
 #include <memory>
 
+class QDBusServiceWatcher;
 class QScreen;
 class QTimer;
 
@@ -61,8 +65,14 @@ class WindowTrackingAdaptor;
  * - PhosphorZones::Zone detection and highlighting
  * - Overlay visibility based on modifiers
  * - Window snapping via KWin D-Bus
+ *
+ * Inherits @c QDBusContext so registerDropProxy can identify the peer that
+ * registered a proxy and drop the registration when that peer dies. A proxy
+ * outlives every individual drag by design, so without owner tracking a shell
+ * that crashes rather than unregistering would keep hijacking snap drops over
+ * its old rect for the daemon's whole lifetime.
  */
-class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor, public QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowDrag")
@@ -239,6 +249,24 @@ public Q_SLOTS:
      * drag mode. This replaces the effect-side cross-VS flip logic.
      */
     void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
+
+    /**
+     * @brief Register (or replace) a screen's drop proxy: a miniature of
+     *        its snapping zones that a real drag can be dropped on.
+     *
+     * The Phosphor shell registers its placement map here. While a snap-path
+     * drag has its activation trigger held and the cursor is inside the
+     * proxy's rect, the cursor is treated as being over the real zone of
+     * the cell under it (highlight through the overlay, geometry preview,
+     * endDrag snaps there); inside the rect but over no cell is no target.
+     * @p proxyJson follows PhosphorProtocol::Service::DropProxyKey, in the
+     * screen's own pixels; a malformed proxy is refused and any earlier one
+     * stands. One proxy per screen. On a tiling or scrolling screen the
+     * proxy is accepted and ignored, since the snap path never runs there.
+     */
+    void registerDropProxy(const QString& screenId, const QString& proxyJson);
+    /** Drop the proxy registered for @p screenId, if any. */
+    void unregisterDropProxy(const QString& screenId);
 
     /** Forward mouse wheel delta to zone selector for scrolling during drag. */
     void selectorScrollWheel(int angleDeltaY);
@@ -588,6 +616,27 @@ private:
     // output WITHOUT destroying overlay windows. See the call site in dragMoved
     // and the rationale comment in IOverlayService::setIdleForDragPause().
     void clearOverlayForTriggerRelease();
+
+    // Drop proxy (dropproxy.h). resolveDropProxyAt maps a global cursor
+    // position onto the proxy registered for the cursor's PHYSICAL screen,
+    // in that screen's own pixels. The two target helpers are the single-zone
+    // and no-zone arms of handleMultiZoneModifier, shared with the proxy
+    // path so a proxied cell lights and commits exactly like a real zone.
+    DropProxyRegistry::Resolution resolveDropProxyAt(QScreen* screen, const QString& screenId, int x, int y) const;
+    void applySingleZoneTarget(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
+                               PhosphorZones::Layout* layout);
+    void clearZoneTarget();
+    // Watch a registering peer's bus name so its proxies retire when it dies,
+    // since a proxy outlives any single drag and a crashed shell would
+    // otherwise keep capturing snap drops. At most one watcher per peer: the
+    // shell re-registers on every miniature geometry change, so one per call
+    // would leak a bus match rule per repaint.
+    void watchDropProxyOwner(const QString& service);
+    DropProxyRegistry m_dropProxies;
+    // One watcher per registering bus name. The owner of each proxy is stored
+    // by the registry itself, in the same slot as the proxy, so the two cannot
+    // disagree about which output they describe.
+    QHash<QString, QDBusServiceWatcher*> m_dropProxyWatchers;
 
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;

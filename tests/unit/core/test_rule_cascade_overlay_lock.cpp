@@ -37,11 +37,107 @@
 
 #include "RuleCascadeFixture.h"
 
+#include <PhosphorZones/Layout.h>
+
 class TestRuleCascadeOverlayLock : public QObject, public RuleCascadeFixture
 {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    /// The overlay shader slot is NODE-scoped ("overlay-shader:<layoutId>"),
+    /// the overlay twin of "anim-shader:<event>": a rule names the
+    /// OverlayShaderTree node it overrides, a layout uuid or the empty
+    /// global-default node, and the resolver walks the active layout's node
+    /// before the global one, the order the tree itself resolves in. Pins the
+    /// four consequences a single un-scoped slot could not give:
+    ///   - a layout-node rule and a global-node rule in one context COMPOSE
+    ///     rather than the higher priority shadowing the other;
+    ///   - the layout node wins over the global node WHATEVER their
+    ///     priorities, because it is the deeper node, while priority still
+    ///     decides between two rules on the SAME node;
+    ///   - a layout-node rule is inert while another layout is active there;
+    ///   - an engaged-empty effectId is the "no shader" sentinel and reaches
+    ///     the override as an EMPTY id, distinguishable from "no rule".
+    void testContextOverlay_shaderSlotIsNodeScoped()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        auto* layoutA = new PhosphorZones::Layout(QStringLiteral("A"));
+        auto* layoutB = new PhosphorZones::Layout(QStringLiteral("B"));
+        f.registry->addLayout(layoutA);
+        f.registry->addLayout(layoutB);
+        const QString nodeA = layoutA->id().toString();
+
+        const auto screenRule = [](const QString& name, int priority, const QString& screenId, const QString& node,
+                                   const QString& effectId) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::OverrideOverlayShader);
+            if (!node.isEmpty()) {
+                a.params.insert(QString(PWR::ActionParam::LayoutId), node);
+            }
+            a.params.insert(QString(PWR::ActionParam::EffectId), effectId);
+            r.actions = {a};
+            return r;
+        };
+
+        // DP-1 (active layout A): a LOW-priority rule on A's node and a
+        // HIGH-priority rule on the global node. The node wins, not the
+        // priority, and the global rule is not shadowed: it still fills its
+        // own slot, which the DP-2 leg below proves by reading it.
+        // DP-2 (active layout B): the global rule and a rule on A's node,
+        // which is inert here because A is not the active layout.
+        // HDMI-1: a block on the global node.
+        // DVI-1: two rules on the SAME (global) node, where priority decides.
+        QVERIFY(f.store->setAllRules({
+            screenRule(QStringLiteral("dp1 node A"), 100, QStringLiteral("DP-1"), nodeA, QStringLiteral("for-a")),
+            screenRule(QStringLiteral("dp1 global"), 900, QStringLiteral("DP-1"), QString(), QStringLiteral("for-all")),
+            screenRule(QStringLiteral("dp2 global"), 900, QStringLiteral("DP-2"), QString(), QStringLiteral("for-all")),
+            screenRule(QStringLiteral("dp2 node A"), 950, QStringLiteral("DP-2"), nodeA, QStringLiteral("for-a")),
+            screenRule(QStringLiteral("hdmi block"), 500, QStringLiteral("HDMI-1"), QString(), QString()),
+            screenRule(QStringLiteral("dvi low"), 100, QStringLiteral("DVI-1"), QString(), QStringLiteral("low")),
+            screenRule(QStringLiteral("dvi high"), 700, QStringLiteral("DVI-1"), QString(), QStringLiteral("high")),
+        }));
+        // Assignments live in the same store as the rules and setAllRules
+        // replaces the lot, so the layouts are pinned AFTER the rules land.
+        f.registry->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        f.registry->assignLayout(QStringLiteral("DP-2"), 0, QString(), layoutB);
+
+        const PhosphorZones::ContextOverlayOverride dp1 =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(dp1.shaderId.has_value());
+        QCOMPARE(*dp1.shaderId, QStringLiteral("for-a"));
+
+        const PhosphorZones::ContextOverlayOverride dp2 =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(dp2.shaderId.has_value());
+        QCOMPARE(*dp2.shaderId, QStringLiteral("for-all"));
+
+        const PhosphorZones::ContextOverlayOverride hdmi =
+            f.registry->resolveContextOverlay(QStringLiteral("HDMI-1"), 0, QString());
+        QVERIFY2(hdmi.shaderId.has_value(), "the engaged-empty block sentinel was dropped as if no rule matched");
+        QVERIFY(hdmi.shaderId->isEmpty());
+        QVERIFY(!hdmi.isEmpty());
+
+        const PhosphorZones::ContextOverlayOverride dvi =
+            f.registry->resolveContextOverlay(QStringLiteral("DVI-1"), 0, QString());
+        QVERIFY(dvi.shaderId.has_value());
+        QCOMPARE(*dvi.shaderId, QStringLiteral("high"));
+
+        // Reassigning DP-1 to B moves the context off A's node: the cache key
+        // carries the active layout, so the global rule takes over without a
+        // rules change.
+        f.registry->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutB);
+        const PhosphorZones::ContextOverlayOverride dp1Now =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(dp1Now.shaderId.has_value());
+        QCOMPARE(*dp1Now.shaderId, QStringLiteral("for-all"));
+    }
 
     // ─── Context overlay-property resolution (OverlayShader / OverlayStyle) ──
     // resolveContextOverlay is a per-slot read across all matching context

@@ -113,9 +113,16 @@ inline void reloadDaemonSettings(QObject* parent, const QString& logContext = {}
  *
  * Bounded by `Service::SyncCallTimeoutMs`.
  */
-inline void reloadDaemonSettingsBlocking()
+/// @return false when the call did not reach the daemon (not started, timed
+///         out, no such interface). Most callers can ignore it: they are
+///         ordering their own guard against the reply, and a daemon that is
+///         not running has nothing to reload. The import path cannot, because
+///         there the daemon keeps serving pre-import config and will write it
+///         back over what was just imported.
+inline bool reloadDaemonSettingsBlocking()
 {
-    syncCall(Service::Interface::Settings, QStringLiteral("reloadSettings"));
+    return syncCall(Service::Interface::Settings, QStringLiteral("reloadSettings")).type()
+        != QDBusMessage::ErrorMessage;
 }
 
 /**

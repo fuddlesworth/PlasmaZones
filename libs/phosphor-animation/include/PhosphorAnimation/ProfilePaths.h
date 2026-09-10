@@ -235,7 +235,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 //      "appearance is the only class that reaches a daemon surface" — a new
 //      daemon-driven class must be added there, or its packs are silently
 //      classified compositor-only and skipped by the daemon.
-//   4. `_typeCatalog` in ShaderBrowserPage.qml — the browser's type axis.
+//   4. `typeCatalog` in ShaderBrowserPage.qml — the browser's type axis.
 //      A missing entry ships an untranslated badge sorted last.
 //   5. `shaderPathResolvesInIsolation` (shaderprofiletree.cpp) — decide
 //      whether the new class's leaves may inherit a shader from their
@@ -310,11 +310,12 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 /// `move`, the motion is CONTINUOUS — wheel scrolling retargets the per-output
 /// view spring on every batch, so there are no discrete from/to legs and a
 /// crossfade pack has nothing to play. Like `desktop`, the pass is per-output
-/// and full-screen: the compositor renders the already-translated scene into
-/// one capture and the pack decorates it (motion blur, smear, edge warp)
-/// driven by offset/velocity uniforms (iStripMotion), converging to the
-/// identity image at settle. A distinct one-scene-sampler contract
-/// (strip_transition.glsl), incompatible with the single-surface and
+/// and full-screen: the compositor renders the strip layer into a capture
+/// (with the below-strip content held in a second texture, so the pack only
+/// ever displaces the columns) and the pack decorates it (motion blur,
+/// smear, edge warp) driven by offset/velocity uniforms (iStripMotion),
+/// converging to the identity image at settle. A distinct strip-layer
+/// sampler contract (strip_transition.glsl), incompatible with the single-surface and
 /// two-texture pipelines — a shader must opt in explicitly via
 /// `appliesTo: ["strip"]`, and a universal effect does NOT apply here.
 /// A strip-ONLY pack is therefore compositor-only, which is exactly what

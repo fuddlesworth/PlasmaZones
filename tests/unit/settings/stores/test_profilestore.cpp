@@ -28,6 +28,7 @@
 #include <QJsonValue>
 #include <QSaveFile>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUuid>
@@ -653,13 +654,22 @@ private Q_SLOTS:
     {
         // v7 qualifies: migrateV6ToV7 rewrites only the Animations group's
         // ShaderProfileTree blob in place (see olderProfileFileV6RenamesPlacementNodes).
-        QCOMPARE(ConfigSchemaVersion, 7);
+        // v8 qualifies, but only because the step is told not to: migrateV7ToV8
+        // imports the per-event timing override FILES into config, which on a
+        // profile delta would write the migrating machine's own timings into
+        // every profile. readProfileFile runs the chain with
+        // ExternalImports::Disabled, leaving v8 a pure version stamp there.
+        // v8's other half, the overlay-shader sidecar lift, has no chain step
+        // at all — it runs from the finalize pass and never sees a profile
+        // delta (see olderProfileV7FileMigratesForward).
+        QCOMPARE(ConfigSchemaVersion, 8);
     }
 
-    /// A profile file stamped v5 whose delta carries the old zone-colour
-    /// shape loads through the migration path: palette-snapshot colours drop
-    /// (UseSystem was on), pinned colours survive, the UseSystem key is gone,
-    /// and the record is served under the current version.
+    // The two below are FIXTURE HELPERS, not tests, and they live in a private
+    // section rather than among the slots. QTest skips them today only because
+    // its filter rejects a non-void return and a parameter list, which is luck:
+    // a future void parameterless helper written here would be run as a test.
+private:
     /// A store expecting the CURRENT version, unlike the fixture stores
     /// above (which pin formatVersion 5 for their synthetic groups). The
     /// current-schema defaults blob must declare the zone-colour groups —
@@ -717,6 +727,11 @@ private Q_SLOTS:
         return f.write(QJsonDocument(file).toJson()) >= 0;
     }
 
+private Q_SLOTS:
+    /// A profile file stamped v5 whose delta carries the old zone-colour
+    /// shape loads through the migration path: palette-snapshot colours drop
+    /// (UseSystem was on), pinned colours survive, the UseSystem key is gone,
+    /// and the record is served under the current version.
     void olderProfileFileMigratesForward()
     {
         const QUuid id = QUuid::createUuid();
@@ -748,6 +763,100 @@ private Q_SLOTS:
         // delta's version key after migrating. This pins the seed's stamp,
         // not the migration.
         QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+    }
+
+    /// The stamp-only arm required by the version-pin policy in
+    /// profileFormatTracksConfigSchemaVersion: with imports disabled the v7→v8
+    /// step touches nothing but the version key, so a v7-stamped profile's
+    /// delta must load and apply unchanged under a current-version store. (A
+    /// v6-stamped delta with no animation overrides crosses both remaining
+    /// steps unchanged too — the second case pins that.)
+    /// A data table rather than a loop over the two seed versions. m_lastApplied
+    /// and the temp dir are reset in init(), which runs per SLOT, not per
+    /// iteration — so the second pass of a loop asserted against state the first
+    /// pass had left behind, over a directory that still held the first
+    /// profile. Both assertions would have passed even if the second version
+    /// applied nothing at all. QTest re-runs init()/cleanup() per row, so each
+    /// case gets its own fixture.
+    void olderProfileV7FileMigratesForward_data()
+    {
+        QTest::addColumn<int>("seedVersion");
+        QTest::newRow("v7 stamp-only step") << 7;
+        QTest::newRow("v6 crosses both steps") << 6;
+    }
+
+    void olderProfileV7FileMigratesForward()
+    {
+        QFETCH(int, seedVersion);
+        const QUuid id = QUuid::createUuid();
+        QJsonObject delta;
+        delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+        QVERIFY(writeProfileFileFixture(id, seedVersion, delta));
+
+        ProfileStore store(makeCurrentVersionConfig());
+        QVERIFY(store.activateProfile(id.toString()));
+        QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
+        QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+    }
+
+    /// A settings profile must never acquire the LOADING machine's own
+    /// per-event timing.
+    ///
+    /// `readProfileFile` migrates a profile's sparse delta with
+    /// `ExternalImports::Disabled`, and that one argument is the whole guard:
+    /// the v7→v8 step, when imports are enabled, reads
+    /// `<data>/plasmazones/profiles/*.json` off the local filesystem and folds
+    /// them into `Animations/MotionProfileTree`. A profile is a document that
+    /// never held those, so enabling imports there would write this user's
+    /// timings into every profile they load.
+    ///
+    /// Both of the things that would otherwise mask a regression are defeated
+    /// deliberately: the override file is planted under the per-target
+    /// XDG_DATA_HOME the migration actually reads, and MotionProfileTree is
+    /// declared in the defaults so the schema filter cannot be what drops it.
+    /// Without either, flipping the argument to Enabled leaves this green.
+    void profileDeltaNeverAcquiresThisMachinesTimingFiles()
+    {
+        const QString profilesDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/profiles");
+        QVERIFY(QDir().mkpath(profilesDir));
+        QFile f(profilesDir + QStringLiteral("/osd.show.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QJsonObject local;
+        local.insert(QStringLiteral("name"), QStringLiteral("osd.show"));
+        local.insert(QStringLiteral("duration"), 999);
+        const QByteArray localBytes = QJsonDocument(local).toJson();
+        QCOMPARE(f.write(localBytes), static_cast<qint64>(localBytes.size()));
+        f.close();
+
+        // A v7-stamped profile carrying something unrelated, so the chain runs
+        // the v8 step over it.
+        const QUuid id = QUuid::createUuid();
+        QJsonObject delta;
+        delta.insert(QStringLiteral("Snapping.Behavior"), QJsonObject{{QStringLiteral("Enabled"), true}});
+        QVERIFY(writeProfileFileFixture(id, 7, delta));
+
+        auto config = makeCurrentVersionConfig();
+        config.defaultConfig = []() {
+            QJsonObject defaults = baseDefaults();
+            defaults[QStringLiteral("Animations")] = QJsonObject{{QStringLiteral("MotionProfileTree"), QJsonObject()}};
+            defaults[QStringLiteral("_version")] = ConfigSchemaVersion;
+            return defaults;
+        };
+        ProfileStore store(config);
+        QCOMPARE(store.availableProfiles().size(), 1);
+        QVERIFY(store.activateProfile(id.toString()));
+
+        // Present-as-a-declared-default is fine and expected; carrying an
+        // ENTRY is the regression. The planted file is for `osd.show`, so any
+        // override at all here came off this machine's filesystem.
+        const QJsonArray overrides = m_lastApplied.value(QStringLiteral("Animations"))
+                                         .toObject()
+                                         .value(QStringLiteral("MotionProfileTree"))
+                                         .toObject()
+                                         .value(QStringLiteral("overrides"))
+                                         .toArray();
+        QVERIFY2(overrides.isEmpty(), "the profile acquired this machine's per-event timing files");
     }
 
     /// A profile file stamped v6 whose delta carries a shader override on a

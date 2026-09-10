@@ -196,7 +196,9 @@ void PlasmaZonesEffect::scheduleScreenDesktopResync()
 // mid-reconfigure).
 KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) const
 {
-    if (!w) {
+    // Guarded here so every caller is: the gates in surface_gating.cpp reach
+    // this on teardown paths where KWin::effects can already be null.
+    if (!w || !KWin::effects) {
         return nullptr;
     }
     const QPointF cf = w->frameGeometry().center();
@@ -765,6 +767,11 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // Drop any strip-pass entry for this output for the same dangling-key
     // reason; its sibling spring state goes with the forgetOutput below.
     m_stripTransition.outputRemoved(output);
+
+    // The pointer pass keeps its history in ONE output's device-px canvas and
+    // stores that output as a raw pointer, so a disconnected LogicalOutput*
+    // here would be dereferenced by its damage math and its repaint pump.
+    m_pointerPass.outputRemoved(output);
 
     // Drop this output's strip view accumulator. The map is keyed by
     // LogicalOutput*, so a disconnected one would leave an entry whose key can

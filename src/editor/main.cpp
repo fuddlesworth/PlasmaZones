@@ -4,20 +4,15 @@
 #include "EditorController.h"
 #include "EditorLaunchController.h"
 #include "core/resolve/animationbootstrap.h"
-#include "core/types/constants.h"
+#include "config/settings.h"
 #include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
-#include <PhosphorWayland/LayerShellPluginLoader.h>
-#include <PhosphorWayland/LayerSurface.h>
 #include <PhosphorScreens/Resolver.h>
 #include "core/platform/singleinstanceservice.h"
 #include "core/utils/translationloader.h"
-#include "../config/configdefaults.h"
 #include "version.h"
-#include "../daemon/rendering/zoneshaderitem.h"
-#include "daemon/rendering/vulkansupport.h"
 
 #include <QApplication>
 #include <QFile>
@@ -30,7 +25,6 @@
 
 #include "phosphor_i18n.h"
 #include "phosphor_qml_i18n.h"
-#include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
 
@@ -74,42 +68,11 @@ int main(int argc, char* argv[])
         }
     }
 
-    // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
-    // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
-    // environment (e.g. set globally for games), and its NVIDIA stat-polling
-    // thread costs ~30% CPU continuously inside this process — we are a
-    // window-manager helper, not a game client. Both env vars are cleared:
-    // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
-    // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
-    // Must run before QVulkanInstance::create() in vulkansupport.cpp.
-    qunsetenv("MANGOHUD");
-    qputenv("DISABLE_MANGOHUD", "1");
-
-    // Register our layer-shell QPA plugin before QApplication
-    PhosphorWayland::registerLayerShellPlugin();
-
-    // Read rendering backend preference and set graphics API BEFORE QApplication.
-    // Must match daemon's backend so shader previews render identically.
-    bool useVulkan = false;
-#if QT_CONFIG(vulkan)
-    QVulkanInstance vulkanInstance;
-#endif
-    const PlasmaZones::ConfigDefaults::RenderingBootConfig renderingConfig =
-        PlasmaZones::ConfigDefaults::readRenderingConfigFromDisk();
-    {
-        useVulkan = PlasmaZones::probeAndSetGraphicsApi(renderingConfig.backend);
-        if (!useVulkan && renderingConfig.backend == QLatin1String("vulkan")) {
-            // Mirror the daemon's diagnostic: without it a silent drop to
-            // OpenGL leaves no log line even though the comment above promises
-            // previews render identically to the daemon.
-            qCCritical(PlasmaZones::lcEditor) << "Vulkan library not found — falling back to OpenGL."
-                                              << "Install vulkan-icd-loader or equivalent for your distro.";
-        }
-        // Same GPU pin as the daemon so shader previews render on the same
-        // device. DRI_PRIME must be exported before the app object (Mesa
-        // reads it when the DRI screen opens during platform init).
-        PlasmaZones::applyOpenGlGpuPreference(renderingConfig.gpuDevice);
-    }
+    // The layer-shell QPA registration and the daemon-matched Vulkan /
+    // GPU-pin bootstrap that used to sit here existed for the in-editor
+    // shader preview, which moved to the settings app along with shader
+    // assignment. The editor window is a plain xdg_toplevel rendering on
+    // Qt's default OpenGL backend, so it needs neither.
 
     // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
     // style (qqc2-desktop-style) renders every control through a QtWidgets
@@ -119,45 +82,6 @@ int main(int argc, char* argv[])
     // into a crash on the first paint frame. See discussion #262.
     QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
-
-    // Probe Vulkan usability and export the GPU pin (same checks as the
-    // daemon). Note the editor's QQuickWindows never attach this instance —
-    // no editor-side consumer reads PVulkanInstanceProperty, so Qt creates
-    // its own internal QVulkanInstance per window. The call is still wanted
-    // for its side effects: the enumerable-GPU probe (falling back to OpenGL
-    // before the API is locked in) and the QT_VK_PHYSICAL_DEVICE_INDEX
-    // export, which Qt's own instance honors at device selection.
-#if QT_CONFIG(vulkan)
-    qRegisterMetaType<QVulkanInstance*>();
-    if (useVulkan) {
-        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, renderingConfig.gpuDevice)) {
-            qCCritical(PlasmaZones::lcEditor)
-                << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
-                << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"
-                << "a reboot may be needed to match the kernel module to the userspace driver.";
-        }
-    }
-#endif
-
-    // Publish the exported/cleared GPU var lists exactly like the daemon:
-    // this process exports the same variables, and the scrub contract is
-    // keyed on these properties, so every GPU-exporting binary must publish
-    // them even while no editor-side spawn site exists today.
-    app.setProperty(PlasmaZones::PGpuExportedVarsProperty, PlasmaZones::exportedGpuPreferenceVariables());
-    app.setProperty(PlasmaZones::PGpuClearedVarsProperty, PlasmaZones::clearedGpuPreferenceVariables());
-
-    // Register metatype for QVariant storage (LayerSurface stores itself
-    // as a QWindow dynamic property via QVariant::fromValue).
-    qRegisterMetaType<PhosphorWayland::LayerSurface*>();
-
-    // Verify the layer-shell QPA plugin loaded successfully. If not, shader preview
-    // overlays will be created as xdg_toplevel (wrong stacking/anchoring).
-    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorWayland::LayerSurface::isSupported()) {
-        qCCritical(lcEditor) << "Layer-shell QPA plugin did not initialize —"
-                             << "shader preview overlays will use xdg_toplevel (wrong stacking)."
-                             << "Check that phosphorwayland-qpa.so is installed to Qt's"
-                             << "wayland-shell-integration plugin directory.";
-    }
 
     app.setApplicationName(QStringLiteral("plasmazones-editor"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
@@ -196,9 +120,6 @@ int main(int argc, char* argv[])
             QQuickStyle::setStyle(QStringLiteral("Fusion"));
         }
     }
-
-    // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
-    qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     // Resolve target screen and collect launch args up front so we can forward
     // them to an already-running editor instance before doing any heavy setup.
@@ -247,13 +168,31 @@ int main(int argc, char* argv[])
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML
     // `PhosphorMotionAnimation { profile: "..." }` lookups resolve. The
-    // shipped tree carries no bundled profile JSONs (timings are
-    // Settings-UI driven via the daemon's registry publisher); the
-    // bootstrap loader is still wired so user-authored JSONs at
-    // `~/.local/share/plasmazones/profiles/<path>.json` get picked up
-    // and so live-reload watches are armed for fresh installs. Must
-    // outlive the QML engine (Behavior bindings keep registry handles).
+    // shipped tree carries no bundled profile JSONs; the bootstrap loads
+    // curves and seeds the animation families, and the per-event timing
+    // overrides are applied from config just below. Must outlive the QML
+    // engine (Behavior bindings keep registry handles).
     PlasmaZones::AnimationBootstrap animationBootstrap;
+
+    // The editor has no settings UI of its own, but it does animate, and its
+    // per-event timing overrides live in the same config key the daemon and
+    // the settings app read (`Animations/MotionProfileTree`). Read them once
+    // at start-up through a standalone Settings; the editor is a short-lived
+    // modal process, so there is nothing to keep live.
+    //
+    // NOTE the standalone ctor is not a cheap read: it owns a freshly migrated
+    // config backend, so constructing it runs the whole migration chain and can
+    // WRITE config.json. That is acceptable here — the chain is idempotent and
+    // latches per process — but it is a side effect, not a lookup, and it is
+    // why this is constructed once rather than on demand.
+    // Declared after the bootstrap for the reason bindToSettings documents,
+    // even though this call passes keepLive=false and wires no connections:
+    // the ordering is what makes a later change to true safe.
+    PlasmaZones::Settings editorMotionSettings;
+    // The same wiring the settings app does, through the same helper. keepLive
+    // is false because this is a short-lived modal process: it reads once at
+    // start-up and has nothing to keep current.
+    animationBootstrap.bindToSettings(editorMotionSettings, /*keepLive=*/false);
 
     // Publish the bootstrap-owned registries + a fresh clock manager as
     // the QML-side defaults. Phase A3 of the architecture refactor
@@ -283,8 +222,8 @@ int main(int argc, char* argv[])
     EditorLaunchController launcher(&controller);
 
     // Claim the D-Bus well-known name BEFORE applyLaunchArgs(). applyLaunchArgs
-    // triggers blocking daemon calls (queryShadersEnabled, queryAvailableShaders,
-    // loadLayout) — if we registered after those, a second launch racing during
+    // triggers blocking daemon calls (loadLayout among them) — if we
+    // registered after those, a second launch racing during
     // startup would run its own heavy init before discovering the conflict,
     // redundantly contending on the daemon's event loop. Registering first means
     // rapid-fire launches forward cleanly the moment they check the bus.

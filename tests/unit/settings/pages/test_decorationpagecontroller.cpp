@@ -43,20 +43,27 @@
 
 #include <QColor>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaMethod>
+#include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTemporaryDir>
 
+#include <PhosphorPointer/PointerShaderRegistry.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include "config/configdefaults.h"
 #include "settings/pages/decorationpagecontroller.h"
 #include "helpers/TreeStubSettings.h"
 
@@ -143,6 +150,19 @@ QJsonObject fadeTintMetadata()
                                    QJsonObject{{QLatin1String("id"), QLatin1String("tintColor")},
                                                {QLatin1String("type"), QLatin1String("color")},
                                                {QLatin1String("default"), QLatin1String("#ff3daee9")}}}}};
+}
+
+/// The smallest pointer pack the pointer registry accepts, in the shape the
+/// registry's own test fixture authors: a metadata.json naming a fragment
+/// shader that exists beside it.
+bool writePointerPack(const QString& root, const QString& id)
+{
+    QJsonObject metadata;
+    metadata.insert(QLatin1String("id"), id);
+    metadata.insert(QLatin1String("name"), id);
+    metadata.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+    metadata.insert(QLatin1String("parameters"), QJsonArray{});
+    return writePack(root, id, metadata);
 }
 
 /// A plain non-border pack: providesBorder absent, so setChain must not seed it.
@@ -258,6 +278,119 @@ private Q_SLOTS:
         QVERIFY2(!c.clearOverride(QString()), "the baseline override cannot be cleared");
         // Clearing a surface with no override reports nothing removed.
         QVERIFY(!c.clearOverride(QStringLiteral("window.snapped")));
+    }
+
+    /// A surface that ships a seed chain (the OSD / PopupFrame card chrome in
+    /// ConfigDefaults::decorationProfileTree) cannot be turned off by a bare
+    /// clear — the read-side seed overlay puts the override straight back. OFF
+    /// therefore persists the explicit empty chain, which the overlay's master
+    /// gate honours, and the card reads that marker as OFF via
+    /// isExplicitlyUndecorated. Turning the surface back ON drops the marker so
+    /// the shipped chain flows in again.
+    void clearOverride_onSeededSurface_persistsUndecoratedMarker()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString path = QStringLiteral("popup.zoneSelector");
+        QVERIFY(c.clearOverride(path));
+        const auto stored = settings.decorationProfileTree();
+        QVERIFY(stored.hasOverride(path));
+        QVERIFY(stored.directOverride(path).chain.has_value());
+        QVERIFY(stored.directOverride(path).chain->isEmpty());
+        // The marker survives the read-side seed overlay — the whole point of
+        // writing it rather than clearing. TreeStubSettings stores the tree
+        // raw, so the overlay Settings::decorationProfileTree() applies on
+        // every read is applied here explicitly; without it this case would
+        // only prove the marker was written, not that it holds.
+        const auto merged = stored.withSeedDefaults(ConfigDefaults::decorationProfileTree());
+        QVERIFY(merged.directOverride(path).chain.has_value());
+        QVERIFY(merged.directOverride(path).chain->isEmpty());
+        QVERIFY(merged.resolve(path).effectiveChain().isEmpty());
+        QVERIFY(c.isExplicitlyUndecorated(path));
+        QVERIFY(c.chainAt(path).isEmpty());
+
+        // Back ON: the marker goes, the path inherits again.
+        QVERIFY(c.clearUndecorated(path));
+        QVERIFY(!c.isExplicitlyUndecorated(path));
+        QVERIFY(!c.hasOverride(path));
+        // A second call has nothing left to do.
+        QVERIFY(!c.clearUndecorated(path));
+    }
+
+    /// The shipped card chrome arrives as an INJECTED override at its seed
+    /// paths, so an untouched seed must not read as a descendant that shadows
+    /// its parent — that put an unclearable "3 surfaces shadow this parent"
+    /// warning on the popup card of a config nobody had edited. A seeded path
+    /// the user actually edited counts again.
+    void overrideDescendantCount_ignoresUntouchedSeeds()
+    {
+        TreeStubSettings settings;
+        settings.setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
+        DecorationPageController c(nullptr, &settings);
+
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 0);
+
+        c.setChain(QStringLiteral("popup.layoutPicker"), QStringList{QStringLiteral("glow")});
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 1);
+    }
+
+    /// The overlay injects a seed field only where the tree engages that field
+    /// nowhere on the walk-up, so an engagement at an ANCESTOR gates part of
+    /// the seed off and the injection arrives partial (chain only). That is
+    /// still an untouched seed at the leaf, and a whole-profile compare
+    /// against the shipped seed would miscount all three popups as shadowing
+    /// their parent — the exact phantom warning this exclusion removes.
+    void overrideDescendantCount_ignoresPartiallyGatedSeeds()
+    {
+        TreeStubSettings settings;
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        // Parameters engaged at the baseline gate the seed's parameters off
+        // everywhere, so each seeded popup is injected with its chain alone.
+        PhosphorSurfaceShaders::DecorationProfile baseline;
+        baseline.parameters = QVariantMap{};
+        tree.setBaseline(baseline);
+        PhosphorSurfaceShaders::DecorationProfile chainOnly;
+        chainOnly.chain =
+            ConfigDefaults::decorationProfileTree().directOverride(QStringLiteral("popup.zoneSelector")).chain;
+        tree.setOverride(QStringLiteral("popup.zoneSelector"), chainOnly);
+        settings.setDecorationProfileTree(tree);
+
+        DecorationPageController c(nullptr, &settings);
+        QCOMPARE(c.overrideDescendantCount(QStringLiteral("popup")), 0);
+    }
+
+    /// An engaged-but-empty chain at an UNSEEDED path is a real user look —
+    /// the documented way for a leaf to disable an ancestor's chain — not the
+    /// OFF marker. Reading it as undecorated would mislabel the card and let
+    /// the toggle's ON path delete the user's choice.
+    void isExplicitlyUndecorated_onlyAtSeededPaths()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString leaf = QStringLiteral("window.tiled");
+        c.setChain(QStringLiteral("window"), QStringList{QStringLiteral("glow")});
+        c.setChain(leaf, QStringList{});
+        QVERIFY(c.hasOverride(leaf));
+        QVERIFY(!c.isExplicitlyUndecorated(leaf));
+        QVERIFY(!c.clearUndecorated(leaf));
+        // Still overriding to "no packs", so the ancestor's chain stays out.
+        QVERIFY(c.chainAt(leaf).isEmpty());
+    }
+
+    /// An unseeded surface keeps the plain clear-to-inherit behaviour: no
+    /// empty-chain marker is left behind, and it never reads as undecorated.
+    void clearOverride_onUnseededSurface_leavesNoMarker()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("border")});
+        QVERIFY(c.clearOverride(path));
+        QVERIFY(!c.hasOverride(path));
+        QVERIFY(!c.isExplicitlyUndecorated(path));
     }
 
     /// setChain on an unsupported path is a no-op guard — no override is
@@ -909,6 +1042,101 @@ private Q_SLOTS:
                                                "controller's token and the QML's have drifted")
                                     .arg(name)));
         }
+    }
+
+    /// Pointer routing on the ONE bridge that serves two families. With a real
+    /// pointer registry holding one pack, that pack resolves to the pointer
+    /// preview kind and controller, is offered at the pointer path, and is
+    /// listed in the type-tagged catalogue as a pointer row, while a surface
+    /// id keeps resolving to the decoration side.
+    void pointerPack_routesToThePointerPreviewAndListing()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePointerPack(tmp.path(), QStringLiteral("halo")));
+        PhosphorPointerShaders::PointerShaderRegistry pointerRegistry;
+        pointerRegistry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        pointerRegistry.refresh();
+        QVERIFY(pointerRegistry.hasEffect(QStringLiteral("halo")));
+
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings, &pointerRegistry);
+
+        QCOMPARE(c.previewKindFor(QStringLiteral("halo")), QStringLiteral("pointer"));
+        QCOMPARE(c.previewControllerFor(QStringLiteral("halo")), c.pointerPreviewController());
+        QVERIFY(c.pointerPreviewController() != nullptr);
+        // An id no registry owns falls to the decoration side, as before.
+        QCOMPARE(c.previewKindFor(QStringLiteral("glow")), c.previewKind());
+        QCOMPARE(c.previewControllerFor(QStringLiteral("glow")), c.previewController());
+
+        const auto ids = [](const QVariantList& rows) {
+            QStringList out;
+            for (const QVariant& row : rows)
+                out.append(row.toMap().value(QStringLiteral("id")).toString());
+            return out;
+        };
+        QVERIFY(ids(c.availableShaderEffectsForPath(PhosphorSurfaceShaders::decorationPointerPath()))
+                    .contains(QStringLiteral("halo")));
+        // And NOT at a window surface, which the pointer pass never draws.
+        QVERIFY(!ids(c.availableShaderEffectsForPath(QStringLiteral("window.tiled"))).contains(QStringLiteral("halo")));
+
+        bool pointerRow = false;
+        for (const QVariant& row : c.availableShaderEffects()) {
+            const QVariantMap m = row.toMap();
+            if (m.value(QStringLiteral("id")).toString() == QLatin1String("halo")
+                && m.value(QStringLiteral("type")).toString() == QLatin1String("pointer")) {
+                pointerRow = true;
+            }
+        }
+        QVERIFY2(pointerRow, "availableShaderEffects lists no row typed \"pointer\" for the pointer pack");
+    }
+
+    /// Every `bridge.<name>` the decoration pages' QML uses resolves to a
+    /// property or method on this controller. The animations route carries
+    /// the same guard for the shader browser; the decoration pages had none,
+    /// so a renamed invokable here was a silent TypeError on the page. Source
+    /// scrape, comments stripped: it checks that a call CAN resolve, not what
+    /// it does.
+    void everyBridgeCallFromTheDecorationPagesIsReachable()
+    {
+        const QString decorationDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/decoration");
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\\n]*"));
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression bridgeRe(QStringLiteral("\\bbridge\\.([A-Za-z_][A-Za-z0-9_]*)"));
+
+        QSet<QString> used;
+        QDirIterator files(decorationDir, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+        while (files.hasNext()) {
+            QFile f(files.next());
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(f.fileName()));
+            const QString src = QString::fromUtf8(f.readAll()).remove(blockCommentRe).remove(lineCommentRe);
+            auto it = bridgeRe.globalMatch(src);
+            while (it.hasNext())
+                used.insert(it.next().captured(1));
+        }
+        QVERIFY2(!used.isEmpty(), "scraped no bridge.* names — the decoration QML tree or receiver name moved");
+
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : used) {
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        unreachable.sort();
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("the decoration pages call these on their bridge, but "
+                                           "DecorationPageController lacks them: %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
     }
 };
 

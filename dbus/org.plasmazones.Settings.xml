@@ -72,7 +72,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified."/>
         </signal>
         <signal name="motionProfileTreeChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed (a profiles/&lt;path&gt;.json override was edited and rescanned). Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own profile-file writes; the KWin effect re-fetches motionProfileTree on this signal."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed. Since schema v8 that tree is the Animations/MotionProfileTree config key, so this fires on a write to it rather than on a file rescan. Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own timing writes. The KWin effect re-fetches motionProfileTree on this signal."/>
         </signal>
         <signal name="sessionIdleChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the session went idle (no input for the configured timeout) or became active again. The effect pauses decoration-chain animation while idle, which is what lets the GPU leave its top performance state — the per-frame work being cheap does not, since what costs is that there is work every frame at all. The daemon owns this because idleness is a Wayland CLIENT concern (ext-idle-notify-v1) and the effect lives inside the compositor, which serves that protocol rather than consuming it."/>
@@ -98,72 +98,6 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="schemasJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object: {key: {type}, ...}."/>
             </arg>
-        </method>
-
-        <!-- Shader methods. These are also published on the dedicated
-             org.plasmazones.Shader interface (see org.plasmazones.Shader.xml);
-             SettingsAdaptor keeps them here for backward compatibility with
-             callers that bind the Settings interface. Keep the method set and
-             signatures consistent across both interfaces. -->
-        <method name="availableShaders">
-            <annotation name="org.gtk.GDBus.DocString" value="Get list of available shader effects with metadata."/>
-            <arg name="shaders" type="av" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="List of shader metadata maps."/>
-            </arg>
-        </method>
-        <method name="shaderInfo">
-            <annotation name="org.gtk.GDBus.DocString" value="Get detailed information about a specific shader."/>
-            <arg name="shaderId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
-            </arg>
-            <arg name="info" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Shader metadata map (empty if not found)."/>
-            </arg>
-        </method>
-        <method name="defaultShaderParams">
-            <annotation name="org.gtk.GDBus.DocString" value="Get default parameter values for a shader."/>
-            <arg name="shaderId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
-            </arg>
-            <arg name="params" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of parameter IDs to default values."/>
-            </arg>
-        </method>
-        <method name="translateShaderParams">
-            <annotation name="org.gtk.GDBus.DocString" value="Translate shader params from param IDs to uniform names for ZoneShaderItem."/>
-            <arg name="shaderId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
-            </arg>
-            <arg name="params" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of param IDs to values (e.g. intensity: 0.5)."/>
-            </arg>
-            <arg name="uniforms" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of uniform names to values (e.g. customParams1_x: 0.5)."/>
-            </arg>
-        </method>
-        <method name="shadersEnabled">
-            <annotation name="org.gtk.GDBus.DocString" value="Check if shader effects are enabled (compiled with shader support)."/>
-            <arg name="enabled" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if shaders are available."/>
-            </arg>
-        </method>
-        <method name="userShadersEnabled">
-            <annotation name="org.gtk.GDBus.DocString" value="Check if user-installed shaders are supported."/>
-            <arg name="enabled" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if user shaders can be loaded."/>
-            </arg>
-        </method>
-        <method name="userShaderDirectory">
-            <annotation name="org.gtk.GDBus.DocString" value="Get path to the user shader installation directory."/>
-            <arg name="path" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Path to ~/.local/share/plasmazones/overlays."/>
-            </arg>
-        </method>
-        <method name="openUserShaderDirectory">
-            <annotation name="org.gtk.GDBus.DocString" value="Open the user shader directory in the file manager."/>
-        </method>
-        <method name="refreshShaders">
-            <annotation name="org.gtk.GDBus.DocString" value="Reload all shaders from disk."/>
         </method>
 
         <!-- Per-screen settings. Categories: 'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. -->

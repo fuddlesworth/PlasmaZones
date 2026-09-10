@@ -34,6 +34,7 @@ set(plasmazones_settings_SRCS
     # page registry → per-domain CRUD.
     controller/settingscontroller_lifecycle.cpp
     controller/settingscontroller_pageregistration.cpp
+    controller/settingscontroller_whatsnew.cpp
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
     controller/settingscontroller_rulelookups.cpp
@@ -91,7 +92,7 @@ set(plasmazones_settings_SRCS
     # methods (sectionForPath / eventLabel / parentChain).
     pages/animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
-    # Consumed by AnimationsPageController + SnappingShadersPageController.
+    # Consumed by AnimationsPageController + OverlaysPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
     services/shaderpackinstaller.h
     services/shaderpackinstaller.cpp
@@ -99,7 +100,7 @@ set(plasmazones_settings_SRCS
     # child QObject.
     stores/animationpresetlibrary.h
     stores/animationpresetlibrary.cpp
-    # Shared set store (motion sets + decoration sets) and the motion-set
+    # Shared set store (motion, decoration and overlay sets) and the motion-set
     # domain closures that specialise it.
     stores/shadersetstore.h
     stores/shadersetstore.cpp
@@ -128,8 +129,9 @@ set(plasmazones_settings_SRCS
     pages/snappingbehaviorcontroller.cpp
     pages/snappingeffectscontroller.h
     pages/snappingeffectscontroller.cpp
-    pages/snappingshaderspagecontroller.h
-    pages/snappingshaderspagecontroller.cpp
+    pages/overlayspagecontroller.h
+    pages/overlayspagecontroller.cpp
+    pages/overlayspagecontroller_sets.cpp
     pages/snappingzoneselectorcontroller.h
     pages/snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
@@ -153,6 +155,10 @@ set(plasmazones_settings_SRCS
     pages/decorationpagecontroller_paths.cpp
     pages/decorationpagecontroller_browser.cpp
     pages/decorationpagecontroller_sets.cpp
+    # Pointer preview — drives a simulated pointer through the shipped
+    # PointerHistory sampler for the pointer surface's preview canvas.
+    pages/pointerpreviewcontroller.h
+    pages/pointerpreviewcontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
     # helpers. Consumed only by decorationpagecontroller.cpp; kept separate to
     # hold the conversion helpers out of the controller TU.
@@ -296,6 +302,10 @@ set_source_files_properties(qml/pages/animations/CurvePresets.qml PROPERTIES QT_
 # TriggerLabels is a singleton for the same reason: the trigger bit tables are
 # shared between the trigger editor and the profile diff.
 set_source_files_properties(qml/components/TriggerLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+# PreviewCanvas is a singleton for the same reason: the fixed composition size
+# is shared by the decoration, pointer and animation preview panes and by their
+# hosts, none of which can be handed it before they lay themselves out.
+set_source_files_properties(qml/pages/shaders/PreviewCanvas.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
@@ -323,11 +333,12 @@ qt_add_qml_module(plasmazones-settings
         qml/components/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
-        # each with a Behavior page. Shaders lives under Configuration. The
-        # window border / title-bar appearance AND the unified gaps are shared
-        # across modes and live on the top-level WindowAppearancePage.
+        # each with a Behavior page. The overlay's own appearance and its
+        # shader assignments moved out to Appearance → Overlays (grouped
+        # further down). The window border / title-bar appearance AND the
+        # unified gaps are shared across modes and live on the top-level
+        # WindowAppearancePage.
         qml/pages/snapping/SnappingOverlayBehaviorPage.qml
-        qml/pages/snapping/SnappingOverlayAppearancePage.qml
         qml/pages/snapping/SnappingZoneSelectorPage.qml
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
@@ -488,7 +499,13 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsMotionSetsPage.qml
         qml/pages/animations/AnimationsPresetsPage.qml
         qml/pages/animations/AnimationsShadersPage.qml
-        qml/pages/snapping/SnappingShadersPage.qml
+        # Appearance → Overlays: how the zone overlay looks, which shader each
+        # layout draws, and the Library holding the pack browser and saved sets.
+        qml/pages/overlays/OverlaysAppearancePage.qml
+        qml/pages/overlays/OverlaysLibraryPage.qml
+        qml/pages/overlays/OverlaysAssignmentsPage.qml
+        qml/pages/overlays/OverlayShaderAssignmentCard.qml
+        qml/pages/overlays/OverlaySetsPage.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
         # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
         # list with per-pack params) and border/titlebar field overrides via
@@ -499,6 +516,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/decoration/DecorationOsdsPage.qml
         qml/pages/decoration/DecorationPopupsPage.qml
         qml/pages/decoration/DecorationShellPage.qml
+        qml/pages/decoration/DecorationPointerPage.qml
         qml/pages/decoration/DecorationSurfaceCardList.qml
         qml/pages/decoration/DecorationSurfaceCard.qml
         qml/pages/tiling/ChainEditor.qml
@@ -508,9 +526,10 @@ qt_add_qml_module(plasmazones-settings
         # bridge.
         qml/pages/shaders/ShaderBrowserPage.qml
         qml/pages/shaders/ShaderBrowserCard.qml
-        # Domain-agnostic sets page + rich set card — shared by the Decoration
-        # Sets and Motion Sets pages. Both are thin wrappers that pass the
-        # right ShaderSetStore bridge plus their domain copy.
+        # Domain-agnostic sets page + rich set card — shared by the Sets pages
+        # under Animations, Decorations and Overlays. All three are thin
+        # wrappers that pass the right ShaderSetStore bridge plus their
+        # domain copy.
         qml/pages/shaders/ShaderSetsPage.qml
         qml/pages/shaders/ShaderSetCard.qml
         # Shared drag-and-drop import band (shader packs, layouts /
@@ -524,9 +543,15 @@ qt_add_qml_module(plasmazones-settings
         # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
         # invisible instances, Rules + shader browser directly).
         qml/components/StayOpenMenuItem.qml
+        qml/pages/shaders/PreviewCanvas.qml
+        qml/pages/shaders/PackPreview.qml
+        qml/pages/shaders/PackEditorBody.qml
         qml/pages/shaders/DecorationChainPreview.qml
         qml/pages/shaders/DecorationPreviewPane.qml
         qml/pages/shaders/AnimationPreviewPane.qml
+        qml/pages/shaders/PointerPreviewCanvas.qml
+        qml/pages/shaders/PointerPreviewPane.qml
+        qml/pages/shaders/PointerPackNotices.qml
         qml/pages/shaders/ShaderBrowserDetailDialog.qml
         qml/pages/animations/CurveEditorDialog.qml
         qml/pages/animations/CurvePresets.qml
@@ -606,6 +631,9 @@ target_link_libraries(plasmazones-settings
                                       # was added but not hand-listed; the generated
                                       # module can never drift.
         PhosphorSurface::PhosphorSurface  # SurfaceShaderRegistry/Effect (Decoration page)
+        PhosphorPointer::PhosphorPointer  # PointerShaderRegistry/Effect + the
+                                          # PointerHistory sampler and the UBO tail
+                                          # extension (pointer surface + preview)
         PhosphorControl::PhosphorControl  # ApplicationController, PageController, IStagingDomain
         PhosphorControl::PhosphorControlQml  # QML chrome: SettingsAppWindow, Sidebar, footer, etc.
         PhosphorControlQmlplugin  # Generated by qt_add_qml_module (STATIC) — registers the

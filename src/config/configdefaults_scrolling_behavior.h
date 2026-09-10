@@ -21,15 +21,25 @@ public:
     //
     // The strip's window-handling and focus knobs, the peers of the
     // Tiling.Behavior and Snapping.Behavior.WindowHandling families. Key
-    // NAMES are the shared leaf spellings (FocusNewWindows, StickyWindowHandling,
-    // …) under the Scrolling.Behavior group. Defaults deliberately match the
-    // autotile canonical so a screen flipped between the two engines starts
-    // from identical behavior.
+    // NAMES are mostly the shared leaf spellings (FocusNewWindows,
+    // StickyWindowHandling, …) under the Scrolling.Behavior group; a few
+    // (GroupSameAppAsTabs) are scrolling-only knobs with no sibling-mode
+    // twin. Defaults deliberately match the autotile canonical where a twin
+    // exists so a screen flipped between the two engines starts from
+    // identical behavior.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static constexpr bool scrollingFocusNewWindows()
     {
         return true;
+    }
+
+    /// Open a window as a tab of a column that already holds a window of the
+    /// same application (Scrolling.Behavior.GroupSameAppAsTabs). Off by
+    /// default: a fresh open takes its own column, niri's behaviour.
+    static constexpr bool scrollingGroupSameAppAsTabs()
+    {
+        return false;
     }
 
     // ── Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll) ──

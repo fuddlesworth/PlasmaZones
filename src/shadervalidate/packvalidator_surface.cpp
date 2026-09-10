@@ -283,7 +283,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << padLabel(fragLabel) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -294,7 +294,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             // (not just `shared/`) bakes identically here and can't false-fail
             // the gate. The sibling zone validator uses the same
             // {root/shared, root} pair.
-            const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
+            // Sibling shared/ first, then the family's XDG roots, so an
+            // INSTALLED pack (whose helpers live in the system prefix, not
+            // beside it) resolves its includes the way the runtime does.
+            const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
             QString err;
             // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body, no
             // main()) into a full TU before expansion, identical to the daemon /
@@ -305,7 +308,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << padLabel(fragLabel) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
@@ -327,7 +330,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         // that resolves an include from the packs-root (not just `shared/`) bakes
         // identically here and can't false-fail the gate. The sibling zone
         // validator uses the same {root/shared, root} pair.
-        const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
+        // Sibling shared/ first, then the family's XDG roots, so an
+        // INSTALLED pack (whose helpers live in the system prefix, not
+        // beside it) resolves its includes the way the runtime does.
+        const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
         for (const QString& buf : eff.bufferShaderPaths) {
             if (!QFile::exists(buf)) {
                 continue; // missing buffers already linted above
@@ -342,7 +348,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(buf).fileName();
             QFile bufFile(buf);
             if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
+                out << "  " << padLabel(label) << "ERROR\n    cannot read " << buf << "\n";
                 ++errors;
                 continue;
             }
@@ -351,7 +357,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString expanded =
                 ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), bufferIncludePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const ShaderCompiler::Result result =
@@ -377,7 +383,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         // that resolves an include from the packs-root (not just `shared/`) bakes
         // identically here and can't false-fail the gate. The sibling zone
         // validator uses the same {root/shared, root} pair.
-        const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
+        // Sibling shared/ first, then the family's XDG roots, so an
+        // INSTALLED pack (whose helpers live in the system prefix, not
+        // beside it) resolves its includes the way the runtime does.
+        const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
             // Beside the FRAGMENT (matching the daemon runtime and the comment
@@ -401,7 +410,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(vertPath).fileName();
             QFile vertFile(vertPath);
             if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
+                out << "  " << padLabel(label) << "ERROR\n    cannot read " << vertPath << "\n";
                 ++errors;
             } else {
                 const QString rawVert = QString::fromUtf8(vertFile.readAll());
@@ -409,7 +418,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 const QString expanded =
                     ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(), includePaths, &err);
                 if (expanded.isEmpty()) {
-                    out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+                    out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
                     ++errors;
                 } else {
                     const ShaderCompiler::Result result =

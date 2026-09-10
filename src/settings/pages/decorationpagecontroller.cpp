@@ -5,9 +5,13 @@
 
 #include "decoration_controller_detail.h"
 #include "decorationpreviewcontroller.h"
+#include "pointerpreviewcontroller.h"
 
+#include "config/configdefaults.h"
 #include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
 
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
@@ -16,6 +20,8 @@
 
 #include <QColor>
 #include <QLatin1String>
+#include <QLoggingCategory>
+#include <QSet>
 
 #include <algorithm>
 
@@ -26,6 +32,49 @@ using PhosphorSurfaceShaders::DecorationProfile;
 using PhosphorSurfaceShaders::DecorationProfileTree;
 
 namespace {
+
+/// The built-in seed layer `Settings::decorationProfileTree()` overlays on
+/// every read. Built once: it is a pure function of compiled-in literals, and
+/// the readers below run for every visible card on every tree write (each
+/// slider drag tick), where rebuilding four profiles and their parameter maps
+/// per call is pure waste.
+const DecorationProfileTree& decorationSeeds()
+{
+    static const DecorationProfileTree seeds = ConfigDefaults::decorationProfileTree();
+    return seeds;
+}
+
+/// True when the read-side seed overlay would inject an override at @p path
+/// were @p tree to carry none there — the path ships card chrome AND nothing
+/// on its walk-up vetoes the seed. This, not "the chain is engaged and empty",
+/// is what makes a path one whose OFF state has to be persisted as the
+/// explicit empty chain.
+bool seedWouldInjectAt(const DecorationProfileTree& tree, const QString& path)
+{
+    DecorationProfileTree without = tree;
+    without.clearOverride(path);
+    return without.withSeedDefaults(decorationSeeds()).hasOverride(path);
+}
+
+/// True when the override @p tree stores at @p path is nothing but an
+/// untouched seed injection. Compared PER FIELD against the seed rather than
+/// whole-profile: the overlay injects a seed field only where this tree
+/// engages that field nowhere on the walk-up, so a seed whose parameters were
+/// gated off by an engagement at an ancestor arrives as a chain-only
+/// injection, which is still untouched AT THIS PATH. A whole-profile compare
+/// would read that as a user override.
+bool isUntouchedSeedInjection(const DecorationProfileTree& tree, const QString& path)
+{
+    if (!decorationSeeds().hasOverride(path))
+        return false;
+    const DecorationProfile seed = decorationSeeds().directOverride(path);
+    const DecorationProfile mine = tree.directOverride(path);
+    if (mine.chain && mine.chain != seed.chain)
+        return false;
+    if (mine.parameters && mine.parameters != seed.parameters)
+        return false;
+    return !(mine.disabledPacks && mine.disabledPacks != seed.disabledPacks);
+}
 
 /// Overridden paths strictly BELOW @p path (its descendants), e.g. for
 /// "window" → every overridden "window.*". Excludes @p path itself. These are
@@ -38,8 +87,18 @@ QStringList overrideDescendantsOf(const DecorationProfileTree& tree, const QStri
     const QString prefix = path + QLatin1Char('.');
     const QStringList overridden = tree.overriddenPaths();
     for (const QString& p : overridden) {
-        if (p.startsWith(prefix))
-            out.append(p);
+        if (!p.startsWith(prefix))
+            continue;
+        // The tree the controller reads carries the shipped card chrome as an
+        // injected override at its seed paths, and an untouched injection is
+        // not a user override: counting it would put a "3 descendant surfaces
+        // shadow this parent" warning on the popup card of a config nobody has
+        // ever edited, with a Clear action that cannot clear it (the overlay
+        // re-injects on the next read). A seeded path the user HAS edited no
+        // longer matches the seed and counts normally.
+        if (isUntouchedSeedInjection(tree, p))
+            continue;
+        out.append(p);
     }
     return out;
 }
@@ -106,18 +165,28 @@ const DecorationProfileTree& DecorationPageController::tree() const
 }
 
 DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
-                                                   ISettings* settings, QObject* parent)
+                                                   ISettings* settings,
+                                                   PhosphorPointerShaders::PointerShaderRegistry* pointerRegistry,
+                                                   QObject* parent)
     // "decoration-staging", not "decorations": the sidebar nav node owns the
     // bare id (regVirtual in settingscontroller_pageregistration.cpp), and the
     // staging controller stays independently addressable — same split as
     // AnimationsPageController's "animations-staging".
     : PhosphorControl::PageController(QStringLiteral("decoration-staging"), parent)
     , m_registry(registry)
+    , m_pointerRegistry(pointerRegistry)
     , m_settings(settings)
     , m_preview(new DecorationPreviewController(registry, settings, this))
+    , m_pointerPreview(new PointerPreviewController(pointerRegistry, this))
 {
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &DecorationPageController::shaderEffectsChanged);
+    }
+    // Both families feed the same browser and the same set of cards, so a
+    // rescan on either registry has to re-fire the one catalogue signal.
+    if (m_pointerRegistry) {
+        connect(m_pointerRegistry, &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
                 &DecorationPageController::shaderEffectsChanged);
     }
     if (m_settings) {
@@ -143,20 +212,113 @@ QObject* DecorationPageController::previewController() const
     return m_preview;
 }
 
+QObject* DecorationPageController::pointerPreviewController() const
+{
+    return m_pointerPreview;
+}
+
 QString DecorationPageController::previewKind() const
 {
     return QStringLiteral("decoration");
 }
 
+bool DecorationPageController::isPointerPack(const QString& effectId) const
+{
+    if (!m_pointerRegistry || effectId.isEmpty() || !m_pointerRegistry->hasEffect(effectId))
+        return false;
+    // An id both registries answer to is a pack-author error: the two
+    // families draw through different passes, so one id cannot mean both.
+    // Resolve to the surface family, which was there first, and say so once
+    // per id rather than on every preview or chain read that asks.
+    if (m_registry && m_registry->hasEffect(effectId)) {
+        static QSet<QString> warned;
+        if (!warned.contains(effectId)) {
+            warned.insert(effectId);
+            qCWarning(lcConfig) << "decoration: pack id" << effectId
+                                << "is claimed by both a surface pack and a pointer pack; treating it as the "
+                                   "surface pack";
+        }
+        return false;
+    }
+    return true;
+}
+
+QString DecorationPageController::previewKindFor(const QString& effectId) const
+{
+    return isPointerPack(effectId) ? QStringLiteral("pointer") : previewKind();
+}
+
+QObject* DecorationPageController::previewControllerFor(const QString& effectId) const
+{
+    if (isPointerPack(effectId))
+        return m_pointerPreview;
+    return m_preview;
+}
+
+QStringList DecorationPageController::unresolvableChainPacks(const QString& path, const QStringList& chain) const
+{
+    // The pointer surface renders through the pointer pass and every other
+    // surface through a window paint, so a chain is judged against the one
+    // registry its path consumes. What is refused is a pack the OTHER family
+    // owns: a surface pack at the pointer path cannot be drawn by the pointer
+    // pass (different uniform contract), and the reverse is just as dead. A
+    // pack that neither registry knows is NOT refused — that is an
+    // uninstalled pack, a legitimate state the chain editor already shows as
+    // "(missing)", and refusing it would leave the user unable to reorder or
+    // remove anything around that row. A family whose registry is absent (a
+    // headless host, or a test built without one) judges nothing.
+    QStringList foreign;
+    const bool pointerPath = path == PhosphorSurfaceShaders::decorationPointerPath();
+    const bool haveOwn = pointerPath ? m_pointerRegistry != nullptr : m_registry != nullptr;
+    if (!haveOwn) {
+        return foreign;
+    }
+    for (const QString& id : chain) {
+        const bool inPointer = m_pointerRegistry && m_pointerRegistry->hasEffect(id);
+        const bool inSurface = m_registry && m_registry->hasEffect(id);
+        const bool inOwn = pointerPath ? inPointer : inSurface;
+        const bool inOther = pointerPath ? inSurface : inPointer;
+        if (!inOwn && inOther) {
+            foreign.append(id);
+        }
+    }
+    return foreign;
+}
+
 // ── Available packs ───────────────────────────────────────────────────────
+
+namespace {
+
+/// Type token a browser row carries, and the sole value of its `appliesTo`
+/// list. Two families share the decoration browser now, and the type axis is
+/// what separates them there.
+constexpr QLatin1String kTypeSurface{"surface"};
+constexpr QLatin1String kTypePointer{"pointer"};
+
+/// Tag @p row with the family it came from, in the shape ShaderBrowserPage's
+/// type axis reads: a `type` token plus a one-element `appliesTo`.
+QVariantMap tagged(QVariantMap row, QLatin1String type)
+{
+    row.insert(QLatin1String("type"), QString(type));
+    row.insert(QLatin1String("appliesTo"), QStringList{QString(type)});
+    return row;
+}
+
+} // namespace
 
 QVariantList DecorationPageController::availableShaderEffects() const
 {
     QVariantList result;
+    if (m_pointerRegistry) {
+        const auto pointerEffects = m_pointerRegistry->availableEffects();
+        result.reserve(pointerEffects.size());
+        for (const auto& effect : pointerEffects)
+            result.append(tagged(effectToMap(effect), kTypePointer));
+    }
     if (!m_registry)
         return result;
     const auto effects = m_registry->availableEffects();
-    result.reserve(effects.size());
+    result.reserve(result.size() + effects.size());
     for (const auto& effect : effects) {
         // EVERY pack is offered, including "border" and "opacity-tint". Those two
         // also back the plain config/rule-owned layers in easy mode, but that is a
@@ -165,8 +327,32 @@ QVariantList DecorationPageController::availableShaderEffects() const
         // into a chain they are ordinary packs that render through their OWN params
         // (setChain seeds those from the plain setting via providesBorder /
         // providesOpacityTint), exactly like frost's contentOpacity.
-        result.append(effectToMap(effect));
+        result.append(tagged(effectToMap(effect), kTypeSurface));
     }
+    return result;
+}
+
+QVariantList DecorationPageController::availableShaderEffectsForPath(const QString& path) const
+{
+    QVariantList result;
+    // The pointer surface renders through the pointer pass, which knows only
+    // the pointer contract, so offering it a surface pack would be offering a
+    // pack that cannot draw. The reverse holds for every other surface.
+    if (path == PhosphorSurfaceShaders::decorationPointerPath()) {
+        if (!m_pointerRegistry)
+            return result;
+        const auto effects = m_pointerRegistry->availableEffects();
+        result.reserve(effects.size());
+        for (const auto& effect : effects)
+            result.append(tagged(effectToMap(effect), kTypePointer));
+        return result;
+    }
+    if (!m_registry)
+        return result;
+    const auto effects = m_registry->availableEffects();
+    result.reserve(effects.size());
+    for (const auto& effect : effects)
+        result.append(tagged(effectToMap(effect), kTypeSurface));
     return result;
 }
 
@@ -209,6 +395,16 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
+    // Same family gate a decoration set passes on import: a surface pack at
+    // the pointer path (or a pointer pack anywhere else) would persist and
+    // then render nothing, because the pass that draws that surface knows
+    // only its own contract.
+    const QStringList unresolvable = unresolvableChainPacks(path, chain);
+    if (!unresolvable.isEmpty()) {
+        qCWarning(lcConfig) << "setChain: refusing chain at" << path
+                            << "with packs the surface cannot draw:" << unresolvable;
+        return;
+    }
     DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // Packs newly entering the chain, for the border-seed below. The previous
@@ -453,8 +649,62 @@ bool DecorationPageController::clearOverride(const QString& path)
     if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
     DecorationProfileTree tree = this->tree();
-    if (!tree.clearOverride(path))
+    const bool removed = tree.clearOverride(path);
+    // Seeded surfaces (the card chrome in ConfigDefaults::decorationProfileTree:
+    // the OSD and the three PopupFrame popups) are re-injected by the read-side
+    // seed overlay, so a plain clear here is undone on the very next read and
+    // the card's toggle snaps straight back ON — the surface could not be
+    // turned off at all. Persist the explicit empty chain the overlay's master
+    // gate honours instead, which IS what OFF means for a seeded surface:
+    // undecorated. Nothing to inherit is lost, since the seed was the only
+    // thing this path was getting. The whole override goes, parameters
+    // included, exactly as it does on an unseeded path — OFF is a clear, not a
+    // retune.
+    if (seedWouldInjectAt(tree, path)) {
+        DecorationProfile undecorated;
+        undecorated.chain = QStringList{};
+        tree.setOverride(path, undecorated);
+    } else if (!removed) {
         return false;
+    }
+    m_settings->setDecorationProfileTree(tree);
+    return true;
+}
+
+bool DecorationPageController::isExplicitlyUndecorated(const QString& path) const
+{
+    if (path.isEmpty() || !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
+        return false;
+    const DecorationProfileTree& t = tree();
+    if (!t.hasOverride(path))
+        return false;
+    const DecorationProfile direct = t.directOverride(path);
+    if (!direct.chain || !direct.chain->isEmpty())
+        return false;
+    // Only at a path the seed overlay would re-inject. An engaged empty chain
+    // ANYWHERE else is a real user look — the documented way for a leaf to
+    // disable an ancestor's pack chain (DecorationProfile's "explicitly-empty
+    // chain" contract) — and reading it as OFF would both mislabel the card
+    // and let the ON path (clearUndecorated) delete the user's choice.
+    return seedWouldInjectAt(t, path);
+}
+
+bool DecorationPageController::clearUndecorated(const QString& path)
+{
+    if (!m_settings || !isExplicitlyUndecorated(path))
+        return false;
+    DecorationProfileTree tree = this->tree();
+    DecorationProfile profile = tree.directOverride(path);
+    // Disengage only the chain slot, so the seed chain flows in again while
+    // any parameters or disable set still engaged at this path stay put (the
+    // overlay gates those on their own engagement). clearOverride writes a
+    // chain-only marker, so in practice there is nothing else to keep; this is
+    // the slot-scoped write regardless, not a whole-override drop.
+    profile.chain.reset();
+    if (!profile.parameters && !profile.disabledPacks)
+        tree.clearOverride(path);
+    else
+        tree.setOverride(path, profile);
     m_settings->setDecorationProfileTree(tree);
     return true;
 }

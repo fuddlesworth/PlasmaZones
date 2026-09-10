@@ -12,6 +12,7 @@
 
 #include <phosphorengine_export.h>
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -155,12 +156,12 @@ public:
     /// cross-screen reclaim, the effect's already-queued arrival announce
     /// still carries the ARRIVAL screen, and dispatching it would migrate
     /// the window straight back. isWindowTracked cannot serve — its contract
-    /// is PER-ENGINE: SnapEngine and ScrollEngine answer from the raw
-    /// reverse-map key, which a refused adoption can leave dangling, while
-    /// AutotileEngine verifies membership as well (a phantom key answers
-    /// false there — see its override doc for why that engine needed the
-    /// stricter form). Callers wanting one uniform answer across engines
-    /// cannot get it from that predicate. isWindowManaged/isWindowTiled
+    /// is PER-ENGINE: ScrollEngine answers from the raw reverse-map key,
+    /// which a refused adoption can leave dangling, while SnapEngine and
+    /// AutotileEngine verify membership as well (a phantom key answers
+    /// false there — see AutotileEngine's override doc for why that engine
+    /// needed the stricter form). Callers wanting one uniform answer across
+    /// engines cannot get it from that predicate. isWindowManaged/isWindowTiled
     /// cannot serve either — both exclude engine-floating windows, which a
     /// reclaim can legitimately produce.
     ///
@@ -177,6 +178,58 @@ public:
     {
         Q_UNUSED(windowId)
         return {};
+    }
+
+    /// The (screen, desktop, activity) key of the state that genuinely holds
+    /// @p windowId, tiled or floating, in ANY context — or nullopt when no
+    /// state holds it. Membership-grade like heldScreenForWindow, but
+    /// deliberately NOT scoped to the screen's current context: this is the
+    /// query for "which desktop's stack still lists this window", which the
+    /// daemon's desktop-membership reconcile asks after the compositor
+    /// reports the window's desktop set changed. The holding state is
+    /// usually a BACKGROUND one by then (the user is looking at the desktop
+    /// the window arrived on), which is exactly the case the current-context
+    /// predicates answer empty for.
+    ///
+    /// At most ONE key can come back. The per-screen store's reverse map is
+    /// single-valued, so a window has exactly one recorded key; this answers
+    /// that key when the state it names genuinely holds the window, and
+    /// nullopt otherwise. A caller must not read nullopt as "no engine state
+    /// mentions this window" — a phantom reverse-map entry left by a refused
+    /// adoption answers nullopt too, which is the safe direction here.
+    ///
+    /// ScrollEngine answers nullopt for the duration of a drag-insert
+    /// preview: the preview keeps the reverse-map key pointed at the target
+    /// context while the window is detached from the strip, so the
+    /// membership term fails until the drop or cancel.
+    ///
+    /// SnapEngine has per-context states but deliberately keeps the default.
+    /// The daemon's desktop-membership reconcile walks the tiling-family
+    /// lifecycle engines only, so snapping is out of that arm's scope; a
+    /// zone assignment has no stack to close a gap in, unlike a tile.
+    virtual std::optional<PlacementStateKey> heldKeyForWindow(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
+    /// Drop @p windowId from the state at @p key, without any of the
+    /// re-announce bookkeeping a live-move release carries.
+    ///
+    /// For an engine that takes part in desktop-membership reconciliation but
+    /// is NOT in the tiling lifecycle pipeline — snapping. The pipeline
+    /// engines are released through the adaptor instead, because their release
+    /// has to carry the move-excuse and replay-cache work the tiling dispatch
+    /// depends on; a snapped window has none of that, it simply stops being an
+    /// occupant of the zone it left behind.
+    ///
+    /// Keyed rather than by window id alone: the whole point is to clear the
+    /// state the window is NO LONGER on, which is not the one a current-context
+    /// lookup would find.
+    virtual void releaseFromContext(const PlacementStateKey& key, const QString& windowId)
+    {
+        Q_UNUSED(key)
+        Q_UNUSED(windowId)
     }
 
     /// Bracket a BURST of windowOpened calls delivered together (the
@@ -203,6 +256,12 @@ public:
     }
 
     /// A window was closed.
+    ///
+    /// An implementation must drop the window from whichever state actually
+    /// holds it, BACKGROUND contexts included, resolving through the stored
+    /// key rather than the screen's current one. heldKeyForWindow answers
+    /// across every context, so a close that only cleaned the current
+    /// context would leave it answering a key for a window that is gone.
     virtual void windowClosed(const QString& windowId) = 0;
 
     /// A window gained focus (called when the compositor reports activation).
@@ -1104,6 +1163,32 @@ public:
         return {};
     }
     virtual void pruneStatesForDesktop(int removedDesktop)
+    {
+        Q_UNUSED(removedDesktop)
+    }
+    /// Shift every per-(screen, desktop, activity) state ABOVE @p
+    /// removedDesktop down by one, because Plasma renumbers x11 desktop
+    /// numbers when a desktop in the middle is deleted (removing 2 of 4
+    /// makes 3 become 2 and 4 become 3).
+    ///
+    /// This is the companion to pruneStatesForDesktop, which only drops the
+    /// removed desktop's own state. Without the shift, every surviving
+    /// higher state stays filed under the number it had before, and any
+    /// consumer that compares a stored key against a number the compositor
+    /// reports now — the daemon's desktop-membership reconcile above all —
+    /// reads a window that never moved as having left its desktop.
+    ///
+    /// The caller drives prune first, then this, and must have established
+    /// which desktop was removed. desktopCountChanged alone cannot: it
+    /// carries the new count, and after a mid-list removal every surviving
+    /// number is still within it.
+    ///
+    /// An implementation must move EVERY structure keyed by a
+    /// PlacementStateKey or by a bare desktop number, not just the state
+    /// store, and must walk the affected desktops in ASCENDING order so
+    /// each target key is already vacant when it is written (descending
+    /// collides at every step, and the store's insert overwrites silently).
+    virtual void renumberDesktopsAfterRemoval(int removedDesktop)
     {
         Q_UNUSED(removedDesktop)
     }

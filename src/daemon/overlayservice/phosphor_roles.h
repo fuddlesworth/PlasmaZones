@@ -178,12 +178,6 @@ inline const PhosphorLayer::Role Cheatsheet =
 inline const PhosphorLayer::Role ScrollDropIndicator =
     PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-drop-indicator"));
 
-/// Shader preview (editor Shader Settings dialog). Floating Overlay
-/// layer, no anchors, no keyboard. Singleton. Positioned programmatically
-/// by the caller.
-inline const PhosphorLayer::Role ShaderPreview =
-    PhosphorShellPatterns::Floating().withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
-
 /// Build a per-instance Role from one of the base roles above by appending
 /// `-{screenId}-{generation}` to its base scope prefix. Single-source for
 /// the policy "per-instance scope prefix-matches the base role's prefix" so

@@ -5,7 +5,7 @@
 
 The launcher: a spotlight-style search over installed applications, open
 windows, clipboard history, arithmetic and shell commands, per
-[`docs/phosphor-shell-design/mockups/launcher-spotlight.svg`](../../docs/phosphor-shell-design/mockups/launcher-spotlight.svg).
+[`docs/phosphor-shell-design/mockups-v2/launcher.svg`](../../docs/phosphor-shell-design/mockups-v2/launcher.svg).
 Two targets in one directory: a C++ core library
 (`PhosphorShellLauncher`) any host can link without the UI, and the
 `Phosphor.Launcher` QML module that draws it, themed through

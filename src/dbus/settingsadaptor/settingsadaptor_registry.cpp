@@ -6,7 +6,7 @@
 //     getSetting/setSetting D-Bus surface (REGISTER_* macro block,
 //     enum-validated custom setters, JSON profile-tree blob round-trips) and
 //     calls the three per-mode slices
-//   * validProfileTreeBlob — shared wire validation for the two profile-tree
+//   * validProfileTreeBlob — shared wire validation for the three profile-tree
 //     blob setters
 //
 // The registry is split across FOUR TUs, one per family, all filling the same
@@ -66,11 +66,12 @@ bool isWindowScopeToken(const QString& requested)
     return requested == WAS::Tiled || requested == WAS::Normal || requested == WAS::All;
 }
 
-// Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
-// AND surface decoration tree) accepted over D-Bus.
+// Shared wire-size cap for the JSON profile-tree blobs (animation shader
+// tree, surface decoration tree, and overlay shader tree) accepted over
+// D-Bus.
 constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
 
-// Shared wire validation for the two profile-tree blob setters: gate on UTF-8
+// Shared wire validation for the three profile-tree blob setters: gate on UTF-8
 // byte length — for multi-byte payloads QString::size() undercounts what a
 // 64 KiB wire frame encodes to — and require a top-level JSON object. Fills
 // @p outDoc with the parsed document on success.
@@ -589,6 +590,12 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)
     REGISTER_DOUBLE_SETTING("decorationBlurScaleMultiplier", decorationBlurScaleMultiplier,
                             setDecorationBlurScaleMultiplier)
+    // Also fetched by the effect via loadSettingAsync, and subject to the same
+    // unknown-key trap the comment above describes: it is default-TRUE, so a
+    // missing entry here would read back as false and quietly disable the
+    // fullscreen suppression on every startup.
+    REGISTER_BOOL_SETTING("decorationSuppressWhileFullscreen", decorationSuppressWhileFullscreen,
+                          setDecorationSuppressWhileFullscreen)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified
@@ -624,18 +631,27 @@ void SettingsAdaptor::initializeRegistry()
     // The merged per-event `PhosphorAnimation::Profile` set — every
     // entry the daemon's `m_profileRegistry` holds, which is the SAME
     // registry the OverlayService SurfaceAnimator resolves OSD / popup
-    // durations from. Settings persists per-event overrides as one
-    // `profiles/<path>.json` file each; the daemon's ProfileLoader
-    // scans them into the registry, and `publishActiveAnimationProfile`
+    // durations from. Settings persists per-event overrides in the
+    // `Animations/MotionProfileTree` config key; the daemon's
+    // motionProfileTreeChanged handler installs them into the registry via
+    // `installMotionProfileTree`, and `publishActiveAnimationProfile`
     // registers the settings-driven `Global` profile on top.
     //
     // The kwin-effect lives in a separate process and cannot share the
     // registry object, so the merged set is flattened into a
     // `ProfileTree` and shipped over the bus: `Global` becomes the
-    // tree baseline, every other path an override. The effect resolves
-    // per-event durations from the tree exactly as the SurfaceAnimator
-    // resolves them from the registry. Read-only — Settings owns the
-    // authoritative per-event files, never the effect.
+    // tree baseline, every other path an override.
+    //
+    // The effect does NOT read that baseline. It seeds `overlayChainOnto` with
+    // its own animator profile (the global duration and curve it already has
+    // from the plain settings keys) and overlays the tree's per-path entries
+    // onto it, and overlayChainOnto skips the tree's own baseline by design.
+    // The baseline is written anyway so the shipped tree is a complete
+    // serialisation of the registry rather than a lossy one. Note the
+    // consequence: the global's minDistance, sequenceMode and staggerInterval
+    // reach the daemon's SurfaceAnimator but have no route to the compositor.
+    //
+    // Read-only — Settings owns the authoritative config key, never the effect.
     if (m_profileRegistry) {
         auto* registry = m_profileRegistry;
         m_getters[QString(PhosphorProtocol::Service::SettingProperty::MotionProfileTree)] = [registry]() {
@@ -750,6 +766,22 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
+
+    // Zone-overlay shader tree (JSON blob round-trip via D-Bus), the third
+    // tree alongside the two above. The settings app writes assignments here;
+    // the daemon consumes the tree in-process (OverlayService shader resolve).
+    m_getters[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] = [this]() {
+        return m_settings->overlayShaderTreeJson();
+    };
+    m_setters[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] =
+        [this](const QVariant& v) -> bool {
+        QJsonDocument doc;
+        if (!validProfileTreeBlob(v, &doc))
+            return false;
+        m_settings->setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
+        return true;
+    };
+    m_schemas[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] = QStringLiteral("string");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Per-mode families, one TU each: settingsadaptor_registry_snapping.cpp,

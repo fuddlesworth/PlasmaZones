@@ -762,18 +762,23 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             query.screenOrientation = orientationToken;
             query.activeLayout = activeLayoutId;
             query.colorScheme = schemeToken;
-            // The ten slots this resolver reads. A rule carrying none of them
-            // is NOT admitted — the same slot-carrying gate resolveContextGaps
-            // applies, and for the same reason: the evaluator's walk STOPS at
-            // the first admitted rule carrying an in-scope terminal action
-            // (Exclude), so admitting unrelated rules lets a higher-priority
-            // context Exclude drop every overlay override below it.
+            // The slots this resolver reads: nine fixed ones plus the
+            // node-scoped shader family ("overlay-shader:<node>"). A rule
+            // carrying none of them is NOT admitted — the same slot-carrying
+            // gate resolveContextGaps applies, and for the same reason: the
+            // evaluator's walk STOPS at the first admitted rule carrying an
+            // in-scope terminal action (Exclude), so admitting unrelated rules
+            // lets a higher-priority context Exclude drop every overlay
+            // override below it.
             static const QSet<QString> overlaySlots = {
-                QString(PWR::ActionSlot::OverlayShader),          QString(PWR::ActionSlot::OverlayStyle),
-                QString(PWR::ActionSlot::OverlayHighlightColor),  QString(PWR::ActionSlot::OverlayInactiveColor),
-                QString(PWR::ActionSlot::OverlayBorderColor),     QString(PWR::ActionSlot::OverlayActiveOpacity),
-                QString(PWR::ActionSlot::OverlayInactiveOpacity), QString(PWR::ActionSlot::OverlayBorderWidth),
-                QString(PWR::ActionSlot::OverlayBorderRadius),    QString(PWR::ActionSlot::OverlayShowZoneNumbers),
+                QString(PWR::ActionSlot::OverlayStyle),           QString(PWR::ActionSlot::OverlayHighlightColor),
+                QString(PWR::ActionSlot::OverlayInactiveColor),   QString(PWR::ActionSlot::OverlayBorderColor),
+                QString(PWR::ActionSlot::OverlayActiveOpacity),   QString(PWR::ActionSlot::OverlayInactiveOpacity),
+                QString(PWR::ActionSlot::OverlayBorderWidth),     QString(PWR::ActionSlot::OverlayBorderRadius),
+                QString(PWR::ActionSlot::OverlayShowZoneNumbers),
+            };
+            const auto isOverlaySlot = [](const QString& slot) {
+                return overlaySlots.contains(slot) || slot.startsWith(PWR::ActionSlot::OverlayShaderPrefix);
             };
             // Mode-referencing rules are structurally excluded: this resolver
             // is mode-agnostic, so mode is unstamped and a negated
@@ -781,32 +786,51 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             // overlay override the user scoped to another mode. Same rule the
             // assignment / default-assignment / lock resolvers enforce.
             const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
-            const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [&registry](const PWR::Rule& r) {
-                // TiledWindowCount joins Mode: neither is stamped on an overlay
-                // query, and an absent field makes a leaf false, so a negated
-                // leaf on it matches every context and restyles every screen.
-                // Window-sourced fields get the negation-scoped guard for the
-                // same inversion (positive leaves stay inert by design).
-                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
-                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
-                    return false;
-                }
-                for (const PWR::RuleAction& a : r.actions) {
-                    if (overlaySlots.contains(registry.slotFor(a))) {
-                        return true;
+            const PWR::ResolvedActions resolved =
+                m_evaluator->resolveFiltered(query, [&registry, &isOverlaySlot](const PWR::Rule& r) {
+                    // TiledWindowCount joins Mode: neither is stamped on an overlay
+                    // query, and an absent field makes a leaf false, so a negated
+                    // leaf on it matches every context and restyles every screen.
+                    // Window-sourced fields get the negation-scoped guard for the
+                    // same inversion (positive leaves stay inert by design).
+                    if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                        || r.match.negatesAnyField(PWR::windowSourcedFields())) {
+                        return false;
                     }
-                }
-                return false;
-            });
+                    for (const PWR::RuleAction& a : r.actions) {
+                        if (isOverlaySlot(registry.slotFor(a))) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
 
-            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
-                const QString id = action->params.value(PWR::ActionParam::EffectId).toString();
-                if (!id.isEmpty()) {
-                    overlay.shaderId = id;
-                    // Optional shader uniform overrides — empty when the rule
-                    // overrides only the shader id (shader defaults apply).
-                    overlay.shaderParams = action->params.value(PWR::ActionParam::Params).toObject().toVariantMap();
-                }
+            // The shader slot is node-scoped like the animation shader slot,
+            // and this read is the tree's own walk with the rule layer
+            // consulted at each node: the active layout's node first, then
+            // the global-default node. A rule on the layout's node therefore
+            // beats a rule on the global node whatever their priorities, which
+            // is the override-beats-baseline order the OverlayShaderTree
+            // resolves in. Priority still decides between two rules on the
+            // SAME node, since they share a slot. The active id is the
+            // assignment id, so an autotile or scrolling context (a prefixed
+            // token, never a tree key) reads only the global node.
+            //
+            // A filled slot is applied verbatim, empty effectId included: that
+            // is the engaged-empty "no shader" sentinel the animation action
+            // carries, and it must reach the consumer as an override, not
+            // vanish into "no rule matched". The two are distinguishable only
+            // because the evaluator records a slot as filled by presence, not
+            // by payload.
+            auto shaderAction = resolved.slot(QString(PWR::ActionSlot::OverlayShaderPrefix) + activeLayoutId);
+            if (!shaderAction) {
+                shaderAction = resolved.slot(QString(PWR::ActionSlot::OverlayShaderPrefix));
+            }
+            if (shaderAction) {
+                overlay.shaderId = shaderAction->params.value(PWR::ActionParam::EffectId).toString();
+                // Optional shader uniform overrides — empty when the rule
+                // overrides only the shader id (shader defaults apply).
+                overlay.shaderParams = shaderAction->params.value(PWR::ActionParam::Params).toObject().toVariantMap();
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayStyle))) {
                 // Wire token → OverlayDisplayMode int so consumers compare against

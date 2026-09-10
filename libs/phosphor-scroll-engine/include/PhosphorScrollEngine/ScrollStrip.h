@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/ScrollEngineTypes.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <phosphorscrollengine_export.h>
 
@@ -48,9 +49,13 @@ namespace PhosphorScrollEngine {
 /// positions the group edge to edge on purpose, and a policy that re-centered
 /// the active column afterwards would hand a second press a different group.
 /// Any focus-driven or structural re-anchor (every reanchorAfterFocusChange
-/// caller: the focus and move verbs, the inserts, an active column that
-/// vanished), the Always policy's own re-centering, or either centering verb
-/// re-attaches it and the policy takes the view back. A bystander's removal
+/// caller: the COLUMN-focus and move verbs, the inserts, an active column
+/// that vanished), the Always policy's own re-centering, or either centering
+/// verb re-attaches it and the policy takes the view back. The TILE-focus
+/// ops here never re-anchor, so ScrollEngine clears the latch on their behalf
+/// instead: cycleTab, focusTab, focusWindowTop, focusWindowBottom and the
+/// cross-axis leg of a directional focus press all hand the view back the way
+/// windowFocused does when the pointer picks the same tab. A bystander's removal
 /// that leaves focus where it was does not. One re-attach lives OUTSIDE this
 /// class, in ScrollEngine::windowFocused: a compositor report naming the
 /// window the strip already calls active reaches no re-anchor at all (it is
@@ -180,8 +185,14 @@ public:
     /// the last arrival would otherwise keep it.
     /// The tile is seeded with @p params.defaultWindowHeight; callers with a
     /// remembered intent overwrite it via setWindowHeightIntent.
+    /// @p displayOverride, when ENGAGED, is applied to the host column BEFORE
+    /// the tile joins (through applyColumnDisplay, so the extent ownership
+    /// transition holds), the same contract insertWindowIntoActiveColumn
+    /// carries. Disengaged leaves the host's display alone, which is what a
+    /// float/minimize round trip wants.
     bool insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
-                                  const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
+                                  const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0,
+                                  std::optional<ColumnDisplay> displayOverride = std::nullopt);
     /// Remove @p windowId; a column left empty closes up. Keeps the view
     /// anchored so surviving neighbours don't jump, and selects a sensible
     /// new focus when the active tile/column vanished. Returns false when
@@ -213,12 +224,19 @@ public:
     bool focusAdjacentColumn(int delta, const ScrollLayoutParams& params);
     bool focusFirstColumn(const ScrollLayoutParams& params);
     bool focusLastColumn(const ScrollLayoutParams& params);
-    /// Focus the previous/next non-minimized tile within the active column
-    /// (cycles tabs in a tabbed column exactly the same way). @p delta -1/+1.
+    /// Focus the previous/next non-minimized tile within the active column,
+    /// stopping at either end (ScrollEngine::cycleTab wraps instead, by
+    /// falling back to focusTileAtEnd when this refuses). @p delta -1/+1.
     bool focusAdjacentTile(int delta);
     /// Focus the first (@p last false) or last non-minimized tile of the
     /// active column (niri focus-window-top/bottom). False when already there.
     bool focusTileAtEnd(bool last);
+    /// Focus the @p ordinal'th (1-based) non-minimized tile of the active
+    /// column, which is that ordinal's tab when the column is tabbed. Like
+    /// the sibling tile-focus verbs it is NOT gated on the display mode, so
+    /// it addresses the stack the same way. False when the column has no
+    /// such tile or it is already the active one.
+    bool focusTileByOrdinal(int ordinal);
     /// Make @p windowId the active tile of its (newly active) column.
     /// Externally-driven focus (compositor activation). Returns false when
     /// untracked or already the focused window.
@@ -230,6 +248,12 @@ public:
     /// Move the active column directly to @p target (one list move + one
     /// reanchor — a positional move must not pay per-step swap costs).
     bool moveActiveColumnTo(int target, const ScrollLayoutParams& params);
+    /// Move the column at strip index @p from to strip index @p to and make
+    /// it the active column (a placement map dragging one column past the
+    /// others). Unlike focusColumn, @p from is NOT clamped: an index past the
+    /// end names no column, and moving the last column in its place would be
+    /// a drag nobody made. False for either index out of range or equal.
+    bool moveColumnTo(int from, int to, const ScrollLayoutParams& params);
     bool moveActiveColumnToFirst(const ScrollLayoutParams& params);
     bool moveActiveColumnToLast(const ScrollLayoutParams& params);
     /// Reorder the active tile within its column by @p delta positions.
@@ -735,6 +759,17 @@ public:
     /// Resolve every non-minimized tile's absolute pixel rect against
     /// @p params. Pure function of the current model state; does not mutate.
     ResolvedStrip relayout(const ScrollLayoutParams& params) const;
+
+    /// The whole strip as a renderer of a strip MAP reads it: every column's
+    /// strip position and main extent, every tile's cross extent, the
+    /// viewport's offset and extent on the same axis, and the active column
+    /// (ScrollStripModel documents each field). ONE relayout pass plus one
+    /// cumulative walk over the columns, so the cost is the same as a
+    /// relayout rather than a columnStripPos per column. Pure function of the
+    /// current model state; does not mutate. On a degenerate work area the
+    /// columns still carry their positions and extents while every tile's
+    /// cross extent is 0, since the relayout resolves nothing there.
+    ScrollStripModel stripModel(const ScrollLayoutParams& params) const;
 
     /// True when the whole strip already fits the viewport, i.e. there is
     /// nothing off screen to scroll to. A degenerate work area counts as

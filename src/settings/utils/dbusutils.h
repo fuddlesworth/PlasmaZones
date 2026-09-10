@@ -44,9 +44,12 @@ inline QDBusMessage callDaemon(const QString& interface, const QString& method, 
 /// a separate app that cannot include this GPL settings-app header — spells
 /// the same wire contract without a second hand-rolled copy. It picks the
 /// async form there: it has no guard to order against the reply.
-inline void notifyReload()
+/// @return true if the daemon acknowledged the reload. Callers that only need
+///         the ordering can ignore it; a caller that is about to re-fetch from
+///         the daemon cannot, for the same reason notifyRulesReload documents.
+inline bool notifyReload()
 {
-    PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
+    return PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
 }
 
 /// Ask the daemon to re-read rules.json.

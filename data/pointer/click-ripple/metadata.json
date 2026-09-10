@@ -1,0 +1,63 @@
+{
+    "id": "click-ripple",
+    "name": "Click Ripple",
+    "description": "Every click sends a ring rippling out from the pointer. Pressing a button launches a ring that eases outward and fades as it grows, and releasing it sends a thinner second ring after the first. Each button has its own ring colour. The rings draw over the cursor so they stay visible on top of it.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Click",
+    "fragmentShader": "effect.frag",
+    "layer": "above",
+    "reach": 160,
+    "trailSeconds": 0.9,
+    "samplesTrail": false,
+    "parameters": [
+        {
+            "id": "size",
+            "name": "Size",
+            "type": "float",
+            "default": 120.0,
+            "min": 16.0,
+            "max": 320.0,
+            "description": "Diameter the ring grows to before it is gone, pulled in at large thicknesses so the band stays inside the painted area (px)"
+        },
+        {
+            "id": "thickness",
+            "name": "Thickness",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 16.0,
+            "description": "Line thickness of the press ring (px)"
+        },
+        {
+            "id": "duration",
+            "name": "Duration",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.2,
+            "max": 0.81,
+            "description": "How long a ring takes to expand and fade (seconds)"
+        },
+        {
+            "id": "colorLeft",
+            "name": "Left button",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Ring colour for the left button"
+        },
+        {
+            "id": "colorRight",
+            "name": "Right button",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Ring colour for the right button"
+        },
+        {
+            "id": "colorMiddle",
+            "name": "Middle button",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Ring colour for the middle button"
+        }
+    ]
+}

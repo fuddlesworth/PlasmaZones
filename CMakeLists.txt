@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.4.11 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.4.16 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -173,6 +173,18 @@ if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
         "Kirigami for icon rendering and has no Qt-only fallback.")
 endif()
 
+# App-tier compile-time gate for the shell. The Phosphor shell's own surfaces
+# (the `shell.phosphor.*` decoration subtree: bar, popouts, OSD bands, toasts,
+# picker, lock) only exist when the shell is built, so the seeds in
+# ConfigDefaults, the settings cards and their breadcrumb labels compile out
+# with it. Defined at directory scope here, before any add_subdirectory, so
+# every TU that includes the inline ConfigDefaults headers sees the same
+# value (a per-target definition would split the ODR across core / daemon /
+# settings / tests).
+if(BUILD_PHOSPHOR_SHELL)
+    add_compile_definitions(PLASMAZONES_HAVE_PHOSPHOR_SHELL)
+endif()
+
 if(USE_KDE_FRAMEWORKS)
     add_compile_definitions(USE_KDE_FRAMEWORKS)
 
@@ -321,6 +333,7 @@ add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (La
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
 add_subdirectory(libs/phosphor-surface)     # surface-shader pack subsystem (SurfaceShaderContract/Effect/Registry) - depends on phosphor-shaders/registry/fsloader
+add_subdirectory(libs/phosphor-pointer)     # pointer-shader pack subsystem (PointerShaderContract/Effect/Registry, PointerHistory) - depends on phosphor-shaders/registry/fsloader
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
 # ext-idle-notify-v1. Built unconditionally (it used to sit behind
 # BUILD_PHOSPHOR_SHELL) because the DAEMON now depends on it: the KWin effect
@@ -400,6 +413,10 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell-launcher)       # Launcher core: ILauncherProvider implementations, fzf-style matcher, .desktop scanner (Phase 4.2); depends on registry
     add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the shell-tier libs that also require KF6 Kirigami (bar, power, control-center and launcher)
     add_subdirectory(libs/phosphor-shell-power)    # Phosphor.Power session menu (Phase 4.6); depends on theme + widgets + Kirigami
+    add_subdirectory(libs/phosphor-shell-dashboard) # Phosphor.Dashboard: dashboard grid + keybind cheatsheet on the placement map (Phase 4); depends on theme + widgets + protocol
+    add_subdirectory(libs/phosphor-shell-picker)   # Phosphor.Picker wallpaper and theme strip (Phase 4); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-polkit)   # Phosphor.Polkit authentication prompt (Phase 4); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-lock)     # Phosphor.Lock lockscreen surface (Phase 4); depends on theme + widgets + Kirigami + phosphor-wayland (lock surfaces)
 endif()
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
@@ -579,9 +596,11 @@ install(DIRECTORY data/scrolling-templates/
     FILES_MATCHING PATTERN "*.json"
 )
 
-# Settings embeds whatsnew.json as a Qt resource at build time. Also
-# install it on disk so docs/release tooling can read the user-facing
-# entries without grabbing the binary's resource bundle.
+# Settings embeds whatsnew.json as a Qt resource at build time, so nothing in
+# this repo reads the installed copy. It ships anyway as a packaging
+# convenience: the release notes a distro or a downstream tool wants to quote
+# are here in one file, rather than inside the settings binary's resource
+# bundle.
 install(FILES data/whatsnew.json
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones
 )
@@ -590,8 +609,8 @@ install(FILES data/whatsnew.json
 # (e.g. `"curve": "widget-out"`) so a single edit to a curve file
 # retunes every profile that uses it, and users can drop their own
 # JSON under ~/.local/share/plasmazones/curves/ to override a shipped
-# curve system-wide. The daemon's CurveLoader scans this path before
-# ProfileLoader runs.
+# curve system-wide. The daemon's CurveLoader scans this path first, so
+# every later consumer resolves curve names against the merged set.
 install(DIRECTORY data/curves/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/curves
     FILES_MATCHING PATTERN "*.json"
@@ -681,6 +700,19 @@ install(DIRECTORY data/animations/
 install(DIRECTORY data/surface/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/surface
     PATTERN ".*" EXCLUDE
+    PATTERN "p_generated.glsl" EXCLUDE
+)
+
+# Install bundled pointer shader packs (pointer trails, halos, click ripples;
+# the fourth shader-pack family). The kwin-effect and the settings preview
+# discover ${XDG_DATA_DIRS}/plasmazones/pointer via the PointerShaderRegistry;
+# user overrides at ~/.local/share/plasmazones/pointer win.
+# Ship the whole pack tree (metadata, shaders, the shared/ GLSL includes,
+# and any texture a pack references) and exclude only hidden dev/OS files.
+install(DIRECTORY data/pointer/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/pointer
+    PATTERN ".*" EXCLUDE
+    PATTERN "p_generated.glsl" EXCLUDE
 )
 
 # Install bundled scripted tiling algorithms
@@ -740,8 +772,6 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #   phosphor-ipc-demo    — three IpcTargets driven via phosphorctl.
 #   phosphor-widgets-kitchen-sink — every Phosphor.Widgets atom in its
 #                            enabled/disabled states (widgets + theme).
-#   phosphor-bar-canvas-demo — connected-corner bar; a popout grows out of
-#                            the bar as one Shape, toggled via PopoutService.
 #   phosphor-osd-demo — OSDHost overlay; the four built-in OSDs via
 #                            Registry<IOSDFactory>, driven by phosphorctl.
 #   phosphor-toast-demo — ToastHost overlay fed by a real NotificationServer
@@ -753,7 +783,6 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-registry-demo)
     add_subdirectory(examples/phosphor-ipc-demo)
     add_subdirectory(examples/phosphor-widgets-kitchen-sink)
-    add_subdirectory(examples/phosphor-bar-canvas-demo)
     add_subdirectory(examples/phosphor-osd-demo)
     add_subdirectory(examples/phosphor-toast-demo)
     add_subdirectory(examples/phosphor-control-center-demo)

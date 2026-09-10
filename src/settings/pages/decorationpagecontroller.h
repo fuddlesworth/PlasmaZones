@@ -22,10 +22,15 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorPointerShaders {
+class PointerShaderRegistry;
+}
+
 namespace PlasmaZones {
 
 class DecorationPreviewController;
 class ISettings;
+class PointerPreviewController;
 
 /// Q_INVOKABLE surface for the "Decoration" drill-down settings pages
 /// (exposed to QML through SettingsController's `decorationPage` Q_PROPERTY;
@@ -97,6 +102,14 @@ class DecorationPageController : public PhosphorControl::PageController
     /// follows.
     Q_PROPERTY(QString previewKind READ previewKind CONSTANT)
 
+    /// Live-preview data source for the `pointer` surface. The pointer packs
+    /// render through a different host from the surface family (a cursor
+    /// driven over a wallpaper, not a stand-in window card), so the pointer
+    /// card and the browser's pointer rows take this one instead of
+    /// `previewController`. Typed as QObject* for the same reason as its
+    /// sibling above.
+    Q_PROPERTY(QObject* pointerPreviewController READ pointerPreviewController CONSTANT)
+
 public:
     /// @param registry Optional — when null, the `*ShaderEffects()`
     ///        Q_INVOKABLEs return empty results so unit tests can construct
@@ -106,8 +119,14 @@ public:
     ///        is not the same as "empty result": a RESOLVED read still returns a
     ///        fully populated map, because resolution fills the library defaults
     ///        in. Only the raw reads come back empty.
+    /// @param pointerRegistry Optional — the pointer-pack registry backing the
+    ///        `pointer` surface. When null the pointer surface simply offers no
+    ///        packs, exactly as a null @p registry leaves the surface family
+    ///        empty.
     explicit DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
-                                      ISettings* settings = nullptr, QObject* parent = nullptr);
+                                      ISettings* settings = nullptr,
+                                      PhosphorPointerShaders::PointerShaderRegistry* pointerRegistry = nullptr,
+                                      QObject* parent = nullptr);
     ~DecorationPageController() override;
 
     // ── PhosphorControl::StagingDomain contract ───────────────────────────
@@ -131,7 +150,29 @@ public:
     /// description / author / version / category / isUserEffect /
     /// providesBorder / providesOpacityTint / parameters (a
     /// QVariantList of ParameterInfo maps).
+    /// Rows carry two extra keys the per-surface list above does not need:
+    /// `type` ("surface" or "pointer") and `appliesTo` (a one-element list
+    /// holding that same token). The browser's existing type axis reads
+    /// `appliesTo`, so tagging the rows is all it takes for the Type filter,
+    /// group-by and card badge to appear once both families are present.
     Q_INVOKABLE QVariantList availableShaderEffects() const;
+
+    /// The packs a chain at @p path may actually use: pointer packs for the
+    /// `pointer` surface, surface packs everywhere else. The chain editor
+    /// binds this rather than availableShaderEffects, so a cursor chain never
+    /// offers a window pack (which would render nothing through the pointer
+    /// pass) and a window chain never offers a cursor pack. Mirrors
+    /// AnimationsPageController::availableShaderEffectsForPath.
+    Q_INVOKABLE QVariantList availableShaderEffectsForPath(const QString& path) const;
+
+    /// Which preview pane suits @p effectId: "pointer" when the pointer
+    /// registry owns the id, else "decoration". The shared browser detail
+    /// dialog calls this per selected pack, because one bridge now serves two
+    /// families and the CONSTANT `previewKind` property can only name one.
+    Q_INVOKABLE QString previewKindFor(const QString& effectId) const;
+
+    /// The preview controller matching previewKindFor(@p effectId).
+    Q_INVOKABLE QObject* previewControllerFor(const QString& effectId) const;
 
     // ── Surface taxonomy ──────────────────────────────────────────────────
 
@@ -208,8 +249,27 @@ public:
     /// Drop the entire per-surface override at @p path so the surface
     /// fully inherits its ancestors / baseline. Rejected for "" (the baseline
     /// is the root and has nothing to inherit from; edit its fields directly via
-    /// setChain). @return true when an override was removed.
+    /// setChain). At a SEEDED path (the shipped card chrome for the OSD and the
+    /// PopupFrame popups) a bare clear would be undone by the read-side seed
+    /// overlay, so this engages an explicit empty chain there instead and the
+    /// surface ends up genuinely undecorated. @return true when the override
+    /// was removed or replaced by that marker.
     Q_INVOKABLE bool clearOverride(const QString& path);
+
+    /// True when @p path carries the "explicitly undecorated" marker
+    /// clearOverride leaves on a seeded surface: a direct override whose chain
+    /// is engaged and EMPTY, at a path the read-side seed overlay would
+    /// otherwise inject into. The card reads it as OFF: an override exists,
+    /// but it means "draws nothing", not "the user has a look here". An
+    /// engaged empty chain at an UNSEEDED path is not this — there it is the
+    /// documented way for a leaf to disable an ancestor's chain, a real user
+    /// look, and it keeps reading as ON.
+    Q_INVOKABLE bool isExplicitlyUndecorated(const QString& path) const;
+
+    /// Remove that marker so @p path inherits (and the seed chain flows in)
+    /// again. No-op unless isExplicitlyUndecorated(@p path). @return true when
+    /// the marker was removed.
+    Q_INVOKABLE bool clearUndecorated(const QString& path);
 
     /// Number of descendant surfaces under @p path that carry their own
     /// override — they SHADOW this parent node (the resolve walk stops at the
@@ -222,7 +282,12 @@ public:
     /// overrides (which ride the ancestor's pack rather than pinning one).
     /// Neither exclusion has an analogue here — every decoration surface
     /// resolves through its ancestors, and this tree's `chain` is the pack
-    /// choice itself — so this counts every descendant override.
+    /// choice itself — so this counts every descendant override the USER made.
+    /// The one thing it skips is an untouched seed injection: the tree read
+    /// here carries the shipped card chrome as an override at its seed paths,
+    /// and counting those would warn about shadowing on a config nobody has
+    /// edited, with a Clear action the next read undoes. A seeded descendant
+    /// the user has actually edited counts.
     Q_INVOKABLE int overrideDescendantCount(const QString& path) const;
 
     /// Clear every descendant override under @p path so the whole subtree
@@ -255,7 +320,7 @@ public:
     /// does not cover keep their current overrides. APPLYING a set writes
     /// through ISettings::setDecorationProfileTree, so that write rides the
     /// normal dirty / apply / discard staging flow. The set FILES themselves
-    /// are not staged (decoration wires no fileSnapshot hook), so no Discard
+    /// are not staged at all, so no Discard
     /// can undo a set write here. Saving over an existing set requires explicit
     /// consent regardless of domain (see ShaderSetStore::saveCurrentAsSet). The
     /// domain closures live in decorationpagecontroller_sets.cpp.
@@ -265,6 +330,8 @@ public:
     }
 
     QObject* previewController() const;
+
+    QObject* pointerPreviewController() const;
 
     QString previewKind() const;
 
@@ -298,13 +365,32 @@ private:
     QString userShaderDirectoryPath() const;
     QString decorationSetsDirectoryPath() const;
 
+    /// Whether @p effectId names a pointer pack: the one predicate behind
+    /// previewKindFor and previewControllerFor. An id present in BOTH
+    /// registries resolves as a surface pack (that family was there first)
+    /// and is warned about once.
+    bool isPointerPack(const QString& effectId) const;
+
+    /// The ids in @p chain the registry for @p path's family cannot resolve:
+    /// the pointer registry at the pointer path, the surface registry
+    /// everywhere else. Empty when every id resolves, and empty when that
+    /// family has no registry to judge against. Gates setChain and the
+    /// decoration-set import alike, so the two cannot drift on what a
+    /// surface may carry.
+    QStringList unresolvableChainPacks(const QString& path, const QStringList& chain) const;
+
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
+    PhosphorPointerShaders::PointerShaderRegistry* m_pointerRegistry = nullptr;
     ISettings* m_settings = nullptr;
 
     /// Owned via QObject parenting (this). Constructed eagerly: it is cheap
     /// until the pane actually asks for a chain, and CONSTANT Q_PROPERTYs must
     /// not change identity after first read.
     DecorationPreviewController* m_preview = nullptr;
+
+    /// Same ownership and eager-construction rules as m_preview — it backs a
+    /// CONSTANT Q_PROPERTY too.
+    PointerPreviewController* m_pointerPreview = nullptr;
 
     QString m_setsDirOverride; ///< Empty = use the XDG default
 

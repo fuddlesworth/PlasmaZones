@@ -106,6 +106,10 @@ public:
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
+    // NOTE: zone-overlay shader assignments are NOT a Snapping.* group. They
+    // live in the top-level `overlaysGroup` below, beside Animations and
+    // Decorations, because the page that edits them sits under Appearance with
+    // those two rather than under Snapping.
     // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
     // shared inner/outer gap values live in the top-level Gaps group (gapsGroup)
     // and are read through Settings' gap getters.
@@ -166,6 +170,19 @@ public:
     // mirroring how the animation ShaderProfileTree sits under Animations; the
     // Decorations.WindowFiltering sub-group is the border-pass window filter.
     P_CONFIG_GROUP(decorationsGroup, "Decorations")
+
+    // Overlays — zone-overlay shader assignments (OverlayShaderTree: global
+    // baseline + per-layout-UUID overrides). Top-level and singular like
+    // Animations and Decorations, and for the same reason: the three are
+    // siblings under Appearance in the settings tree, and a v2 group name
+    // mirrors where its page lives. A zone overlay only draws in snapping mode,
+    // but so does every zone, and which shader it draws is a look rather than a
+    // placement decision.
+    //
+    // The overlay's colours and fonts are NOT here: those keys predate this
+    // group and still live in the Snapping.Zones.* groups the Appearance page
+    // reads. Only the assignments moved.
+    P_CONFIG_GROUP(overlaysGroup, "Overlays")
 
     // Decorations.Performance — what the decoration chain is allowed to keep
     // redrawing. An animated pack (a drifting mote layer, an orbiting gleam)
@@ -388,6 +405,16 @@ public:
     P_CONFIG_KEY(gridColumnsKey, "GridColumns")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Overlays
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // OverlayShaderTree JSON blob — zone-overlay shader assignments (global
+    // baseline + per-layout overrides), nested under Overlays. Replaces the
+    // pre-v8 per-layout shaderId/shaderParams that lived in the
+    // layout-settings sidecar.
+    P_CONFIG_KEY(overlayShaderTreeKey, "OverlayShaderTree")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -506,6 +533,7 @@ public:
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
     P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")
     P_CONFIG_KEY(focusFollowsMouseMaxScrollKey, "FocusFollowsMouseMaxScroll")
+    P_CONFIG_KEY(groupSameAppAsTabsKey, "GroupSameAppAsTabs")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior.DragScroll
@@ -548,6 +576,7 @@ public:
     P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
     P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
     P_CONFIG_KEY(blurScaleMultiplierKey, "BlurScaleMultiplier")
+    P_CONFIG_KEY(suppressWhileFullscreenKey, "SuppressWhileFullscreen")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps
@@ -627,6 +656,13 @@ public:
     // selection layered alongside the motion Profile (separate tree,
     // same dot-path namespace — see design doc decision AA).
     P_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
+    /// Per-event motion overrides (curve, duration, stagger, ...), the timing
+    /// twin of ShaderProfileTree above and the config home the per-event
+    /// override FILES under the data dir migrate into. Config-backed for the
+    /// same reason the decoration tree is: a settings profile, a set snapshot
+    /// and the normal Save/Discard staging all reach config and none of them
+    /// reach loose files.
+    P_CONFIG_KEY(motionProfileTreeKey, "MotionProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
@@ -694,6 +730,23 @@ public:
             qFatal("snapToZoneKey: n out of range: %d", n);
         }
         return snapToZoneKeyPattern().arg(n);
+    }
+
+    // Scrolling's tab ordinals. In Shortcuts.Global rather than
+    // Shortcuts.Scrolling because that is where every INDEXED family lives
+    // (the quick-layout and snap-to-zone digits are equally mode-specific and
+    // sit here): the Shortcuts.Scrolling parity canary derives one action id
+    // per schema key by snake-casing it, which a pattern key has no spelling
+    // for, and the indexed families are registered outside the static table
+    // that canary reads.
+    P_CONFIG_KEY(scrollFocusTabKeyPattern, "ScrollFocusTab%1")
+    static QString scrollFocusTabKey(int n)
+    {
+        // Same guard and same protocol bound as snapToZoneKey above.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+            qFatal("scrollFocusTabKey: n out of range: %d", n);
+        }
+        return scrollFocusTabKeyPattern().arg(n);
     }
 
     P_CONFIG_KEY(rotateWindowsClockwiseKey, "RotateWindowsClockwise")
@@ -807,6 +860,17 @@ public:
         // restructured. They exist as separate accessors so migration code
         // reads unambiguously as "reading from v1 source" vs "writing to v2
         // destination".
+        // Not a v1 spelling: the v8 overlay-shader lift's record of which layout
+        // ids it has already merged from the layout-settings sidecar, so it
+        // merges each at most once (see relocateOverlayShaderAssignments). It
+        // lives in Legacy rather than beside the live keys because nothing but
+        // that migration reads or writes it, and it is deliberately NOT schema-
+        // declared. The leading underscore and the config-ROOT placement match
+        // the _v4* stashes below and are what keep purgeStaleKeys from deleting
+        // it: its first pass strips undeclared scalars inside declared groups,
+        // and Overlays is a declared group.
+        P_CONFIG_KEY(v8SidecarLiftedKey, "_v8SidecarLifted")
+
         P_CONFIG_GROUP(v1ActivationGroup, "Activation")
         P_CONFIG_GROUP(v1DisplayGroup, "Display")
         P_CONFIG_GROUP(v1AppearanceGroup, "Appearance")

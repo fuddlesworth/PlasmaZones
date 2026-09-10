@@ -21,19 +21,17 @@
 #include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 
-#include <scene/itemrenderer.h>
 #include <scene/windowitem.h>
-#include <scene/workspacescene.h>
 
+#include <QList>
 #include <QPoint>
 #include <QRectF>
 #include <QScopeGuard>
 #include <QSize>
 #include <QVector2D>
-
-#include <cmath>
 
 // The drive part of StripTransitionManager: arm from the tiling batch path,
 // capture the live scene, run the pack over it. The pack-source → GLShader
@@ -98,6 +96,10 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
             // thread; the erase frees the entry's capture texture.
             ensureGlContextCurrent();
             m_active.erase(it);
+            // The erased pass may hold the cursor hide; nothing paints the
+            // cursor for this output again until the repaint below, so give
+            // it back now rather than blink a frame (see updateCursorHiding).
+            updateCursorHiding();
             if (wasPresenting && KWin::effects) {
                 KWin::effects->addRepaint(output->geometry());
             }
@@ -194,6 +196,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     }
     auto it = m_active.find(screen);
     if (it == m_active.end()) {
+        // Reached on the repaint an erase (notifyLeg's disarm, outputRemoved)
+        // scheduled while the hide was still held: the erase site releases
+        // the hide itself, so this is the no-op path of the same release.
+        updateCursorHiding();
         return false;
     }
     // POINTER, not a reference, and re-seated after the capture below: the
@@ -244,19 +250,27 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // this frame and every later one (the sentinel keeps notifyLeg's
         // re-arms pointless but harmless: we end here again before any
         // capture). `it` and `pass` are DEAD after endOutput — return
-        // immediately, do not add reads between these two lines.
+        // immediately, do not add reads between these two lines. The hide
+        // release after it is for a pack hot-reloaded into a compile failure
+        // MID-LEG: the previous frame painted with the cursor hidden, and the
+        // normal scene about to paint this one honours the item's visibility.
         endOutput(screen);
+        updateCursorHiding();
         return false;
     }
 
     // Ensure the persistent capture target, revalidated against this frame's
     // device size and on-screen format (output scale/mode change, HDR flip).
     const QSize deviceSize = viewport.deviceSize();
-    const GLenum captureFormat = TransitionPass::captureFormatFor(renderTarget);
+    // Alpha-capable, NOT the target's own format: the capture's alpha is the
+    // strip layer's coverage (see snapshotBelowCapture), and KWin's output
+    // buffers are typically opaque (see alphaCaptureFormatFor).
+    const GLenum captureFormat = TransitionPass::alphaCaptureFormatFor(renderTarget);
     if (pass->captureTex
         && (pass->captureTex->size() != deviceSize || pass->captureTex->internalFormat() != captureFormat)) {
         pass->captureFbo.reset();
         pass->captureTex.reset();
+        pass->belowTex.reset();
     }
     if (!pass->captureTex) {
         pass->captureTex = TransitionPass::allocateOutputTexture(deviceSize, captureFormat);
@@ -267,13 +281,26 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 pass->captureTex.reset();
             }
         }
+        // The below-strip snapshot, same size and format as the capture it
+        // is copied from (glCopyTexSubImage2D needs no framebuffer of its
+        // own). Allocated and freed in lockstep with the capture.
+        if (pass->captureTex) {
+            pass->belowTex = TransitionPass::allocateOutputTexture(deviceSize, captureFormat);
+            if (!pass->belowTex) {
+                pass->captureFbo.reset();
+                pass->captureTex.reset();
+            }
+        }
         if (!pass->captureTex) {
             // Allocation failed — abandon this LEG rather than retry per
             // frame. A later wheel batch re-arms via notifyLeg and retries
             // the allocation once per batch, which is the wanted behaviour
             // for a transient failure and bounded for a persistent one.
-            // `it`/`pass` are DEAD after endOutput — return immediately.
+            // `it`/`pass` are DEAD after endOutput — return immediately. The
+            // hide release covers a size or format change mid-leg whose
+            // reallocation failed: the previous frame held the hide.
             endOutput(screen);
+            updateCursorHiding();
             return false;
         }
     }
@@ -281,11 +308,13 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // Keep KWin's own cursor out of the capture below (see the header): the
     // scene walk paints the overlay item last, and a software cursor drawn
     // into uStrip is smeared by the pack and never redrawn sharp, since this
-    // pass replaces the output's paint. Hidden here, blitted by drawCursor
-    // at the tail. Placed AFTER the compile and allocation checks above so
-    // no return-false path between the hide and the tail exists: a pass
-    // that abandons this frame paints the normal scene with the cursor
-    // still shown.
+    // pass replaces the output's paint. Hidden here, blitted by
+    // TransitionPass::drawSceneCursor at the tail. Placed AFTER the compile and allocation checks above so
+    // no reachable return-false path between the hide and the tail exists
+    // (the re-seat miss after the capture is structural and releases the
+    // hide itself): a pass that abandons this frame paints the normal scene
+    // with the cursor still shown, and a pass that abandons a LATER frame
+    // releases the hide it took (the abort arms above).
     hideCursorForPass(screen);
 
     // Render the live scene into the capture. This is the downstream chain
@@ -310,35 +339,65 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        // Exclude everything stacked ABOVE the strip from the capture (OSDs,
-        // notifications, floating windows, panels, daemon overlays): the
-        // pack must not smear surfaces that are not scrolling. "Above" is a
-        // STACKING fact, not a role: the boundary is the topmost strip
-        // COLUMN managed by this output in KWin's stacking order, and only
-        // windows above that boundary are excluded. The tab pills need no
-        // clause of their own: they are a blit at the anchor's slot rather
-        // than a window in the stacking order, so they land inside the
-        // capture and ride the strip with the columns they label.
-        // A floating window stacked BELOW a raised
-        // column stays in the capture and is smeared with it, which is what
-        // its stacking says should happen; a closing or dragged column that
-        // is genuinely below the topmost live column likewise stays inside.
-        // Windows whose expanded geometry does not intersect this output are
-        // never excluded — they contribute nothing to the capture (the
-        // viewport clips them) and excluding them would composite them onto
-        // the wrong output at full decoration-fold cost every frame.
+        // The pack must decorate the STRIP LAYER ONLY: nothing that is not
+        // scrolling may move with the columns. The scene walk paints the
+        // whole stack into the capture in stacking order, so the strip band
+        // is cut out of it at BOTH ends, each end by a different mechanism:
         //
-        // paintWindow records the excluded set in paint order while the
-        // latch is set, and the tail below composites exactly that set
-        // sharp on top of the shader output. Both the latch and the two
-        // containers are scope-guarded so a throw inside the scene walk can
-        // neither leak the latch into live painting nor strand recorded
-        // EffectWindow pointers past the frame.
+        //   BELOW the strip (the desktop background, keep-below windows) is
+        //   painted into the capture NORMALLY, because the effect's own
+        //   backdrop capture (captureWindowBackdrop, the frost and glass
+        //   decoration packs) reads the scene beneath a column out of the
+        //   framebuffer the column is drawn into, and a column painted over
+        //   nothing would lose its frost for the length of the leg. KWin's
+        //   own Blur effect is NOT a consumer here: paintWindow forwards
+        //   PAINT_WINDOW_TRANSFORMED for every window inside the band, and
+        //   BlurEffect::shouldBlur refuses a transformed window, so a
+        //   blur-behind column shows plain translucency for the pass, exactly
+        //   as it already did while the spring translated it (blur is off on
+        //   any translated window). Without that refusal the blur would read
+        //   the zeroed alpha below and, on a rounded-corner window, ADD its
+        //   blur over the wallpaper instead of replacing it. At the
+        //   band's bottom edge paintWindow calls snapshotBelowCapture(): the
+        //   capture (below-strip content only, at that point) is copied into
+        //   belowTex and its ALPHA is zeroed. The columns then paint over it
+        //   with their real coverage, so the capture's alpha is exactly the
+        //   strip layer's, and getStripColor (strip_transition.glsl) subtracts
+        //   the wallpaper back out of every sample using belowTex. The pack's
+        //   output is re-composited over the UNDISPLACED belowTex by the
+        //   entry point, which is what keeps the wallpaper still.
+        //
+        //   ABOVE the strip (OSDs, notifications, floating windows, panels,
+        //   daemon overlays) is skipped and recorded; the tail composites the
+        //   recorded set sharp over the shader output.
+        //
+        // Both boundaries are STACKING facts, not roles: the bottommost and
+        // topmost strip COLUMNS managed by this output in KWin's stacking
+        // order. The tab pills need no clause of their own: they are a blit
+        // at the anchor's slot rather than a window in the stacking order, so
+        // they land inside the band and ride the strip with the columns they
+        // label. A floating window stacked BETWEEN two columns stays in the
+        // band and is smeared with them, which is what its stacking says
+        // should happen; a closing or dragged column that is genuinely inside
+        // the band likewise stays inside. The below set carries EVERY window
+        // under the band, intersecting this output or not: it only gates the
+        // snapshot trigger, so a foreign-output window under the band must
+        // not fire it early. The above set keeps its intersection filter —
+        // its members are composited at full decoration-fold cost every
+        // frame, and a window off this output would land on the wrong one.
+        //
+        // The latch, the two sets, the snapshot flag and the recorded list
+        // are scope-guarded so a throw inside the scene walk can neither leak
+        // the latch into live painting nor strand recorded EffectWindow
+        // pointers past the frame.
         m_effect->m_stripCaptureAboveStrip.clear();
+        m_effect->m_stripCaptureBelowStrip.clear();
         {
             const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
             int topStrip = -1;
             int topStripParked = -1;
+            int bottomStrip = -1;
+            int bottomStripParked = -1;
             for (int i = 0; i < stack.size(); ++i) {
                 KWin::EffectWindow* sw = stack.at(i);
                 if (!sw) {
@@ -390,15 +449,27 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 // behaviour instead.
                 if (m_effect->scrollParkedOffscreen(sw, m_effect->getWindowId(sw))) {
                     topStripParked = i;
+                    if (bottomStripParked < 0) {
+                        bottomStripParked = i;
+                    }
                     continue;
                 }
                 topStrip = i;
+                if (bottomStrip < 0) {
+                    bottomStrip = i;
+                }
             }
             if (topStrip < 0) {
                 topStrip = topStripParked;
+                bottomStrip = bottomStripParked;
             }
             if (topStrip >= 0) {
                 const QRectF outputGeoF = screen->geometryF();
+                for (int i = 0; i < bottomStrip; ++i) {
+                    if (KWin::EffectWindow* sw = stack.at(i)) {
+                        m_effect->m_stripCaptureBelowStrip.insert(sw);
+                    }
+                }
                 for (int i = topStrip + 1; i < stack.size(); ++i) {
                     KWin::EffectWindow* sw = stack.at(i);
                     if (!sw || !QRectF(sw->expandedGeometry()).intersects(outputGeoF)) {
@@ -408,20 +479,25 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 }
             }
             // topStrip < 0 (no strip member found — a mode teardown race)
-            // leaves the set empty: the whole scene is captured and the pack
-            // decorates everything, which is the safe degenerate.
+            // leaves both sets empty: the first window of the walk fires the
+            // snapshot on an empty capture, so the whole scene is the strip
+            // layer and the pack decorates everything — the safe degenerate.
         }
         m_effect->m_stripCaptureSkippedWindows.clear();
+        m_effect->m_stripCaptureBelowSnapshotted = false;
         m_effect->m_stripCaptureExclusionOutput = screen;
-        // The latch and the above-strip set are consumed only INSIDE the
-        // capture, so their guard clears unconditionally. The recorded list
-        // is consumed by the composite tail AFTER this scope closes, so its
-        // guard is dismissed on the normal path and fires only when the
-        // scene walk throws — which is what keeps the header's
-        // entries-never-outlive-the-frame contract true on the unwind path.
+        // The latch, the two exclusion sets and the snapshot flag are
+        // consumed only INSIDE the capture, so their guard clears
+        // unconditionally. The recorded list is consumed by the composite
+        // tail AFTER this scope closes, so its guard is dismissed on the
+        // normal path and fires only when the scene walk throws — which is
+        // what keeps the header's entries-never-outlive-the-frame contract
+        // true on the unwind path.
         const auto exclusionGuard = qScopeGuard([this] {
             m_effect->m_stripCaptureExclusionOutput = nullptr;
             m_effect->m_stripCaptureAboveStrip.clear();
+            m_effect->m_stripCaptureBelowStrip.clear();
+            m_effect->m_stripCaptureBelowSnapshotted = false;
         });
         auto skippedUnwindGuard = qScopeGuard([this] {
             m_effect->m_stripCaptureSkippedWindows.clear();
@@ -438,6 +514,14 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                                                                   /*resetPaintedLatch=*/false);
             KWin::effects->paintScreen(captureTarget, captureViewport, mask, walkRegion, screen);
         }
+        // No band window reached paintWindow's trigger (every column culled
+        // as parked or foreign): the capture holds below-strip content only.
+        // Snapshot it now, while the capture framebuffer is still pushed, so
+        // belowTex is this frame's and the alpha zero makes the strip layer
+        // empty — the quad then re-composites the still wallpaper alone.
+        if (!m_effect->m_stripCaptureBelowSnapshotted) {
+            snapshotBelowCapture();
+        }
         skippedUnwindGuard.dismiss(); // normal exit: the composite tail consumes the list
     }
 
@@ -451,8 +535,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // it ever happens the recorded list must not outlive the frame — the
         // unwind guard was dismissed on the assumption the tail consumes it,
         // and that tail is now skipped. No framebuffer has been pushed yet at
-        // this point, so there is nothing else to unwind.
+        // this point, so there is nothing else to unwind. The hide taken
+        // above is released too: the normal scene paints this frame.
         m_effect->m_stripCaptureSkippedWindows.clear();
+        updateCursorHiding();
         return false;
     }
     pass = &it->second;
@@ -531,7 +617,14 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // through viewport.projectionMatrix(), which the quad draw uses.
     const QSize targetSize = targetFb ? targetFb->size() : deviceSize;
     glViewport(0, 0, targetSize.width(), targetSize.height());
-    glDisable(GL_BLEND); // the decorated scene is itself opaque — replace the output
+    // The quad REPLACES the output: the strip entry point re-composites the
+    // pack's output over the below-strip snapshot itself (strip_transition
+    // .glsl's PZ_FINALIZE_COLOR override), so what it writes is the full
+    // opaque frame. Blending is off for the same reason it always was, and
+    // deliberately NOT left to ambient state: KWin's item renderer turns it
+    // off after every window it draws, so the state here is whatever the
+    // capture walk's last window left behind.
+    glDisable(GL_BLEND);
 
     {
         KWin::ShaderBinder binder(cs->shader.get());
@@ -583,6 +676,14 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 cs->shader->setUniform(cs->customColorsLoc[slot], pass->customColors[slot]);
             }
         }
+        // uBelow on unit 1: the below-strip snapshot, read by getStripColor
+        // to subtract the wallpaper out of every sample and by the entry
+        // point to put it back, undisplaced, under the pack's output.
+        if (cs->uBelowLoc >= 0) {
+            cs->shader->setUniform(cs->uBelowLoc, 1);
+            glActiveTexture(GL_TEXTURE1);
+            pass->belowTex->bind();
+        }
         if (cs->uStripLoc >= 0) {
             cs->shader->setUniform(cs->uStripLoc, 0);
             glActiveTexture(GL_TEXTURE0);
@@ -591,25 +692,26 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
 
         TransitionPass::drawOutputQuad(viewport);
 
-        // Unbind the capture unit: ScopedGlState restores the active-unit
-        // ENUM, not the BINDINGS, and a name still bound when a reap later
-        // deletes it survives as a dangling reference — the exact hole the
-        // desktop pass documents at its own unbind.
+        // Unbind both units: ScopedGlState restores the active-unit ENUM,
+        // not the BINDINGS, and a name still bound when a reap later deletes
+        // it survives as a dangling reference — the exact hole the desktop
+        // pass documents at its own unbind. Unit 0 is left active.
+        if (cs->uBelowLoc >= 0) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        glActiveTexture(GL_TEXTURE0);
         if (cs->uStripLoc >= 0) {
-            glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
     } // binder out of scope before the composite binds its own shaders
 
-    // Composite the windows the capture excluded — exactly the set recorded
-    // during the exclusion latch, in the same bottom-to-top paint order —
-    // sharp on top of the shader output. Same direct-drive shape as the
-    // desktop pass's compositeWindowsInto: drive each window through OUR OWN
-    // paintWindow so decorations, rule opacity and in-flight per-window
-    // transitions all apply, with m_directPaintCapture terminating its tail
-    // in a raw draw (the chain iterator is at begin() here). These windows
-    // DID get prePaintWindow this frame — they were in the scene walk and
-    // skipped only at paint — so no state is missing.
+    // Composite the windows the capture excluded ABOVE the strip — exactly
+    // the set recorded during the exclusion latch, in the same bottom-to-top
+    // paint order — sharp on top of the shader output. KWin's item renderer
+    // owns the blend state for each window it draws (enabled per node with
+    // the premultiplied func, disabled again at the end), so the glDisable
+    // above costs a translucent OSD nothing.
     //
     // Swap, not move-assign: a moved-from QList drops its capacity, so the
     // record site would malloc from scratch on every frame of the leg. The
@@ -617,59 +719,105 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // local instead.
     QList<KWin::EffectWindow*> aboveStrip;
     aboveStrip.swap(m_effect->m_stripCaptureSkippedWindows);
-    if (!aboveStrip.isEmpty()) {
-        // Re-establish blending BEFORE the composite. The quad tail above
-        // ran with GL_BLEND disabled, and nothing in OUR draw paths (the
-        // decoration present, the transition draw) enables it — they
-        // inherit ambient state, and the desktop pass's composites all run
-        // BEFORE its own disable, so this pass is the only one that
-        // composites windows downstream of a glDisable(GL_BLEND). Without
-        // this, a translucent OSD or notification would render fully
-        // opaque for the whole leg. Premultiplied-alpha func, KWin's
-        // convention; ScopedGlState restores the previous state at scope
-        // end.
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        m_effect->m_directPaintCapture = true;
-        const auto directPaintGuard = qScopeGuard([this] {
-            m_effect->m_directPaintCapture = false;
-        });
-        for (KWin::EffectWindow* w : std::as_const(aboveStrip)) {
-            // ItemEffect is a QPointer plus an effect-reference count on the
-            // item (scene/item.h) — per-frame construction is noise next to
-            // the window paint it brackets, so no renderability pre-check is
-            // worth its complexity. These windows are normally visible, but
-            // the ref is kept for the one that stops being so mid-leg (a
-            // notification starting its close) while still in our list.
-            KWin::ItemEffect keepRenderable(w->windowItem());
-            KWin::WindowPaintData aboveData;
-            // The window's OWN opacity, not 1.0: unlike the desktop pass's
-            // composite (which reconstructs windows into a static capture),
-            // this draws live on screen every frame, so a client with
-            // per-window opacity or a notification mid-fade must keep it.
-            aboveData.setOpacity(w->opacity());
-            const int aboveMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-            // infinite() rather than the injected-paint deviceRegion clip: the
-            // shader quad already repainted the whole output, so this pass
-            // damages full-output anyway and every pixel of these windows has
-            // to be redrawn over it. A region clip would only risk dropping
-            // parts the scene's own damage never listed.
-            m_effect->paintWindow(renderTarget, viewport, w, aboveMask, KWin::Region::infinite(), aboveData);
-        }
-    }
+    compositeSharp(renderTarget, viewport, aboveStrip);
     aboveStrip.clear();
     aboveStrip.swap(m_effect->m_stripCaptureSkippedWindows); // return the allocation for the next frame
     // Last draw of the pass: the cursor, above everything, where KWin's own
     // overlay item would have put it had this pass not replaced the paint.
+    // Shared with the pointer decoration pass, which hides and re-draws the
+    // cursor for the same reason, so the two renderItem calls cannot drift.
     if (m_cursorHidden && cursorOnOutput(screen)) {
-        drawCursor(renderTarget, viewport);
+        TransitionPass::drawSceneCursor(renderTarget, viewport);
     }
     return true;
 }
 
+void StripTransitionManager::snapshotBelowCapture()
+{
+    KWin::LogicalOutput* const screen = m_effect->m_stripCaptureExclusionOutput;
+    if (!screen || m_effect->m_stripCaptureBelowSnapshotted) {
+        return;
+    }
+    // Set FIRST: a snapshot that cannot run (no pass, no textures) must not
+    // be retried by every later window of the walk, and the post-walk
+    // fallback in paintOutput keys off the same flag.
+    m_effect->m_stripCaptureBelowSnapshotted = true;
+    const auto it = m_active.find(screen);
+    if (it == m_active.end() || !it->second.captureTex || !it->second.belowTex) {
+        return;
+    }
+    OutputStripPass& pass = it->second;
+    // The capture framebuffer is the one pushed by paintOutput around the
+    // walk, so it is the READ framebuffer glCopyTexSubImage2D reads from.
+    // A copy rather than a blit: it needs no framebuffer for the
+    // destination and is supported everywhere KWin's GL is.
+    const QSize size = pass.captureTex->size();
+    // Unit 0 is the ambient unit everywhere in this codebase, but a
+    // GLTexture::bind is a bare glBindTexture on whatever unit is active, so
+    // pin it rather than clobber a unit a third-party effect left selected.
+    glActiveTexture(GL_TEXTURE0);
+    pass.belowTex->bind();
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, size.width(), size.height());
+    glBindTexture(GL_TEXTURE_2D, 0);
+    // Zero the capture's ALPHA and keep its colour: the strip band paints
+    // over this with its real coverage, so from here on the capture's alpha
+    // is exactly the strip layer's, while the colour beneath the columns
+    // stays for the effect's own backdrop capture to read.
+    TransitionPass::clearAlpha(0.0f);
+}
+
+void StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarget,
+                                            const KWin::RenderViewport& viewport,
+                                            const QList<KWin::EffectWindow*>& windows)
+{
+    if (windows.isEmpty()) {
+        return;
+    }
+    // Same direct-drive shape as the desktop pass's compositeWindowsInto:
+    // drive each window through OUR OWN paintWindow so decorations, rule
+    // opacity and in-flight per-window transitions all apply, with
+    // m_directPaintCapture terminating its tail in a raw draw (the chain
+    // iterator is at begin() here). These windows DID get prePaintWindow
+    // this frame — they were in the scene walk and skipped only at paint —
+    // so no state is missing. KWin's renderer owns the blend state per draw.
+    m_effect->m_directPaintCapture = true;
+    const auto directPaintGuard = qScopeGuard([this] {
+        m_effect->m_directPaintCapture = false;
+    });
+    for (KWin::EffectWindow* w : windows) {
+        // ItemEffect is a QPointer plus an effect-reference count on the
+        // item (scene/item.h) — per-frame construction is noise next to
+        // the window paint it brackets, so no renderability pre-check is
+        // worth its complexity. These windows are normally visible, but
+        // the ref is kept for the one that stops being so mid-leg (a
+        // notification starting its close) while still in our list.
+        KWin::ItemEffect keepRenderable(w->windowItem());
+        // Paint-data opacity stays at its default 1.0, the value the desktop
+        // pass's composite and the window-snapshot captures set. The window's
+        // own opacity lives on its WindowItem (KWin's WindowItem tracks
+        // Window::opacity), and the renderer multiplies that item opacity
+        // into the paint data's, so seeding the paint data with
+        // w->opacity() here applied it TWICE: a notification mid-fade at
+        // 0.5 was composited at 0.25 for every frame of the leg. A client
+        // with per-window opacity keeps it through the item.
+        KWin::WindowPaintData data;
+        const int paintMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+        // infinite() rather than the injected-paint deviceRegion clip: the
+        // shader quad repaints the whole output, so this pass damages
+        // full-output anyway and every pixel of these windows has to be
+        // redrawn. A region clip would only risk dropping parts the scene's
+        // own damage never listed.
+        m_effect->paintWindow(renderTarget, viewport, w, paintMask, KWin::Region::infinite(), data);
+    }
+}
+
 bool StripTransitionManager::cursorOnOutput(KWin::LogicalOutput* screen) const
 {
-    return screen && KWin::effects && screen->geometryF().contains(KWin::effects->cursorPos());
+    // screenAt, not geometryF().contains(): QRectF::contains includes the
+    // right and bottom edges, so a pointer on a shared boundary would read as
+    // on BOTH outputs and two passes could each take the hide. screenAt is
+    // exclusive, and it is the rule the pointer pass resolves with too.
+    return screen && KWin::effects && KWin::effects->screenAt(KWin::effects->cursorPos().toPoint()) == screen;
 }
 
 void StripTransitionManager::hideCursorForPass(KWin::LogicalOutput* screen)
@@ -712,39 +860,18 @@ void StripTransitionManager::updateCursorHiding()
     m_cursorHidden = false;
 }
 
-void StripTransitionManager::drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport)
+void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen)
 {
-    // The workspace scene is reached through any window item: the effects
-    // API exposes no scene accessor, and Item::scene() on a member of the
-    // scene IS the workspace scene. An empty stacking order means no strip
-    // either, so there is nothing to draw the cursor over.
-    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-    KWin::WorkspaceScene* scene = nullptr;
-    for (KWin::EffectWindow* w : stack) {
-        if (w && w->windowItem()) {
-            scene = qobject_cast<KWin::WorkspaceScene*>(w->windowItem()->scene());
-            break;
-        }
-    }
-    if (!scene || !scene->cursorItem()) {
+    // Unconditional for THIS output, unlike updateCursorHiding: a live pass
+    // on it does not keep the hide, because the caller is about to paint the
+    // output without this pass, and nothing else would draw the cursor.
+    if (!m_cursorHidden || !cursorOnOutput(screen)) {
         return;
     }
-    // WorkspaceScene::updateCursor only moves the item while the cursor is
-    // shown; hidden, its position is whatever the pointer was at when the
-    // hide landed. Track the live pointer the way that slot does (the item's
-    // own hotspot offset lives in its child, so the position IS the pointer).
-    scene->cursorItem()->setPosition(KWin::effects->cursorPos());
-    // Same call paintGenericScreen makes for the overlay item, with the same
-    // viewport, so the cursor lands exactly where the un-passed frame would
-    // have put it, at the item's own scale, for a theme sprite and a
-    // client-provided surface alike. Rendered as the ROOT of the call, which
-    // is what makes the hidden item drawable: the renderer honours
-    // explicitVisible on children only. No colour-space handling of our own,
-    // the renderer's item path carries it. Hand GL state back as found, as
-    // every draw in this tail does.
-    const ShaderInternal::ScopedGlState glStateGuard;
-    scene->renderer()->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
-                                  KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
+    if (KWin::effects) {
+        KWin::effects->showCursor();
+    }
+    m_cursorHidden = false;
 }
 
 void StripTransitionManager::reapSettled()

@@ -224,8 +224,9 @@ int main(int argc, char* argv[])
     app.setQuitOnLastWindowClosed(false);
 
     // Register ZoneShaderItem for QML
-    // This enables RenderNodeOverlay.qml to use the GPU-accelerated shader item
-    // (the item's ctor registers the ZoneLabelTexture metatype + QImage converter).
+    // This enables RenderNodeOverlayContent.qml to use the GPU-accelerated
+    // shader item (the item's ctor registers the ZoneLabelTexture metatype +
+    // QImage converter).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     // Register SurfaceShaderItem (per-surface decoration layer) for QML.

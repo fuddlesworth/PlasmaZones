@@ -5,7 +5,8 @@
 //   * buildApplicationController() — wires the PhosphorControl
 //     PageRegistry with PlasmaZones' settings pages and sidebar categories
 //     (the navigable leaf pages are enumerated in validPageNames()).
-//   * What's-New dismissal + last-seen-version state.
+//
+// What's New state lives in the sibling settingscontroller_whatsnew.cpp.
 //
 // The static sidebar topology accessors (pageGroupChildren,
 // pageOwnedConfigKeys, validPageNames) live in the sibling
@@ -15,18 +16,13 @@
 // as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
-#include "version.h"
 
-#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 #include "pageadapter.h"
 #include "settings/services/settingsstagingdomain.h"
 
-#include <QSettings>
-#include <QStringList>
 #include <QUrl>
-#include <QVersionNumber>
 
 namespace PlasmaZones {
 
@@ -91,8 +87,9 @@ void SettingsController::buildApplicationController()
     // belongs here rather than among the tools. regPage trackDomain()s the
     // controller so its staged active-profile pointer joins the Save/Discard
     // transaction; the applied config rides the Settings staging path.
-    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("pages/profiles/ProfilesPage.qml"),
-            QStringLiteral("bookmarks"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regPage(m_profilesPage.get(), QString(), PhosphorI18n::tr("Profiles"),
+            QStringLiteral("pages/profiles/ProfilesPage.qml"), QStringLiteral("bookmarks"), /*collapsible=*/false,
+            /*divider=*/false, AdvancedOnly);
     // General leads near the top (mirrors the Animations section leading with
     // its own "General" child). Divider after it closes the top/global block.
     regPage(m_generalPage, QString(), PhosphorI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
@@ -244,17 +241,15 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-layouts"), QStringLiteral("snapping"), PhosphorI18n::tr("Layouts"),
                QStringLiteral("pages/snapping/SnappingLayoutsPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
-               QString(), QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
-    // Advanced-only: its simple face used to be the Triggers card, now
-    // condensed into SnappingSimplePage (its declared counterpart).
-    regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("pages/snapping/SnappingOverlayBehaviorPage.qml"),
-               QStringLiteral("preferences-system"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly,
-               QStringLiteral("snapping-simple"));
-    regVirtual(QStringLiteral("snapping-overlay-appearance"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Appearance"), QStringLiteral("pages/snapping/SnappingOverlayAppearancePage.qml"),
-               QStringLiteral("preferences-desktop-color"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    // The overlay's BEHAVIOR — when it appears while you drag. A standalone top
+    // leaf rather than a category: its Appearance sibling became the Overlays
+    // entry under Appearance, so a category here would have one child.
+    // Advanced-only, its simple face being the condensed SnappingSimplePage
+    // (its declared counterpart).
+    regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
+               QStringLiteral("pages/snapping/SnappingOverlayBehaviorPage.qml"),
+               QStringLiteral("preferences-desktop-color"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly, QStringLiteral("snapping-simple"));
 
     // Zone Selector is a single top leaf under Snapping (not split into
     // Behavior/Appearance): its behaviour is just the enable toggle + trigger
@@ -282,10 +277,7 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/snapping/SnappingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-config-cat"), PhosphorI18n::tr("Shaders"),
-            QStringLiteral("pages/snapping/SnappingShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
-            /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-
+    // (The overlay shader pages are registered under Appearance → Overlays.)
     // Tiling children — organised by subject (Window / Algorithm / Configuration)
     // to match the snapping reorg. Tiling has no drag-overlay or selector popup,
     // so its only interaction surface (the drag-insert indicator) folds into
@@ -498,9 +490,9 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/animations/AnimationsPresetsPage.qml"), QStringLiteral("bookmarks"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("animations-motionsets"), QStringLiteral("animations-library"),
-               PhosphorI18n::tr("Motion Sets"), QStringLiteral("pages/animations/AnimationsMotionSetsPage.qml"),
-               QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("animations-motionsets"), QStringLiteral("animations-library"), PhosphorI18n::tr("Sets"),
+               QStringLiteral("pages/animations/AnimationsMotionSetsPage.qml"), QStringLiteral("color-palette"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-shaders"), QStringLiteral("animations-library"), PhosphorI18n::tr("Shaders"),
                QStringLiteral("pages/animations/AnimationsShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"),
@@ -543,13 +535,65 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/decoration/DecorationShellPage.qml"), QStringLiteral("computer"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    // The mouse pointer is a decoration surface like any other: its chain
+    // lives at the `pointer` path in the same DecorationProfileTree, so it
+    // rides the same card, the same sets and the same per-page reset.
+    regVirtual(QStringLiteral("decorations-pointer"), QStringLiteral("decorations-surfaces"),
+               PhosphorI18n::tr("Pointer"), QStringLiteral("pages/decoration/DecorationPointerPage.qml"),
+               QStringLiteral("input-mouse"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
-    regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
-               PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),
-               QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"), PhosphorI18n::tr("Sets"),
+               QStringLiteral("pages/decoration/DecorationSetsPage.qml"), QStringLiteral("color-palette"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
+    // Overlays — the third Appearance drill-down beside Animations and
+    // Decorations, and shaped like Decorations: the config leaves first, then a
+    // collapsible Library bucket holding the saved sets and the pack browser.
+    // Everything about the zone overlay's LOOK lives here, including which
+    // shader each layout draws. Only when the overlay appears while you drag
+    // stayed under Snapping, because that is an activation decision.
+    // Icons follow the sibling trees rather than being picked per page: the
+    // tree parent is domain-specific and distinct (theme for decorations,
+    // playback for animations, colour here), the lead config page is
+    // `configure`, the Library bucket is `folder-open`, its sets page is
+    // `color-palette`, and its pack browser is `preferences-desktop-display`.
+    // A reader who has learnt one of these trees can then read the others.
+    // NOT preferences-desktop-color: that is Snapping → Overlay's icon, and a
+    // top-level Appearance category wearing a Snapping leaf's icon reads as the
+    // same page in two places. The Appearance parents each take a distinct one
+    // (Decorations preferences-desktop-theme, Animations media-playback-start).
+    regVirtual(QStringLiteral("overlays"), QStringLiteral("appearance"), PhosphorI18n::tr("Overlays"), QString(),
+               QStringLiteral("preferences-desktop-effects"));
+    // Appearance leads, the way Decoration → General does, with the divider
+    // closing the config block before the Library bucket.
+    regVirtual(QStringLiteral("overlays-appearance"), QStringLiteral("overlays"), PhosphorI18n::tr("Appearance"),
+               QStringLiteral("pages/overlays/OverlaysAppearancePage.qml"), QStringLiteral("configure"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    // "Layouts", not "Shaders": Library → Shaders below is the pack browser,
+    // named the way the decoration tree names its own, and two entries reading
+    // "Shaders" in one drill-down would be a coin flip. The name says what the
+    // page is keyed on, and the layouts icon follows from it —
+    // `preferences-desktop-display` belongs to the pack browser in all three
+    // trees, so reusing it here would put one glyph on two entries.
+    //
+    // The page id stays overlays-assignments: it is what the page DOES, the
+    // label is where it does it, and the id is not user-visible.
+    regVirtual(QStringLiteral("overlays-assignments"), QStringLiteral("overlays"), PhosphorI18n::tr("Layouts"),
+               QStringLiteral("pages/overlays/OverlaysAssignmentsPage.qml"), QStringLiteral("view-grid"),
+               /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
+
+    regVirtual(QStringLiteral("overlays-library"), QStringLiteral("overlays"), PhosphorI18n::tr("Library"), QString(),
+               QStringLiteral("folder-open"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("overlays-sets"), QStringLiteral("overlays-library"), PhosphorI18n::tr("Sets"),
+               QStringLiteral("pages/overlays/OverlaySetsPage.qml"), QStringLiteral("color-palette"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regPage(m_overlaysPage.get(), QStringLiteral("overlays-library"), PhosphorI18n::tr("Shaders"),
+            QStringLiteral("pages/overlays/OverlaysLibraryPage.qml"), QStringLiteral("preferences-desktop-display"),
+            /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Every page declared its simple/advanced tier at registration above.
     // Seed the registry's mode from m_advancedMode (default simple) so the
@@ -610,60 +654,6 @@ void SettingsController::buildApplicationController()
             m_app->setCurrentPageId(m_activePage);
         }
     });
-}
-
-// Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
-// sorts after "1.9.0" (plain string compare gets that wrong). Entries come
-// from the bundled whatsnew.json resource in no guaranteed order.
-QString SettingsController::latestWhatsNewVersion() const
-{
-    QVersionNumber best;
-    QString bestStr;
-    for (const QVariant& v : m_whatsNewEntries) {
-        const QString ver = v.toMap().value(QStringLiteral("version")).toString();
-        const QVersionNumber parsed = QVersionNumber::fromString(ver);
-        if (parsed.isNull())
-            continue;
-        if (bestStr.isEmpty() || best < parsed) {
-            best = parsed;
-            bestStr = ver;
-        }
-    }
-    return bestStr;
-}
-
-bool SettingsController::hasUnseenWhatsNew() const
-{
-    const QString latest = latestWhatsNewVersion();
-    if (latest.isEmpty())
-        return false;
-    // Unseen iff the latest bundled entry is strictly newer than what the
-    // user last marked seen. String compare after normalisation would still
-    // mis-order "1.10" vs "1.9", so go through QVersionNumber.
-    const QVersionNumber latestV = QVersionNumber::fromString(latest);
-    const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
-    // Belt-and-braces: the ctor already clamps m_whatsNewEntries to
-    // VERSION_STRING (settingscontroller.cpp), so latestV can only exceed
-    // the running version if that filter regresses. Same version source on
-    // both sides, so the two can never disagree.
-    const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
-    if (!appV.isNull() && appV < latestV) {
-        return false;
-    }
-    return seenV < latestV;
-}
-
-void SettingsController::markWhatsNewSeen()
-{
-    const QString latest = latestWhatsNewVersion();
-    if (latest.isEmpty())
-        return;
-    if (m_lastSeenWhatsNewVersion != latest) {
-        m_lastSeenWhatsNewVersion = latest;
-        QSettings appSettings;
-        appSettings.setValue(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey(), latest);
-        Q_EMIT lastSeenWhatsNewVersionChanged();
-    }
 }
 
 } // namespace PlasmaZones

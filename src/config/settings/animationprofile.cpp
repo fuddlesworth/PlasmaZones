@@ -58,6 +58,17 @@ void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
 }
 } // namespace
 
+bool Settings::hasExplicitAnimationProfile() const
+{
+    // Deliberately NOT derived from animationProfile(): that accessor
+    // substitutes the ConfigDefaults blob for an absent key (see
+    // readProfileObject above), so every field is engaged whether or not the
+    // user has ever opened the page. Callers that must rank the global
+    // profile as user INTENT rather than as a shipped default need the
+    // storage fact, which only the store can answer.
+    return m_store->hasExplicitValue(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+}
+
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
     // Only a MALFORMED blob returns an empty object here (yielding a

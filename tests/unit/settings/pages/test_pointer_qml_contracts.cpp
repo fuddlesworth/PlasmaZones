@@ -1,0 +1,260 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_pointer_qml_contracts.cpp
+ * @brief Contracts between the pointer preview QML and PointerPreviewController,
+ *        pinned by parsing the QML source itself.
+ *
+ * QML resolves names at runtime and the settings app has no QML test harness,
+ * so a renamed or mistyped invokable is a silent TypeError and a dead control
+ * in the running app rather than a build failure. The animation route carries
+ * this guard for its own pane and the decoration route for its own, and each
+ * deliberately excludes the other routes because their controller is a
+ * different class. The pointer route is excluded from the decoration sweep for
+ * exactly that reason, which is what makes this file its counterpart rather
+ * than a duplicate.
+ *
+ * Source-scrape, with the usual limitation: it checks that a call CAN resolve,
+ * not what it does.
+ */
+
+#include "pages/pointerpreviewcontroller.h"
+
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QIODevice>
+#include <QMetaMethod>
+#include <QMetaObject>
+#include <QRegularExpression>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+#include <QtTest/QtTest>
+
+using namespace PlasmaZones;
+
+namespace {
+
+QString readFile(const QString& path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+    return QString::fromUtf8(f.readAll());
+}
+
+/// Strip comments before scraping, matching the sibling guards: a call that
+/// survives only in prose is not a caller, and a `//` inside a string must not
+/// swallow the rest of a line that carries one.
+QString stripComments(QString src)
+{
+    static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                   QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
+    src.remove(blockCommentRe);
+    src.remove(lineCommentRe);
+    return src;
+}
+
+/// Every `<receiver>.<name>` used across @p paths.
+QSet<QString> scrapeCalls(const QStringList& paths, const QString& receiver, QString* readError)
+{
+    QSet<QString> used;
+    const QRegularExpression callRe(QStringLiteral("\\b%1\\.([A-Za-z_][A-Za-z0-9_]*)").arg(receiver));
+    for (const QString& path : paths) {
+        const QString raw = readFile(path);
+        if (raw.isEmpty()) {
+            *readError = path;
+            return used;
+        }
+        const QString src = stripComments(raw);
+        auto it = callRe.globalMatch(src);
+        while (it.hasNext()) {
+            used.insert(it.next().captured(1));
+        }
+    }
+    return used;
+}
+
+/// Names in @p used that are neither a property nor a method on @p meta.
+QStringList unreachableOn(const QMetaObject* meta, const QSet<QString>& used)
+{
+    QStringList unreachable;
+    for (const QString& name : used) {
+        const QByteArray raw = name.toUtf8();
+        if (meta->indexOfProperty(raw.constData()) >= 0) {
+            continue;
+        }
+        bool found = false;
+        for (int i = 0; i < meta->methodCount() && !found; ++i) {
+            found = meta->method(i).name() == raw;
+        }
+        if (!found) {
+            unreachable.append(name);
+        }
+    }
+    unreachable.sort();
+    return unreachable;
+}
+
+const QString kShadersQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+const QString kPagesDir = QStringLiteral(P_SOURCE_DIR "/src/settings/pages");
+
+/// The files the pointer route scrapes. The pane and the canvas are the
+/// pointer route proper, and the notice strip reads packInfo for both hosts.
+/// PackPreview is NOT here: it is the shared stage every family renders
+/// through, and its decoration branch reads audioSpectrum, which the pointer
+/// controller has no reason to carry. The two names it reads on every route
+/// (previewRevision, packInfo) are pinned directly, on all three controllers,
+/// by everyPreviewControllerCarriesTheNamesPackPreviewReads.
+QStringList pointerMirrorPaths()
+{
+    return {kShadersQml + QStringLiteral("/PointerPreviewPane.qml"),
+            kShadersQml + QStringLiteral("/PointerPreviewCanvas.qml"),
+            kShadersQml + QStringLiteral("/PointerPackNotices.qml")};
+}
+
+} // namespace
+
+class TestPointerQmlContracts : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void everyPreviewControllerCallFromThePointerQmlIsReachable();
+    void everyPointerFileThatCallsThePreviewControllerIsMirrored();
+    void everyPreviewControllerCarriesTheNamesPackPreviewReads();
+    void thePointerDrivingCallsKeepTheirArgumentCount();
+    void theBrowserDialogRoutesThePointerPreviewKind();
+};
+
+void TestPointerQmlContracts::everyPreviewControllerCallFromThePointerQmlIsReachable()
+{
+    // Every file, not just the pane: the canvas is where the simulated pointer
+    // is driven, so it carries the calls most likely to be renamed.
+    const QStringList paths = pointerMirrorPaths();
+
+    QString readError;
+    const QSet<QString> used = scrapeCalls(paths, QStringLiteral("previewController"), &readError);
+    QVERIFY2(readError.isEmpty(), qPrintable(QStringLiteral("cannot read ") + readError));
+    QVERIFY2(!used.isEmpty(), "scraped no previewController.* names — a pointer preview file or the receiver moved");
+
+    PointerPreviewController controller;
+    const QStringList unreachable = unreachableOn(controller.metaObject(), used);
+    QVERIFY2(unreachable.isEmpty(),
+             qPrintable(QStringLiteral("the pointer preview QML calls these on previewController, but "
+                                       "PointerPreviewController lacks them: %1")
+                            .arg(unreachable.join(QStringLiteral(", ")))));
+}
+
+void TestPointerQmlContracts::everyPointerFileThatCallsThePreviewControllerIsMirrored()
+{
+    // Anti-rot sweep for the hardcoded list above: a new Pointer*.qml in the
+    // shaders directory that talks to previewController is pointer-route code
+    // whose calls would otherwise go unchecked, which is the exact gap the
+    // mirror exists to close. Comments stripped first, so a file that only
+    // MENTIONS the receiver in prose is not a caller.
+    const QStringList mirrored = pointerMirrorPaths();
+    QDirIterator sweep(kShadersQml, QStringList{QStringLiteral("Pointer*.qml")}, QDir::Files);
+    int seen = 0;
+    while (sweep.hasNext()) {
+        const QString path = sweep.next();
+        ++seen;
+        const QString src = stripComments(readFile(path));
+        if (!src.contains(QLatin1String("previewController."))) {
+            continue;
+        }
+        QVERIFY2(mirrored.contains(path),
+                 qPrintable(QStringLiteral("%1 calls previewController but is not in the pointer mirror's path "
+                                           "list — add it to pointerMirrorPaths")
+                                .arg(QFileInfo(path).fileName())));
+    }
+    QVERIFY2(seen > 0, "swept no Pointer*.qml — the pointer preview files or the directory moved");
+}
+
+void TestPointerQmlContracts::everyPreviewControllerCarriesTheNamesPackPreviewReads()
+{
+    // PackPreview.qml reads exactly two names on whichever controller its host
+    // supplies, and every family's mirror rests on the premise that all three
+    // controllers carry both. The pointer controller is checked on its real
+    // metaobject. The decoration and animation controllers are checked on
+    // their headers: this target links only the pointer controller, so their
+    // metaobjects are not reachable here, and a declaration scrape is what
+    // can be pinned from this side.
+    const QStringList required{QStringLiteral("previewRevision"), QStringLiteral("packInfo")};
+
+    PointerPreviewController pointer;
+    const QStringList missingOnPointer =
+        unreachableOn(pointer.metaObject(), QSet<QString>(required.cbegin(), required.cend()));
+    QVERIFY2(
+        missingOnPointer.isEmpty(),
+        qPrintable(
+            QStringLiteral("PointerPreviewController lacks: %1").arg(missingOnPointer.join(QStringLiteral(", ")))));
+
+    static const QRegularExpression revisionRe(QStringLiteral("Q_PROPERTY\\(\\s*int\\s+previewRevision\\s+READ"));
+    static const QRegularExpression packInfoRe(QStringLiteral("Q_INVOKABLE\\s+QVariantMap\\s+packInfo\\s*\\("));
+    for (const QString& header :
+         {QStringLiteral("/decorationpreviewcontroller.h"), QStringLiteral("/animationpreviewcontroller.h"),
+          QStringLiteral("/pointerpreviewcontroller.h")}) {
+        const QString src = stripComments(readFile(kPagesDir + header));
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("cannot read ") + header));
+        QVERIFY2(
+            src.contains(revisionRe),
+            qPrintable(QStringLiteral("%1 declares no previewRevision property, which PackPreview reads").arg(header)));
+        QVERIFY2(src.contains(packInfoRe),
+                 qPrintable(QStringLiteral("%1 declares no packInfo invokable, which PackPreview reads").arg(header)));
+    }
+}
+
+void TestPointerQmlContracts::thePointerDrivingCallsKeepTheirArgumentCount()
+{
+    // Name reachability is not enough for the calls that carry the simulated
+    // pointer. QML resolves an invokable by name and coerces whatever it was
+    // handed, so dropping or reordering an argument compiles, resolves, and
+    // then feeds the sampler silently wrong values — the preview simply stops
+    // matching the compositor with nothing failing. Pin the shapes the QML
+    // actually calls with.
+    const QMetaObject* mo = &PointerPreviewController::staticMetaObject;
+    const QHash<QString, int> expected{
+        {QStringLiteral("drivePointer"), 7}, // item, x, y, cursorW, cursorH, dtMs, pressed
+        {QStringLiteral("resetPointer"), 1}, // item
+        {QStringLiteral("configurePreviewItem"), 3}, // item, packId, params
+        {QStringLiteral("updatePreviewParams"), 3}, // item, packId, params
+        {QStringLiteral("packInfo"), 1}, // packId
+    };
+
+    for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
+        int found = -1;
+        for (int i = mo->methodOffset(); i < mo->methodCount(); ++i) {
+            const QMetaMethod m = mo->method(i);
+            if (QString::fromLatin1(m.name()) == it.key()) {
+                found = m.parameterCount();
+                break;
+            }
+        }
+        QVERIFY2(found >= 0,
+                 qPrintable(QStringLiteral("PointerPreviewController has no invokable named %1").arg(it.key())));
+        QCOMPARE(found, it.value());
+    }
+}
+
+void TestPointerQmlContracts::theBrowserDialogRoutesThePointerPreviewKind()
+{
+    // The browser dialog picks a preview pane by the page's previewKind, so it
+    // must actually route the pointer token somewhere or the pane is dead code
+    // whatever the controller answers. Which controller answers "pointer" is
+    // checked on the decoration route that now owns the pointer surface.
+    const QString dialog = readFile(kShadersQml + QStringLiteral("/ShaderBrowserDetailDialog.qml"));
+    QVERIFY2(!dialog.isEmpty(), "cannot read ShaderBrowserDetailDialog.qml");
+    QVERIFY2(dialog.contains(QLatin1String("\"pointer\"")),
+             "ShaderBrowserDetailDialog does not route the pointer previewKind");
+    QVERIFY2(dialog.contains(QLatin1String("PointerPreviewPane")),
+             "ShaderBrowserDetailDialog never instantiates PointerPreviewPane");
+}
+
+QTEST_MAIN(TestPointerQmlContracts)
+#include "test_pointer_qml_contracts.moc"

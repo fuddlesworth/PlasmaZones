@@ -14,6 +14,7 @@
 
 #include <PhosphorWayland/LayerSurface.h>
 
+#include <QEvent>
 #include <QScreen>
 #include <QThread>
 #include <QTimer>
@@ -276,6 +277,12 @@ void ScreenManager::createGeometrySensor(const PhysicalScreen& screen)
     connect(sensor, &QWindow::yChanged, this, [this, screenName]() {
         onSensorGeometryChanged(screenName);
     });
+
+    // The compositor's per-surface scale arrives after the surface is
+    // configured, and QWindow has no changed signal for it, so the event is
+    // the only notice. Installed before show() so the first one is not
+    // missed. See eventFilter.
+    sensor->installEventFilter(this);
 
     m_geometrySensors.insert(screen.name, sensor);
 
@@ -565,6 +572,67 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen) const
     // availableGeometry rather than surface an empty rect.
     const PhysicalScreen tracked = trackedScreenByName(screen->name());
     return tracked.isValid() ? actualAvailableGeometry(tracked) : screen->availableGeometry();
+}
+
+qreal ScreenManager::logicalScale(const PhysicalScreen& screen) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    // The sensor is a mapped layer-shell QWindow anchored to this output, so
+    // Qt has given it the compositor's per-surface fractional scale. That is
+    // the number the header's note is about: QScreen would answer with the
+    // wl_output integer buffer scale instead (2 for a 1.15 output), which is
+    // not a scale anything here means.
+    // Gated on a MAPPED sensor, and on the platform window as well —
+    // calculateAvailableGeometry needs only isVisible() because a geometry it
+    // reads back before mapping is simply the one it was given, while a scale
+    // read that early is actively wrong. An unmapped QWindow has no platform
+    // window to carry a per-surface scale, and QWindow::devicePixelRatio()
+    // then answers with its screen's — the very integer buffer scale this
+    // accessor exists to avoid.
+    // Without the gate that value would be laundered through as though it were
+    // the fractional one, which is worse than returning it from the fallback
+    // below, where the coarseness is at least stated.
+    if (auto sensor = m_geometrySensors.value(screen.name); sensor && sensor->isVisible() && sensor->handle()) {
+        const qreal sensorScale = sensor->devicePixelRatio();
+        if (sensorScale > 0.0) {
+            return sensorScale;
+        }
+    }
+    // No sensor (synthetic screen), or one not mapped yet. The coarse QScreen
+    // answer is the wl_output buffer scale, so it over-reports on a fractional
+    // output — but it is the best a client can see without a surface, and it
+    // is what this used to report everywhere.
+    return screen.qscreen ? screen.qscreen->devicePixelRatio() : 1.0;
+}
+
+qreal ScreenManager::logicalScale(QScreen* screen) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    if (!screen) {
+        return 1.0;
+    }
+    const PhysicalScreen tracked = trackedScreenByName(screen->name());
+    return tracked.isValid() ? logicalScale(tracked) : screen->devicePixelRatio();
+}
+
+bool ScreenManager::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event && event->type() == QEvent::DevicePixelRatioChange) {
+        // Reverse-resolve the sensor to its screen rather than capturing the
+        // name: the map is small (one entry per output) and a captured name
+        // would need its own teardown to stay honest.
+        for (auto it = m_geometrySensors.constBegin(); it != m_geometrySensors.constEnd(); ++it) {
+            if (it.value() == watched) {
+                const PhysicalScreen screen = trackedScreenByName(it.key());
+                if (screen.isValid()) {
+                    Q_EMIT logicalScaleChanged(screen);
+                }
+                break;
+            }
+        }
+    }
+    // Never filtered: the sensor still needs the event.
+    return QObject::eventFilter(watched, event);
 }
 
 bool ScreenManager::isPanelGeometryReady() const

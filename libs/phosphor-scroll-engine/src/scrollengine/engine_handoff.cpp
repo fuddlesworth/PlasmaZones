@@ -31,7 +31,7 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     }
     // Tracking-only clear: the receiving engine places the window; this
     // screen's remaining columns close up on the scheduled retile.
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+    const ScrollLayoutParams params = layoutParamsForKey(key);
     state->strip().takeWindow(windowId, params);
     state->removeFloating(windowId);
     m_states.removeWindow(windowId);

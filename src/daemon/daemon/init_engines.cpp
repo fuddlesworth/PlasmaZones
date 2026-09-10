@@ -38,7 +38,6 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
@@ -201,15 +200,22 @@ void Daemon::initEnginesAndWiring()
     // Scrolling provider: resolves against the "scrolling" placement mode
     // so a `Mode Equals "scrolling"` gap rule applies to the strip and
     // stays inert elsewhere.
-    scrollEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-        if (!m_layoutManager || screenId.isEmpty()) {
-            return {};
-        }
-        return GeometryUtils::mergeConfigPerScreenGaps(
-            GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("scrolling"))),
-            m_settings.get(), screenId);
-    });
+    scrollEngine->setContextGapProvider(
+        [this](const QString& screenId, int desktop, const QString& activity) -> QVariantMap {
+            if (!m_layoutManager || screenId.isEmpty()) {
+                return {};
+            }
+            // A desktop of 0 means "the context this screen is showing", which is
+            // what a current-context caller passes; a named desktop comes from a
+            // caller mutating a BACKGROUND state, and its gap rules are the ones
+            // that state was laid out against.
+            const int resolvedDesktop = desktop > 0 ? desktop : currentDesktopForScreen(screenId);
+            const QString resolvedActivity = desktop > 0 ? activity : currentActivity();
+            return GeometryUtils::mergeConfigPerScreenGaps(
+                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                    screenId, resolvedDesktop, resolvedActivity, QStringLiteral("scrolling"))),
+                m_settings.get(), screenId);
+        });
 
     // Snap-restore defer gate (ScrollEngine::windowOpened): bakes BOTH the
     // global snapping toggle and the recorded context's mode into one
@@ -1205,6 +1211,18 @@ void Daemon::initEnginesAndWiring()
     // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_tilingAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
+    // Snapping reconciles desktop membership but stays OUT of the lifecycle
+    // pipeline: it takes no part in window dispatch, the replay cache or the
+    // relay entry points. Its stake is zone occupancy, which is queried across
+    // every store, so a window that left a desktop has to stop being listed as
+    // an occupant of the zone it was snapped into there.
+    m_tilingAdaptor->setMembershipEngines({snapEngine});
+    // Desktop-membership reconcile: the registry's per-window desktop set is
+    // the authority on which desktop a window belongs to, and the adaptor
+    // sees every engine state, so a window that leaves a desktop is released
+    // from that desktop's stack here rather than by the effect guessing from
+    // the desktop in view (see TilingAdaptor::setWindowRegistry).
+    m_tilingAdaptor->setWindowRegistry(m_windowRegistry.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
     // The wheel's view step reads ShortcutManager's narrow getter over
@@ -1465,6 +1483,15 @@ void Daemon::initEnginesAndWiring()
     m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
                                           m_layoutManager.get(), autotileEngine, m_screenManager.get(),
                                           m_compositorBridge, m_scrollEngine.get(), m_screenModeRouter.get(), this);
+    // The shortcut catalog behind Control.getShortcutsJson. ShortcutManager
+    // outlives every adaptor rebuild (constructed in the Daemon ctor), so the
+    // provider reads it through the member; the relay is scoped to the
+    // adaptor so a rebuilt one never receives a stale connection.
+    m_controlAdaptor->setShortcutCatalogProvider([this]() -> QVariantList {
+        return m_shortcutManager ? m_shortcutManager->shortcutCatalog() : QVariantList();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, m_controlAdaptor,
+            &ControlAdaptor::notifyShortcutsChanged);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all

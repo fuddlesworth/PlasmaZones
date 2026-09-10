@@ -38,6 +38,7 @@ pre-commit:
         - "data/animations/*/metadata.json"
         - "data/overlays/*/metadata.json"
         - "data/surface/*/metadata.json"
+        - "data/pointer/*/metadata.json"
         - "data/schemas/*.json"
         - "data/whatsnew.json"
       # Hard gate: when a schema-governed data file or a schema itself is
@@ -82,6 +83,17 @@ pre-commit:
         sh -c 'bin=build/bin/plasmazones-shader-validate;
         if [ -x "$bin" ]; then exec "$bin" --quiet --surface data/surface;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping surface shader validation; build the target to enable this local gate" >&2; fi'
+    shader-validate-pointer:
+      glob: "data/pointer/**/*.{frag,vert,glsl,json}"
+      # Pointer packs are the fourth authoring model, with their own CI gate
+      # (shader_validate_pointer). Without this hook they would be the only
+      # shader tree with no pre-commit validation, which is the gap the
+      # animation hook above was added to close. Same best-effort skip when the
+      # binary isn't built.
+      run: >
+        sh -c 'bin=build/bin/plasmazones-shader-validate;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --pointer data/pointer;
+        else echo "plasmazones-shader-validate not built (build/bin/) — skipping pointer shader validation; build the target to enable this local gate" >&2; fi'
 
 commit-msg:
   commands:

@@ -402,6 +402,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::tilingBehaviorGroup(), CD::lockedScreensKey()), idKind(ValueKind::ScreenId));
         t.insert(pairKey(CD::animationsGroup(), CD::shaderProfileTreeKey()), idKind(ValueKind::ShaderPack));
         t.insert(pairKey(CD::decorationsGroup(), CD::decorationProfileTreeKey()), idKind(ValueKind::DecorationPack));
+        t.insert(pairKey(CD::overlaysGroup(), CD::overlayShaderTreeKey()), idKind(ValueKind::OverlayShader));
 
         // ── Triggers ────────────────────────────────────────────────────────
         // the tiling drag-insert triggers are a leaf of Tiling.Behavior, not a sub-group of their own —

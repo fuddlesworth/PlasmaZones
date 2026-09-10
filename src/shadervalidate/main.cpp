@@ -10,9 +10,9 @@
 // no compositor). It is the CI gate for the bundled sets and a pre-commit-
 // friendly tool for pack authors.
 //
-// Three authoring models. Each pack's model is DETECTED from the marker header
+// Four authoring models. Each pack's model is DETECTED from the marker header
 // in its sibling `shared/` directory (see detectPackModel); --overlay /
-// --animation / --surface force one model for every path given, for a pack
+// --animation / --surface / --pointer force one model for every path given, for a pack
 // tree that carries no shared/ dir of its own. Detection is the default
 // because --overlay used to be, so validating an animation pack without
 // remembering the flag reported wrong-validator artifacts as pack errors:
@@ -22,17 +22,23 @@
 //     daemon Qt-RHI path.
 //   • animation/transition packs (--animation, data/animations/*):
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
-//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path.
-//     Compositor-only packs are baked out of process through glslang instead,
-//     since their kwin classic-GL source is a dialect the SPIR-V target
-//     rejects by design (see validateAnimationPack).
+//     + paramPreamble; validates every fragment and declared vertex on BOTH
+//     the Qt-RHI preview and compositor paths. All animation validation needs
+//     glslangValidator or glslang on PATH for the classic-GL compile. The
+//     default vertex and daemon multipass buffers also bake on Qt-RHI.
 //   • surface/decoration packs (--surface, data/surface/*):
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see
 //     validateSurfacePack.
+//   • pointer packs (--pointer, data/pointer/*):
+//     PointerShaderEffect + the pPointer entry scaffold + paramPreamble;
+//     validates effect.frag and the buffer passes on BOTH the preview Qt-RHI
+//     path and, through glslang, the compositor PLASMAZONES_KWIN path every
+//     pointer pack ships on; the shared vertex stage bakes on the preview
+//     path only — see validatePointerPack.
 //
 // Usage:
-//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface]
+//   plasmazones-shader-validate [--quiet|-q] [--overlay|-o|--animation|-a|--surface|-s|--pointer|-p]
 //                               [--emit-preamble] [--] <path> [<path> ...]
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
@@ -42,6 +48,8 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorPointer/PointerShaderEffect.h>
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -52,6 +60,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -60,6 +69,8 @@
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
+using PhosphorPointerShaders::PointerShaderEffect;
+using PhosphorPointerShaders::PointerShaderRegistry;
 using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
 using PhosphorSurfaceShaders::SurfaceShaderEffect;
@@ -73,6 +84,37 @@ bool isPackDir(const QString& dir)
     return QFile::exists(QDir(dir).filePath(QStringLiteral("metadata.json")));
 }
 
+// The three effect-struct families share one open / parse / isValid / preamble
+// sequence and differ only in the struct and registry involved, so it lives
+// here once. Returns the pack's `p_<id>` preamble, or nullopt after printing
+// why. The overlay family parses through ShaderRegistry::parsePackMetadata and
+// takes its own branch in emitPreamble.
+template<typename Effect, typename Registry>
+std::optional<QString> preambleFromEffectMetadata(const QString& packDir, const QString& name, QTextStream& errStream)
+{
+    QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+    if (!metaFile.open(QIODevice::ReadOnly)) {
+        errStream << name << ": cannot read metadata.json\n";
+        return std::nullopt;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
+    if (!doc.isObject()) {
+        errStream << name << ": invalid metadata.json\n";
+        return std::nullopt;
+    }
+    Effect eff = Effect::fromJson(doc.object());
+    eff.sourceDir = QDir(packDir).absolutePath();
+    // Mirror the validate path: reject metadata missing the required id /
+    // fragmentShader fields rather than silently emitting a sidecar from a
+    // half-parsed pack. (isValid() checks field presence, not file
+    // existence, so emit-preamble-before-writing-the-shader still works.)
+    if (!eff.isValid()) {
+        errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
+        return std::nullopt;
+    }
+    return Registry::paramPreamble(eff);
+}
+
 // Write the generated `p_<id>` autocomplete sidecar for one pack (T2.2). The
 // sidecar (p_generated.glsl) is an editor-only aid: an author #includes it for
 // glslls / glsl-language-server autocomplete, and the include resolver skips it
@@ -81,54 +123,25 @@ bool isPackDir(const QString& dir)
 int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStream& out, QTextStream& errStream)
 {
     const QString name = QFileInfo(packDir).fileName();
-    QString preamble;
+    std::optional<QString> preamble;
     // glslls needs the UBO declarations the p_<id> defines reference, so the
     // sidecar pulls in the right base header per authoring model.
     QString baseHeader;
 
-    if (model == PackModel::Surface) {
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (!metaFile.open(QIODevice::ReadOnly)) {
-            errStream << name << ": cannot read metadata.json\n";
-            return 1;
-        }
-        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
-        if (!doc.isObject()) {
-            errStream << name << ": invalid metadata.json\n";
-            return 1;
-        }
-        SurfaceShaderEffect eff = SurfaceShaderEffect::fromJson(doc.object());
-        eff.sourceDir = QDir(packDir).absolutePath();
-        if (!eff.isValid()) {
-            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
-            return 1;
-        }
-        preamble = SurfaceShaderRegistry::paramPreamble(eff);
+    switch (model) {
+    case PackModel::Pointer:
+        preamble = preambleFromEffectMetadata<PointerShaderEffect, PointerShaderRegistry>(packDir, name, errStream);
+        baseHeader = QStringLiteral("pointer_uniforms.glsl");
+        break;
+    case PackModel::Surface:
+        preamble = preambleFromEffectMetadata<SurfaceShaderEffect, SurfaceShaderRegistry>(packDir, name, errStream);
         baseHeader = QStringLiteral("surface_uniforms.glsl");
-    } else if (model == PackModel::Animation) {
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (!metaFile.open(QIODevice::ReadOnly)) {
-            errStream << name << ": cannot read metadata.json\n";
-            return 1;
-        }
-        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll());
-        if (!doc.isObject()) {
-            errStream << name << ": invalid metadata.json\n";
-            return 1;
-        }
-        AnimationShaderEffect eff = AnimationShaderEffect::fromJson(doc.object());
-        eff.sourceDir = QDir(packDir).absolutePath();
-        // Mirror the validate path: reject metadata missing the required id /
-        // fragmentShader fields rather than silently emitting a sidecar from a
-        // half-parsed pack. (isValid() checks field presence, not file
-        // existence, so emit-preamble-before-writing-the-shader still works.)
-        if (!eff.isValid()) {
-            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
-            return 1;
-        }
-        preamble = AnimationShaderRegistry::paramPreamble(eff);
+        break;
+    case PackModel::Animation:
+        preamble = preambleFromEffectMetadata<AnimationShaderEffect, AnimationShaderRegistry>(packDir, name, errStream);
         baseHeader = QStringLiteral("animation_uniforms.glsl");
-    } else {
+        break;
+    case PackModel::Overlay: {
         QString parseErr;
         const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
         if (!parseErr.isEmpty()) {
@@ -137,6 +150,11 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
         }
         preamble = ShaderRegistry::paramPreamble(info);
         baseHeader = QStringLiteral("common.glsl");
+        break;
+    }
+    }
+    if (!preamble) {
+        return 1;
     }
 
     const QLatin1String sidecarName(ShaderIncludeResolver::GeneratedPreambleInclude);
@@ -152,20 +170,21 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
       << "// Re-run --emit-preamble after you change the pack's parameters.\n"
       << "#include <" << baseHeader << ">\n"
       << "\n"
-      << (preamble.isEmpty() ? QStringLiteral("// (this pack declares no named parameters)\n") : preamble);
+      << (preamble->isEmpty() ? QStringLiteral("// (this pack declares no named parameters)\n") : *preamble);
     s.flush();
 
     const QString sidecarPath = QDir(packDir).filePath(sidecarName);
-    QFile f(sidecarPath);
+    // QSaveFile: the sidecar is replaced atomically on commit, so an editor
+    // that #includes it never reads a half-written file, and a failed run
+    // leaves the previous sidecar in place rather than a truncated one.
+    QSaveFile f(sidecarPath);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
         errStream << name << ": cannot write " << sidecarPath << ": " << f.errorString() << "\n";
         return 1;
     }
-    // Checked: a short write leaves a TRUNCATED sidecar that the line below
-    // would still report as "wrote".
     const QByteArray encoded = sidecar.toUtf8();
-    if (f.write(encoded) != encoded.size()) {
-        errStream << name << ": short write to " << sidecarPath << ": " << f.errorString() << "\n";
+    if (f.write(encoded) != encoded.size() || !f.commit()) {
+        errStream << name << ": cannot write " << sidecarPath << ": " << f.errorString() << "\n";
         return 1;
     }
     if (!quiet) {
@@ -183,7 +202,7 @@ int main(int argc, char** argv)
 
     QStringList args;
     bool quiet = false; // --quiet/-q: print only failing packs (clean pre-commit output)
-    // System selection: --overlay vs --animation vs --surface, each FORCING one
+    // System selection: --overlay vs --animation vs --surface vs --pointer, each FORCING one
     // authoring model for every path given. With none of them the model is
     // detected per pack from its shared/ directory (detectPackModel), which is
     // the default because the old default silently forced `--overlay` and
@@ -210,28 +229,51 @@ int main(int argc, char** argv)
             forcedModel = PackModel::Animation;
         } else if (a == QLatin1String("--surface") || a == QLatin1String("-s")) {
             forcedModel = PackModel::Surface;
+        } else if (a == QLatin1String("--pointer") || a == QLatin1String("-p")) {
+            forcedModel = PackModel::Pointer;
         } else if (a == QLatin1String("--overlay") || a == QLatin1String("-o")) {
             forcedModel = PackModel::Overlay;
         } else if (a == QLatin1String("--emit-preamble")) {
             emitMode = true;
+        } else if (a.startsWith(QLatin1Char('-')) && a.size() > 1) {
+            // A misspelled flag would otherwise be tried as a path and
+            // reported as "not a directory", which sends the reader after
+            // the filesystem instead of the spelling. A bare `-` stays a path.
+            errStream << "unknown option: " << a << "\n";
+            args.clear();
+            break;
         } else {
             args << a;
         }
     }
     if (args.isEmpty()) {
-        errStream << "usage: plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] "
+        errStream << "usage: plasmazones-shader-validate [--quiet|-q] "
+                     "[--overlay|-o|--animation|-a|--surface|-s|--pointer|-p] "
                      "[--emit-preamble] [--] <pack-dir-or-root> [...]\n"
-                  << "  (no model flag)   detect each pack's model from its shared/ dir  [default]\n"
-                  << "  --overlay         force zone/overlay packs (data/overlays/*)\n"
-                  << "  --animation       force transition/animation packs (data/animations/*)\n"
-                  << "  --surface         force surface-layer packs (data/surface/*)\n"
-                  << "  --emit-preamble   write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
+                  << "  (no model flag)      detect each pack's model from its shared/ dir  [default]\n"
+                  << "  --overlay, -o        force zone/overlay packs (data/overlays/*); -o selects a model, "
+                     "not an output file\n"
+                  << "  --animation, -a      force transition/animation packs (data/animations/*)\n"
+                  << "  --surface, -s        force surface-layer packs (data/surface/*)\n"
+                  << "  --pointer, -p        force pointer packs (data/pointer/*)\n"
+                  << "  --quiet, -q          print only failing packs\n"
+                  << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n"
+                  << "Animation packs compile for Qt-RHI previews and the compositor. Install glslang for the "
+                     "compositor check.\n";
         return 2;
     }
 
     // Expand each argument into a list of pack directories: a pack dir is taken as
     // itself; anything else is treated as a root and scanned one level deep.
+    // Deduplicated on the absolute path, so a pack named twice (or once on its
+    // own and once through its root) is validated and counted once.
     QStringList packs;
+    const auto addPack = [&packs](const QString& dir) {
+        const QString abs = QDir(dir).absolutePath();
+        if (!packs.contains(abs)) {
+            packs << abs;
+        }
+    };
     for (const QString& arg : args) {
         const QFileInfo fi(arg);
         if (!fi.exists() || !fi.isDir()) {
@@ -239,14 +281,14 @@ int main(int argc, char** argv)
             return 2;
         }
         if (isPackDir(arg)) {
-            packs << QDir(arg).absolutePath();
+            addPack(arg);
             continue;
         }
         const QStringList subdirs = QDir(arg).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& sub : subdirs) {
             const QString subPath = QDir(arg).filePath(sub);
             if (isPackDir(subPath)) {
-                packs << QDir(subPath).absolutePath();
+                addPack(subPath);
             }
         }
     }
@@ -270,7 +312,7 @@ int main(int argc, char** argv)
         }
         errStream << QFileInfo(pack).fileName()
                   << ": no sibling shared/ marker, validating as an overlay pack. Pass "
-                     "--overlay/--animation/--surface to choose\n";
+                     "--overlay/--animation/--surface/--pointer to choose\n";
         return PackModel::Overlay;
     };
 
@@ -297,7 +339,8 @@ int main(int argc, char** argv)
         QString report;
         QTextStream reportStream(&report);
         const PackModel model = modelFor(pack);
-        const int e = model == PackModel::Surface ? validateSurfacePack(pack, reportStream)
+        const int e = model == PackModel::Pointer ? validatePointerPack(pack, reportStream)
+            : model == PackModel::Surface         ? validateSurfacePack(pack, reportStream)
             : model == PackModel::Animation       ? validateAnimationPack(pack, reportStream)
                                                   : validatePack(pack, reportStream);
         reportStream.flush();

@@ -16,9 +16,11 @@
  *   - removeUserPreset must not touch override files, even when an override's
  *     embedded `name` happens to match the preset being removed
  *   - Malformed preset JSON logs and is skipped rather than breaking the list
- *   - A write that fails AFTER the pre-edit snapshot was taken un-stages that
- *     snapshot, so the page does not report an unsaved change to a file that
- *     was never touched
+ *   - A write that cannot reach disk toasts rather than failing silently
+ *   - Preset CRUD is IMMEDIATE: it does not stage, so Discard does not undo it
+ *
+ * The snapshot-and-rollback contract this file used to pin went with schema v8.
+ * The library is constructed with no snapshot or rollback hooks at all.
  */
 
 #include <QSignalSpy>
@@ -35,6 +37,7 @@
 #include <QVariantMap>
 
 #include "settings/pages/animationspagecontroller.h"
+#include "helpers/AnimationsControllerFixture.h"
 
 using namespace PlasmaZones;
 
@@ -44,11 +47,24 @@ class TestAnimationsPresets : public QObject
 
 private Q_SLOTS:
 
-    /// Every test overrides the profiles dir to a QTemporaryDir. Redirect
-    /// GenericDataLocation too, so nothing can reach the real ~/.local/share.
+    /// Deliberately EMPTY, and it must stay that way.
+    ///
+    /// This used to call `QStandardPaths::setTestModeEnabled(true)`, which
+    /// defeats every slot's `IsolatedConfigGuard`: the guard isolates by
+    /// setting `XDG_CONFIG_HOME`, and test mode makes QStandardPaths ignore
+    /// that and return one fixed `~/.qttest/config` for the whole process. So
+    /// every slot shared a single config file, and since schema v8 put the
+    /// per-event overrides IN config, one slot's overrides leaked into the
+    /// next — quietly satisfying assertions that were supposed to be testing
+    /// their own slot's setup. `test_animations_motion_sets` removed the same
+    /// call for the same reason.
+    ///
+    /// Isolation is already complete without it: each slot's guard gives it a
+    /// private XDG_CONFIG_HOME and XDG_DATA_HOME, the CMake sweep gives the
+    /// whole target its own XDG root, and the file-backed preset library is
+    /// redirected per slot by `setUserProfilesDirOverride`.
     void initTestCase()
     {
-        QStandardPaths::setTestModeEnabled(true);
     }
 
     // ─── User preset library ──────────────────────────────────────────────
@@ -57,7 +73,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
@@ -75,14 +92,35 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Preset file
         QVERIFY(
             c.addUserPreset(QStringLiteral("My Curve"), {{QStringLiteral("curve"), QStringLiteral("0.5,0,0.5,1")}}));
-        // Override file at a known path
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+
+        // An override file at a KNOWN path, planted by hand. It has to be
+        // planted rather than written through setOverride: since schema v8
+        // setOverride writes a config key and puts nothing in this directory,
+        // so driving it here would leave the assertion below true no matter
+        // what the library filtered. The file is what a pre-v8 build left
+        // behind, and it is still sitting in the profiles dir the preset
+        // library reads — the migration copies those files, it does not remove
+        // them.
+        //
+        // This is the KNOWN-path case, which the orphan slot below does not
+        // reach: its file names a path allBuiltInPaths() no longer contains, so
+        // it exercises the dotted-basename guard. This one is caught earlier,
+        // by the known-path membership check.
+        QFile f(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QJsonObject obj;
+        obj.insert(QStringLiteral("name"), QStringLiteral("editor.snapIn"));
+        obj.insert(QStringLiteral("duration"), 250);
+        const QByteArray objBytes = QJsonDocument(obj).toJson();
+        QCOMPARE(f.write(objBytes), static_cast<qint64>(objBytes.size()));
+        f.close();
 
         // userPresets sees ONLY the preset, not the override
         const QVariantList presets = c.userPresets();
@@ -104,7 +142,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Plant an orphan override file directly: the on-disk shape
@@ -137,7 +176,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
@@ -152,7 +192,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.addUserPreset(QString(), {{QStringLiteral("duration"), 100}}));
@@ -164,7 +205,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(
@@ -181,7 +223,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
@@ -198,29 +241,40 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        // Write an override file. Its on-disk `name` field is "editor.snapIn"
-        // (per setOverride's stamping rule).
-        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
-        const QString overrideFilePath = tmp.path() + QStringLiteral("/editor.snapIn.json");
-        QVERIFY(QFileInfo::exists(overrideFilePath));
+        // A LEFTOVER override FILE, planted by hand because that is the state
+        // the v8 migration actually creates: it reads the pre-v8 per-event
+        // files into config and deliberately leaves them on disk so an
+        // older version still works.
+        //
+        // Planted rather than written through setOverride: since v8 that
+        // writes to CONFIG, so the profiles dir would stay empty and the
+        // remove-by-name walk — which only ever touches files — could not
+        // collateral-damage anything no matter how broken it was. Asserted
+        // that way this slot could not fail; deleting the guard it names left
+        // it green.
+        const QString orphanPath = tmp.path() + QStringLiteral("/editor.snapIn.json");
+        {
+            QFile f(orphanPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QJsonDocument(QJsonObject{{QStringLiteral("name"), QStringLiteral("editor.snapIn")},
+                                              {QStringLiteral("duration"), 250}})
+                        .toJson());
+        }
+        QVERIFY(QFileInfo::exists(orphanPath));
 
-        // The override file's own `name` field is "editor.snapIn", so a naive
-        // remove-by-name directory walk would match it and delete it. The
-        // library must refuse: preset CRUD does not own override files.
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
         QVERIFY(!c.removeUserPreset(QStringLiteral("editor.snapIn")));
         QCOMPARE(spy.count(), 0);
 
-        // The override file MUST still exist — this is the load-bearing
-        // assertion: removeUserPreset cannot collateral-damage overrides.
-        QVERIFY2(
-            QFileInfo::exists(overrideFilePath),
-            "override file was deleted by removeUserPreset(\"editor.snapIn\") — preset CRUD MUST NOT touch override "
-            "slots");
-        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+        // The load-bearing assertion: the walk must recognise this name as an
+        // event path rather than a preset, and refuse, leaving the file alone.
+        QVERIFY2(QFileInfo::exists(orphanPath),
+                 "removeUserPreset(\"editor.snapIn\") deleted a leftover override file — preset CRUD MUST NOT "
+                 "touch anything named after an event path");
     }
 
     // ─── Logging on malformed JSON ────────────────────────────────────────
@@ -233,7 +287,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
 
         // Write a known-good preset so the iteration has at least one
@@ -257,25 +312,26 @@ private Q_SLOTS:
         QCOMPARE(presets.size(), 1);
         QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Good"));
     }
-    /// A failed write leaves the file untouched, so the snapshot it staged for
-    /// Discard has to go back too. Without the rollback the page sits dirty
-    /// with nothing to restore, and the only way out is a no-op Discard.
-    void failedWriteDoesNotLeaveThePageDirty()
+    /// A preset write that cannot reach disk reports the failure to the user
+    /// rather than failing silently.
+    ///
+    /// This slot used to assert that the failure also left no staged snapshot
+    /// behind. That assertion is gone because it can no longer fail: preset CRUD
+    /// is immediate since schema v8, the library is constructed with no snapshot
+    /// or rollback hooks at all, and `hasPendingChanges()` is a value comparison
+    /// over the two config trees that never consults a preset file. Asserting
+    /// `!hasPendingChanges()` on a page nothing here can dirty would pass with
+    /// the whole write path deleted.
+    void failedWriteToastsRatherThanFailingSilently()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
-        QVERIFY(!c.hasPendingChanges());
 
-        // Read-execute only: the directory still exists (so the snapshot stages a
-        // "did not exist" entry for the new file and allows the write), but
-        // QSaveFile cannot create anything inside it.
-        //
-        // A directory at the destination would NOT work here: the snapshot guard
-        // refuses a non-regular file before the write is ever attempted, so it
-        // would test that guard instead of this one. The drop-vs-keep semantics of
-        // the rollback are pinned by the two tests below, which do run as root.
+        // Read-execute only: the directory still exists, so the write is
+        // attempted, but QSaveFile cannot create anything inside it.
         QVERIFY(QFile::setPermissions(tmp.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
 
         QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
@@ -291,45 +347,58 @@ private Q_SLOTS:
         if (written)
             QSKIP("The write succeeded, so this environment ignores directory permissions (running as root?).");
 
+        // The load-bearing assertion: the user is told. Deleting the
+        // toastRequested emit in AnimationPresetLibrary's write-failure arm
+        // fails this.
         QCOMPARE(toastSpy.count(), 1);
-        // The load-bearing assertion: the failed write staged nothing.
-        QVERIFY(!c.hasPendingChanges());
+        // And the preset really did not land, so the list is unchanged.
+        QVERIFY(c.userPresets().isEmpty());
     }
 
-    /// Create a preset and delete it in the same session and disk is back where it
-    /// started, so the staged "this file did not exist" snapshot is a phantom.
-    /// Keeping it left the page dirty forever with nothing for Discard to restore.
-    void createThenDeleteAPresetLeavesThePageClean()
+    /// Preset CRUD is IMMEDIATE, matching the decoration page's set files.
+    /// Creating or deleting one is not a staged edit and Discard does not undo
+    /// it — the same footer button used to mean two different things on the two
+    /// pages, silently reverting an animation preset a user had just saved.
+    void presetCrudIsImmediateAndDoesNotDirtyThePage()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c;
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
         c.setUserProfilesDirOverride(tmp.path());
+
+        // Dirty the page FIRST with a real staged timing edit. Asserting
+        // `!hasPendingChanges()` on a page that was never dirty is an
+        // assertion that cannot fail — it would hold just as well if preset
+        // CRUD staged nothing because it did nothing. What the slot is
+        // actually about is that preset CRUD leaves the page's dirty state
+        // exactly as it found it, so there has to be a state to leave.
         QVERIFY(!c.hasPendingChanges());
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(c.hasPendingChanges());
 
         QVERIFY(c.addUserPreset(QStringLiteral("Temp"), {{QStringLiteral("duration"), 200}}));
-        QVERIFY2(c.hasPendingChanges(), "a new preset is an unsaved change");
+        QVERIFY2(c.hasPendingChanges(), "saving a preset changed the page's dirty state; it is not a staged edit");
 
         QVERIFY(c.removeUserPreset(QStringLiteral("Temp")));
-        QVERIFY2(!c.hasPendingChanges(), "deleting it again puts disk back as it was, so nothing may remain staged");
-    }
+        QVERIFY2(c.hasPendingChanges(), "deleting a preset changed the page's dirty state");
 
-    /// The mirror: deleting a preset that existed BEFORE this session is a real
-    /// change, and its snapshot is the only copy of the file. It must survive.
-    void deletingAPreexistingPresetKeepsItsSnapshot()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-
-        QVERIFY(c.addUserPreset(QStringLiteral("Keeper"), {{QStringLiteral("duration"), 200}}));
-        c.commitPending(); // the preset is now part of the committed baseline
-        QVERIFY(!c.hasPendingChanges());
-
-        QVERIFY(c.removeUserPreset(QStringLiteral("Keeper")));
-        QVERIFY2(c.hasPendingChanges(),
-                 "deleting a pre-existing preset IS an unsaved change, and Discard must be able to restore it");
+        // And the CRUD really was immediate: a Discard reverts the timing edit
+        // but leaves the preset library alone.
+        QVERIFY(c.addUserPreset(QStringLiteral("Keeper"), {{QStringLiteral("duration"), 210}}));
+        QVERIFY(c.revertPending());
+        fx.settings.load();
+        c.refreshDirtyState();
+        QVERIFY2(!c.hasPendingChanges(), "Discard did not revert the staged timing edit");
+        const QVariantList afterDiscard = c.userPresets();
+        bool keeperSurvived = false;
+        for (const QVariant& preset : afterDiscard) {
+            if (preset.toMap().value(QStringLiteral("name")).toString() == QStringLiteral("Keeper")) {
+                keeperSurvived = true;
+                break;
+            }
+        }
+        QVERIFY2(keeperSurvived, "Discard removed a saved preset; preset CRUD is immediate and outside the staged set");
     }
 };
 

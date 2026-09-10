@@ -64,9 +64,11 @@ namespace {
 // `resolveWithInheritance()` walking the parent chain so a parent-node
 // edit (e.g. "All Popups → 2000 ms" written to `popup`)
 // propagates to every leaf under it. Unset paths fall through to
-// library defaults (150 ms OutCubic). User-authored JSONs at
-// `~/.local/share/plasmazones/profiles/<path>.json` are still loaded
-// by ProfileLoader for advanced users who want file-based overrides.
+// library defaults (150 ms OutCubic). Per-event overrides come from the
+// `Animations/MotionProfileTree` config key, installed into the registry by
+// `installMotionProfileTree`. The pre-v8 `plasmazones/profiles/<path>.json`
+// files are read once by the v7→v8 migration and never again — nothing
+// watches that directory now, so editing one has no effect.
 //
 // **Within-family scale-leg coupling (intentional, scoped).** Each
 // surface family's hide-leg-scale reuses the surface family's
@@ -160,9 +162,7 @@ QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, const QStrin
 ///
 /// Load-bearing, not documentation, for ONE surface: ZoneOverlay has no
 /// per-role config and genuinely routes through the animator, so this default is
-/// the motion it gets. ShaderPreview also has no config but never touches the
-/// animator at all (it is shown imperatively), so it merely RESOLVES to this if
-/// anything asks. The registration site below names both.
+/// the motion it gets. The registration site below names it.
 PAL::SurfaceAnimator::Config buildDefaultConfig()
 {
     return PAL::SurfaceAnimator::Config{};
@@ -361,9 +361,6 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //     animator (overlay.cpp passes PhosphorRoles::ZoneOverlay to
     //     beginShow/beginHide on the passive-shell slot) but the default
     //     motion is the intended visual; no shader leg is configured.
-    //   - ShaderPreview (editor preview window): shown via direct
-    //     window->show() in showShaderPreview because the editor controls
-    //     visibility imperatively and re-creates on every open.
     //   - ScrollDropIndicator (drag re-insert drop target): the
     //     animation-profile taxonomy defines no domain for it, so the library
     //     default is the intended motion for both legs, and the role doc

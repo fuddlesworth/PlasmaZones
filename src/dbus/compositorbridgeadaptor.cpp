@@ -7,6 +7,7 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
+#include <QDBusMessage>
 #include <QUuid>
 
 namespace PlasmaZones {
@@ -66,6 +67,9 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
     m_bridgeName = compositorName;
     m_bridgeVersion = version;
     m_capabilities = capabilities;
+    // Remember WHO registered, so a later reportGesture can be attributed.
+    // A direct (non-D-Bus) call has no peer and leaves this empty.
+    m_bridgeService = calledFromDBus() ? message().service() : QString();
 
     qCInfo(lcDbusWindow) << "Compositor bridge registered:" << compositorName << "apiVersion=" << version
                          << "capabilities:" << capabilities;
@@ -82,6 +86,45 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
 void CompositorBridgeAdaptor::reportModifierState(int modifiers, int mouseButtons)
 {
     Q_EMIT modifierStateChanged(modifiers, mouseButtons);
+}
+
+void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& direction, uint fingerCount)
+{
+    // The interface documents this as firing "only for gestures the bridge
+    // registered under the 'gestures' capability", and that gate has to be
+    // real: gestureReported drives the shell's launcher and dashboard, and the
+    // session bus is an untrusted boundary.
+    //
+    // The capability list alone is NOT that gate — it is daemon-wide state
+    // describing whichever bridge registered last, so any peer would pass it
+    // as soon as a gestures-capable bridge existed. The caller's own bus name
+    // has to match the registered bridge's. A direct (non-D-Bus) call has no
+    // peer to authorise, which is the path the unit tests take.
+    if (!isBridgeRegistered() || !hasCapability(QStringLiteral("gestures"))) {
+        qCDebug(lcDbusWindow) << "reportGesture dropped: no bridge registered for gestures";
+        return;
+    }
+    if (calledFromDBus() && message().service() != m_bridgeService) {
+        // Warned, not logged at debug: this is either a peer trying to drive
+        // the shell's surfaces, or the real bridge calling from a connection
+        // it never registered — which would take out every gesture in the
+        // session. Neither should be invisible at default log levels.
+        qCWarning(lcDbusWindow) << "reportGesture dropped: caller" << message().service()
+                                << "is not the registered bridge" << m_bridgeService;
+        return;
+    }
+    // Boundary validation: the vocabulary is closed, so anything else is a
+    // bridge bug and is dropped rather than relayed to the shell.
+    static const QStringList kSwipeDirections{QStringLiteral("up"), QStringLiteral("down"), QStringLiteral("left"),
+                                              QStringLiteral("right")};
+    static const QStringList kPinchDirections{QStringLiteral("expanding"), QStringLiteral("contracting")};
+    const bool swipe = kind == QLatin1String("swipe") && kSwipeDirections.contains(direction);
+    const bool pinch = kind == QLatin1String("pinch") && kPinchDirections.contains(direction);
+    if ((!swipe && !pinch) || fingerCount < 1 || fingerCount > 5) {
+        qCWarning(lcDbusWindow) << "reportGesture dropped:" << kind << direction << fingerCount;
+        return;
+    }
+    Q_EMIT gestureReported(kind, direction, fingerCount);
 }
 
 } // namespace PlasmaZones

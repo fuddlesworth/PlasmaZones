@@ -173,8 +173,272 @@ private Q_SLOTS:
         QVERIFY(filtered.contains(QStringLiteral("window.movement.placeIn")));
         QVERIFY(filtered.contains(QStringLiteral("Global")));
 
-        // Full snapshot still carries the seed for in-process consumers.
-        QCOMPARE(m_registry.snapshot().size(), 3);
+        // Seeds are NOT in either snapshot: they live in their own layer, so
+        // the exclusion is structural rather than a filter. Both accessors
+        // answer with the non-seed entries only.
+        QCOMPARE(m_registry.snapshot().size(), 2);
+
+        // But they are still registered content — `resolve` and `hasProfile`
+        // answer across both layers, or a registry whose entire content is
+        // seeds (the shell tier's) would look empty.
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+        const auto seedEntry = m_registry.resolve(QStringLiteral("window"));
+        QVERIFY(seedEntry.has_value());
+        QCOMPARE(seedEntry->duration.value_or(0.0), 200.0);
+    }
+
+    /// `registerProfile`'s SEED BRANCH, driven directly.
+    ///
+    /// The slot above sets the low-precedence tag AFTER registering, so what it
+    /// actually exercises is the migration loop inside setLowPrecedenceOwnerTag
+    /// — invert the seed branch and it still passes, because the migration puts
+    /// the entry back where the assertions expect it. This one sets the tag
+    /// first, which is the ordering every composition root uses, so the branch
+    /// itself decides where the entry lands.
+    ///
+    /// It matters more than a coverage gap: that branch is where a seed-tagged
+    /// write silently leaves an untagged entry standing at the same path, which
+    /// is what let a cleared global profile keep outranking every family seed
+    /// for the rest of a session.
+    void testSeedBranchPlacesSeedsInTheirOwnLayerWhenTheTagIsSetFirst()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        // Landed in the seed layer, not the upper one. Inverting the branch
+        // fails here rather than anywhere downstream.
+        QVERIFY(!m_registry.snapshot().contains(QStringLiteral("window")));
+        QVERIFY(m_registry.snapshotExcludingLowPrecedence().isEmpty());
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 200.0);
+
+        // And a byte-identical UNTAGGED write at the same path is a separate
+        // entry in the upper layer rather than an update of the seed — the two
+        // stores coexist, which is the property the layer split exists for.
+        m_registry.registerProfile(QStringLiteral("window"), seed);
+        QVERIFY(m_registry.snapshot().contains(QStringLiteral("window")));
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+    }
+
+    /// `unregisterProfile` removes from the non-seed layer ONLY, and a
+    /// seed-only path is therefore untouched by it.
+    ///
+    /// That asymmetry is the mechanism the composition roots rely on when they
+    /// move the global profile between layers: the caller drops its own
+    /// untagged entry and registers under the seed tag, and this is what makes
+    /// the drop hit the right one. A seed-aware unregisterProfile would delete
+    /// the layer the move is aiming at.
+    void testUnregisterLeavesASeedOnlyPathAlone()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("widget"), seed, seedTag);
+
+        m_registry.unregisterProfile(QStringLiteral("widget"));
+
+        QVERIFY2(m_registry.hasProfile(QStringLiteral("widget")),
+                 "unregisterProfile removed a seed; clearing an override would then drop to library defaults "
+                 "instead of revealing the seed underneath");
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 200.0);
+
+        // And with an override on top, unregister reveals the seed rather than
+        // emptying the path — the reveal the two stores exist for.
+        Profile override;
+        override.duration = 900.0;
+        m_registry.registerProfile(QStringLiteral("widget"), override);
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 900.0);
+        m_registry.unregisterProfile(QStringLiteral("widget"));
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 200.0);
+    }
+
+    /// A user override at a seeded path must WIN without destroying the seed,
+    /// and clearing it must reveal the seed again.
+    ///
+    /// This is the regression guard for the whole two-layer storage change.
+    /// Before it the registry held one slot per path, so the override
+    /// overwrote the seed outright and the later clear removed the path
+    /// entirely — dropping to library defaults for the rest of the session,
+    /// with nothing short of a restart to re-seed.
+    void testAnOverrideAtASeededPathDoesNotDestroyTheSeed()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 150.0;
+        m_registry.registerProfile(QStringLiteral("window.appearance.close"), seed, seedTag);
+
+        Profile override;
+        override.duration = 900.0;
+        m_registry.reloadFromOwner(QStringLiteral("tree"), {{QStringLiteral("window.appearance.close"), override}});
+        QCOMPARE(m_registry.resolveWithInheritance(QStringLiteral("window.appearance.close")).effectiveDuration(),
+                 900.0);
+
+        // The user clears it: the whole partition is replaced with an empty map.
+        m_registry.reloadFromOwner(QStringLiteral("tree"), {});
+        QCOMPARE(m_registry.resolveWithInheritance(QStringLiteral("window.appearance.close")).effectiveDuration(),
+                 150.0);
+    }
+
+    /// A user override at a SHALLOWER path beats a seed at a deeper one.
+    ///
+    /// The reason `resolveWithInheritance` is two passes at all: within one
+    /// layer the deeper entry wins, but across layers every user entry
+    /// outranks every seed regardless of depth. A single-pass deeper-wins walk
+    /// answers 500 here.
+    void testAParentOverrideBeatsALeafSeed()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile leafSeed;
+        leafSeed.duration = 500.0;
+        m_registry.registerProfile(QStringLiteral("widget.pulse.fast"), leafSeed, seedTag);
+
+        Profile parentOverride;
+        parentOverride.duration = 800.0;
+        m_registry.registerProfile(QStringLiteral("widget"), parentOverride, QStringLiteral("tree"));
+
+        QCOMPARE(m_registry.resolveWithInheritance(QStringLiteral("widget.pulse.fast")).effectiveDuration(), 800.0);
+    }
+
+    /// `clear()` must empty the seed layer too.
+    ///
+    /// It is the test fixture's own reset, so a seed surviving it would leak
+    /// into every later slot in this file and make their assertions depend on
+    /// execution order.
+    void testClearWipesTheSeedLayer()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 150.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+        QVERIFY(m_registry.hasProfile(QStringLiteral("window")));
+
+        m_registry.clear();
+        QVERIFY(!m_registry.hasProfile(QStringLiteral("window")));
+        QVERIFY(!m_registry.resolve(QStringLiteral("window")).has_value());
+    }
+
+    /// `clearOwner(seedTag)` must actually clear seeds.
+    ///
+    /// Seeds are not in the owner map, so a loop over it finds nothing for the
+    /// seed tag and the call would be a silent no-op.
+    void testClearOwnerRemovesSeeds()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile seed;
+        seed.duration = 150.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        m_registry.clearOwner(seedTag);
+        QVERIFY(!m_registry.hasProfile(QStringLiteral("window")));
+    }
+
+    /// A seed-tagged write over an EXISTING untagged entry at the same path
+    /// leaves that untagged entry standing, so the seed does not take effect.
+    ///
+    /// This is the mechanism behind the cleared-global-profile bug, from the
+    /// other direction: the seed branch only ever touches `m_seedProfiles`, so
+    /// it cannot evict an override, and pass 2 of the resolve walk keeps
+    /// winning. Callers that mean to MOVE an entry into the seed layer have to
+    /// unregister their own copy first, which is exactly what the composition
+    /// roots now do. Pinning the raw behaviour here keeps a future
+    /// "just make registerProfile evict" fix from landing silently: doing that
+    /// would destroy a user override every time a seed is refreshed.
+    void testSeedWriteDoesNotEvictAnExistingOverrideAtTheSamePath()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+
+        Profile existing;
+        existing.duration = 900.0;
+        m_registry.registerProfile(QStringLiteral("window"), existing);
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 900.0);
+
+        // The caller-side eviction the composition roots perform is what makes
+        // the seed visible, and it must not take the seed down with it.
+        m_registry.unregisterProfile(QStringLiteral("window"));
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 200.0);
+    }
+
+    /// Changing the low-precedence tag from one NON-EMPTY value to another
+    /// demotes the old seeds back to the upper store under their old tag, and
+    /// promotes entries already owned by the new tag into the seed layer.
+    ///
+    /// Only the empty-to-set direction had coverage, which is the half every
+    /// composition root exercises at startup. The demote half runs when a tag
+    /// is re-pointed, and it carries the collision case: a seed whose path is
+    /// already held in the upper store cannot move there, so it is dropped —
+    /// and it still has to announce the path, because per-field overlay means
+    /// what the path resolves to changes even though the winning entry does
+    /// not. An unannounced drop leaves consumers rendering a stale field.
+    void testTagRepointDemotesOldSeedsAndAnnouncesTheDroppedCollision()
+    {
+        const QString oldTag = QStringLiteral("seeds-a");
+        const QString newTag = QStringLiteral("seeds-b");
+        m_registry.setLowPrecedenceOwnerTag(oldTag);
+
+        Profile lonely;
+        lonely.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), lonely, oldTag);
+
+        Profile collidingSeed;
+        collidingSeed.duration = 300.0;
+        m_registry.registerProfile(QStringLiteral("widget"), collidingSeed, oldTag);
+        Profile override;
+        override.minDistance = 7;
+        m_registry.registerProfile(QStringLiteral("widget"), override);
+
+        // Owned by the incoming tag while it is still an ordinary owner.
+        Profile future;
+        future.duration = 400.0;
+        m_registry.registerProfile(QStringLiteral("dialog"), future, newTag);
+        QVERIFY(m_registry.snapshot().contains(QStringLiteral("dialog")));
+
+        QSignalSpy changed(&m_registry, &PhosphorProfileRegistry::profileChanged);
+        m_registry.setLowPrecedenceOwnerTag(newTag);
+        QTRY_VERIFY(changed.count() >= 3);
+
+        QStringList announced;
+        for (const QList<QVariant>& call : changed) {
+            announced.append(call.at(0).toString());
+        }
+        QVERIFY2(announced.contains(QStringLiteral("widget")),
+                 "the dropped seed's path was not announced; a consumer holding a field that only the "
+                 "seed carried keeps rendering it after the value is gone");
+        QVERIFY(announced.contains(QStringLiteral("window")));
+        QVERIFY(announced.contains(QStringLiteral("dialog")));
+
+        // Demoted: back in the upper store under the tag it was written with.
+        QCOMPARE(m_registry.ownerOf(QStringLiteral("window")), oldTag);
+        QCOMPARE(m_registry.resolve(QStringLiteral("window"))->duration.value_or(0.0), 200.0);
+
+        // Dropped, not merged: the surviving override is the only entry left,
+        // so the seed's duration is gone rather than showing through.
+        QCOMPARE(m_registry.ownerOf(QStringLiteral("widget")), QString());
+        QCOMPARE(m_registry.resolve(QStringLiteral("widget"))->duration.value_or(0.0), 0.0);
+
+        // Promoted: now a seed, so it is stripped at the D-Bus boundary.
+        QVERIFY(!m_registry.snapshotExcludingLowPrecedence().contains(QStringLiteral("dialog")));
+        QCOMPARE(m_registry.resolve(QStringLiteral("dialog"))->duration.value_or(0.0), 400.0);
     }
 
     /// `ownerReloaded(tag)` fires exactly once per partitioned-reload

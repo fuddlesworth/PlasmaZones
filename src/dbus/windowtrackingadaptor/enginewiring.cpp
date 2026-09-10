@@ -543,6 +543,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     if (const auto it = raw.constFind(ScrollOpenKeys::focused()); it != raw.constEnd()) {
                         params.focused = it->toBool();
                     }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::tabGroup()); it != raw.constEnd()) {
+                        params.tabGroup = it->toString();
+                    }
                     return params;
                 });
             // Plain else: this whole block is already inside `if (m_scrollEngine)`,

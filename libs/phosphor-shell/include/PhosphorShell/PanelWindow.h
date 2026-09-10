@@ -9,7 +9,9 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QRect>
+#include <QRegion>
 #include <QSize>
+#include <QVariant>
 
 QT_BEGIN_NAMESPACE
 class QScreen;
@@ -55,6 +57,24 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     /// rather than producing a region that overhangs it.
     Q_PROPERTY(int interactiveThickness READ interactiveThickness WRITE setInteractiveThickness NOTIFY
                    interactiveThicknessChanged)
+    /// An EXPLICIT input region, replacing the band rule above. Unset (an
+    /// invalid QVariant, the default) means the band rule applies. Set to a
+    /// list of rects (surface-local device-independent coordinates, as QML
+    /// `Qt.rect` values) and the surface accepts pointer input in exactly
+    /// their union, clamped to the surface. An EMPTY list makes the whole
+    /// surface click-through.
+    ///
+    /// This is what a full-screen overlay wants: an OSD surface that must
+    /// reach every screen edge but never take a click (`[]`), or a toast
+    /// surface whose cards need hover and a close button while everything
+    /// around them stays click-through (the cards' rects). A band cannot
+    /// express either, since a band is one edge-anchored slice and its
+    /// empty case means "the whole surface", not "nothing".
+    ///
+    /// Like `interactiveThickness`, this is sampled LIVE: ShellEngine
+    /// re-applies the region whenever it changes, and it moves nothing but
+    /// the input region.
+    Q_PROPERTY(QVariant inputRegion READ inputRegion WRITE setInputRegion NOTIFY inputRegionChanged)
     /// Radius (logical pixels) of the concave quarter-arc carved into
     /// each corner of the visible panel where the panel meets the
     /// desktop area. 0 disables the carve. Larger values eat further
@@ -192,6 +212,21 @@ public:
     /// unsupported rather than as a supported live property.
     [[nodiscard]] int effectiveInputThickness() const;
 
+    [[nodiscard]] QVariant inputRegion() const;
+    void setInputRegion(const QVariant& region);
+
+    /// Whether `inputRegion` is set, so the explicit region replaces the
+    /// band rule. Same shape as effectiveInputThickness: one place for the
+    /// "unset means band" rule.
+    [[nodiscard]] bool hasExplicitInputRegion() const;
+
+    /// The explicit region as a QRegion in surface-local coordinates,
+    /// clamped to `surfaceSize`. Empty when the region is unset, when the
+    /// list is empty, or when every rect falls outside the surface. Static
+    /// and pure, like visibleBand, so the parsing and the clamp can be
+    /// tested without a live surface.
+    [[nodiscard]] static QRegion explicitInputRegion(const QVariant& region, QSize surfaceSize);
+
     [[nodiscard]] int cornerCarveRadius() const;
     void setCornerCarveRadius(int radius);
 
@@ -224,6 +259,7 @@ Q_SIGNALS:
     void thicknessChanged();
     void shadowSizeChanged();
     void interactiveThicknessChanged();
+    void inputRegionChanged();
     void cornerCarveRadiusChanged();
     void screenChanged();
     void panelLayerChanged();
@@ -240,6 +276,8 @@ private:
     int m_shadowSize = 0;
     // 0 = follow m_thickness. See the property docs above.
     int m_interactiveThickness = 0;
+    // Invalid = unset (the band rule applies). See the property docs.
+    QVariant m_inputRegion;
     int m_cornerCarveRadius = 0;
     // QPointer so monitor hot-unplug doesn't leave us with a dangling
     // QScreen pointer. ScreenManager owns QScreen lifetimes externally.

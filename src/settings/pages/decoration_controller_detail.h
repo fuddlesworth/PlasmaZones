@@ -5,10 +5,16 @@
 
 // Inline helpers for the DecorationPageController translation units (currently
 // decorationpagecontroller.cpp; the class is split across several TUs). They
-// convert surface-pack effect / parameter values to QVariantMap for QML and
-// build the sparse / resolved DecorationProfile -> QVariantMap projections.
+// convert surface-pack and pointer-pack effect / parameter values to
+// QVariantMap for QML and build the sparse / resolved DecorationProfile ->
+// QVariantMap projections. The pointer is a decoration surface like any other,
+// so its packs are projected beside the surface family: their half lives in
+// pointer_controller_detail.h (included here) so the pointer preview
+// controller can share it without the surface headers.
 // Inline definitions here let any consuming TU get its own copy without relying
 // on unity-build TU merging for cross-TU linkage.
+
+#include "pointer_controller_detail.h"
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>

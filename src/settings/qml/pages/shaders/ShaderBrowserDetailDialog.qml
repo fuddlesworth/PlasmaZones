@@ -71,13 +71,39 @@ Kirigami.Dialog {
     // preview controller these days, and previewKind selects the pane. The
     // null case remains the contract for a bridge without one: the right
     // pane then degrades to the read-only parameter list below.
-    readonly property var previewController: bridge && bridge.previewController ? bridge.previewController : null
+    readonly property string _effectId: effect ? (effect.id || "") : ""
+    // Resolved PER PACK where the bridge can do that, and per bridge otherwise.
+    // The decoration bridge serves two pack families (surface and pointer) that
+    // preview through different hosts, so it exposes previewControllerFor /
+    // previewKindFor and answers for the selected pack. A bridge that has only
+    // one family exposes neither, and is answered for by its own CONSTANT
+    // previewController / previewKind, so every other browser is unchanged.
+    readonly property var previewController: {
+        if (!bridge)
+            return null;
+        if (_effectId.length > 0 && typeof bridge.previewControllerFor === "function") {
+            const scoped = bridge.previewControllerFor(_effectId);
+            if (scoped)
+                return scoped;
+        }
+        return bridge.previewController ? bridge.previewController : null;
+    }
     readonly property bool _livePreview: previewController !== null && effect !== null
-    // Which preview pane this bridge wants. The decoration bridge reports
-    // "decoration"; the zone/overlay bridges predate the property and report
-    // nothing, so a controller with no declared kind falls back to "zone" —
-    // that fallback is what keeps the snapping and overlay browsers unchanged.
-    readonly property string _previewKind: (bridge && bridge.previewKind) ? bridge.previewKind : (previewController ? "zone" : "")
+    // Which preview pane this pack wants. The decoration bridge reports
+    // "decoration" or "pointer" per pack; the zone/overlay bridges predate the
+    // property and report nothing, so a controller with no declared kind falls
+    // back to "zone" — that fallback is what keeps the snapping and overlay
+    // browsers unchanged.
+    readonly property string _previewKind: {
+        if (!bridge)
+            return "";
+        if (_effectId.length > 0 && typeof bridge.previewKindFor === "function") {
+            const scoped = bridge.previewKindFor(_effectId);
+            if (scoped)
+                return scoped;
+        }
+        return bridge.previewKind ? bridge.previewKind : (previewController ? "zone" : "");
+    }
     // The two panes need different halves of this dialog. A zone preview drives
     // the shader-info / translated-param / preset machinery below; a decoration
     // preview drives none of it (its controller composes a whole chain instead,
@@ -87,6 +113,20 @@ Kirigami.Dialog {
     readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
     readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
     readonly property bool _animationPreview: _livePreview && _previewKind === "animation"
+    readonly property bool _pointerPreview: _livePreview && _previewKind === "pointer"
+
+    // The wallpaper the zone pane draws behind its zones, as a file:// URL.
+    // Resolved once per dialog rather than per frame — the path does not change
+    // while the dialog is open, and ShaderRegistry caches the decode anyway.
+    // Empty when the zone pane is not the active one or the path cannot be
+    // resolved, which leaves the pane on its black ground.
+    readonly property string _zoneWallpaperUrl: {
+        if (!_zonePreview || !previewController)
+            return "";
+        var p = previewController.wallpaperPath() || "";
+        return p.length > 0 ? "file://" + _encodeFilePath(p) : "";
+    }
+
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -125,6 +165,11 @@ Kirigami.Dialog {
     // itself until its shader compiles, so it arms on the decoration
     // schedule (a tick after teardown), not the zone one.
     property bool _animationArmed: false
+    // The pointer pane's arm flag, lifecycle-twin of the two above: written
+    // ONLY by _teardownPanes / _armPanes. Like the animation pane it covers
+    // itself until its shader compiles, so it arms on the decoration schedule
+    // (a tick after teardown) rather than waiting for `opened`.
+    property bool _pointerArmed: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -145,11 +190,24 @@ Kirigami.Dialog {
     // (packInfo); the zone and decoration controllers expose no such probe
     // yet, so those kinds keep the historical start-always behaviour — a
     // known cost, not an oversight, until their bridges grow one.
+    //
+    // The pointer controller is different again: it has no audio API at all,
+    // so there is nothing to start and asking would be a call into a method
+    // that does not exist.
     function _packWantsAudio() {
+        if (_previewKind === "pointer")
+            return false;
         if (_previewKind !== "animation")
             return true;
         var info = previewController.packInfo(effect ? (effect.id || "") : "");
         return info && info.audio === true;
+    }
+
+    // Paired with _packWantsAudio for the stop side, which has no per-pack
+    // question to ask and so cannot reuse it: a controller that never started
+    // capture also has nothing to stop, and only some of them expose the call.
+    function _canStopAudio() {
+        return previewController && typeof previewController.stopAudioCapture === "function";
     }
 
     on_AppActiveChanged: {
@@ -161,7 +219,7 @@ Kirigami.Dialog {
             _previewLastTime = Date.now() / 1000;
             if (_packWantsAudio())
                 previewController.startAudioCapture();
-        } else {
+        } else if (_canStopAudio()) {
             previewController.stopAudioCapture();
         }
     }
@@ -239,11 +297,13 @@ Kirigami.Dialog {
         _rendererActive = false; // zone
         _decorationArmed = false; // decoration
         _animationArmed = false; // animation
+        _pointerArmed = false; // pointer
     }
     function _armPanes() {
         Qt.callLater(function () {
             root._decorationArmed = root.visible && root._decorationPreview;
             root._animationArmed = root.visible && root._animationPreview;
+            root._pointerArmed = root.visible && root._pointerPreview;
         });
         // The zone arm normally waits for onOpened. A reset while ALREADY
         // open (a mid-session caller, or a fast pack switch on a dialog whose
@@ -315,7 +375,7 @@ Kirigami.Dialog {
         // next _resetPreview rebuilds them fresh. Through the shared lifecycle,
         // not by writing one pane's flag here and forgetting the other's.
         _teardownPanes();
-        if (previewController)
+        if (_canStopAudio())
             previewController.stopAudioCapture();
     }
 
@@ -733,8 +793,19 @@ Kirigami.Dialog {
             // gets its own pane below, selected by _previewKind.
             Item {
                 visible: root._livePreview
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-                Layout.minimumWidth: Kirigami.Units.gridUnit * 20
+                // Wide enough that a pane-shaped preview holds the composition
+                // canvas at 1:1. The slot loses margins twice on the way in,
+                // once to the Loader below and once to the pane's own column,
+                // plus the frame border, so a slot merely as wide as the canvas
+                // leaves the frame inside NARROWER than it. The pane's fit then
+                // reduces by a percent or two, and that reduction switches on a
+                // layer whose render node stops repainting for the classes that
+                // animate by driving iTime alone — the preview renders one
+                // still frame and never moves. Both bounds carry it: shrinking
+                // the dialog must not reintroduce that.
+                readonly property real _minPreviewWidth: PreviewCanvas.size.width + Kirigami.Units.gridUnit * 2
+                Layout.preferredWidth: Math.max(Kirigami.Units.gridUnit * 24, _minPreviewWidth)
+                Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 20, _minPreviewWidth)
                 Layout.fillHeight: true
 
                 // Live decoration preview: the stand-in card run through the
@@ -806,6 +877,24 @@ Kirigami.Dialog {
                     }
                 }
 
+                // Live pointer preview: the pack run as one screen-space pass
+                // over a stand-in desktop with a simulated cursor. Same Loader
+                // shape and armed-flag lifecycle as the two panes above.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root.visible && root._pointerPreview && root._pointerArmed
+                    visible: active
+
+                    sourceComponent: PointerPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
                 // Live ZoneShaderItem preview (zone/overlay browser).
                 Rectangle {
                     id: livePreviewPane
@@ -814,13 +903,37 @@ Kirigami.Dialog {
                     anchors.margins: Kirigami.Units.smallSpacing
                     visible: root._zonePreview
                     radius: Kirigami.Units.smallSpacing
-                    // Intentionally a true-black backdrop (not a theme color): the
-                    // shader renders over this, and a tinted background would
-                    // contaminate the previewed colors.
+                    // True black, not a theme colour: it is what shows while the
+                    // wallpaper decodes and where it cannot be resolved, and a
+                    // tinted ground would contaminate the previewed colours.
                     color: "black"
                     border.width: 1
                     border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                     clip: true
+
+                    // The user's wallpaper behind the zones, matching the
+                    // decoration and animation panes. Every overlay pack is
+                    // translucent somewhere — that is what an overlay is — so
+                    // over flat black they all read as far more opaque than they
+                    // will be on a real desktop, and a pack whose whole point is
+                    // what shows through cannot be judged at all.
+                    //
+                    // Distinct from the useWallpaper SAMPLER feed below: this is
+                    // the backdrop, and it is drawn for every pack, not only the
+                    // ones that sample it.
+                    Image {
+                        anchors.fill: parent
+                        source: root._zoneWallpaperUrl
+                        visible: source.toString().length > 0
+                        fillMode: Image.PreserveAspectCrop
+                        // A desktop wallpaper is far larger than this pane, and
+                        // the decode is cached by ShaderRegistry, so ask for the
+                        // pane's size rather than holding the full image.
+                        sourceSize.width: Math.max(1, Math.round(parent.width))
+                        sourceSize.height: Math.max(1, Math.round(parent.height))
+                        asynchronous: true
+                        cache: true
+                    }
 
                     // Zones the preview renders over — shared by the renderer,
                     // the label texture, and the hover hit-test. Recomputed on
@@ -878,7 +991,7 @@ Kirigami.Dialog {
                     // config rebuild below (iTime) doesn't re-run C++ calls —
                     // these recompute only when zones / size / shader change.
                     readonly property string _preamble: (root._zonePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
-                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
+                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, livePreviewPane) : null
                     readonly property var _wallpaperTex: (root._zonePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
                     // Cached so the per-frame config rebuild below doesn't read it
                     // off the controller every frame (a QVariant vector copy) and
@@ -958,8 +1071,8 @@ Kirigami.Dialog {
         }
     }
 
-    // Color picker for color params (child of the dialog root, mirroring the
-    // editor's ShaderSettingsDialog). Outlives any param row destroyed mid-edit.
+    // Color picker for color params, kept as a child of the dialog root so it
+    // outlives any param row destroyed mid-edit.
     ColorDialog {
         id: shaderColorDialog
 

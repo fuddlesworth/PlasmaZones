@@ -81,9 +81,10 @@ struct CatalogMeta
     // "managed" is the union of the two engine modes; see the contract
     // block above.
     const char* mode;
-    // Optional tr() disambiguation for the category word (e.g. the mode
-    // name "Scrolling", whose bare source would otherwise inherit the
-    // scrollbar-sense translation lupdate merges by source text).
+    // Optional tr() disambiguation for the category word (e.g. the
+    // scrolling groups' "View" and "Focus", whose bare sources would
+    // otherwise inherit whatever unrelated translation lupdate merges in by
+    // source text).
     const char* categoryDisambiguation = nullptr;
     // Optional cheatsheet display label. The registration description must
     // stand alone (System Settings lists it without context), but on the
@@ -116,6 +117,59 @@ struct CatalogMeta
     int rowOrder = 0;
 };
 
+// The scrolling verbs do not fit under one heading. A single "Scrolling"
+// block ran to sixty-odd rows, which is a wall rather than a reference, so
+// the mode's rows are split into the reading groups the table below is
+// already authored in: focus, columns, tabs, column width, window height,
+// the view, floating.
+//
+// The names are unqualified ("Focus", not "Scrolling Focus") because these
+// blocks only ever draw on a scrolling screen and the sheet's own subtitle
+// says which mode it is filtered for. They share one disambiguation so a
+// translator sees them as the family they are, and so "View" cannot pick up
+// an unrelated sense.
+//
+// At namespace scope rather than inside the table lambda below because the
+// prefix-keyed tab family at the end of catalogMetaForId needs one too, and
+// a second QT_TRANSLATE_NOOP3 of the same words is a definition that can
+// drift.
+//
+// The order rides on the same constant as the words, so a row cannot name
+// one group and sort into another: spelling the two separately at forty-odd
+// call sites compiles clean when they disagree and shows up as a heading
+// that appears twice, or two groups fused under one.
+//
+// The orders run 10 to 16, straight after the mode-neutral categories
+// (General 0 through Virtual Screens 8) and Autotile at 9, so the blocks
+// read in that order on the sheet. They are contiguous, unlike the
+// mode-neutral values above: a new scrolling group between two of these
+// renumbers the ones after it, which is a one-line edit here now that no
+// call site repeats the number.
+struct ScrollCategoryLabel
+{
+    const char* source;
+    const char* comment;
+};
+struct ScrollCategory
+{
+    ScrollCategoryLabel label;
+    int order;
+};
+constexpr ScrollCategory kScrollFocusCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "Focus", "scrolling cheatsheet category"), 10};
+constexpr ScrollCategory kScrollColumnsCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "Columns", "scrolling cheatsheet category"), 11};
+constexpr ScrollCategory kScrollTabsCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "Tabs", "scrolling cheatsheet category"), 12};
+constexpr ScrollCategory kScrollColumnWidthCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "Column Width", "scrolling cheatsheet category"), 13};
+constexpr ScrollCategory kScrollWindowHeightCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "Window Height", "scrolling cheatsheet category"), 14};
+constexpr ScrollCategory kScrollViewCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "View", "scrolling cheatsheet category"), 15};
+constexpr ScrollCategory kScrollFloatingCategory = {
+    QT_TRANSLATE_NOOP3("plasmazones", "Floating", "scrolling cheatsheet category"), 16};
+
 CatalogMeta catalogMetaForId(const QString& id)
 {
     static const QHash<QString, CatalogMeta> kMeta = [] {
@@ -128,17 +182,6 @@ CatalogMeta catalogMetaForId(const QString& id)
                 QLatin1String(id),
                 {category, order, mode, categoryDisambiguation, shortLabel, explanation, templatesExplanation, seq++});
         };
-        // The scrolling category word needs the "tiling mode name"
-        // disambiguation or it inherits the scrollbar-sense translation.
-        // QT_TRANSLATE_NOOP3 makes the extraction self-contained: relying
-        // on another file's live tr() call would silently orphan the whole
-        // category translation if that call were reworded or removed.
-        static constexpr struct
-        {
-            const char* source;
-            const char* comment;
-        } kScrollingCategory = QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
-        constexpr const char* kModeNameContext = kScrollingCategory.comment;
         add(kIdOpenEditor, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
@@ -321,32 +364,36 @@ CatalogMeta catalogMetaForId(const QString& id)
         // (consume, expel, grow) is opaque to anyone who has not used a
         // scrolling tiler before, and the sheet is where they look it up.
         //
-        // The block is authored in reading groups — focus, then arranging
-        // columns, then column width, then window height, then the view,
-        // then the float verbs — and the table's order IS the sheet's order
-        // (see CatalogMeta::rowOrder), so keep a new row inside its group.
+        // The reading groups below are each their own cheatsheet category
+        // (see the kScroll*Category constants), so a new row has to name the
+        // constant of the group it belongs in, not just sit between the right
+        // neighbours. Within a group the table's order IS the sheet's order
+        // (see CatalogMeta::rowOrder).
         //
         // ── Focus ──
-        add(kIdScrollFocusColumnFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollFocusColumnFirst, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first column."));
-        add(kIdScrollFocusColumnLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollFocusColumnLast, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last column."));
-        add(kIdScrollFocusColumnLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Edge Stop)"),
+        add(kIdScrollFocusColumnLeft, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Edge Stop)"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves focus one column toward the start of the strip and stops at the edge. The "
                               "regular focus shortcut continues onto the next monitor instead."));
-        add(kIdScrollFocusColumnRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column (Edge Stop)"),
+        add(kIdScrollFocusColumnRight, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column (Edge Stop)"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves focus one column toward the end of the strip and stops at the edge. The "
                               "regular focus shortcut continues onto the next monitor instead."));
-        add(kIdScrollFocusColumnLeftOrLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Wrap)"),
+        add(kIdScrollFocusColumnLeftOrLast, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Wrap)"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves focus one column toward the start of the strip, wrapping to the last column "
                               "at the edge."));
-        add(kIdScrollFocusColumnRightOrFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+        add(kIdScrollFocusColumnRightOrFirst, kScrollFocusCategory.label.source, kScrollFocusCategory.order,
+            "scrolling", kScrollFocusCategory.label.comment,
             QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column (Wrap)"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves focus one column toward the end of the strip, wrapping to the first column "
@@ -355,43 +402,65 @@ CatalogMeta catalogMetaForId(const QString& id)
         // Last Window in Column") are already short enough for the column, so
         // an override would have to repeat them verbatim and ship a second
         // translatable string saying the same thing.
-        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollFocusWindowTop, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first window of the focused column."));
-        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollFocusWindowBottom, kScrollFocusCategory.label.source, kScrollFocusCategory.order, "scrolling",
+            kScrollFocusCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last window of the focused column."));
         // ── Arranging columns ──
-        add(kIdScrollMoveColumnToFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMoveColumnToFirst, kScrollColumnsCategory.label.source, kScrollColumnsCategory.order, "scrolling",
+            kScrollColumnsCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the first position."));
-        add(kIdScrollMoveColumnToLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMoveColumnToLast, kScrollColumnsCategory.label.source, kScrollColumnsCategory.order, "scrolling",
+            kScrollColumnsCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the last position."));
-        add(kIdScrollConsumeWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
+        add(kIdScrollConsumeWindow, kScrollColumnsCategory.label.source, kScrollColumnsCategory.order, "scrolling",
+            kScrollColumnsCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Pulls a window from the next column into the focused column, stacking them."));
-        add(kIdScrollExpelWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
+        add(kIdScrollExpelWindow, kScrollColumnsCategory.label.source, kScrollColumnsCategory.order, "scrolling",
+            kScrollColumnsCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves the focused window out of a shared column into a new column after it."));
-        add(kIdScrollConsumeOrExpelLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollConsumeOrExpelLeft, kScrollColumnsCategory.label.source, kScrollColumnsCategory.order, "scrolling",
+            kScrollColumnsCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Splits the focused window out of a shared column toward the start of the strip. "
                               "A window alone in its column merges into the previous column instead."));
-        add(kIdScrollConsumeOrExpelRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollConsumeOrExpelRight, kScrollColumnsCategory.label.source, kScrollColumnsCategory.order,
+            "scrolling", kScrollColumnsCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Splits the focused window out of a shared column toward the end of the strip. "
                               "A window alone in its column merges into the next column instead."));
-        add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollToggleColumnTabbed, kScrollTabsCategory.label.source, kScrollTabsCategory.order, "scrolling",
+            kScrollTabsCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
+        add(kIdScrollCycleTab, kScrollTabsCategory.label.source, kScrollTabsCategory.order, "scrolling",
+            kScrollTabsCategory.label.comment, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Shows the next tab of the focused column, wrapping round to the first one at the end. "
+                              "In a column that is not tabbed it focuses the next window down the stack."));
+        add(kIdScrollCycleTabBack, kScrollTabsCategory.label.source, kScrollTabsCategory.order, "scrolling",
+            kScrollTabsCategory.label.comment, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Shows the previous tab of the focused column, wrapping round to the last one at the "
+                              "start. In a column that is not tabbed it focuses the previous window up the "
+                              "stack."));
         // ── Column width ──
-        add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollIncreaseColumnWidth, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Grows the focused column along the strip by the configured step."));
-        add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollDecreaseColumnWidth, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused column along the strip by the configured step."));
-        add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+        add(kIdScrollCycleColumnWidth, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Steps the focused column through the screen's size presets along the strip."));
-        add(kIdScrollCycleColumnWidthBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+        add(kIdScrollCycleColumnWidthBack, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Steps the focused column through the screen's size presets along the strip, "
@@ -401,13 +470,15 @@ CatalogMeta catalogMetaForId(const QString& id)
         // maximize discards the first's stored width and un-maximizing then
         // falls back to the default width. And the target is the work area
         // (panels excluded), not the screen.
-        add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMaximizeColumn, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Toggles the focused column between filling the work area and a smaller size."));
         // The state the titlebar button shows. Distinct from Maximize Column
         // on purpose: that one only widens along the strip and leaves the
         // maximize button alone.
-        add(kIdScrollMaximizeToEdges, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMaximizeToEdges, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Toggles the focused column between covering the whole work area with no gaps "
                               "and its normal size. The covering state is the one the window's maximize "
@@ -417,26 +488,33 @@ CatalogMeta catalogMetaForId(const QString& id)
         // registration names ("Grow Column / Window into Empty Space") say
         // which one a row is, and shortening them back would put two
         // identical labels in the list.
-        add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollExpandColumn, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Grows the focused column to fill the empty space visible on screen. "
                               "Other columns keep their size."));
-        add(kIdScrollMinimizeColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMinimizeColumnWidth, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused column to the smallest size preset."));
-        add(kIdScrollEqualizeColumnWidths, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollEqualizeColumnWidths, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
+            "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Gives every column fully on screen an equal share of the screen. Columns "
                               "clipped at an edge are left alone."));
         // ── Window height ──
-        add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollIncreaseWindowHeight, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Grows the focused window within its column by the configured step."));
-        add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollDecreaseWindowHeight, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused window within its column by the configured step."));
-        add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+        add(kIdScrollCycleWindowHeight, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Steps the focused window through the screen's size presets within its column."));
-        add(kIdScrollCycleWindowHeightBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+        add(kIdScrollCycleWindowHeightBack, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Steps the focused window through the screen's size presets within its column, "
@@ -444,45 +522,54 @@ CatalogMeta catalogMetaForId(const QString& id)
         // The height twins of Maximize Column, Grow Column into Empty Space,
         // Minimize Column Width and Equalize Column Widths, in the order their
         // width siblings appear above.
-        add(kIdScrollMaximizeWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMaximizeWindowHeight, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Toggles the focused window between filling its column and the height it "
                               "had before, or an even share with the other windows there if it had none."));
-        add(kIdScrollExpandWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollExpandWindow, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Grows the focused window to fill the empty space left in its column. "
                               "The other windows there keep their size."));
-        add(kIdScrollMinimizeWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollMinimizeWindowHeight, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused window to the smallest size preset."));
-        add(kIdScrollEqualizeWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollEqualizeWindowHeights, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
+            "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Gives every window in the focused column an equal share of it."));
         // ── The view ──
-        add(kIdScrollCenterColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollCenterColumn, kScrollViewCategory.label.source, kScrollViewCategory.order, "scrolling",
+            kScrollViewCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));
-        add(kIdScrollCenterVisibleColumns, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollCenterVisibleColumns, kScrollViewCategory.label.source, kScrollViewCategory.order, "scrolling",
+            kScrollViewCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the fully visible columns sit centered as a group."));
         // "Back" and "forward" rather than left/right: the strip can run
         // either way, and these read correctly on a vertical one too.
-        add(kIdScrollViewPageBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollViewPageBack, kScrollViewCategory.label.source, kScrollViewCategory.order, "scrolling",
+            kScrollViewCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Scrolls the view toward the start of the strip by a whole screen. "
                               "Focus stays where it is."));
-        add(kIdScrollViewPageForward, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollViewPageForward, kScrollViewCategory.label.source, kScrollViewCategory.order, "scrolling",
+            kScrollViewCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Scrolls the view toward the end of the strip by a whole screen. "
                               "Focus stays where it is."));
-        add(kIdScrollToggleWindowedFullscreen, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        add(kIdScrollToggleWindowedFullscreen, kScrollViewCategory.label.source, kScrollViewCategory.order, "scrolling",
+            kScrollViewCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Puts the focused window into its fullscreen presentation while it keeps its "
                               "place in the column, so it does not cover the screen. Press again to leave "
                               "it."));
         // ── Floating ──
-        add(kIdScrollMoveToFloating, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
+        add(kIdScrollMoveToFloating, kScrollFloatingCategory.label.source, kScrollFloatingCategory.order, "scrolling",
+            kScrollFloatingCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Makes the focused window float. Unlike the float toggle, it never re-tiles."));
-        add(kIdScrollMoveToTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Move to Tiled"),
+        add(kIdScrollMoveToTiling, kScrollFloatingCategory.label.source, kScrollFloatingCategory.order, "scrolling",
+            kScrollFloatingCategory.label.comment, QT_TRANSLATE_NOOP("plasmazones", "Move to Tiled"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Returns the focused floating window to its column. Unlike the float toggle, "
                               "it never floats."));
@@ -548,6 +635,21 @@ CatalogMeta catalogMetaForId(const QString& id)
                 nullptr,
                 9000};
     }
+    if (id.startsWith(QLatin1String(kScrollFocusTabPrefix))) {
+        // Scrolling only, unlike the mode-neutral zone digits above: the
+        // ordinal addresses a TAB of the focused column, which is a concept
+        // the other two engines have nothing to map onto.
+        return {kScrollTabsCategory.label.source,
+                kScrollTabsCategory.order,
+                "scrolling",
+                kScrollTabsCategory.label.comment,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones",
+                                  "Shows the numbered tab of the focused column. In a column that is not tabbed "
+                                  "it focuses that window in the stack."),
+                nullptr,
+                9000};
+    }
     // A shortcut added to the table without catalog metadata still shows up
     // (miscategorised beats invisible), and the log points at the fix.
     qCWarning(lcShortcuts) << "cheatsheet: no catalog metadata for shortcut id" << id;
@@ -586,7 +688,7 @@ QString lastKeyToken(const QString& sequence)
 
 } // namespace
 
-QVariantList ShortcutManager::cheatsheetModel() const
+QVector<QVariantMap> ShortcutManager::catalogRows() const
 {
     QVector<QVariantMap> rows;
     rows.reserve(m_entries.size());
@@ -631,10 +733,46 @@ QVariantList ShortcutManager::cheatsheetModel() const
         row.insert(QStringLiteral("mode"), QString::fromLatin1(meta.mode));
         rows.push_back(row);
     }
+    return rows;
+}
+
+void ShortcutManager::sortCatalogRows(QVector<QVariantMap>& rows)
+{
+    // Category blocks in display order, then the catalog table's authored
+    // row order within each block. The old single-key sort fell back to
+    // REGISTRATION order inside a category, which was append order across
+    // many PRs, not a reading order. Sorting the map vector (before the
+    // QVariantList conversion) compares by reference instead of detaching
+    // two QVariantMaps per comparison.
+    std::stable_sort(rows.begin(), rows.end(), [](const QVariantMap& a, const QVariantMap& b) {
+        const int catA = a.value(QLatin1String("categoryOrder")).toInt();
+        const int catB = b.value(QLatin1String("categoryOrder")).toInt();
+        if (catA != catB) {
+            return catA < catB;
+        }
+        return a.value(QLatin1String("rowOrder")).toInt() < b.value(QLatin1String("rowOrder")).toInt();
+    });
+}
+
+QVariantList ShortcutManager::shortcutCatalog() const
+{
+    QVector<QVariantMap> rows = catalogRows();
+    sortCatalogRows(rows);
+    QVariantList model;
+    model.reserve(rows.size());
+    for (const QVariantMap& row : std::as_const(rows)) {
+        model.push_back(row);
+    }
+    return model;
+}
+
+QVariantList ShortcutManager::cheatsheetModel() const
+{
+    const QVector<QVariantMap> rows = catalogRows();
 
     // ─── Family compression ────────────────────────────────────────────────
-    // The numbered slot families (kIndexedSlotCount rows each) and the
-    // directional quads (4 rows each) dominate the sheet as walls of
+    // The compressed numbered slot families (kIndexedSlotCount rows each) and
+    // the directional quads (4 rows each) dominate the sheet as walls of
     // near-identical lines.
     // When every member of a family is assigned, all members share the same
     // modifier prefix, and each member's final key token is the expected one
@@ -643,7 +781,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // unassigned, a rebind off-pattern — falls back to the individual rows,
     // because a compressed row would then lie about what the keys do.
     using FamilySpec = CheatsheetFamily;
-    // ONLY the digit families and the directional quads compress. Opposed
+    // ONLY the three digit families and the directional quads compress. Opposed
     // PAIRS (the bracket/comma rotate and cycle pairs, the scrolling
     // Home/End, U/O, paging-key and letter+Shift pairs) deliberately do
     // NOT: every action keeps its own row, spelled out, so no direction is
@@ -656,12 +794,14 @@ QVariantList ShortcutManager::cheatsheetModel() const
     QStringList snapToZoneIds;
     QStringList workspaceMoveSlotIds;
     QStringList workspaceFocusSlotIds;
+    QStringList scrollFocusTabIds;
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         digitTokens.append(QString::number(i + 1));
         quickLayoutIds.append(quickLayoutId(i));
         snapToZoneIds.append(snapToZoneId(i));
         workspaceMoveSlotIds.append(workspaceMoveSlotId(i));
         workspaceFocusSlotIds.append(workspaceFocusSlotId(i));
+        scrollFocusTabIds.append(scrollFocusTabId(i));
     }
     // One spelling of the digit range everywhere: the chip token and the row
     // labels used to disagree ("1…9" against "1-9") for no reason a reader
@@ -676,7 +816,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // the merge and a family needing distinct templates wording must be left
     // uncompressed rather than given one combined string.  The directional
     // quad members below all have empty explanations today; give the spec a
-    // combinedDescription before adding one. The two digit families are the
+    // combinedDescription before adding one. The three digit families are the
     // exception: their prefix-generated per-member explanation is identical
     // across members and reads correctly for the merged range row, so
     // keeping the first member's is right for them.
@@ -706,6 +846,12 @@ QVariantList ShortcutManager::cheatsheetModel() const
          digitRange},
         {workspaceFocusSlotIds, digitTokens,
          PhosphorI18n::tr("Focus Workspace %1", "range of workspace slots, e.g. 1-9").arg(digitRange), digitRange},
+        // Ships unbound, so this one does not compress by default. It still
+        // needs a spec: a user who binds all nine on one prefix would
+        // otherwise get nine near-identical rows where the two families above
+        // give one. Its prefix-generated explanation is identical across
+        // members, which is the exception the INVARIANT above sanctions.
+        {scrollFocusTabIds, digitTokens, PhosphorI18n::tr("Focus Tab %1").arg(digitRange), digitRange},
         {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
           QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
          arrowTokens,
@@ -737,20 +883,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     };
 
     QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);
-    // Category blocks in display order, then the catalog table's authored
-    // row order within each block. The old single-key sort fell back to
-    // REGISTRATION order inside a category, which was append order across
-    // many PRs, not a reading order. Sorting the map vector (before the
-    // QVariantList conversion) compares by reference instead of detaching
-    // two QVariantMaps per comparison.
-    std::stable_sort(out.begin(), out.end(), [](const QVariantMap& a, const QVariantMap& b) {
-        const int catA = a.value(QLatin1String("categoryOrder")).toInt();
-        const int catB = b.value(QLatin1String("categoryOrder")).toInt();
-        if (catA != catB) {
-            return catA < catB;
-        }
-        return a.value(QLatin1String("rowOrder")).toInt() < b.value(QLatin1String("rowOrder")).toInt();
-    });
+    sortCatalogRows(out);
     QVariantList model;
     model.reserve(out.size());
     for (const QVariantMap& row : std::as_const(out)) {

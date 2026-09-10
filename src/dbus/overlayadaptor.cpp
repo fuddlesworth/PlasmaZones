@@ -167,34 +167,6 @@ int OverlayAdaptor::getMinimumZoneDisplaySizePx()
     return m_settings ? m_settings->minimumZoneDisplaySizePx() : Defaults::MinimumZoneDisplaySizePx;
 }
 
-void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, const QString& screenId,
-                                       const QString& shaderId, const QString& shaderParamsJson,
-                                       const QString& zonesJson)
-{
-    if (!m_overlayService) {
-        qCWarning(lcDbus) << "showShaderPreview: overlay service not wired";
-        return;
-    }
-    m_overlayService->showShaderPreview(x, y, width, height, screenId, shaderId, shaderParamsJson, zonesJson);
-}
-
-void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
-                                         const QString& zonesJson)
-{
-    if (!m_overlayService) {
-        return;
-    }
-    m_overlayService->updateShaderPreview(x, y, width, height, shaderParamsJson, zonesJson);
-}
-
-void OverlayAdaptor::hideShaderPreview()
-{
-    if (!m_overlayService) {
-        return;
-    }
-    m_overlayService->hideShaderPreview();
-}
-
 bool OverlayAdaptor::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                                     const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {

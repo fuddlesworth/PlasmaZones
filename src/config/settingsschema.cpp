@@ -46,6 +46,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     s.versionKey = ConfigKeys::versionKey();
 
     appendShadersSchema(s);
+    appendOverlayShadersSchema(s);
     appendAppearanceSchema(s);
     appendOrderingSchema(s);
     appendAnimationsSchema(s);
@@ -429,6 +430,9 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
                         "writes this, so it is not meant to be edited by hand.")},
+        {CD::motionProfileTreeKey(), CD::motionProfileTree(), QMetaType::QVariantMap,
+         QStringLiteral("Per-context overrides of animation timing, holding each context's easing curve and duration. "
+                        "The animations page writes this, so it is not meant to be edited by hand.")},
     };
 }
 
@@ -615,6 +619,20 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i],
                     QStringLiteral("Snaps the focused window to zone %1 of the current layout.").arg(i + 1));
+    }
+    const QString scrollFocusTabDefaults[] = {
+        CD::scrollFocusTab1Shortcut(), CD::scrollFocusTab2Shortcut(), CD::scrollFocusTab3Shortcut(),
+        CD::scrollFocusTab4Shortcut(), CD::scrollFocusTab5Shortcut(), CD::scrollFocusTab6Shortcut(),
+        CD::scrollFocusTab7Shortcut(), CD::scrollFocusTab8Shortcut(), CD::scrollFocusTab9Shortcut(),
+    };
+    // Same protocol-constant bound as the two loops above.
+    static_assert(std::size(scrollFocusTabDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "focus-tab defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
+        addShortcut(globals, CD::scrollFocusTabKey(i + 1), scrollFocusTabDefaults[i],
+                    QStringLiteral("Shows tab %1 of the focused column in scrolling mode. In a column that is not "
+                                   "tabbed it focuses window %1 in the stack.")
+                        .arg(i + 1));
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut(),
                 QStringLiteral("Moves every window one zone clockwise within the current layout."));
@@ -871,6 +889,9 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
     };
 }
+
+// Overlays lives in settingsschema_overlayshaders.cpp, split
+// out for file size the way the scrolling and tiling domains were.
 
 // ─── PhosphorZones::Zone Selector ──────────────────────────────────────────────────────────
 // Pops up at the edge of the screen during drag to let users pick which zone
@@ -1236,6 +1257,9 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Resolution the blur passes render at, relative to the window. Below 1 is cheaper and softer, "
                         "above 1 is sharper and costs more."),
          clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
+        {CD::suppressWhileFullscreenKey(), CD::decorationSuppressWhileFullscreen(), QMetaType::Bool,
+         QStringLiteral("Draw no decorations on a monitor while a window on it is fullscreen. Other monitors keep "
+                        "theirs.")},
     };
 }
 

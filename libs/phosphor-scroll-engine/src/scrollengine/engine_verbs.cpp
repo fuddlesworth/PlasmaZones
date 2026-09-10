@@ -7,6 +7,10 @@
 #include <PhosphorEngine/WindowRegistry.h>
 
 #include "scrollverbresolve_p.h"
+// lcScrollEngine is used below and reaches this file only through a sibling
+// translation unit under a UNITY build, so its absence breaks a non-unity
+// configure while the default build stays green.
+#include "scrollenginelogging.h"
 
 #include <cmath>
 
@@ -42,6 +46,51 @@ namespace PhosphorScrollEngine {
         Q_EMIT placementChanged(screen);                                                                               \
     }                                                                                                                  \
     Q_EMIT navigationFeedback(changed, QStringLiteral(actionStr),                                                      \
+                              changed ? (successReasonExpr) : QStringLiteral("no_target"), sourceWindow,               \
+                              changed ? state->strip().activeWindowId() : QString(), screen)
+
+// The tile-focus family: the two stack-end verbs, cycleTab and focusTab.
+// Three things separate it from P_SCROLL_VERB, and all three follow from
+// these verbs moving focus WITHIN a column rather than between columns.
+//
+// 1. The float layer holding focus is a REFUSAL, not a cue to act on the
+//    strip's stale active tile. Same guard and same token as
+//    toggleWindowedFullscreen below, whose source slot likewise names the
+//    floating window the user is actually looking at rather than a tile they
+//    cannot see.
+// 2. On success the view-detach latch is cleared. The strip's tile-focus ops
+//    deliberately never touch the anchor (unlike the column-focus family,
+//    which re-anchors), so without this a view the user panned away with the
+//    wheel stays parked and the verb activates a window that is off-screen.
+//    Clearing the latch hands the view back to the configured policy, which
+//    is exactly what windowFocused does when the SAME tab is picked with the
+//    pointer. The two arms have to agree, or clicking a pill re-centres and
+//    pressing the chord does not. Deliberately a latch clear and not a
+//    reanchorAfterFocusChange: re-anchoring clamps away the deliberately
+//    unclamped centering anchors, and the pointer arm does not do it either.
+// 3. The clear is on SUCCESS ONLY. A refused press is not a view event, and
+//    the pointer arm's own hand-back is likewise gated on the report naming
+//    the active window.
+#define P_SCROLL_TILE_FOCUS_VERB(screenIdExpr, opExpr, successReasonExpr)                                              \
+    P_SCROLL_RESOLVE(screenIdExpr);                                                                                    \
+    if (!state || state->strip().isEmpty()) {                                                                          \
+        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_windows"), QString(), QString(),  \
+                                  screen);                                                                             \
+        return;                                                                                                        \
+    }                                                                                                                  \
+    if (state->floatingHasFocus()) {                                                                                   \
+        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_target"),                         \
+                                  state->lastFloatingFocus(), QString(), screen);                                      \
+        return;                                                                                                        \
+    }                                                                                                                  \
+    const QString sourceWindow = state->strip().activeWindowId();                                                      \
+    const bool changed = (opExpr);                                                                                     \
+    if (changed) {                                                                                                     \
+        state->strip().setViewDetached(false);                                                                         \
+        applyLayout(screen, true);                                                                                     \
+        Q_EMIT placementChanged(screen);                                                                               \
+    }                                                                                                                  \
+    Q_EMIT navigationFeedback(changed, QStringLiteral("focus"),                                                        \
                               changed ? (successReasonExpr) : QStringLiteral("no_target"), sourceWindow,               \
                               changed ? state->strip().activeWindowId() : QString(), screen)
 
@@ -172,8 +221,12 @@ void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
                                   screen);
         return;
     }
-    const int activeCol = state->strip().activeColumnIndex();
-    const bool willExpel = activeCol >= 0 && state->strip().columns().at(activeCol).tiles.size() > 1;
+    // Through the guarded accessor rather than indexing with
+    // activeColumnIndex(): that index is returned unclamped, and the class's
+    // own activeColumn() checks BOTH ends, so a stale index past a shrunken
+    // column list would be an out-of-bounds read here and nowhere else.
+    const auto* activeColumn = state->strip().activeColumn();
+    const bool willExpel = activeColumn != nullptr && activeColumn->tiles.size() > 1;
     const QString action = willExpel ? QStringLiteral("expel") : QStringLiteral("consume");
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().consumeOrExpel(delta, params);
@@ -275,7 +328,7 @@ bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
         // can differ, and this is the same approximation every other
         // window-keyed strip mutation on this engine lives with; the values
         // that matter to the toggle (work area, axis) are per-screen.
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        const ScrollLayoutParams params = layoutParamsForKey(key);
         const bool changed = state->strip().toggleMaximizeColumnForWindow(canonicalId, params);
         if (changed) {
             if (key == currentKeyForScreen(key.screenId)) {
@@ -350,7 +403,7 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
                                    << "trackedScreen:" << key.screenId;
             return false;
         }
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        const ScrollLayoutParams params = layoutParamsForKey(key);
         const bool changed = state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
         // The RESOLVED rect, not just the flag: "did the column end up covering
         // the raw work area" is the question a maximize report actually needs
@@ -522,7 +575,39 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // percent reads as "nothing to move" rather than reaching qRound, the
     // same guard the drag auto-scroll tick applies to its public qreal: no
     // in-tree caller can pass one, but this is exported library API.
-    const int deltaPx = std::isfinite(percent) ? qRound(percent / 100.0 * params.axis.mainSize(params.workArea)) : 0;
+    //
+    // Finite is not enough on its own. `qRound` of a double past int's range is
+    // undefined, and a caller outside this repo can pass 1e12 as easily as a
+    // NaN — the same hazard `setColumnWidth` guards against a few functions
+    // below, and for the same reason. Bounded before the round rather than
+    // after, since after is already too late. The band is far wider than any
+    // meaningful scroll (a hundred viewports) and far inside int.
+    constexpr qreal kMaxScrollPx = 1e6;
+    const qreal rawPx = std::isfinite(percent)
+        ? qBound(-kMaxScrollPx, percent / 100.0 * params.axis.mainSize(params.workArea), kMaxScrollPx)
+        : 0.0;
+    const int deltaPx = qRound(rawPx);
+    scrollViewResolved(deltaPx, screen, state, params);
+}
+
+void ScrollEngine::scrollViewByPx(int px, const QString& screenId)
+{
+    // Same shape as the percent verb minus the conversion: the caller
+    // already holds strip pixels (the placement map pans by the distance it
+    // was dragged), and converting them to a percent only to convert back
+    // would round twice.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("scroll"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    scrollViewResolved(px, screen, state, params);
+}
+
+void ScrollEngine::scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state,
+                                      const ScrollLayoutParams& params)
+{
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
     const QString refusal = deltaPx == 0 ? QStringLiteral("no_movement") : QStringLiteral("no_target");
@@ -545,14 +630,14 @@ void ScrollEngine::focusWindowTop(const QString& screenId)
     // CROSS-axis ends: the stack runs top-to-bottom on a horizontal strip and
     // left-to-right on a vertical one, so these two swap words with the axis
     // just as the main-axis pair above does.
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus", true,
-                  Detail::physicalTokenForCross(-1, params.axis));
+    P_SCROLL_TILE_FOCUS_VERB(screenId, state->strip().focusTileAtEnd(false),
+                             Detail::physicalTokenForCross(-1, params.axis));
 }
 
 void ScrollEngine::focusWindowBottom(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus", true,
-                  Detail::physicalTokenForCross(1, params.axis));
+    P_SCROLL_TILE_FOCUS_VERB(screenId, state->strip().focusTileAtEnd(true),
+                             Detail::physicalTokenForCross(1, params.axis));
 }
 
 void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
@@ -567,6 +652,54 @@ void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
     }
     P_SCROLL_VERB(screenId, state->strip().focusAdjacentColumn(delta, params), "focus", true,
                   Detail::physicalTokenForMain(delta, params.axis));
+}
+
+void ScrollEngine::focusColumnAtIndex(int index, const QString& screenId)
+{
+    // A negative index is out of contract (the strip would clamp it to the
+    // first column, which is a press nobody made); refused with the same
+    // deliberate silence as focusColumnPlain's delta check. An index past the
+    // end clamps to the last column, ScrollStrip::focusColumn's own rule.
+    if (index < 0) {
+        return;
+    }
+    // Spelled out rather than through P_SCROLL_VERB because the OSD arrow
+    // needs the PREVIOUS active index, which the macro's op expression would
+    // have overwritten by the time the success reason is evaluated.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const int previous = state->strip().activeColumnIndex();
+    const bool changed = state->strip().focusColumn(index, params);
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(
+        changed, QStringLiteral("focus"),
+        changed ? Detail::physicalTokenForMain(state->strip().activeColumnIndex() > previous ? 1 : -1, params.axis)
+                : QStringLiteral("no_target"),
+        sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+}
+
+void ScrollEngine::moveColumnToIndex(int from, int to, const QString& screenId)
+{
+    // Same silence for a negative index as focusColumnAtIndex. Anything else
+    // out of range reaches the strip, which refuses it, and that refusal is
+    // reported as no_target: the caller named a column, so unlike a negative
+    // index it is a real (if unanswerable) request.
+    if (from < 0 || to < 0) {
+        return;
+    }
+    // The OSD arrow points the way the column travelled, so the direction is
+    // the sign of (to - from) rather than the previous active index the
+    // focus twin reads; P_SCROLL_VERB can express that directly.
+    P_SCROLL_VERB(screenId, state->strip().moveColumnTo(from, to, params), "move", true,
+                  Detail::physicalTokenForMain(to > from ? 1 : -1, params.axis));
 }
 
 void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
@@ -584,6 +717,46 @@ void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
                   state->strip().focusAdjacentColumn(delta, params)
                       || (delta < 0 ? state->strip().focusLastColumn(params) : state->strip().focusFirstColumn(params)),
                   "focus", true, Detail::physicalTokenForMain(delta, params.axis));
+}
+
+void ScrollEngine::cycleTab(int delta, const QString& screenId)
+{
+    // Same delta contract (and the same deliberate silence) as
+    // focusColumnPlain: a zero must not read as a press, and an
+    // out-of-contract value must not short-circuit into the wrap fallback and
+    // teleport focus to an end of the column.
+    if (delta != -1 && delta != 1) {
+        return;
+    }
+    // The stack twin of focusColumnWrap, and it wraps for the same reason: a
+    // user cycling a column's tabs expects the far end, not the neighbouring
+    // OUTPUT that the generic directional focus crosses onto at the stack
+    // edge. Short-circuit keeps a successful adjacent step from also
+    // wrapping. Deliberately NOT gated on the column being tabbed — the tiles
+    // of a stacked column are the same tiles that become its tabs when it is
+    // flipped, so a gate would make one chord work or not depending on a
+    // display mode this verb does not touch.
+    P_SCROLL_TILE_FOCUS_VERB(screenId,
+                             state->strip().focusAdjacentTile(delta) || state->strip().focusTileAtEnd(delta < 0),
+                             Detail::physicalTokenForCross(delta, params.axis));
+}
+
+void ScrollEngine::focusTab(int ordinal, const QString& screenId)
+{
+    // Ordinals are 1-based and unbounded above: the strip answers false for
+    // an ordinal past the column's tab count, and the macro's refusal arm
+    // turns that into the same no_target feedback an edge press gets. Only a
+    // non-positive ordinal is out of contract, refused silently for the
+    // reason the delta verbs spell out.
+    if (ordinal < 1) {
+        return;
+    }
+    // "tab", not an empty reason. The verb names an absolute tab rather than
+    // a direction, so there is no arrow to derive — but the OSD's
+    // directionArrow() DEFAULTS to a right arrow, so an empty reason on the
+    // "focus" action renders a glyph pointing somewhere the focus did not go.
+    // NavigationOsdContent carries a matching arrow-free arm for this token.
+    P_SCROLL_TILE_FOCUS_VERB(screenId, state->strip().focusTileByOrdinal(ordinal), QStringLiteral("tab"));
 }
 
 void ScrollEngine::setColumnWidth(const ColumnWidth& width, const QString& screenId)
@@ -768,6 +941,7 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 }
 
 #undef P_SCROLL_VERB
+#undef P_SCROLL_TILE_FOCUS_VERB
 // P_SCROLL_RESOLVE deliberately NOT #undef'd — it comes from
 // scrollverbresolve_p.h, whose include guard would make an #undef here erase
 // it for the next file in a unity chunk.

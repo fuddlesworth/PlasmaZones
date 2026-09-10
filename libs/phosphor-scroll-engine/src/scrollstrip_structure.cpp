@@ -282,7 +282,8 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
 }
 
 bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
-                                           const ScrollLayoutParams& params, int minWidth, int minHeight)
+                                           const ScrollLayoutParams& params, int minWidth, int minHeight,
+                                           std::optional<ColumnDisplay> displayOverride)
 {
     if (windowId.isEmpty() || containsWindow(windowId) || columnIndex < 0 || columnIndex >= m_columns.size()) {
         return false;
@@ -290,6 +291,12 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
     const int prevIdx = m_activeColumnIdx;
     const int oldViewOffset = viewOffsetFor(params);
     Column& col = m_columns[columnIndex];
+    // Before the join, for insertWindowIntoActiveColumn's reason: a column
+    // turning tabbed hands its extent to the tab on show, and after the
+    // append that would be the arrival, whose height is the context default.
+    if (displayOverride) {
+        applyColumnDisplay(col, *displayOverride);
+    }
     Tile tile;
     tile.windowId = windowId;
     tile.minWidth = minWidth;
@@ -689,6 +696,20 @@ bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& param
     // prevIdx = -1: same rationale as moveActiveColumn.
     reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
+}
+
+bool ScrollStrip::moveColumnTo(int from, int to, const ScrollLayoutParams& params)
+{
+    if (from < 0 || from >= m_columns.size() || to < 0 || to >= m_columns.size() || from == to) {
+        return false;
+    }
+    // Focus first, then reuse the active-column move: the moved column ends
+    // up active either way (every move verb keeps the moved column focused),
+    // and moveActiveColumnTo already owns the pre-maximize slot bookkeeping.
+    // focusColumn's own result is irrelevant here; a `from` that is already
+    // active answers false from it and the move below still applies.
+    focusColumn(from, params);
+    return moveActiveColumnTo(to, params);
 }
 
 bool ScrollStrip::moveActiveColumnToFirst(const ScrollLayoutParams& params)

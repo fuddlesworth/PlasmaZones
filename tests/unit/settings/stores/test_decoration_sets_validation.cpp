@@ -45,6 +45,10 @@
 #include <QStringList>
 #include <QTemporaryDir>
 
+#include <PhosphorPointer/PointerShaderRegistry.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
+
 #include "config/configdefaults.h"
 #include "phosphor_i18n.h"
 #include "settings/pages/decorationpagecontroller.h"
@@ -54,6 +58,40 @@
 #include "helpers/TreeStubSettings.h"
 
 using namespace PlasmaZones;
+
+namespace {
+
+/// Author the smallest pack either registry accepts:
+/// `<root>/<id>/metadata.json` naming a fragment shader that exists beside
+/// it. The two families read the same minimal shape.
+bool writeMinimalPack(const QString& root, const QString& id)
+{
+    const QString packDir = root + QLatin1Char('/') + id;
+    if (!QDir().mkpath(packDir))
+        return false;
+    QJsonObject metadata;
+    metadata.insert(QLatin1String("id"), id);
+    metadata.insert(QLatin1String("name"), id);
+    metadata.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+    metadata.insert(QLatin1String("parameters"), QJsonArray{});
+    QFile meta(packDir + QStringLiteral("/metadata.json"));
+    if (!meta.open(QIODevice::WriteOnly | QIODevice::Truncate) || meta.write(QJsonDocument(metadata).toJson()) < 0)
+        return false;
+    QFile frag(packDir + QStringLiteral("/effect.frag"));
+    return frag.open(QIODevice::WriteOnly | QIODevice::Truncate) && frag.write(QByteArrayLiteral("// stub\n")) > 0;
+}
+
+bool writePointerPack(const QString& root, const QString& id)
+{
+    return writeMinimalPack(root, id);
+}
+
+bool writeSurfacePack(const QString& root, const QString& id)
+{
+    return writeMinimalPack(root, id);
+}
+
+} // namespace
 
 class TestDecorationSetsValidation : public QObject
 {
@@ -474,7 +512,9 @@ private Q_SLOTS:
         QVERIFY(!sets->applySet(QStringLiteral("foreign")));
         QCOMPARE(validateSpy.count(), 1);
         QCOMPARE(validateSpy.first().first().toString(),
-                 PhosphorI18n::tr("“%1” does not match this page.").arg(QStringLiteral("foreign")));
+                 PhosphorI18n::tr("“%1” could not be used here. It may be for another page, or it may need packs or "
+                                  "entries this version does not have.")
+                     .arg(QStringLiteral("foreign")));
     }
 
     /// An import carrying no entries would land as a row that applySet then
@@ -718,6 +758,109 @@ private Q_SLOTS:
         QCOMPARE(toastSpy.count(), 1);
         QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That set has no usable name."));
         QVERIFY(sets->availableSets().isEmpty());
+    }
+
+    /// The pointer surface is a supported path, but its chain has to be
+    /// POINTER packs: the pointer pass knows only its own contract, so a
+    /// SURFACE id at `pointer` would persist and never draw. What is refused
+    /// is exactly a pack the other family owns. An id neither registry knows
+    /// is an uninstalled pack, a state the chain editor already shows as
+    /// missing, and it is let through so the user can still edit around it.
+    void applySet_rejectsAForeignPackAtThePointerPath()
+    {
+        QTemporaryDir packs;
+        QVERIFY(packs.isValid());
+        QVERIFY(writePointerPack(packs.path() + QStringLiteral("/pointer"), QStringLiteral("halo")));
+        PhosphorPointerShaders::PointerShaderRegistry pointerRegistry;
+        pointerRegistry.addSearchPaths(QStringList{packs.path() + QStringLiteral("/pointer")},
+                                       PhosphorFsLoader::LiveReload::Off);
+        pointerRegistry.refresh();
+        QVERIFY(pointerRegistry.hasEffect(QStringLiteral("halo")));
+        // "glow" is a SURFACE pack, so at the pointer path it is foreign.
+        QVERIFY(writeSurfacePack(packs.path() + QStringLiteral("/surface"), QStringLiteral("glow")));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{packs.path() + QStringLiteral("/surface")},
+                                PhosphorFsLoader::LiveReload::Off);
+        registry.refresh();
+        QVERIFY(registry.hasEffect(QStringLiteral("glow")));
+
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings, &pointerRegistry);
+        c.setSetsDirOverride(decorationSetsDir());
+        ShaderSetStore* sets = c.setsBridge();
+
+        const auto payloadWithChain = [](const QString& name, const QStringList& chain) {
+            QJsonObject entry;
+            entry.insert(QStringLiteral("path"), PhosphorSurfaceShaders::decorationPointerPath());
+            entry.insert(QStringLiteral("profile"),
+                         QJsonObject{{QStringLiteral("chain"), QJsonArray::fromStringList(chain)}});
+            QJsonObject root;
+            root.insert(QStringLiteral("name"), name);
+            root.insert(QStringLiteral("version"), 1);
+            root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+            return root;
+        };
+
+        writeSetFile(decorationSetsDir() + QStringLiteral("/bogus.json"),
+                     payloadWithChain(QStringLiteral("bogus"), {QStringLiteral("halo"), QStringLiteral("glow")}));
+        QVERIFY2(!sets->applySet(QStringLiteral("bogus")),
+                 "a chain at the pointer path naming a SURFACE pack must refuse the set");
+        QVERIFY2(!c.hasOverride(PhosphorSurfaceShaders::decorationPointerPath()),
+                 "and nothing may be written to the tree");
+
+        // The same shape with only the registered pack applies, so the refusal
+        // above is the foreign id and not the pointer path itself.
+        writeSetFile(decorationSetsDir() + QStringLiteral("/fine.json"),
+                     payloadWithChain(QStringLiteral("fine"), {QStringLiteral("halo")}));
+        QVERIFY(sets->applySet(QStringLiteral("fine")));
+        QCOMPARE(c.chainAt(PhosphorSurfaceShaders::decorationPointerPath()), QStringList{QStringLiteral("halo")});
+
+        // An id NO registry knows is an uninstalled pack, not a foreign one:
+        // it persists, and the editor shows it as missing rather than locking
+        // the user out of the chain around it.
+        writeSetFile(
+            decorationSetsDir() + QStringLiteral("/gone.json"),
+            payloadWithChain(QStringLiteral("gone"), {QStringLiteral("halo"), QStringLiteral("notinstalled")}));
+        QVERIFY2(sets->applySet(QStringLiteral("gone")), "an uninstalled pack id is not the same as a foreign one");
+        QCOMPARE(c.chainAt(PhosphorSurfaceShaders::decorationPointerPath()),
+                 (QStringList{QStringLiteral("halo"), QStringLiteral("notinstalled")}));
+    }
+
+    /// The same family gate on the controller's own setter, so an import and
+    /// a page edit cannot drift on what a surface may carry: a surface pack at
+    /// the pointer path, and a pointer pack at a window surface, are both
+    /// refused rather than persisted as chains that never draw.
+    void setChain_refusesPacksTheSurfaceCannotDraw()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePointerPack(tmp.path() + QStringLiteral("/pointer"), QStringLiteral("halo")));
+        PhosphorPointerShaders::PointerShaderRegistry pointerRegistry;
+        pointerRegistry.addSearchPaths(QStringList{tmp.path() + QStringLiteral("/pointer")},
+                                       PhosphorFsLoader::LiveReload::Off);
+        pointerRegistry.refresh();
+        // A surface pack in the surface registry's own shape: the loader
+        // wants a fragment shader beside the metadata, nothing more.
+        QVERIFY(writeSurfacePack(tmp.path() + QStringLiteral("/surface"), QStringLiteral("glowish")));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path() + QStringLiteral("/surface")},
+                                PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("glowish")));
+
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings, &pointerRegistry);
+        c.setSetsDirOverride(decorationSetsDir());
+        const QString pointer = PhosphorSurfaceShaders::decorationPointerPath();
+
+        c.setChain(pointer, QStringList{QStringLiteral("glowish")});
+        QVERIFY2(!c.hasOverride(pointer), "a surface pack at the pointer path must be refused");
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("halo")});
+        QVERIFY2(!c.hasOverride(QStringLiteral("window.tiled")), "a pointer pack at a window surface must be refused");
+
+        c.setChain(pointer, QStringList{QStringLiteral("halo")});
+        QCOMPARE(c.chainAt(pointer), QStringList{QStringLiteral("halo")});
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glowish")});
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), QStringList{QStringLiteral("glowish")});
     }
 };
 

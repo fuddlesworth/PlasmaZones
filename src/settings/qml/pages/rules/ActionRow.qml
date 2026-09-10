@@ -117,16 +117,11 @@ ColumnLayout {
             return [];
 
         // Named for its registry, for the same shadowing reason as above.
-        var overlayShadersController = row.appSettings ? row.appSettings.snappingShadersPage : null;
+        var overlayShadersController = row.appSettings ? row.appSettings.overlaysPage : null;
         if (!overlayShadersController)
             return [];
 
-        var effects = overlayShadersController.availableShaderEffects() || [];
-        for (var i = 0; i < effects.length; ++i) {
-            if (effects[i].id === effectId)
-                return effects[i].parameters || [];
-        }
-        return [];
+        return overlayShadersController.shaderParameters(effectId);
     }
     /// The active shader-uniform schema for whichever shader-override action is
     /// being edited (animation or overlay) — drives the inline
@@ -506,6 +501,9 @@ ColumnLayout {
 
                     if (modelData.kind === "decorationChain")
                         return paramEditors._decorationChainEditor;
+
+                    if (modelData.kind === "overlayLayout")
+                        return paramEditors._overlayLayoutEditor;
 
                     if (modelData.kind === "overlayShader")
                         return paramEditors._overlayShaderEditor;
