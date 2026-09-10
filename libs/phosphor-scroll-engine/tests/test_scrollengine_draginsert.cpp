@@ -103,6 +103,7 @@ private Q_SLOTS:
     void beginSettlesTheViewOverRealColumns();
     void cancelRestoresThePreDragView();
     void commitLandsTheDropWhereTheIndicatorPromised();
+    void commitCentersTheDropUnderAlwaysCentering();
     void focusReportsAreDroppedWhileAPreviewSteersTheView();
 
 private:
@@ -2071,9 +2072,13 @@ void TestScrollEngineDragInsert::commitLandsTheDropWhereTheIndicatorPromised()
     QObject owner;
     auto* settings = new ScrollTestUtils::StubScrollSettings(&owner);
     // 900px columns on the 1200px viewport: no two fit together, which is
-    // exactly the overflow the centering arms fire on.
+    // exactly the overflow the centering arm fires on. OnOverflow rather than
+    // Always, because Always is the user asking for the middle in so many
+    // words and the drop honours it (commitCentersTheDropUnderAlwaysCentering);
+    // this policy is the one whose centering is a WIDTH verdict, and that is
+    // the verdict the drop overrides.
     settings->widthValue = 0.75;
-    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
+    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow);
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->setEngineSettings(settings);
     engine->refreshConfigFromSettings();
@@ -2091,8 +2096,8 @@ void TestScrollEngineDragInsert::commitLandsTheDropWhereTheIndicatorPromised()
     engine->commitDragInsertPreview();
 
     QCOMPARE(state->strip().columnOfWindow(QStringLiteral("b")), 0);
-    // Flush left, as promised — NOT centered (Always centering would put the
-    // anchor at 150 and the view at -150, with "a" entirely off screen).
+    // Flush left, as promised — NOT centered (the overflow verdict would put
+    // the anchor at 150 and the view at -150, with "a" entirely off screen).
     // And it survives the commit's own applyLayout: the drop owns the view
     // the way a pan does, so updateViewForFocus cannot hand it back to the
     // policy on the same pass.
@@ -2103,6 +2108,45 @@ void TestScrollEngineDragInsert::commitLandsTheDropWhereTheIndicatorPromised()
     const QRect neighbour = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
     QVERIFY(!neighbour.isNull());
     QCOMPARE(Ax::mainPos(neighbour), 900);
+}
+
+void TestScrollEngineDragInsert::commitCentersTheDropUnderAlwaysCentering()
+{
+    // The other half of the drop's view contract, and the bug it fixes: with
+    // "center focused column" set to Always, a window dropped into a new slot
+    // at the END of the strip landed flush against the trailing edge and only
+    // centered once the user focused another column and came back. Always
+    // means the focused column sits in the middle whatever put it there, a
+    // drop included, so the policy wins here and the view stays attached.
+    QObject owner;
+    auto* settings = new ScrollTestUtils::StubScrollSettings(&owner);
+    // 600px columns on the 1200px viewport: two fit, so nothing here is the
+    // over-wide case the fit arm exists for — only the policy is in play.
+    settings->widthValue = 0.5;
+    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    DragTarget target;
+    target.primary = state->strip().columnCount();
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+
+    QCOMPARE(state->strip().windowsInOrder(),
+             (QStringList{QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("a")}));
+    // The trailing column starts at 1200 on a 1200px viewport, so centering
+    // its 600px puts the view at 900 — 300px of dead space past the end of
+    // the strip, which is exactly what a centered last column looks like.
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), 900);
+    // Attached, unlike the fit arm: the policy owns this view, so the next
+    // relayout re-deriving it is the point rather than a hazard.
+    QVERIFY(!state->strip().viewDetached());
 }
 
 void TestScrollEngineDragInsert::focusReportsAreDroppedWhileAPreviewSteersTheView()

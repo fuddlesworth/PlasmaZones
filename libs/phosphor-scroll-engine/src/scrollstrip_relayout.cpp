@@ -588,14 +588,36 @@ void ScrollStrip::reanchorForDropCommit(int oldViewOffset, const ScrollLayoutPar
         m_viewDetached = false;
         return;
     }
+    // ALWAYS centering is the user asking, in so many words, for the focused
+    // column to sit in the middle whatever put it there. A drop is one of the
+    // things that puts it there, so the policy wins over the fit below and the
+    // view stays ATTACHED — the same verdict the arrival re-anchor already
+    // reaches for an open, a move-to-last, or a plain focus step onto the same
+    // column. Without this a window dropped into a new slot at the end of the
+    // strip landed flush against the trailing edge and stayed there until the
+    // user focused away and back, which is what re-derived the anchor.
+    //
+    // The minimal fit below still owns every other policy, and with it the
+    // regression this function was written for: under OnOverflow a column too
+    // wide to share the viewport centers on focus, which after a drop pushed
+    // every neighbour off screen and read as the window flying away from the
+    // strip. That column reaches the fit arm exactly as before.
+    if (isCenteringActiveColumn(params)) {
+        // Through the verb, so the re-attach and the anchor stay one decision
+        // (it clears the latch itself). mainExtent's degenerate case is
+        // handled inside centeredAnchorFor, which keeps the persisted anchor.
+        centerActiveColumn(params);
+        return;
+    }
     // The drop OWNS the view the way a pan does, so the latch is SET, not
     // cleared — and above the degenerate-area guard, for
     // reanchorAfterFocusChange's reason (the latch answers "who owns the
     // view", which needs no layout maths). Without it the applyLayout the
     // commit runs immediately afterwards re-applies the centering policy
-    // through updateViewForFocus and undoes this anchor on the same pass —
-    // under Always unconditionally, and under OnOverflow for exactly the
-    // over-wide column this function exists to keep beside its neighbour.
+    // through updateViewForFocus and undoes this anchor on the same pass,
+    // under OnOverflow for exactly the over-wide column this function exists
+    // to keep beside its neighbour. (Always never reaches here — it took the
+    // centering arm above, which keeps the view attached on purpose.)
     // The next focus change re-attaches through reanchorAfterFocusChange,
     // same as any pan.
     m_viewDetached = true;
