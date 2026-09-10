@@ -915,7 +915,10 @@ void TestPointerHistory::testDamageRectSurvivesANegativeReach()
     history.setTrailSeconds(1.0);
     history.notePointer(QPointF(100.0, 100.0), 0);
     history.notePointer(QPointF(160.0, 150.0), 40);
-    const QRectF damage = history.damageRect(-5.0, 40, 1.0);
+    // The magnitude has to exceed the curve allowance this run earns (about
+    // 6.5 px), or the allowance alone keeps the rect the right way up and the
+    // clamp could be removed without this noticing.
+    const QRectF damage = history.damageRect(-100.0, 40, 1.0);
     QVERIFY(!damage.isEmpty());
     QVERIFY2(damage.width() >= 60.0 && damage.height() >= 50.0,
              qPrintable(QStringLiteral("%1 x %2").arg(damage.width()).arg(damage.height())));

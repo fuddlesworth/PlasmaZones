@@ -40,6 +40,10 @@ const int kMaxSparks = 48;
 // budget. Deliberately low: the settings preview's simulated pointer peaks
 // near 324 px/s.
 const float kFullSpeed = 220.0;
+// The metadata trailSeconds. `life` is this pack's trailWindowParam, so the
+// host spaces the ring over it and inflates the damage rect for it; a value
+// past this would walk samples the host has already stopped repainting.
+const float kTrailSeconds = 1.0;
 
 // One spark's premultiplied contribution at `rel` (the fragment relative to
 // the launch point). `h` is the spark's hash (its .z sets the radius), the
@@ -84,7 +88,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float life = max(p_life, 0.05);
+    float life = clamp(p_life, 0.05, kTrailSeconds);
     float size = max(p_size, 0.25) * scale;
     float gravity = p_gravity * scale;
     float launch = 220.0 * max(p_spread, 0.0) * scale;

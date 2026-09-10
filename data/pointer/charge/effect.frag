@@ -74,8 +74,12 @@
 // mouseChanged and a still pointer sends nothing at all, so the fast samples
 // sit there until they age out of `lifetime`. Easing this out the way the
 // click arm does needs a clock that keeps running after a stop, and the
-// pointer contract carries no such lane -- pointerIdleSeconds() resets on the
-// first accepted motion, which is the very moment in question. The step is
+// contract carries no lane that yields time-since-resume the same way on both
+// runtimes. pointerIdleSeconds() resets on the first accepted motion, which
+// is the very moment in question; iTime survives the park but marks nothing
+// at the resume; and the gap in the trail ages that a park leaves exists on
+// the compositor but not in the settings preview, whose sampler keeps
+// inserting evenly spaced rest slots. The step is
 // bounded: it can only appear for a park shorter than `lifetime`, and a park
 // past that empties the live run and starts the stroke from nothing anyway.
 // Do not paper over it by decaying the charge with idle time; that reads as
