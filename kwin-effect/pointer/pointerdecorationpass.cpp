@@ -280,6 +280,13 @@ void PointerDecorationPass::repaintStaleTrail(KWin::LogicalOutput* next, qint64 
     if (!m_output || m_output == next || !KWin::effects) {
         return;
     }
+    // The rect is taken for the DEPARTING output while the cursor has already
+    // moved, so the live sprite rect damageDeviceRect unions in is computed at
+    // the new position and mostly falls outside this output, where the final
+    // intersect clips it away. That is a surplus, not a miss: the band this
+    // pass actually painted a sprite into is carried by m_lastSpriteCanvasRect,
+    // which the same union includes and which is cleared by the caller right
+    // after this returns.
     const QRectF stale = damageLogicalRect(m_output, nowMs);
     if (!stale.isEmpty()) {
         KWin::effects->addRepaint(KWin::RectF(stale));

@@ -18,7 +18,7 @@
             "default": 44.0,
             "min": 16.0,
             "max": 300.0,
-            "description": "How far the brackets may reach from the click (px). They start inside that, and every other length except the line thickness is a share of it."
+            "description": "How far the brackets may reach from the click (px). They start inside that, and every other length except the line thickness is a share of it"
         },
         {
             "id": "rest",
@@ -88,7 +88,7 @@
             "min": 0.0,
             "max": 1.0,
             "step": 0.05,
-            "description": "Strength of the smaller second set drawn when the button is released. Set it to 0 to leave the release unmarked."
+            "description": "Strength of the smaller second set drawn when the button is released. Set it to 0 to leave the release unmarked"
         },
         {
             "id": "colorLeft",

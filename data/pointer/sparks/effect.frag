@@ -6,9 +6,19 @@
 // position (not its ring index, which shifts as new samples arrive) so a
 // spark keeps its launch direction and speed from frame to frame while its
 // sample ages. The one exception is the newest sample, whose position the
-// sampler refreshes in place for up to one sample interval before it is
-// left behind; its sparks are at age zero and barely displaced, so the
-// re-roll is not visible. Each spark follows a ballistic arc under
+// sampler refreshes in place for up to one sample interval before it is left
+// behind, re-rolling its sparks on every device pixel it moves through.
+//
+// That was written when the interval sat near its 8 ms floor and the head
+// barely moved inside one. The interval is now the pack's trailSeconds spread
+// over the ring, which is about 33 ms here, so at speed the head can travel
+// tens of pixels and re-roll many times before it is left behind. The sparks
+// on it are still at age zero and small, so what this costs is stability at
+// the head rather than a visible strobe further down the trail. Fixing it
+// properly needs a per-slot identity that survives the refresh, which the
+// trail vec4 has no room for: .xy is the position the refresh moves, and .z
+// and .w are the age and speed. Seeding from a coarser cell is what the note
+// below rules out for the samples behind it. Each spark follows a ballistic arc under
 // `gravity`, shrinks and fades over `life`, and shifts colour from colorA to
 // colorB. Coverage is accumulated additively then clamped. Everything is
 // gone once a sample's age passes `life`, which stays within the metadata's

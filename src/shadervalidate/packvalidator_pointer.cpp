@@ -77,6 +77,10 @@ constexpr double kMinPreviewGate = 0.15;
 // as the smallest value that still turns a point into a region — so a reach
 // between the two draws, it is just clipped too tight to be worth shipping.
 // The lints below have to say that rather than claim the pack cannot draw.
+//
+// Two bundled packs (ink, windtrail) declare a reachParam minimum of exactly
+// this value, so they pass on the strict `<` with no margin at all. Raising
+// the floor, or relaxing the comparison to `<=`, breaks both at once.
 constexpr double kUsableReachFloor = 4.0;
 
 // GLSL smoothstep, so the lint computes the same number pointerSpeedGate does.

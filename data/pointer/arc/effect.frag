@@ -126,6 +126,14 @@ vec4 pPointer(vec2 uv) {
     // refresh (60 on a 60 Hz output) advances the phase a whole cycle per
     // frame, so every frame sampled the same phase and the arcs sat dim
     // instead of crackling.
+    //
+    // The cap is HALF of 60, which is the fastest re-roll a 60 Hz output can
+    // actually resolve. It is deliberately not lowered to half of the 20 Hz
+    // this family elsewhere designs down to: 10 re-rolls a second is not a
+    // crackle, and the whole parameter would be spent buying correctness on
+    // outputs almost nobody has. On a 20-30 Hz output the top of the range
+    // aliases back toward the dim arcs described above, which is a graceful
+    // degrade of one slider rather than a broken pack.
     float rate = pointerWrapSafeRate(clamp(p_crackleRate, 1.0, 30.0));
     float jag = clamp(p_jaggedness, 0.0, 1.0);
     float intensity = max(p_intensity, 0.0);

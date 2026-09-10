@@ -89,6 +89,12 @@ class PHOSPHORPOINTER_EXPORT PointerHistory
 {
 public:
     static constexpr int kCapacity = PointerShaderContract::kMaxTrailPoints;
+    /// DEVICE px, deliberately, like every other position in this class: the
+    /// ring stores device px and the packs read them, so a cutoff in logical
+    /// px would be the one quantity here that changed meaning with the output
+    /// scale. The consequence is that a HiDPI output resolves a slower drift
+    /// as motion than a 1x one does, which is the same asymmetry the trail
+    /// positions themselves already carry.
     static constexpr double kMinSampleDistancePx = 1.0;
     static constexpr qint64 kMinSampleGapMs = 8;
     // kCapacity is an alias for a contract constant that lives in another

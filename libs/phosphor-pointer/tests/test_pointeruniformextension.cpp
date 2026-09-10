@@ -298,6 +298,41 @@ void TestPointerUniformExtension::testApplyingAnIdenticalFrameLeavesTheTailClean
     QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
         s.trailCount = 1;
     }));
+    // filteredSpeed shares uPointerVelocity with the velocity vector, so the
+    // velocity case above would stay green if the .w write were dropped
+    // entirely. This is the only case that moves that lane alone.
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.filteredSpeed = 9.0;
+    }));
+    // scale reaches TWO lanes by separate paths: uPointerState[2] directly,
+    // and uPointerFlags[1] as the reach scaled by it. Nothing moved it on its
+    // own, so a setFlagsLocked that stopped honouring the frame's scale left
+    // every existing assertion green.
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.scale = 3.0;
+    }));
+
+    // The dirty bit says something changed, not that the RIGHT thing changed.
+    // Both lanes are checked by value here, because the reach lane in
+    // particular is a product the flags path recomputes rather than a field it
+    // copies.
+    PointerFrameState scaled = fullFrame();
+    scaled.scale = 3.0;
+    scaled.filteredSpeed = 9.0;
+    ext.setReachLogicalPx(48.0);
+    ext.apply(scaled);
+
+    std::vector<char> buffer(1280, char{0});
+    ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
+    const auto stateLane = vec4At(buffer, offsetof(PointerUniformsTail, uPointerState));
+    QCOMPARE(stateLane[2], 3.0f);
+    const auto flags = vec4At(buffer, offsetof(PointerUniformsTail, uPointerFlags));
+    // The reach lane is a PRODUCT the flags path recomputes from the frame's
+    // scale, not a field it copies, which is exactly why the scale case above
+    // needs a value check behind it.
+    QCOMPARE(flags[1], 144.0f); // 48 logical px at scale 3
+    const auto velocity = vec4At(buffer, offsetof(PointerUniformsTail, uPointerVelocity));
+    QCOMPARE(velocity[3], 9.0f);
 }
 
 QTEST_MAIN(TestPointerUniformExtension)

@@ -72,7 +72,7 @@
             "default": 0.5,
             "min": 0.0,
             "max": 1.0,
-            "description": "Size of the smaller spray thrown when the button comes back up. Set it to 0 for a press-only spray"
+            "description": "How much of a spray the button coming back up throws. Set it to 0 for a press-only spray"
         },
         {
             "id": "colorLeft",

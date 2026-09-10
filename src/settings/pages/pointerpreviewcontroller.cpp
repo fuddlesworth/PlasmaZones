@@ -19,6 +19,7 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include <algorithm>
 #include <memory>
 
 namespace PlasmaZones {
@@ -151,6 +152,7 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     state.history.reset();
     state.nowMs = 0;
     state.pressed = false;
+    state.hasLastDevicePos = false;
     state.history.setTrailSeconds(effect.samplesTrail ? effect.trailSeconds : 0.0);
     updatePreviewParams(item, packId, friendlyParams);
     return true;
@@ -213,7 +215,9 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
     // Clamped so a paused-then-resumed pane (or a first frame with no previous
     // timestamp) cannot jump the clock far enough to age the whole ring out in
     // one step, and never runs backwards.
-    st.nowMs += static_cast<qint64>(qBound(0.0, static_cast<double>(dtMs), 250.0));
+    const double stepMs = qBound(0.0, static_cast<double>(dtMs), 250.0);
+    const qint64 startMs = st.nowMs;
+    st.nowMs += static_cast<qint64>(stepMs);
 
     // The canvas is the item, in DEVICE px: iResolution is DPR-scaled on the
     // way to the GPU (the extension keeps requiresPhysicalResolution), and
@@ -222,7 +226,27 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
     // the same DPR as iResolution.
     const qreal dpr = shaderItem->window() ? shaderItem->window()->effectiveDevicePixelRatio() : 1.0;
     const QPointF devicePos(x * dpr, y * dpr);
-    st.history.notePointer(devicePos, st.nowMs);
+
+    // Fed as an EVENT STREAM, not one event per frame. The pane ticks at the
+    // frame rate, but the sampler decides where to put a slot from the gap
+    // since the last one, so one event per 16 ms tick meant an append could
+    // only ever land on a tick boundary: the effective spacing was the sample
+    // interval rounded UP to a multiple of 16, and the ring spanned about half
+    // again as long as the pack's window. The compositor feeds real pointer
+    // events at 125-1000 Hz and lands close to the interval, so the preview
+    // walks the path it covered this tick at a comparable rate. This is what
+    // makes the preview's trail the same length as the one on screen, which
+    // is the whole reason the window is set here at all.
+    constexpr double kSimulatedEventIntervalMs = 4.0; // 250 Hz, inside the range a real mouse reports at
+    const QPointF from = st.hasLastDevicePos ? st.lastDevicePos : devicePos;
+    const int steps = st.hasLastDevicePos ? std::clamp(static_cast<int>(stepMs / kSimulatedEventIntervalMs), 1, 64) : 1;
+    for (int i = 1; i <= steps; ++i) {
+        const double t = static_cast<double>(i) / static_cast<double>(steps);
+        const QPointF at(from.x() + (devicePos.x() - from.x()) * t, from.y() + (devicePos.y() - from.y()) * t);
+        st.history.notePointer(at, startMs + static_cast<qint64>(stepMs * t));
+    }
+    st.lastDevicePos = devicePos;
+    st.hasLastDevicePos = true;
 
     // A synthetic left button, so the press and release edges reach the history
     // through the same noteButtons the compositor calls on a real click.
@@ -266,6 +290,9 @@ void PointerPreviewController::resetPointer(QQuickItem* item)
         it->history.reset();
         it->nowMs = 0;
         it->pressed = false;
+        // Or the first tick after a restart would fill in a path from wherever
+        // the previous loop left the pointer to wherever the new one starts.
+        it->hasLastDevicePos = false;
     }
 }
 

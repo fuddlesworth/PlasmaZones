@@ -17,6 +17,12 @@
 // declaration order: persistence is the first float declared, radius the
 // second.
 //
+// So the ORDER of the `parameters` array in metadata.json is load-bearing for
+// this pack in a way it is not for any single-pass one. Reordering those two
+// entries, or inserting another scalar ahead of them, silently swaps what
+// this stage reads: nothing fails to build, nothing fails to validate, and
+// the decay constant arrives as a radius. Add new scalars AFTER these two.
+//
 // ORIENTATION. vTexCoord addresses this pass's own target and the main pass
 // samples iChannel0 with the same vTexCoord it hands to pointerPixel(), so a
 // texel written for pointerPixel(vTexCoord) here is read back for the same

@@ -18,7 +18,7 @@
             "default": 120.0,
             "min": 16.0,
             "max": 320.0,
-            "description": "Diameter the ring grows to before it is gone (px)"
+            "description": "Diameter the ring grows to before it is gone, pulled in at large thicknesses so the band stays inside the painted area (px)"
         },
         {
             "id": "thickness",

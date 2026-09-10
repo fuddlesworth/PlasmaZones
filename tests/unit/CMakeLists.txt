@@ -2337,8 +2337,10 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # shadervalidate/ - Offline Pack Validator Tests
-#   test_pack_validators:      metadata lints across three of the four authoring
-#                              models (animation, overlay, pointer)
+#   test_pack_validators:      metadata lints for the animation and overlay
+#                              authoring models
+#   test_pointer_pack_validator: the same for the pointer model, split out when
+#                              the shared file passed the size ceiling
 #   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
 #                              multipass buffer passes
 #   test_pack_model_detection: the shared/ marker lookup and include roots
@@ -2346,14 +2348,14 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # The bundled-pack gates (shader_validate_*) only prove the shipped packs are
 # clean; these build deliberately-broken packs in a temp dir and assert the
 # diagnostic. Each compiles the four validator arms straight in, the way the
-# tool does, so it links the same parsers. The three share the fixture helpers
+# tool does, so it links the same parsers. They share the fixture helpers
 # in shadervalidate/packvalidatortesthelpers.h (header-only).
 #
 # glslang: the validator bakes EVERY animation pack's fragment for the
-# compositor through glslang, and the pointer arm does the same. The animation
-# slots QSKIP without the tool (REQUIRE_ANIMATION_FIXTURE), and the pointer
-# slots tolerate the tool-missing error because they assert only on lint text,
-# so the targets stay runnable on a machine that has none. That is the opposite
+# compositor through glslang, and the pointer arm does the same. Both QSKIP
+# without the tool (REQUIRE_ANIMATION_FIXTURE, REQUIRE_POINTER_FIXTURE), which
+# also link the bundled shared/ helpers into the fixture root, so the targets
+# stay runnable on a machine that has neither the tool nor an install. That is the opposite
 # of the shader_validate_animations and shader_validate_pointer gates, which
 # fail instead: the gates are what must never silently lose coverage, while
 # these targets are also a developer's inner-loop tests.
@@ -2363,7 +2365,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
-foreach(_pv_test IN ITEMS test_pack_validators test_animation_pack_bakes test_pack_model_detection)
+foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_animation_pack_bakes
+                          test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
                    ${_pack_validator_arms})

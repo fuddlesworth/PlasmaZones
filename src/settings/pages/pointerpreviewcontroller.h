@@ -6,6 +6,7 @@
 #include <PhosphorPointer/PointerHistory.h>
 
 #include <QHash>
+#include <QPointF>
 #include <QObject>
 #include <QVariantMap>
 
@@ -148,6 +149,10 @@ private:
         /// trail vanish.
         qint64 nowMs = 0;
         bool pressed = false;
+        /// Where the last tick left the simulated pointer, in device px, so a
+        /// tick can fill in the path it travelled rather than teleporting.
+        QPointF lastDevicePos;
+        bool hasLastDevicePos = false;
     };
     QHash<QObject*, PointerState> m_states;
 
