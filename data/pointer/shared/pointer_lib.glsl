@@ -38,7 +38,23 @@ float pointerScale() {
 // against the user's parameter values and scales it — read it from here rather
 // than mirroring the metadata by hand, so the two cannot drift.
 float pointerReach() {
-    return max(uPointerFlags.y, 0.0);
+    // Floored, not merely clamped non-negative, for the reason pointerScale
+    // gives its own fallback: an unset uniform reads 0, and every caller uses
+    // the result as the outer edge of a falloff window. smoothstep with equal
+    // edges is undefined in GLSL (it divides by edge1 - edge0), so a host that
+    // failed to push this would not dim the pack, it would hand the driver
+    // undefined behaviour. The host's own floor is kMinReach, and one device px
+    // is the smallest value that still turns a point into a region.
+    return max(uPointerFlags.y, 1.0);
+}
+
+// The standard falloff across a pack's reach: 1 at the sample, 0 at the edge,
+// with the last fifth of the radius as the feather. Four packs had this
+// spelled out inline; keeping it here is what makes the reach contract one
+// rule rather than four copies, and gives the edge-case floor above a single
+// place to matter.
+float pointerReachWindow(float d, float reach) {
+    return 1.0 - smoothstep(reach * 0.8, reach, d);
 }
 
 // This fragment's canvas position, TOP-DOWN device px. `uv` is the incoming

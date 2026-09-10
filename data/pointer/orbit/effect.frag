@@ -48,10 +48,9 @@ const float kSpeedWindowSeconds = 0.6;
 // The orbit centre: the pointer position `lag` seconds ago, interpolated
 // between the trail samples on either side of that age. Falls back to the
 // oldest sample when the trail does not reach that far back yet, so the lag
-// is clamped to the history available. Stops at
-// the first sample past the lag, which at the default lag is the second or
-// third slot, so a fragment the reject box below throws out pays for almost
-// none of the walk.
+// is clamped to the history available. Stops at the first sample past the
+// lag, which at this pack's window and the default lag is slot 1, so a
+// fragment the reject box below throws out pays for almost none of the walk.
 vec2 orbitCentre(int count, float lag) {
     vec4 newest = pointerTrailAt(0);
     if (lag <= 0.0 || count < 2) {
@@ -209,7 +208,16 @@ vec4 pPointer(vec2 uv) {
     float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
     float stretch = 1.0 + smear * 2.0;
 
-    vec2 drift = uPointerVelocity.xy;
+    // Direction from the raw per-event velocity, magnitude from the filtered
+    // speed. The raw vector reads 0 whenever two events land in the same
+    // millisecond (pointer_lib says so on pointerFilteredSpeed), and this is
+    // the one place left in the family where that would be VISIBLE: the smear
+    // direction would snap from the pointer's motion to the bare orbital
+    // tangent for that frame and back again. Normalising keeps the direction
+    // and takes the length from the figure that survives a shared stamp.
+    vec2 rawDrift = uPointerVelocity.xy;
+    float rawDriftLen = length(rawDrift);
+    vec2 drift = rawDriftLen > 1e-3 ? rawDrift / rawDriftLen * pointerFilteredSpeed() : vec2(0.0);
     // The spin rate is nudged onto a divisor of the iTime wrap so the ring
     // does not jump at the wrap; see pointerWrapSafeRate.
     float orbitRate = pointerWrapSafeRate(max(p_orbitRate, 0.0));
@@ -267,7 +275,15 @@ vec4 pPointer(vec2 uv) {
         // the ramp keeps neighbours close in colour all the way round. The
         // half-turn phase puts dot 0 at colorA, which is what "First colour"
         // promises.
-        float t = abs(fract(float(j) / float(dots) + 0.5) * 2.0 - 1.0);
+        // Normalised over the half-turn rather than the whole ring, so the
+        // dot furthest round from the first one lands exactly on colorB.
+        // Dividing by `dots` reached t = 1 only when j/dots fell on 0.5,
+        // which happens at even counts alone: at the shipped default of 3 the
+        // ramp stopped at 0.667, so the "Last colour" the user picked was
+        // never actually shown. A single dot stays on colorA, which is what
+        // "First colour" promises and leaves no remaining dots to shade.
+        float apex = max(floor(float(dots) * 0.5), 1.0);
+        float t = 1.0 - abs(float(j) - apex) / apex;
         vec3 c = mix(p_colorA.rgb, p_colorB.rgb, t);
         float ca = cover * mix(p_colorA.a, p_colorB.a, t);
         rgb += c * ca;

@@ -148,7 +148,7 @@ vec4 pPointer(vec2 uv) {
         float sigma = w + 1.5 * scale;
         // Compact support: the gaussian alone is still visible at the reject
         // box, so it is windowed to reach exactly zero at the reach.
-        float soft = exp(-(d * d) / (2.0 * sigma * sigma)) * 0.4 * (1.0 - smoothstep(0.8 * reach, reach, d));
+        float soft = exp(-(d * d) / (2.0 * sigma * sigma)) * 0.4 * pointerReachWindow(d, reach);
         // `tail` is applied a second time here, on the opacity, after it
         // already shaped the width above. That is deliberate and not a
         // duplicate: the width has a floor (0.35 px) it can never taper

@@ -157,15 +157,11 @@ vec4 pPointer(vec2 uv) {
     float budget = 1.0 + (clamp(float(int(p_arcs + 0.5)), 1.0, float(kMaxArcs)) - 1.0) * activity;
     float arcAlpha = live * gate * strike * intensity * (0.35 + 0.65 * activity);
     // The newest-first index of the last sample still inside the quiet
-    // window. Ages are monotonic in the index, so the first one at or past
-    // the window ends the live run (see ENDPOINTS in the header).
-    int last = 0;
-    for (int i = 1; i < kPointerTrailCapacity && arcAlpha > 0.0; ++i) {
-        if (i >= count || pointerTrailAt(i).z >= kQuietSeconds) {
-            break;
-        }
-        last = i;
-    }
+    // window (see ENDPOINTS in the header). pointerLiveCount walks the same
+    // monotonic ages and answers the run LENGTH, so the last index is one
+    // less; a run of 0 or 1 leaves `last` at 0 and draws nothing, which is
+    // what the guard below already expects.
+    int last = max(pointerLiveCount(count, kQuietSeconds) - 1, 0);
     if (arcAlpha > 0.0 && last >= 1) {
         for (int j = 0; j < kMaxArcs; ++j) {
             if (float(j) >= budget) {

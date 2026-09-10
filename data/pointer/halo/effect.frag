@@ -56,7 +56,7 @@ vec4 pPointer(vec2 uv) {
         // Gaussian body that reaches zero exactly at the radius, so the pack
         // never paints outside the reach it declares.
         float body = exp(-(d * d) / (2.0 * sigma * sigma));
-        body *= 1.0 - smoothstep(radius * 0.8, radius, d);
+        body *= pointerReachWindow(d, radius);
 
         // The filtered speed, not the raw per-event velocity, which reads 0
         // whenever two events share a millisecond and would blink both the
@@ -88,7 +88,7 @@ vec4 pPointer(vec2 uv) {
             float env = ct * exp(1.0 - 4.0 * ct) * (1.0 - ct);
             float swellSigma = sigma * mix(0.7, 1.15, ct);
             float body = exp(-(dp * dp) / (2.0 * swellSigma * swellSigma));
-            body *= 1.0 - smoothstep(radius * 0.8, radius, dp);
+            body *= pointerReachWindow(dp, radius);
             alpha += body * env * intensity * p_clickSwell;
         }
     }

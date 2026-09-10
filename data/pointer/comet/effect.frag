@@ -25,10 +25,6 @@
 const float kTrailSeconds = 0.8;
 const float kBurstSeconds = 0.35;
 
-// 1 well inside the reach, exactly 0 at it.
-float cometWindow(float d, float reach) {
-    return 1.0 - smoothstep(0.8 * reach, reach, d);
-}
 
 vec4 pPointer(vec2 uv) {
     // No early return on an empty trail: a click before any motion this
@@ -43,6 +39,13 @@ vec4 pPointer(vec2 uv) {
     // rate lands just inside the window, and a tail still fading at the edge
     // would leave its last sliver frozen at 20 Hz and below.
     float tailSeconds = clamp(p_length, 0.05, 0.9 * kTrailSeconds);
+    // The smoothing kernel clamps its neighbours into the run it is told about,
+    // so it has to be told the LIVE run rather than the whole ring (the rule
+    // pointer_lib states on pointerSmoothedAt, and what ink and sparks do).
+    // With the raw count the far end of the last drawn segment blends toward a
+    // sample older than the tail, which sits outside the damage rect the host
+    // inflated for this frame.
+    int live = pointerLiveCount(count, tailSeconds);
     // The reach in device px: both the reject box and the outer edge of every
     // glow, so the two cannot disagree. Read from the uniform the host filled
     // from the parameter the metadata's reachParam names, so the damage rect
@@ -67,7 +70,7 @@ vec4 pPointer(vec2 uv) {
     // path like the tail does, and the speed gate applies to it too, so below
     // the activation speed the whole comet is absent rather than leaving a
     // headlight behind.
-    vec2 headPos = pointerSmoothedAt(0, count, p_smoothing);
+    vec2 headPos = pointerSmoothedAt(0, live, p_smoothing);
     float idle = pointerIdleSeconds();
     // Out at 0.9 of the window rather than exactly at it: liveness is a
     // strict `<`, so the last painted frame at a low refresh rate lands just
@@ -77,14 +80,14 @@ vec4 pPointer(vec2 uv) {
     // trail: the zero entry would put a head at the canvas origin, so both
     // head terms are gated here.
     float idleFade = 1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle);
-    float headFade = count >= 1 ? idleFade * gate : 0.0;
+    float headFade = live >= 1 ? idleFade * gate : 0.0;
     float dHead = length(px - headPos);
     // The head's disc, shared with the click lift below so the two cannot
     // disagree about where the head ends.
-    float headDisc = count >= 1 ? 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead) : 0.0;
+    float headDisc = live >= 1 ? 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead) : 0.0;
     float headCore = headDisc * headFade;
     float headGlow =
-        exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade * cometWindow(dHead, reach);
+        exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade * pointerReachWindow(dHead, reach);
 
     float tail = 0.0;
     float tailGrain = 0.0;
@@ -92,7 +95,7 @@ vec4 pPointer(vec2 uv) {
     // is carried across iterations rather than looked up twice per segment.
     vec2 pa = headPos;
     for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
-        if (i + 1 >= count) {
+        if (i + 1 >= live) {
             break;
         }
         vec4 a = pointerTrailAt(i);
@@ -100,7 +103,7 @@ vec4 pPointer(vec2 uv) {
         if (a.z >= tailSeconds) {
             break;
         }
-        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
+        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
         vec2 lo = min(pa, pb) - reach;
         vec2 hi = max(pa, pb) + reach;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
@@ -116,7 +119,7 @@ vec4 pPointer(vec2 uv) {
         float w = radius * life;
         float body = (1.0 - smoothstep(w - 0.75, w + 0.75, d)) * life * life;
         float soft = exp(-(d * d) / (2.0 * (w + scale) * (w + scale) * 4.0)) * 0.3 * life * life
-            * cometWindow(d, reach);
+            * pointerReachWindow(d, reach);
         // The gate is applied once, on the coverage, as it is on the head:
         // folding it into `life` scaled the width and then squared it in
         // the body, so the tail vanished through the activation band well
@@ -166,7 +169,7 @@ vec4 pPointer(vec2 uv) {
         vec2 cell = floor(rel / grainCell) + vec2(hash13(vec2(tick, 3.0)), hash13(vec2(tick, 11.0))) * 512.0;
         float g = hash13(cell);
         float grain = smoothstep(0.55, 1.0, g);
-        float edge = cometWindow(dp, reach);
+        float edge = pointerReachWindow(dp, reach);
         burst = decay * edge * (ball * 0.5 + ball * grain * 1.5) * p_clickBurst;
         // The head itself lifts with the burst rather than only the grain.
         // Added, not scaled: a click on a resting pointer has headCore at 0

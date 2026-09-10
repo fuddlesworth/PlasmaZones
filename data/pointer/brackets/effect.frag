@@ -70,7 +70,11 @@ float response(vec2 px, vec2 origin, float since, float duration, float hold, fl
     // A corner turned by up to 12 degrees reaches cos + sin, about 1.19, of
     // its offset along an axis; the line's half thickness and feather sit
     // beyond that (see the header).
-    float start = min(spread * kCornerFraction, spread / 1.19 - half_ - 0.75);
+    // Floored at 0: at a small spread the second term goes negative, which
+    // flips the corner signs and sends the arms outward from the press point
+    // instead of back toward it. Zero collapses the marks onto the point,
+    // which is the honest picture of "no room to draw".
+    float start = max(min(spread * kCornerFraction, spread / 1.19 - half_ - 0.75), 0.0);
     float rest = start * clamp(p_rest, 0.0, 1.0);
     float d = mix(start, rest, ease);
     // Capped at the corner's distance from the press point: the arms run from

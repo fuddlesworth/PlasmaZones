@@ -71,7 +71,13 @@ constexpr double kMinPreviewGate = 0.15;
 // this small clips a pack to a sliver around the path: nothing the pack
 // paints further out ever reaches the screen, and the user sees a broken
 // pack rather than a small one.
-constexpr double kMinReachParamFloor = 4.0;
+//
+// A USABILITY floor, deliberately above the runtime's hard one. Load clamps
+// reach to PointerShaderEffect::kMinReach (1.0), which the library documents
+// as the smallest value that still turns a point into a region — so a reach
+// between the two draws, it is just clipped too tight to be worth shipping.
+// The lints below have to say that rather than claim the pack cannot draw.
+constexpr double kUsableReachFloor = 4.0;
 
 // GLSL smoothstep, so the lint computes the same number pointerSpeedGate does.
 double smoothstepAt(double edge0, double edge1, double x)
@@ -455,16 +461,18 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral("reach out of range [0, %1]: %2 (clamped at load)")
                          .arg(PointerShaderEffect::kMaxReach)
                          .arg(reachValue.toDouble());
-        } else if (eff.reachParam.isEmpty() && reachValue.toDouble() < kMinReachParamFloor) {
+        } else if (eff.reachParam.isEmpty() && reachValue.toDouble() < kUsableReachFloor) {
             // The same floor the reachParam arm enforces: under it the damage
             // rect is a sliver around the path (for a resting pointer, empty),
             // so the pack never draws, and a shader windowing on the reach
             // meets equal smoothstep edges at 0.
             lints << QStringLiteral(
-                         "reach %1 is under the %2 logical px floor: the damage rect degenerates to the "
-                         "sample box and the pack cannot draw")
+                         "reach %1 is under the %2 logical px floor: the damage rect is the path inflated by "
+                         "the reach, so the pack is clipped to a sliver around it (load clamps reach to %3 px, "
+                         "below which a resting pointer's rect has no area at all)")
                          .arg(reachValue.toDouble())
-                         .arg(kMinReachParamFloor);
+                         .arg(kUsableReachFloor)
+                         .arg(PointerShaderEffect::kMinReach);
         }
     }
     if (!eff.reachParam.isEmpty()) {
@@ -497,14 +505,14 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             }
             // The floor matters as much as the cap: a reach the user can drag
             // down to a few pixels clips the pack to nothing around the path.
-            if (declared->minValue.isValid() && declared->minValue.toDouble() < kMinReachParamFloor) {
+            if (declared->minValue.isValid() && declared->minValue.toDouble() < kUsableReachFloor) {
                 lints << QStringLiteral(
                              "reachParam '%1' allows a minimum of %2 logical px, below the %3 px floor (a reach "
                              "that small clips the pack to nothing: the damage rect is the path inflated by "
                              "the reach, and nothing painted outside it reaches the screen)")
                              .arg(eff.reachParam)
                              .arg(declared->minValue.toDouble())
-                             .arg(kMinReachParamFloor);
+                             .arg(kUsableReachFloor);
             }
         }
     }
