@@ -79,6 +79,9 @@ jobs:
         id: read
         env:
           GH_TOKEN: ${{ github.token }}
+          # No checkout runs in this job, so gh has no git remote to infer the
+          # repository from and every `gh release`/`gh run` call would abort.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           # releases/latest is the newest non-draft, non-prerelease release,
@@ -334,6 +337,8 @@ jobs:
         if: steps.compare.outputs.rebuild == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
+          # Same as the baseline job: nothing is checked out here either.
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.baseline.outputs.tag }}
           PKGREL: ${{ needs.baseline.outputs.pkgrel }}
           MOVED: ${{ steps.compare.outputs.moved }}
