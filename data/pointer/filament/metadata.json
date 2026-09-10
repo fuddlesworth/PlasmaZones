@@ -7,7 +7,7 @@
     "category": "Trail",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 96,
+    "reachParam": "reach",
     "trailSeconds": 2.0,
     "trailWindowParam": "lifetime",
     "parameters": [
@@ -23,6 +23,8 @@
           "description": "How dark the stroke goes between nodes, 0 for an even tube" },
         { "id": "glow", "name": "Glow", "type": "float", "default": 1.2, "min": 0.0, "max": 3.0,
           "description": "Strength of the soft bloom around the core" },
+        { "id": "reach", "name": "Reach", "type": "float", "default": 96.0, "min": 16.0, "max": 256.0,
+          "description": "How far the glow may paint from the path (px). Lower it to shrink the area redrawn each frame, raise it if a wide stroke's bloom looks cut off" },
         { "id": "colorCycle", "name": "Colour cycle", "type": "float", "default": 12.0, "min": 0.0, "max": 60.0,
           "description": "Seconds the colour takes to travel once through the whole spectrum, 0 to hold one colour" },
         { "id": "activationSpeed", "name": "Activation speed", "type": "float", "default": 0.0, "min": 0.0, "max": 2000.0,

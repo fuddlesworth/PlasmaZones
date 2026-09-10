@@ -85,7 +85,11 @@ vec4 pPointer(vec2 uv) {
     // decay when the hand stops -- it is measured over the current stroke and
     // holds its last value -- so a stroke that swept fast keeps its softest
     // edge for the whole fade rather than crisping up as it dies.
-    float feather = 0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed());
+    // Never wider than the half-width it feathers: past that the smoothstep's
+    // inner edge goes negative and the core stops reaching full alpha even at
+    // the centre of the stroke, so the thinnest settings come out washed out
+    // rather than thin. Only binds below about two logical px of width.
+    float feather = min(0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed()), halfWidth);
 
     // How far apart the colours sit, 0 (one white filament) to 1 (full ramp
     // edge to edge). Driven by the FILTERED speed for the reason the gate is:

@@ -124,28 +124,40 @@ vec4 pPointer(vec2 uv) {
     float scale = pointerScale();
     float lifetime = clamp(p_lifetime, 0.05, kTrailSeconds);
 
-    // Only the LIVE run is drawn, smoothed over, or measured for charge.
-    int live = pointerLiveCount(count, lifetime);
+    // ── the live run, and the charge banked over it, in ONE walk ──
+    //
+    // pointerLiveCount() would find the run and a second loop would then
+    // measure it, which is the same 32 uniform reads twice. Both are
+    // FRAGMENT-INVARIANT -- every input is a uniform, so every fragment in the
+    // damage rect computes the identical answer from scratch -- and the damage
+    // rect is tens of thousands of fragments, so the duplicate walk is tens of
+    // thousands of redundant passes over the ring per frame. Fused here, which
+    // is exact rather than approximate: the loop below breaks on precisely the
+    // condition pointerLiveCount breaks on.
+    float chargeSpeed = max(p_chargeSpeed, 1.0) * scale;
+    int live = 0;
+    float sum = 0.0;
+    float runSeconds = 0.0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        vec4 slot = pointerTrailAt(i);
+        if (i >= count || slot.z >= lifetime) {
+            break;
+        }
+        live = i + 1;
+        runSeconds = slot.z;
+        // Each slot contributes at most its full share, so one hitched
+        // frame with an absurd instantaneous speed cannot carry the charge on
+        // its own.
+        sum += min(slot.w / chargeSpeed, 1.0);
+    }
     if (live < 2) {
         return vec4(0.0);
     }
-
-    // ── charge ──
-    float chargeSpeed = max(p_chargeSpeed, 1.0) * scale;
-    float sum = 0.0;
-    for (int i = 0; i < kPointerTrailCapacity; ++i) {
-        if (i >= live) {
-            break;
-        }
-        // Each sample contributes at most its full share, so one hitched
-        // frame with an absurd instantaneous speed cannot carry the charge on
-        // its own.
-        sum += min(pointerTrailAt(i).w / chargeSpeed, 1.0);
-    }
     // Mean over the run, then scaled by how long the run has actually been
-    // going. Both factors are independent of how the host spaced the ring.
+    // going (`runSeconds` is the oldest live sample's age, carried out of the
+    // walk above). Both factors are independent of how the host spaced the
+    // ring.
     float mean = sum / float(live);
-    float runSeconds = pointerTrailAt(live - 1).z;
     float charge = clamp(mean * clamp(runSeconds / kChargeSeconds, 0.0, 1.0), 0.0, 1.0);
 
     // ── discharge ──
@@ -195,7 +207,11 @@ vec4 pPointer(vec2 uv) {
     // decay when the hand stops -- it is measured over the current stroke and
     // holds its last value -- so a stroke that swept fast keeps its softest
     // edge for the whole fade rather than crisping up as it dies.
-    float feather = 0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed());
+    // Never wider than the half-width it feathers: past that the smoothstep's
+    // inner edge goes negative and the core stops reaching full alpha even at
+    // the centre of the stroke, so the thinnest settings come out washed out
+    // rather than thin. Only binds below about two logical px of width.
+    float feather = min(0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed()), halfWidth);
     float hotSigma = max(halfWidth * 0.4, 0.6 * scale);
 
     float core = 0.0;

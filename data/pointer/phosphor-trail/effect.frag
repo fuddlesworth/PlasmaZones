@@ -82,6 +82,16 @@ vec4 pPointer(vec2 uv) {
     // Four sigma, where the bloom is under a thousandth, rather than three,
     // where it was still a visible 1.5% and cut off square. Bounded by the
     // reach too, since four sigma at the widest stroke is past it.
+    //
+    // The reach is the user's `reach` parameter, not a constant. It is what
+    // the host inflates the damage rect by around every sample, so at the
+    // default width four sigma is about a third of it and the pack asks for
+    // roughly nine times the area it can paint into. Every one of those extra
+    // fragments still runs the span walk before rejecting, which is why this
+    // is worth a knob: a thin stroke can have it lowered. It defaults to the
+    // 96 that used to be hardcoded, so nothing moves until it is touched, and
+    // a wide stroke may need it raised -- four sigma at the widest setting is
+    // past 96 and the bloom clamps.
     float limit = min(sigma * 4.0, pointerReach());
     // Edge softness in DEVICE px, the family convention (scaling it makes the
     // stroke's edge twice as soft on a 2x display as every sibling pack's).
@@ -93,7 +103,11 @@ vec4 pPointer(vec2 uv) {
     // decay when the hand stops -- it is measured over the current stroke and
     // holds its last value -- so a stroke that swept fast keeps its softest
     // edge for the whole fade rather than crisping up as it dies.
-    float feather = 0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed());
+    // Never wider than the half-width it feathers: past that the smoothstep's
+    // inner edge goes negative and the core stops reaching full alpha even at
+    // the centre of the stroke, so the thinnest settings come out washed out
+    // rather than thin. Only binds below about two logical px of width.
+    float feather = min(0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed()), halfWidth);
 
     // Press pulse, gone well inside trailSeconds.
     float flare = 0.0;

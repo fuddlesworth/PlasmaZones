@@ -157,11 +157,14 @@ public:
     /// above). 0 (the default, and what a chain of packs that read nothing
     /// gives) means the `kMinSampleGapMs` floor alone. Survives `reset()`.
     void setTrailSeconds(double seconds);
+    /// The window currently in force. Read by the tests that pin the sampling
+    /// arithmetic; the hosts set it and do not read it back.
     [[nodiscard]] double trailSeconds() const
     {
         return m_trailSeconds;
     }
-    /// Minimum gap between two appended samples, in ms.
+    /// Minimum gap between two appended samples, in ms. Derived from
+    /// `trailSeconds()`, and like it read by the tests rather than the hosts.
     [[nodiscard]] qint64 sampleIntervalMs() const
     {
         return m_sampleIntervalMs;
