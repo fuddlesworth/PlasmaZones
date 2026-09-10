@@ -7,10 +7,12 @@
 // the straight line by a hashed amount, so the arc reads as a crooked spark
 // rather than a curve.
 //
-// DETERMINISM: an arc's endpoints and its whole jag pattern come from a hash
-// of the ROLL INDEX, floor(iTime * rate), and the arc index. Every frame
-// inside one roll window therefore draws the identical arc and the pack
-// crackles at `rate` re-rolls a second instead of strobing at the frame rate.
+// DETERMINISM: a trail arc's endpoints and its whole jag pattern come from a
+// hash of the ROLL INDEX, floor(iTime * rate), and the arc index. Every
+// frame inside one roll window therefore draws the identical arc and the
+// pack crackles at `rate` re-rolls a second instead of strobing at the frame
+// rate. A click arc's tip is fixed for the burst's life (hashed from the
+// press point and the arc index); only its kinks re-roll.
 //
 // Arcs are driven by speed: at low speed only the first arc is lit and it is
 // dim, the full set comes in as the pointer speeds up, and at rest they go
@@ -38,11 +40,19 @@
 // window.
 //
 // REACH. Every arc's whole excursion, the segment plus its jag amplitude
-// plus three glow sigmas of halo, is held inside the reach so nothing meets
-// the damage rect's edge at a visible level. The budget the excursion is
-// fitted to is floored at 35 percent of the reach, as Burst floors its
-// travel: at the smallest reach the halo alone is wider than the reach, and
-// without the floor every strike would collapse onto its origin.
+// plus three glow sigmas of halo, is fitted to a budget inside the reach so
+// nothing meets the damage rect's edge at a visible level at ordinary
+// settings. The budget is floored at 35 percent of the reach, as Burst
+// floors its travel: at the smallest reach the halo alone is wider than the
+// reach, and without the floor every strike would collapse onto its origin.
+// Under the floor the halo does meet the rect's edge: at reach 16 it is
+// clipped there at about a tenth of its brightness.
+//
+// COST. The live-run walk and every arc's endpoint derivation depend only on
+// uniforms yet run per fragment, before the per-arc reject box can cull
+// (there is no earlier place to put them in a single fragment pass). At
+// eight arcs that is eight hashes and a few dozen trail reads per fragment
+// over a pointer-sized rect, which is affordable; do not grow kMaxArcs.
 
 #include <pointer_noise.glsl>
 

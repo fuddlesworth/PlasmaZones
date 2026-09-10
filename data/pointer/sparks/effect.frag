@@ -38,6 +38,35 @@ const int kMaxSparks = 48;
 // near 324 px/s.
 const float kFullSpeed = 220.0;
 
+// One spark's premultiplied contribution at `rel` (the fragment relative to
+// the launch point). `h` is the spark's hash (its .z sets the radius), the
+// launch `angle` and `speed` are the caller's (the path and the click fan
+// aim differently), and the spark has flown for `age` seconds of `life`
+// under `gravity`. The body has compact support at three radii, the extent
+// the reach budget reserves, so a spark reaches zero where the box ends
+// rather than being cut there at a faint level. Shared by the path sparks
+// and the click burst so the two cannot drift apart in shape.
+vec4 sparkAt(vec2 rel, vec3 h, float angle, float speed, float age, float life, float gravity, float size) {
+    vec2 pos = vec2(cos(angle), sin(angle)) * speed * age + vec2(0.0, 0.5 * gravity * age * age);
+    float lifeT = age / life;
+    float remain = 1.0 - lifeT;
+    float r = size * (0.5 + 0.5 * h.z) * (0.4 + 0.6 * remain);
+    float d = length(rel - pos);
+    float body = exp(-(d * d) / (2.0 * r * r)) * (1.0 - smoothstep(2.0 * r, 3.0 * r, d));
+    float a = body * remain * remain * mix(p_colorA.a, p_colorB.a, lifeT);
+    return vec4(mix(p_colorA.rgb, p_colorB.rgb, lifeT) * a, a);
+}
+
+// How far a spark launched `age` seconds ago can have travelled: launch
+// plus the fall, plus the three radii a spark's compact window extends to.
+// Evaluated PER SAMPLE from its own age for the reject box, since a young
+// sample's sparks are still close to it and only the oldest reach the
+// full-life envelope; a single full-life box ran every live sample's inner
+// loop for every fragment within that envelope of it.
+float sparkExtent(float age, float launch, float gravity, float size) {
+    return launch * age + 0.5 * gravity * age * age + size * 3.0;
+}
+
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
     if (count < 1) {
@@ -79,10 +108,6 @@ vec4 pPointer(vec2 uv) {
     float shrink = (travel > envelope && travel > 0.0) ? (envelope / travel) : 1.0;
     launch *= shrink;
     gravity *= shrink;
-
-    // Furthest a spark can travel in its life: launch plus the fall, plus the
-    // three radii a spark's compact window extends to.
-    float extent = launch * life + 0.5 * gravity * life * life + size * 3.0;
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -128,6 +153,7 @@ vec4 pPointer(vec2 uv) {
         // window slides over it.
         vec2 origin = pointerSmoothedAt(i, count, p_smoothing);
         vec2 rel = px - origin;
+        float extent = sparkExtent(s.z, launch, gravity, size);
         if (abs(rel.x) > extent || abs(rel.y) > extent) {
             continue;
         }
@@ -138,24 +164,9 @@ vec4 pPointer(vec2 uv) {
             vec3 h = hash23(seed + vec2(float(k) * 7.31, float(k) * 3.17));
             // Fractional budget: the last spark is dimmer instead of popping.
             float share = clamp(shed - float(k), 0.0, 1.0);
-            float angle = h.x * TAU;
-            float speed = launch * (0.35 + 0.65 * h.y);
-            float age = s.z;
-            vec2 pos = vec2(cos(angle), sin(angle)) * speed * age + vec2(0.0, 0.5 * gravity * age * age);
-            float lifeT = age / life;
-            float remain = 1.0 - lifeT;
-            float r = size * (0.5 + 0.5 * h.z) * (0.4 + 0.6 * remain);
-            float d = length(rel - pos);
-            // Compact support at three radii, the extent the reach budget
-            // reserves, so a spark reaches zero where the box ends rather
-            // than being cut there at a faint level.
-            float body = exp(-(d * d) / (2.0 * r * r)) * (1.0 - smoothstep(2.0 * r, 3.0 * r, d));
-            float fade = remain * remain * share * thin;
-            vec3 c = mix(p_colorA.rgb, p_colorB.rgb, lifeT);
-            float ca = mix(p_colorA.a, p_colorB.a, lifeT);
-            float a = body * fade * ca;
-            rgb += c * a;
-            alpha += a;
+            vec4 spark = sparkAt(rel, h, h.x * TAU, launch * (0.35 + 0.65 * h.y), s.z, life, gravity, size);
+            rgb += spark.rgb * share * thin;
+            alpha += spark.a * share * thin;
         }
     }
 
@@ -164,11 +175,9 @@ vec4 pPointer(vec2 uv) {
     if (burst > 0 && uPointerPress.w > 0.5 && sincePress < life) {
         vec2 origin = uPointerPress.xy;
         vec2 rel = px - origin;
+        float extent = sparkExtent(sincePress, launch, gravity, size);
         if (abs(rel.x) <= extent && abs(rel.y) <= extent) {
             vec2 seed = floor(origin * 0.5) + 91.0;
-            float age = sincePress;
-            float lifeT = age / life;
-            float remain = 1.0 - lifeT;
             for (int k = 0; k < kMaxSparks; ++k) {
                 if (k >= burst) {
                     break;
@@ -177,21 +186,12 @@ vec4 pPointer(vec2 uv) {
                 // Even fan around the press point, jittered so it does not
                 // read as a ring: that shape belongs to Click Ripple.
                 float angle = (float(k) + 0.35 * h.x) / float(burst) * TAU;
-                float speed = launch * 0.75 * (0.4 + 0.6 * h.y);
-                vec2 pos = vec2(cos(angle), sin(angle)) * speed * age + vec2(0.0, 0.5 * gravity * age * age);
-                float r = size * (0.5 + 0.5 * h.z) * (0.4 + 0.6 * remain);
-                float d = length(rel - pos);
-                float body = exp(-(d * d) / (2.0 * r * r)) * (1.0 - smoothstep(2.0 * r, 3.0 * r, d));
-                float fade = remain * remain;
-                vec3 c = mix(p_colorA.rgb, p_colorB.rgb, lifeT);
-                float ca = mix(p_colorA.a, p_colorB.a, lifeT);
-                float a = body * fade * ca;
-                rgb += c * a;
-                alpha += a;
+                vec4 spark = sparkAt(rel, h, angle, launch * 0.75 * (0.4 + 0.6 * h.y), sincePress, life, gravity, size);
+                rgb += spark.rgb;
+                alpha += spark.a;
             }
         }
     }
-
     if (alpha <= 0.0) {
         return vec4(0.0);
     }

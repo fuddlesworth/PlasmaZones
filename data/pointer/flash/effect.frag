@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Flash pointer shader — a click-led pack. A press lights a soft round bloom
-// at the press point with `spikeCount` thin spikes crossing through it, the
+// at the press point with `spikeCount` thin spikes radiating from it, the
 // shape a lens flare makes, and the whole thing is gone again in `duration`
 // (a fifth of a second by default).
 //
@@ -77,9 +77,12 @@ vec4 pPointer(vec2 uv) {
     int spikes = clamp(int(p_spikeCount + 0.5), 0, 12);
     if (spikes > 0) {
         float len = limit * grow;
-        // Held under the reach so a wide spike on a tiny reach still tapers
-        // rather than having its base cut square by the box above.
-        float width = min(max(p_spikeWidth, 0.25) * scale, limit * 0.4);
+        // `across` is the distance from the spike's axis, so the parameter
+        // (a thickness, as its description says) is halved to the half-width
+        // the test below uses. Held under the reach so a wide spike on a
+        // tiny reach still tapers rather than having its base cut square by
+        // the box above.
+        float width = min(0.5 * max(p_spikeWidth, 0.25) * scale, limit * 0.4);
         float base = radians(p_spikeAngle);
         for (int i = 0; i < 12; ++i) {
             if (i >= spikes) {

@@ -22,12 +22,13 @@ const float kIdleCutSeconds = 0.9;
 //
 // The canvas is an 8-bit target and its decay is per frame, so the energy
 // stalls wherever v * persistence rounds back to v, which is at every level
-// under 0.5 / (1 - persistence) LSB: 4/255 at 0.87. That residue never
-// clears on its own while the pointer moves, so the main pass must cut
-// coverage to zero at a floor ABOVE the stall level, and the persistence
-// must stay low enough that the stall level is under the floor: 0.87 stalls
-// at 0.0157 against a floor of 0.02, while 0.92 would stall at 6/255 =
-// 0.0235 and leave a permanent smear.
+// under 0.5 / (1 - persistence) LSB: 3.85 LSB at 0.87, so the highest
+// stalled level is 3/255. That residue never clears on its own while the
+// pointer moves, so the main pass must cut coverage to zero at a floor ABOVE
+// the stall level, and the persistence must stay low enough that the stall
+// level is under the floor: 0.87 stalls at 3/255 = 0.0118 against a floor
+// of 0.02, while 0.92 would stall at 6/255 = 0.0235 and leave a permanent
+// smear.
 //
 // The cap also keeps the far end of a moving stroke under the floor by the
 // time the damage rect ends behind the pointer (the rect covers one

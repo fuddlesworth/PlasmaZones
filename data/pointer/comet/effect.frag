@@ -38,7 +38,11 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float tailSeconds = clamp(p_length, 0.05, kTrailSeconds);
+    // Capped at 0.9 of the window for the reason the head fade ends there:
+    // the last live frame at a low refresh rate lands just inside the
+    // window, and a tail still fading at the edge would leave its last
+    // sliver frozen at 20 Hz and below.
+    float tailSeconds = clamp(p_length, 0.05, 0.9 * kTrailSeconds);
     // The reach in device px: both the reject box and the outer edge of every
     // glow, so the two cannot disagree. Read from the uniform the host filled
     // from the parameter the metadata's reachParam names, so the damage rect

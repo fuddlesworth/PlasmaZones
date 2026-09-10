@@ -44,6 +44,8 @@ private Q_SLOTS:
     void testFilteredSpeedFollowsTheCurrentStrokeOnly();
     void testStationaryAppendsAreNotMotion();
     void testStrokeBoundaryIsIndependentOfTheSampleInterval();
+    void testRestSlotRefreshedByAMoveBecomesMotion();
+    void testSeedPositionIsNotMotion();
     void testFirstMoveAfterParkingStartsFresh();
     void testSpeedIsNotUnderReportedAtRealSamplingRates();
     void testDamageRectCoversTrailInflatedByReach();
@@ -297,6 +299,14 @@ void TestPointerHistory::testSameMillisecondBurstDoesNotFillTheRing()
              qPrintable(QStringLiteral("velocity %1").arg(state.velocity.x())));
     QVERIFY2(std::abs(state.filteredSpeed - 16000.0) < 100.0,
              qPrintable(QStringLiteral("filtered %1").arg(state.filteredSpeed)));
+    // The pairing is the FIRST event of the last millisecond (the seven that
+    // shared it carried its speed and did not become the pairing): one more
+    // event 1 ms on, 2 px past the last position, scores over the 16 px from
+    // that first event, not the 2 px from the last one.
+    history.notePointer(QPointF(endMs * 16.0 + 16.0, 0.0), endMs + 1);
+    const PointerFrameState next = history.frameState(endMs + 1, 1.0);
+    QVERIFY2(std::abs(next.newestTrail().w() - 16000.0f) < 100.0f,
+             qPrintable(QStringLiteral("speed after the burst %1").arg(next.newestTrail().w())));
 }
 
 void TestPointerHistory::testFilteredSpeedFollowsTheCurrentStrokeOnly()
@@ -321,9 +331,66 @@ void TestPointerHistory::testFilteredSpeedFollowsTheCurrentStrokeOnly()
     history.notePointer(QPointF(1005.0, 0.0), t);
     history.notePointer(QPointF(1010.0, 0.0), t + 50);
     const PointerFrameState nudged = history.frameState(t + 50, 1.0);
-    QVERIFY2(nudged.filteredSpeed < 100.0 + 1.0,
-             qPrintable(QStringLiteral("filtered after a park %1 (stale stroke seeded it)").arg(nudged.filteredSpeed)));
-    QVERIFY(nudged.filteredSpeed > 0.0);
+    // Exactly the nudge's own speed: the stroke's first sample carries 0 by
+    // construction and is the boundary, not the seed, or a short stroke
+    // would read as under half of its speed.
+    QVERIFY2(std::abs(nudged.filteredSpeed - 100.0) < 1.0,
+             qPrintable(QStringLiteral("filtered after a park %1 (stale stroke or the zero start seeded it)")
+                            .arg(nudged.filteredSpeed)));
+}
+
+void TestPointerHistory::testRestSlotRefreshedByAMoveBecomesMotion()
+{
+    // Rest past the interval (a non-motion slot lands), then a move inside
+    // the next interval: the rest slot is refreshed into a motion sample
+    // without spending a slot, the move counts (idle resets, the filter sees
+    // it), and the next append still measures its gap from that slot.
+    PointerHistory history;
+    history.setTrailSeconds(0.8); // 26 ms interval
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(100.0, 0.0), 50);
+    history.notePointer(QPointF(100.0, 0.0), 80); // rest slot, not motion
+    QCOMPARE(sampleCount(history, 80), 3);
+    QVERIFY(history.frameState(80, 1.0).idleSeconds > 0.02);
+
+    history.notePointer(QPointF(110.0, 0.0), 90); // inside the rest slot's interval
+    const PointerFrameState moved = history.frameState(90, 1.0);
+    QCOMPARE(moved.trailSize(), 3);
+    QCOMPARE(moved.newestTrail().x(), 110.0f);
+    QCOMPARE(moved.idleSeconds, 0.0);
+    // 10 px over the 40 ms since the last accepted event (the 50 ms one).
+    QCOMPARE(qRound(moved.newestTrail().w()), 250);
+    QVERIFY(moved.filteredSpeed > 0.0);
+
+    // The gap is still measured from the rest slot's append at 80 ms, so an
+    // event at 105 ms (25 ms later) refreshes and one at 106 ms appends.
+    history.notePointer(QPointF(120.0, 0.0), 105);
+    QCOMPARE(sampleCount(history, 105), 3);
+    history.notePointer(QPointF(130.0, 0.0), 106);
+    QCOMPARE(sampleCount(history, 106), 4);
+}
+
+void TestPointerHistory::testSeedPositionIsNotMotion()
+{
+    // The compositor seeds an empty ring from a buttons-only event so the
+    // first live frame has a pointer, without a click counting as a move.
+    PointerHistory history;
+    history.seedPosition(QPointF(40.0, 50.0), 1000);
+    QCOMPARE(sampleCount(history, 1000), 1);
+    const PointerFrameState state = history.frameState(1000, 1.0);
+    QCOMPARE(state.newestTrail().x(), 40.0f);
+    QCOMPARE(state.idleSeconds, PointerShaderContract::kNeverSeconds);
+    QCOMPARE(state.filteredSpeed, 0.0);
+    QVERIFY(!history.isLive(1000, 1.0));
+    // A ring with samples is left alone.
+    history.seedPosition(QPointF(0.0, 0.0), 1001);
+    QCOMPARE(history.frameState(1001, 1.0).newestTrail().x(), 40.0f);
+    // The first real move after the seed is motion and starts a stroke: it
+    // lands past the 8 ms floor so it appends, and the idle clock starts.
+    history.notePointer(QPointF(45.0, 50.0), 1010);
+    QCOMPARE(sampleCount(history, 1010), 2);
+    QCOMPARE(history.frameState(1010, 1.0).idleSeconds, 0.0);
+    QVERIFY(history.isLive(1010, 1.0));
 }
 
 void TestPointerHistory::testStationaryAppendsAreNotMotion()
@@ -384,8 +451,16 @@ void TestPointerHistory::testStrokeBoundaryIsIndependentOfTheSampleInterval()
     const double head = state.newestTrail().w();
     QVERIFY2(std::abs(state.filteredSpeed - head) > 300.0,
              qPrintable(QStringLiteral("filtered %1 collapsed to the head's %2").arg(state.filteredSpeed).arg(head)));
-    QVERIFY2(state.filteredSpeed > 200.0 && state.filteredSpeed < 3000.0,
-             qPrintable(QStringLiteral("filtered %1 outside the stroke's speeds").arg(state.filteredSpeed)));
+    // Pinned to the walk itself: the exponential filter (a = 0.46) over the
+    // slots' speeds, oldest to newest, exactly as the frame state exposes
+    // them. The stroke started before the ring's oldest slot, so every slot
+    // is in the walk and the oldest seeds it.
+    double expected = state.trailAt(state.trailSize() - 1).w();
+    for (int i = state.trailSize() - 2; i >= 0; --i) {
+        expected = expected * 0.54 + state.trailAt(i).w() * 0.46;
+    }
+    QVERIFY2(std::abs(state.filteredSpeed - expected) < 1.0,
+             qPrintable(QStringLiteral("filtered %1, walk gives %2").arg(state.filteredSpeed).arg(expected)));
 }
 
 void TestPointerHistory::testFirstMoveAfterParkingStartsFresh()

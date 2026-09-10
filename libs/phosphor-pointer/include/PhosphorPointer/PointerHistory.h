@@ -32,7 +32,13 @@ namespace PhosphorPointerShaders {
 /// spread over `kCapacity - 1` gaps, never under `kMinSampleGapMs`). An event
 /// inside that gap that has moved at least 1 device px REFRESHES the newest
 /// sample in place, so index 0 is always exactly where the pointer is, and a
-/// sub-pixel drift inside the gap is dropped. Without the interval a 1000 Hz
+/// sub-pixel drift inside the gap is dropped. "Moved" is measured against
+/// the last ACCEPTED event (the head slot when there is none), so a creep of
+/// under a pixel per interval accumulates into a move rather than ageing
+/// the idle clock. (A stamp behind the previous event whose gap to the
+/// slot's append is still past the interval appends a slot; that needs a
+/// clock that stepped back by more than an interval, which neither host's
+/// monotonic clock does.) Without the interval a 1000 Hz
 /// mouse filled all 32 slots in 32 ms, and a pack's tail could never be
 /// longer than that however long its `length` parameter asked for. A sample
 /// appended once the interval has passed WITHOUT the pointer having moved a
@@ -119,6 +125,14 @@ public:
 
     /// Record a pointer position at @p nowMs (see the sampling rule above).
     void notePointer(const QPointF& devicePx, qint64 nowMs);
+
+    /// Give an EMPTY ring a position without recording motion: the slot
+    /// lands (age 0, speed 0, not a motion sample) so the first live frame
+    /// has a pointer to hand out, while the idle clock, the velocity pairing
+    /// and the filtered speed stay untouched. The compositor seeds from a
+    /// buttons-only event after a reset this way; a ring with samples is
+    /// left alone.
+    void seedPosition(const QPointF& devicePx, qint64 nowMs);
 
     /// Record a button transition from @p before to @p now at @p devicePx.
     /// A newly pressed button becomes the last press (left, then right, then

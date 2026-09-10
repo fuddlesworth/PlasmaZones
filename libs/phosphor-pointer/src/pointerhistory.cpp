@@ -219,17 +219,47 @@ double PointerHistory::filteredSpeed() const
             break;
         }
     }
+    // The stroke's first sample carries speed 0 by construction (it has no
+    // usable pairing: it is the first event, or the one after a park), so it
+    // is the boundary but not the seed. The seed is the oldest sample with a
+    // scored speed, or a short stroke would read as a fraction of its speed
+    // (a three-sample nudge after a park at 71 percent of it). Only when the
+    // stroke start is the single motion sample is its 0 the answer.
+    int seed = oldest;
+    if (seed > newest && sampleAt(seed).strokeStart) {
+        for (int i = seed - 1; i >= newest; --i) {
+            if (sampleAt(i).motion) {
+                seed = i;
+                break;
+            }
+        }
+    }
     // The same exponential filter the upstream windtrail effect runs on its
-    // own sampler (a = 0.46), seeded from the stroke's oldest sample rather
-    // than 0 so a short stroke is not biased toward standing still.
-    double filtered = sampleAt(oldest).speed;
-    for (int i = oldest - 1; i >= newest; --i) {
+    // own sampler (a = 0.46), seeded from that sample rather than 0 so a
+    // short stroke is not biased toward standing still.
+    double filtered = sampleAt(seed).speed;
+    for (int i = seed - 1; i >= newest; --i) {
         if (!sampleAt(i).motion) {
             continue;
         }
         filtered = filtered * 0.54 + sampleAt(i).speed * 0.46;
     }
     return std::max(filtered, 0.0);
+}
+
+void PointerHistory::seedPosition(const QPointF& devicePx, qint64 nowMs)
+{
+    if (m_count > 0) {
+        return;
+    }
+    // A position without motion: the slot lands so the first live frame has
+    // a pointer to hand out, but the idle clock, the pairing and the filter
+    // are untouched, exactly as a rest slot appended by a host that feeds
+    // every tick. Seeding through notePointer would have made a click after
+    // a reset count as a move on the compositor alone.
+    m_head = 0;
+    m_ring[0] = Sample{devicePx, nowMs, nowMs, 0.0, false, false};
+    m_count = 1;
 }
 
 void PointerHistory::noteButtons(Qt::MouseButtons now, Qt::MouseButtons before, const QPointF& devicePx, qint64 nowMs)

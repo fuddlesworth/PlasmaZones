@@ -7,7 +7,6 @@
     "category": "Particles",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 260,
     "trailSeconds": 1.0,
     "parameters": [
         {

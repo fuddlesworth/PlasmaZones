@@ -50,26 +50,34 @@ vec4 pPointer(vec2 uv) {
     float cover = 0.0;
 
     // ── The stroke ──
-    if (count >= 2) {
+    // Only the LIVE run of samples is drawn or smoothed over. The ring is
+    // never purged, so behind the live run sit samples older than the
+    // lifetime, and at a lifetime equal to the metadata trailSeconds those
+    // are outside the damage rect, which covers only live samples. A segment
+    // reaching one would leave its last sliver frozen there on the
+    // compositor, and the smoothing kernel blends a segment's far end toward
+    // the sample beyond it, so the live count is handed to pointerSmoothedAt
+    // as the window it clamps its neighbours into.
+    int live = 0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || pointerTrailAt(i).z >= lifetime) {
+            break;
+        }
+        live = i + 1;
+    }
+    if (live >= 2) {
         float cull = halfWidth * 1.5 + 2.0 * scale;
         // The smoothed far end of one segment is the near end of the next,
         // so it is carried across iterations rather than looked up twice.
-        vec2 pa = pointerSmoothedAt(0, count, p_smoothing);
+        vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
         for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
-            if (i + 1 >= count) {
+            if (i + 1 >= live) {
                 break;
             }
             vec4 a = pointerTrailAt(i);
             vec4 b = pointerTrailAt(i + 1);
-            // Both ends inside the window. At a lifetime equal to the
-            // metadata trailSeconds a segment whose far end has aged out is
-            // partly outside the damage rect, which covers only live samples,
-            // and its last sliver would freeze there on the compositor.
-            if (b.z >= lifetime) {
-                break;
-            }
 
-            vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
+            vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
             if (distance(pa, pb) < 1e-4) {
                 // A stationary pair lays down no stroke. The preview appends
                 // one every interval while its pointer rests, and drawing
@@ -90,9 +98,6 @@ vec4 pPointer(vec2 uv) {
             float d = pointerSegmentDistanceFrom(px, pa, pb, t);
             pa = pb;
             float age = mix(a.z, b.z, t);
-            if (age >= lifetime) {
-                continue;
-            }
             float remain = 1.0 - age / lifetime;
 
             // The brush curve: broad where the hand was slow, thin where it

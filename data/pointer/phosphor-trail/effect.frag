@@ -22,9 +22,10 @@
 //
 // `activationSpeed` gates the whole tube once through the shared
 // pointerActivationGate(), and `smoothing` goes through pointerSmoothedAt(),
-// so this pack, Comet, Sparks and WindTrail all gate on the same filtered
-// figure and trace the same curve. Both default to 0, which is the
-// no-threshold, raw-path behaviour.
+// so this pack and every other speed-gated pack (Comet, Sparks, WindTrail,
+// Halo, Arc) gate on the same filtered figure, and every path pack traces
+// the same curve. Both default to 0, which is the no-threshold, raw-path
+// behaviour.
 
 const float kFlareSeconds = 0.4;
 
@@ -87,22 +88,39 @@ vec4 pPointer(vec2 uv) {
     float halo = 0.0;
     float hueAge = 0.0;
 
+    // Only the LIVE run of samples is drawn or smoothed over: at a lifetime
+    // equal to the metadata trailSeconds the samples behind it are outside
+    // the damage rect, and the smoothing kernel would otherwise blend a
+    // segment's far end toward one of them. The live count is the window
+    // pointerSmoothedAt clamps its neighbours into.
+    int live = 0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || pointerTrailAt(i).z >= lifetime) {
+            break;
+        }
+        live = i + 1;
+    }
     // The smoothed far end of one segment is the near end of the next, so it
     // is carried across iterations rather than looked up twice.
-    vec2 pa = pointerSmoothedAt(0, count, p_smoothing);
+    vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
     for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
-        if (i + 1 >= count) {
+        if (i + 1 >= live) {
             break;
         }
         vec4 a = pointerTrailAt(i);
         vec4 b = pointerTrailAt(i + 1);
-        if (a.z >= lifetime) {
-            break;
-        }
-        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
+        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
         // Reject on the raw-sample box (see pointerSegmentOutside) before the
         // distance maths.
-        if (pointerSegmentOutside(px, i, count, a, b, limit)) {
+        if (pointerSegmentOutside(px, i, live, a, b, limit)) {
+            pa = pb;
+            continue;
+        }
+        if (distance(pa, pb) < 1e-4) {
+            // A stationary pair has no tube to draw. A host that feeds a
+            // resting pointer appends one every interval, and a point
+            // segment at age zero would hold a full-brightness dot at the
+            // rest point where the compositor lets it age out.
             pa = pb;
             continue;
         }

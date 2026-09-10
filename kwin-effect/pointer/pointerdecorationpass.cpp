@@ -200,9 +200,13 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
     // buttonsChanged) writes no motion sample, so after a reset (an output
     // crossing, an un-suppress) the first live frame would hand packs
     // iMouse == (0,0) while uPointerPress carries the real position. Seed the
-    // ring from the event when it is empty; a ring with samples keeps them.
-    if (moved || m_history.sampleCount() == 0) {
+    // ring from the event when it is empty, as a position and NOT as motion
+    // (a click is not a move, and the preview never records one as such); a
+    // ring with samples keeps them.
+    if (moved) {
         m_history.notePointer(devicePx, nowMs);
+    } else {
+        m_history.seedPosition(devicePx, nowMs);
     }
     if (buttonsChanged) {
         m_history.noteButtons(buttons, oldButtons, devicePx, nowMs);

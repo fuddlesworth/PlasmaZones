@@ -10,8 +10,9 @@
 //
 //   • Speed is filtered before anything is decided by it. Upstream keeps one
 //     exponentially filtered speed (a = 0.46) rather than reading the raw
-//     per-frame figure. pointerFilteredSpeed() is that filter. Gating on the
-//     raw per-sample speed is what made this pack blink on and off.
+//     per-frame figure. The host sampler runs that filter once per frame and
+//     pointerFilteredSpeed() reads it. Gating on the raw per-sample speed is
+//     what made this pack blink on and off.
 //   • Width answers to the SQUARE ROOT of speed, which compresses the top of
 //     the range so a fast flick is not absurdly fatter than a brisk drag.
 //   • Width also tapers with age on a `pow(smoothstep(life), 1.55)` curve, so
@@ -81,25 +82,33 @@ vec4 pPointer(vec2 uv) {
     float reach = pointerReach();
 
     float cover = 0.0;
+    // Only the LIVE run of samples is drawn or smoothed over (the samples
+    // behind it can be outside the damage rect, and the smoothing kernel
+    // would blend a segment's far end toward one); the live count is the
+    // window pointerSmoothedAt clamps its neighbours into.
+    int live = 0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || pointerTrailAt(i).z >= duration) {
+            break;
+        }
+        live = i + 1;
+    }
     // The smoothed far end of one segment is the near end of the next, so it
     // is carried across iterations rather than looked up twice per segment.
-    vec2 pa = pointerSmoothedAt(0, count, p_smoothing);
+    vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
     for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
-        if (i + 1 >= count) {
+        if (i + 1 >= live) {
             break;
         }
         vec4 a = pointerTrailAt(i);
         vec4 b = pointerTrailAt(i + 1);
-        if (a.z >= duration) {
-            break;
-        }
 
         // The far endpoint is needed either way (it is the next segment's
         // near end), so it is looked up once; the reject box is built from
         // the raw samples (see pointerSegmentOutside) so a rejected fragment
         // still skips the distance maths.
-        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-        if (pointerSegmentOutside(px, i, count, a, b, reach)) {
+        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
+        if (pointerSegmentOutside(px, i, live, a, b, reach)) {
             pa = pb;
             continue;
         }

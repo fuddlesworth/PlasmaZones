@@ -22,10 +22,13 @@
 // texel written for pointerPixel(vTexCoord) here is read back for the same
 // canvas position there, on both runtimes, with no flip of its own.
 //
-// The stamp is gated on the newest sample being fresh: a resting pointer
-// stops laying down glow, so the canvas empties within trailSeconds and the
-// host can stop repainting. Left ungated it would refresh the resting spot
-// forever and a frozen dot would be left behind when the pass went quiet.
+// The stamp is gated on the pointer having MOVED within kFreshSeconds, read
+// from the idle clock rather than the newest sample's age: a host that feeds
+// a resting pointer every tick still appends a slot at age zero every
+// interval, and gating on that age kept re-stamping the resting spot at full
+// energy while the idle clock rose. On the idle clock a resting pointer
+// stops laying down glow on both hosts, so the canvas empties within
+// trailSeconds and the host can stop repainting.
 //
 // The decay is per frame, so at a low refresh rate the canvas is not empty
 // when the host goes quiet at trailSeconds. The idle envelope below is the
@@ -60,7 +63,7 @@ void main() {
     }
 
     int count = pointerTrailCount();
-    if (count >= 1 && pointerTrailAt(0).z < kFreshSeconds) {
+    if (count >= 1 && pointerIdleSeconds() < kFreshSeconds) {
         vec2 px = pointerPixel(vTexCoord);
         float d;
         if (count >= 2) {
