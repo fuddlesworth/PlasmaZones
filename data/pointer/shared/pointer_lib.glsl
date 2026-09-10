@@ -50,10 +50,9 @@ float pointerReach() {
 
 // The standard falloff across a pack's reach: 1 at the sample, 0 at the edge,
 // with the last fifth of the radius as the feather. The packs that measure
-// against the reach had this spelled out inline; keeping it here is what
-// makes the reach contract one
-// rule rather than four copies, and gives the edge-case floor above a single
-// place to matter.
+// against the reach had this spelled out inline. Keeping it here is what makes
+// the reach contract one rule rather than a copy per pack, and gives the
+// edge-case floor above a single place to matter.
 float pointerReachWindow(float d, float reach) {
     return 1.0 - smoothstep(reach * 0.8, reach, d);
 }

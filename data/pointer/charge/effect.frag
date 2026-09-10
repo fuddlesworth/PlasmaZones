@@ -79,9 +79,9 @@
 // is the very moment in question; iTime survives the park but marks nothing
 // at the resume; and the gap in the trail ages that a park leaves exists on
 // the compositor but not in the settings preview, whose sampler keeps
-// inserting evenly spaced rest slots. The step is
-// bounded: it can only appear for a park shorter than `lifetime`, and a park
-// past that empties the live run and starts the stroke from nothing anyway.
+// inserting evenly spaced rest slots. The step is bounded: it can only appear
+// for a park shorter than `lifetime`, and a park past that empties the live
+// run and starts the stroke from nothing anyway.
 // Do not paper over it by decaying the charge with idle time; that reads as
 // the stroke dimming while it is parked, which is the discharge's job.
 //
