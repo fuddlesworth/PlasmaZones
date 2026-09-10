@@ -1,6 +1,21 @@
 {
     "releases": [
         {
+            "version": "3.4.17",
+            "date": "2026-09-10",
+            "highlights": [
+                "New: PlasmaZones builds against Plasma 6.8 as well as 6.7 from the same source, so your package keeps building whichever one your distribution ships (#1096)",
+                "New: Four more pointer packs. Prism spreads the brand spectrum across the stroke as you speed up, Echo stamps your real cursor sprite along the path, Charge banks speed and spends it as a pulse, and Filament runs bright nodes up a Phosphor Trail tube. Seventeen packs ship now (#1093)",
+                "Changed: A pointer pack's trail window is called Lifetime in every pack that has one. If you had changed that slider on Comet, WindTrail, Sparks or Burst, it goes back to its default (#1093)",
+                "Fixed: A pointer pack that reads a buffer channel without declaring a buffer no longer samples the wrong thing (#1093)",
+                "Fixed: Snap assist stays on the fast thumbnail path instead of falling back to the slow one after two capture failures (#1093)",
+                "Fixed: The pointer no longer goes missing when a scrolling leg gives up on a frame (#1093)",
+                "Fixed: Pointer trails follow a curve rather than a polygon (#1093)",
+                "Fixed: Pointer decorations stop when a software KVM or a program hides the cursor, and the last frame is erased instead of staying frozen on screen (#1094)",
+                "Fixed: A window dragged to the end of a scrolling strip centers straight away when \"center focused column\" is set to Always (#1095)"
+            ]
+        },
+        {
             "version": "3.4.16",
             "date": "2026-09-09",
             "highlights": [
