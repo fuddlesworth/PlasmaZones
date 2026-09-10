@@ -129,11 +129,11 @@ vec4 pPointer(vec2 uv) {
     //
     // The cap is HALF of 60, which is the fastest re-roll a 60 Hz output can
     // actually resolve. It is deliberately not lowered to half of the 20 Hz
-    // this family elsewhere designs down to: 10 re-rolls a second is not a
-    // crackle, and the whole parameter would be spent buying correctness on
-    // outputs almost nobody has. On a 20-30 Hz output the top of the range
-    // aliases back toward the dim arcs described above, which is a graceful
-    // degrade of one slider rather than a broken pack.
+    // this family designs down to: 10 re-rolls a second is not a crackle, and
+    // the whole parameter would be spent buying correctness on outputs almost
+    // nobody has. Above half the refresh the pulse stops being resolvable, and
+    // the strike envelope below carries the floor that keeps that case a
+    // change of SHAPE at a steady brightness rather than a dim stall.
     float rate = pointerWrapSafeRate(clamp(p_crackleRate, 1.0, 30.0));
     float jag = clamp(p_jaggedness, 0.0, 1.0);
     float intensity = max(p_intensity, 0.0);
@@ -151,7 +151,21 @@ vec4 pPointer(vec2 uv) {
     float roll = floor(iTime * rate);
     float phase = fract(iTime * rate);
     // Sharp attack, straight decay: the arc strikes and dies inside its window.
-    float strike = smoothstep(0.0, 0.12, phase) * (1.0 - phase);
+    float envelope = smoothstep(0.0, 0.12, phase) * (1.0 - phase);
+    // The pulse is only resolvable while the roll rate stays under half the
+    // refresh, and this family designs down to 20 Hz. Past that a display
+    // samples the envelope once per window at a phase that barely moves, so
+    // the brightness sticks at an arbitrary value — including one near zero,
+    // which is what left the arcs sitting dim instead of crackling.
+    //
+    // The crackle itself survives, because the ROLL INDEX advances by a whole
+    // step per frame once the rate reaches the refresh, so the arcs re-roll
+    // their shape every frame there. What has to survive with it is a
+    // brightness that cannot stick near zero. Lifting the envelope's floor as
+    // the rate climbs buys exactly that, and leaves the crisp strike-and-die
+    // at ordinary rates untouched: the floor is 0 up to 15 re-rolls a second.
+    float unresolvedFloor = 0.35 * smoothstep(15.0, 30.0, rate);
+    float strike = unresolvedFloor + (1.0 - unresolvedFloor) * envelope;
 
     float core = 1.1 * scale;
     float glow = 5.5 * scale;

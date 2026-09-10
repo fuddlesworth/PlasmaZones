@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "thickness",
     "trailSeconds": 1.4,
+    "trailWindowParam": "duration",
     "parameters": [
         {
             "id": "thickness",

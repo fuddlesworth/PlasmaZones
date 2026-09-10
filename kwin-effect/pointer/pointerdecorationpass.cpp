@@ -166,15 +166,17 @@ void PointerDecorationPass::rebuildChain()
         const double reach = eff.resolvedReach(parameters);
         m_maxReachLogical = std::max(m_maxReachLogical, reach);
         m_maxTrailSeconds = std::max(m_maxTrailSeconds, eff.trailSeconds);
-        // Only packs that actually read the trail get a say in how the ring
-        // is spaced. trailSeconds means two different things — how long this
-        // pack needs frames, and how far apart the shared ring's slots sit —
-        // and a click pack legitimately wants a long one for the first reason
-        // while having no interest in the second. Letting it raise the
-        // spacing anyway coarsens the stroke of every trail pack beside it.
-        if (eff.samplesTrail) {
-            m_sampleWindowSeconds = std::max(m_sampleWindowSeconds, eff.trailSeconds);
-        }
+        // How far back this pack READS, which is not how long it needs frames.
+        // A click pack legitimately wants a long trailSeconds for its own
+        // animation while reading no samples at all, and a trail pack wants
+        // frames for as long as its stroke takes to fade while only ever
+        // looking at the part of the path its length parameter covers. Both
+        // used to raise the spacing for every pack sharing the ring.
+        //
+        // Resolved against THIS layer's parameter overrides, so shortening a
+        // tail in the settings app buys a finer stroke for it rather than
+        // leaving the slots spread across a length nobody asked for.
+        m_sampleWindowSeconds = std::max(m_sampleWindowSeconds, eff.resolvedTrailWindow(parameters));
         if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
             m_anyAboveLayer = true;
         }

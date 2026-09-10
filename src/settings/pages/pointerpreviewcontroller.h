@@ -83,8 +83,7 @@ public:
 
     /// Re-translate and upload @p friendlyParams onto an already-configured
     /// item, for live parameter editing in the detail dialog.
-    Q_INVOKABLE void updatePreviewParams(QQuickItem* item, const QString& packId,
-                                         const QVariantMap& friendlyParams) const;
+    Q_INVOKABLE void updatePreviewParams(QQuickItem* item, const QString& packId, const QVariantMap& friendlyParams);
 
     /// Advance the simulated pointer by one pane frame and push the whole
     /// frame state onto the item's uniform extension.

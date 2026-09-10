@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "reach",
     "trailSeconds": 0.8,
+    "trailWindowParam": "length",
     "parameters": [
         {
             "id": "width",

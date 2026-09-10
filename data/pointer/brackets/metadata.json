@@ -1,7 +1,7 @@
 {
     "id": "brackets",
     "name": "Brackets",
-    "description": "Four corner brackets snap inward onto the point you click, the way a camera locks focus on its subject. They start out wide, close in with a small turn that unwinds as they arrive, sit square for a moment and then fade. A lighter second set marks where you let the button go. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
+    "description": "Four corner brackets snap inward onto the point you click, the way a camera locks focus on its subject. They start out wide and close in with a small turn that unwinds as they arrive. Then they sit square for a moment before fading. A lighter second set marks where you let the button go. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Click",

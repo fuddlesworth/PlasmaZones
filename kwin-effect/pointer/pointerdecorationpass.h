@@ -474,10 +474,13 @@ private:
     QSet<KWin::LogicalOutput*> m_suppressedOutputs;
     double m_maxReachLogical = 0.0;
     double m_maxTrailSeconds = 0.0;
-    /// The longest trailSeconds among chain members that actually SAMPLE the
-    /// trail, which is what spaces the history ring. Separate from
-    /// m_maxTrailSeconds, which is the liveness deadline over every member:
-    /// a click pack needs frames without needing samples.
+    /// The longest READ WINDOW among the chain's members, which is what
+    /// spaces the history ring. Separate from m_maxTrailSeconds, the liveness
+    /// deadline over every member: a click pack needs frames without needing
+    /// samples, and a trail pack needs frames for as long as its stroke takes
+    /// to fade while only reading the part of the path its length covers.
+    /// Resolved per layer against that layer's parameter overrides, so it
+    /// follows a slider the way m_maxReachLogical does.
     double m_sampleWindowSeconds = 0.0;
 
     /// The output the history's canvas belongs to. Changing it resets the

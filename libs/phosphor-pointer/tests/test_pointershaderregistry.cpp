@@ -86,6 +86,7 @@ private Q_SLOTS:
     void testLayerTokenRoundTripsThroughFromJson();
     void testLayerDefaultsToBelowAndRejectsUnknownTokens();
     void testReachIsClampedAndResolvedFromItsParameter();
+    void testTrailWindowFollowsTheParameterThatBoundsTheRead();
     void testTrailSecondsDefaultsWhenAbsent();
     void testBufferPassesAreCappedAtTheContractBudget();
     void testInvalidPackIsRejected();
@@ -656,6 +657,59 @@ void TestPointerShaderRegistry::testIncludePathsResolveTheSharedDirectory()
     QVERIFY2(sawInstalledShared, "includePathsFor drops the installed shared dir, so no user pack can be previewed");
 
     QVERIFY(PointerShaderRegistry::includePathsFor(QString()).isEmpty());
+}
+
+void TestPointerShaderRegistry::testTrailWindowFollowsTheParameterThatBoundsTheRead()
+{
+    // Undeclared, the window is the liveness figure: an older pack that says
+    // nothing keeps the behaviour it had.
+    QJsonObject plain = makeMetadata(QStringLiteral("plain"));
+    plain.insert(QLatin1String("trailSeconds"), 2.0);
+    QCOMPARE(PointerShaderEffect::fromJson(plain).resolvedTrailWindow({}), 2.0);
+
+    // A pack that reads nothing has no claim on the spacing at all, whatever
+    // its liveness is.
+    QJsonObject clickOnly = makeMetadata(QStringLiteral("click-only"));
+    clickOnly.insert(QLatin1String("trailSeconds"), 2.0);
+    clickOnly.insert(QLatin1String("samplesTrail"), false);
+    QCOMPARE(PointerShaderEffect::fromJson(clickOnly).resolvedTrailWindow({}), 0.0);
+
+    // A fixed window, for a pack whose read depth is a shader constant.
+    QJsonObject fixed = makeMetadata(QStringLiteral("fixed"));
+    fixed.insert(QLatin1String("trailSeconds"), 2.0);
+    fixed.insert(QLatin1String("trailWindowSeconds"), 0.6);
+    QCOMPARE(PointerShaderEffect::fromJson(fixed).resolvedTrailWindow({}), 0.6);
+
+    // The form most packs want: the window follows the slider that bounds the
+    // read, so shortening the tail buys a finer stroke for it.
+    QJsonObject tunable = makeMetadata(QStringLiteral("tunable"));
+    tunable.insert(QLatin1String("trailSeconds"), 2.0);
+    tunable.insert(QLatin1String("trailWindowParam"), QStringLiteral("lifetime"));
+    tunable.insert(QLatin1String("parameters"),
+                   QJsonArray{makeParameter(QStringLiteral("lifetime"), QStringLiteral("float"), 0.9)});
+    const PointerShaderEffect e = PointerShaderEffect::fromJson(tunable);
+    // The parameter's own default when the user has set nothing...
+    QCOMPARE(e.resolvedTrailWindow({}), 0.9);
+    // ...and the override once they have.
+    QVariantMap overridden;
+    overridden.insert(QStringLiteral("lifetime"), 0.3);
+    QCOMPARE(e.resolvedTrailWindow(overridden), 0.3);
+
+    // Never past the liveness window: the host stops feeding the ring that
+    // long after the last event, so a longer claim would spread the slots
+    // across time the pack can never see samples from.
+    QVariantMap greedy;
+    greedy.insert(QStringLiteral("lifetime"), 9.0);
+    QCOMPARE(e.resolvedTrailWindow(greedy), 2.0);
+
+    // A parameter of the wrong type is not a number, so the declared window
+    // stands rather than a zero sneaking through.
+    QJsonObject badType = makeMetadata(QStringLiteral("bad-type"));
+    badType.insert(QLatin1String("trailSeconds"), 1.5);
+    badType.insert(QLatin1String("trailWindowParam"), QStringLiteral("tint"));
+    badType.insert(QLatin1String("parameters"),
+                   QJsonArray{makeParameter(QStringLiteral("tint"), QStringLiteral("color"), 0.0)});
+    QCOMPARE(PointerShaderEffect::fromJson(badType).resolvedTrailWindow({}), 1.5);
 }
 
 QTEST_MAIN(TestPointerShaderRegistry)

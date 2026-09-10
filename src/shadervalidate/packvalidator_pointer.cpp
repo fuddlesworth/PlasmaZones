@@ -717,6 +717,51 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         }
     }
 
+    // ── trail window ──
+    // The window is what spaces the ring's slots, so a wrong one is not
+    // cosmetic in either direction: too long and the pack pays a coarser
+    // stroke than it needs (and drags every pack sharing the chain down with
+    // it), too short and it reads slots that fell out of the ring before it
+    // was done with them.
+    if (!eff.trailWindowParam.isEmpty()) {
+        const auto declared = std::find_if(eff.parameters.cbegin(), eff.parameters.cend(),
+                                           [&eff](const PointerShaderEffect::ParameterInfo& p) {
+                                               return p.id == eff.trailWindowParam;
+                                           });
+        if (declared == eff.parameters.cend()) {
+            lints << QStringLiteral(
+                         "trailWindowParam '%1' names no declared parameter (the window falls back to "
+                         "trailSeconds at load, so the ring is spaced for the liveness figure)")
+                         .arg(eff.trailWindowParam);
+        } else if (declared->type != QLatin1String("float") && declared->type != QLatin1String("int")) {
+            lints << QStringLiteral(
+                         "trailWindowParam '%1' has type '%2', which is not float or int (the window "
+                         "falls back to trailSeconds at load)")
+                         .arg(eff.trailWindowParam, declared->type);
+        } else if (declared->maxValue.isValid() && declared->maxValue.toDouble() > eff.trailSeconds) {
+            // Clamped at the query, so this is a coverage gap rather than a
+            // crash: at the top of the slider the pack asks to read further
+            // back than the host keeps it alive, and those samples are simply
+            // not there.
+            lints << QStringLiteral(
+                         "trailWindowParam '%1' allows up to %2 s but trailSeconds is %3 s, so at the "
+                         "top of its range the pack reads further back than it stays live for")
+                         .arg(eff.trailWindowParam)
+                         .arg(declared->maxValue.toDouble())
+                         .arg(eff.trailSeconds);
+        }
+    }
+    if (eff.trailWindowSeconds > 0.0 && !eff.trailWindowParam.isEmpty()) {
+        lints << QStringLiteral(
+            "both trailWindowSeconds and trailWindowParam are declared; the parameter wins, so "
+            "the fixed figure is dead weight");
+    }
+    if (!eff.samplesTrail && (eff.trailWindowSeconds > 0.0 || !eff.trailWindowParam.isEmpty())) {
+        lints << QStringLiteral(
+            "samplesTrail is false, so the declared trail window is ignored (a pack that reads "
+            "no samples has no say in the spacing)");
+    }
+
     // ── cursor sprite ──
     // The contract puts the static gate for these here. On the compositor an
     // unbound sampler reads texture unit 0, which is whatever happened to be

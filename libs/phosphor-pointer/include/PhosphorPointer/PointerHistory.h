@@ -82,7 +82,7 @@ namespace PhosphorPointerShaders {
 /// drawing, and further past whenever the interval is on its floor or set by a longer pack in the chain. The packs' own
 /// idle fades end the drawing, not the gate.
 ///
-/// The interval is one per chain, from its LONGEST `trailSeconds`, so a
+/// The interval is one per chain, from its LONGEST read window, so a
 /// chain that mixes a short pack with a long one samples at the long pack's
 /// spacing and the short pack draws its tail from a few slots plus the
 /// refreshed head. A per-layer spread would need a ring per layer.
@@ -133,10 +133,11 @@ public:
 
     PointerHistory();
 
-    /// The window the ring must span, in seconds: the longest `trailSeconds`
-    /// of the packs this history feeds. Sets the sample interval (see the
-    /// sampling rule above). 0 (the default) means the `kMinSampleGapMs`
-    /// floor alone. Survives `reset()`.
+    /// The window the ring must span, in seconds: the furthest back any pack
+    /// this history feeds actually READS, which is not the same as how long
+    /// those packs stay live. Sets the sample interval (see the sampling rule
+    /// above). 0 (the default, and what a chain of packs that read nothing
+    /// gives) means the `kMinSampleGapMs` floor alone. Survives `reset()`.
     void setTrailSeconds(double seconds);
     [[nodiscard]] double trailSeconds() const
     {

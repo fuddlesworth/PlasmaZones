@@ -35,7 +35,17 @@
             "type": "number",
             "exclusiveMinimum": 0,
             "maximum": 60,
-            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event. For a pack that reads uPointerTrail this also spaces the samples: the history has a fixed number of slots and spreads them across this window, so a longer window buys liveness at the cost of stroke resolution, and the longest window among the trail-reading packs in a chain sets the spacing for all of them. Set samplesTrail to false on a pack that needs frames without reading the trail, so its window stays out of that decision."
+            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event. This is a liveness figure and nothing else. What spaces the history's samples is how far back the pack READS, which defaults to this but should be declared separately through trailWindowParam or trailWindowSeconds whenever the two differ."
+        },
+        "trailWindowSeconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60,
+            "description": "How far back (seconds) the pack's stages actually read the trail, when that is a fixed figure rather than a slider. Defaults to trailSeconds. This is what spaces the history's slots, so a pack that needs frames for two seconds but only ever looks at the last half second of path should say so and get a four times finer stroke for it."
+        },
+        "trailWindowParam": {
+            "type": "string",
+            "description": "Name of an int or float parameter whose resolved value replaces trailWindowSeconds, the same shape reachParam has over reach. Use it when how far back the pack reads is a slider, such as a trail's lifetime, so shortening the tail buys a finer stroke for it."
         },
         "samplesTrail": {
             "type": "boolean",

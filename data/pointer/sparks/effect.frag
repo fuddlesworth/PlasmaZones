@@ -5,20 +5,13 @@
 // proportion to its speed. Sparks are seeded from the sample's canvas
 // position (not its ring index, which shifts as new samples arrive) so a
 // spark keeps its launch direction and speed from frame to frame while its
-// sample ages. The one exception is the newest sample, whose position the
-// sampler refreshes in place for up to one sample interval before it is left
-// behind, re-rolling its sparks on every device pixel it moves through.
-//
-// That was written when the interval sat near its 8 ms floor and the head
-// barely moved inside one. The interval is now the pack's trailSeconds spread
-// over the ring, which is about 33 ms here, so at speed the head can travel
-// tens of pixels and re-roll many times before it is left behind. The sparks
-// on it are still at age zero and small, so what this costs is stability at
-// the head rather than a visible strobe further down the trail. Fixing it
-// properly needs a per-slot identity that survives the refresh, which the
-// trail vec4 has no room for: .xy is the position the refresh moves, and .z
-// and .w are the age and speed. Seeding from a coarser cell is what the note
-// below rules out for the samples behind it. Each spark follows a ballistic arc under
+// sample ages. The newest sample is the exception the seeding has to work
+// around: the sampler refreshes slot 0 IN PLACE for up to a whole interval so
+// the head stays exactly on the pointer, so its position is the one key in
+// the ring that moves. Seeding the head off it re-rolled every spark on it
+// once per device pixel travelled. The head is therefore seeded from the
+// anchored sample behind it (see the note at the seed), which keeps its
+// sparks stable while the cluster still rides the live pointer position. Each spark follows a ballistic arc under
 // `gravity`, shrinks and fades over `life`, and shifts colour from colorA to
 // colorB. Coverage is accumulated additively then clamped. Everything is
 // gone once a sample's age passes `life`, which stays within the metadata's
@@ -149,7 +142,19 @@ vec4 pPointer(vec2 uv) {
         // The seed cell is one device pixel: with a coarser cell two slow
         // consecutive samples landed in the same cell, rolled identical
         // sparks and read as beads along one arc.
-        vec2 seed = floor(s.xy);
+        //
+        // The HEAD is seeded from the sample behind it instead of from its
+        // own position, because its position is the one thing in the ring
+        // that moves: the sampler refreshes slot 0 in place for up to a whole
+        // interval so the head stays exactly on the pointer, and seeding off
+        // that re-rolled every spark on it once per device pixel travelled —
+        // tens of times per interval at speed. Slot 1 is anchored and does
+        // not move, so the head's sparks keep their launch direction while
+        // the cluster still rides the live pointer position through `s.xy`.
+        // The offset keeps them from rolling identically to slot 1's own.
+        // A one-sample ring has nothing behind it, but it is also at most one
+        // interval old, so its own position will do.
+        vec2 seed = i == 0 && live >= 2 ? floor(pointerTrailAt(1).xy) + 19.0 : floor(s.xy);
         float thin = hash13(seed + 57.0) < 0.5 ? 1.0 - smoothstep(5.0, 8.0, float(i)) : 1.0;
         if (thin <= 0.0) {
             continue;

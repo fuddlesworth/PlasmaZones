@@ -107,8 +107,8 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
     /// Whether any of the pack's stages actually reads `uPointerTrail`.
     ///
     /// The host spreads the history's fixed number of slots over the longest
-    /// `trailSeconds` in the chain, so that one figure sets the spacing
-    /// between samples for EVERY pack sharing the ring. A click pack that
+    /// WINDOW in the chain (see `resolvedTrailWindow`), so one pack's answer
+    /// sets the spacing for every pack sharing the ring. A click pack that
     /// draws only at the press point still needs a long `trailSeconds` to keep
     /// its animation running, and would otherwise coarsen the stroke of every
     /// trail pack beside it while reading no samples of its own. Declaring
@@ -120,6 +120,30 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
     /// spacing. The validator cross-checks the declaration against the stage
     /// sources, so it cannot quietly drift away from what the shaders do.
     bool samplesTrail = true;
+
+    /// How far back, in seconds, the pack's stages actually READ the trail.
+    /// Zero means "not declared", and the window falls back to
+    /// `trailSeconds`.
+    ///
+    /// `samplesTrail` says WHETHER a pack reads the ring; this says HOW MUCH
+    /// of it. The two are different questions and the second one is what
+    /// should set the spacing, because the host spreads a fixed number of
+    /// slots across the window it is given. Taking that window from
+    /// `trailSeconds` charges every pack for its LIVENESS: a pack that must
+    /// keep drawing for two seconds after the pointer stops, but only ever
+    /// looks at the last half second of path, was getting its stroke sampled
+    /// four times more coarsely than it needed.
+    double trailWindowSeconds = 0.0;
+
+    /// Optional name of an int/float parameter whose resolved value replaces
+    /// `trailWindowSeconds`, the same shape as `reachParam` over `reach`.
+    ///
+    /// This is the form most packs want, because how far back they read is
+    /// usually a slider: a trail's `lifetime`, a comet's `length`. Following
+    /// the resolved value means a user who shortens the tail gets a finer
+    /// stroke for it, instead of paying the spacing for a length they are not
+    /// using.
+    QString trailWindowParam;
 
     /// Bind the cursor sprite as `uCursorSprite`. Default false.
     bool needsCursor = false;
@@ -201,11 +225,30 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
         return !id.isEmpty() && !fragmentShaderPath.isEmpty();
     }
 
+    /// How far back this pack reads the trail, in seconds, for the given
+    /// friendly parameter map: the `trailWindowParam` value when declared and
+    /// present (falling back to that parameter's default), else
+    /// `trailWindowSeconds`, else `trailSeconds`. Clamped to `trailSeconds`,
+    /// since a pack cannot read further back than the host keeps it alive,
+    /// and to a non-negative value.
+    ///
+    /// Returns 0 when `samplesTrail` is false: such a pack reads nothing and
+    /// has no business setting the spacing at all.
+    [[nodiscard]] double resolvedTrailWindow(const QVariantMap& params) const;
+
     /// The pack's reach in logical px for the given friendly parameter map:
     /// the `reachParam` value when declared and present (falling back to
     /// that parameter's default), else `reach`. Clamped to
     /// `kMinReach`..`kMaxReach`.
     [[nodiscard]] double resolvedReach(const QVariantMap& params) const;
+
+private:
+    /// The value of the int/float parameter @p paramId from @p params, its
+    /// declared default when the map has no entry, and @p fallback when the
+    /// name is empty, undeclared or of a type with no number in it. Shared by
+    /// `resolvedReach` and `resolvedTrailWindow`, which differ only in what
+    /// they clamp the answer to.
+    [[nodiscard]] double resolvedParam(const QString& paramId, const QVariantMap& params, double fallback) const;
 };
 
 } // namespace PhosphorPointerShaders

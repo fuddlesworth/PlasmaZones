@@ -9,6 +9,7 @@
     "layer": "below",
     "reach": 96,
     "trailSeconds": 1.0,
+    "trailWindowSeconds": 0.1,
     "multipass": true,
     "bufferShaders": ["buffer.frag"],
     "bufferFeedback": true,

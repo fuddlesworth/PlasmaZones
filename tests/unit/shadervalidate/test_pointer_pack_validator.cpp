@@ -441,6 +441,37 @@ private Q_SLOTS:
                                                                   "}\n"));
             QVERIFY2(!inc.report.contains(QStringLiteral("declare `samplesTrail: false`")), qPrintable(inc.report));
 
+            // The trail WINDOW gate. It decides the ring's spacing, so a
+            // declaration that names nothing, names the wrong type, or
+            // reaches past the pack's own liveness is a real defect rather
+            // than a tidiness one.
+            QJsonObject missing = pointerPackWithGate(QStringLiteral("pt-window-missing"), 0.0);
+            missing.insert(QStringLiteral("trailWindowParam"), QStringLiteral("nosuch"));
+            const PackResult wm = validatePointer(tmp, QStringLiteral("pt-window-missing"), missing, body);
+            QVERIFY2(wm.report.contains(QStringLiteral("trailWindowParam 'nosuch' names no declared parameter")),
+                     qPrintable(wm.report));
+
+            QJsonObject past = pointerPack(
+                QStringLiteral("pt-window-past-liveness"),
+                QJsonArray{pointerParam(QStringLiteral("lifetime"), QStringLiteral("float"), 0.5, 0.0, 9.0)});
+            past.insert(QStringLiteral("trailWindowParam"), QStringLiteral("lifetime"));
+            const PackResult wp =
+                validatePointer(tmp, QStringLiteral("pt-window-past-liveness"), past,
+                                QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(p_lifetime); }\n"));
+            QVERIFY2(wp.report.contains(QStringLiteral("reads further back than it stays live for")),
+                     qPrintable(wp.report));
+
+            // A window declared on a pack that reads nothing is ignored, and
+            // saying both ways is dead weight.
+            QJsonObject both = pointerPackWithGate(QStringLiteral("pt-window-both"), 0.0);
+            both.insert(QStringLiteral("trailWindowSeconds"), 0.5);
+            both.insert(QStringLiteral("trailWindowParam"), QStringLiteral("activationSpeed"));
+            const PackResult wb = validatePointer(tmp, QStringLiteral("pt-window-both"), both, body);
+            QVERIFY2(wb.report.contains(QStringLiteral("the parameter wins")), qPrintable(wb.report));
+            QVERIFY2(wb.report.contains(QStringLiteral("samplesTrail is false, so the declared trail window is "
+                                                       "ignored")),
+                     qPrintable(wb.report));
+
             // The honest declaration draws neither lint.
             QJsonObject honest = pointerPackWithGate(QStringLiteral("pt-trail-honest"), 0.0);
             const PackResult h = validatePointer(tmp, QStringLiteral("pt-trail-honest"), honest, body);

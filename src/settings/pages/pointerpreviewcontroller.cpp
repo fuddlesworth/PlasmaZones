@@ -136,8 +136,8 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     // The same rule the compositor applies, on a chain of one: the window
     // comes from the pack's own trailSeconds when the pack reads the trail,
     // and is left at the floor when it does not. A preview canvas hosts a
-    // single pack, so "the longest trailSeconds among the chain members that
-    // sample" is just this pack's.
+    // single pack, so "the longest read window in the chain" is just this
+    // pack's own, resolved against the parameters being previewed.
     //
     // What a preview therefore cannot show is a MIXED chain: on screen the
     // ring is spaced by the longest sampling pack in the whole chain, so a
@@ -155,7 +155,7 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     state.pressed = false;
     state.hasLastDevicePos = false;
     state.lastDpr = 1.0;
-    state.history.setTrailSeconds(effect.samplesTrail ? effect.trailSeconds : 0.0);
+    state.history.setTrailSeconds(effect.resolvedTrailWindow(friendlyParams));
     updatePreviewParams(item, packId, friendlyParams);
     return true;
 }
@@ -178,7 +178,7 @@ PointerPreviewController::PointerState& PointerPreviewController::stateFor(QObje
 }
 
 void PointerPreviewController::updatePreviewParams(QQuickItem* item, const QString& packId,
-                                                   const QVariantMap& friendlyParams) const
+                                                   const QVariantMap& friendlyParams)
 {
     auto* shaderItem = qobject_cast<PhosphorRendering::ShaderEffect*>(item);
     if (!shaderItem || !m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
@@ -197,6 +197,14 @@ void PointerPreviewController::updatePreviewParams(QQuickItem* item, const QStri
     if (const auto ext = std::dynamic_pointer_cast<PhosphorPointerShaders::PointerUniformExtension>(
             shaderItem->uniformExtension())) {
         ext->setReachLogicalPx(effect.resolvedReach(friendlyParams));
+    }
+    // The sampling window follows a parameter too, so a slider that changes
+    // how far back the pack reads has to re-space the ring the way it re-sets
+    // the reach above. The compositor gets this through rebuildChain on the
+    // same edit; without it the preview would keep the window it was
+    // configured with and stop matching what it is previewing.
+    if (const auto it = m_states.find(shaderItem); it != m_states.end()) {
+        it->history.setTrailSeconds(effect.resolvedTrailWindow(friendlyParams));
     }
 }
 

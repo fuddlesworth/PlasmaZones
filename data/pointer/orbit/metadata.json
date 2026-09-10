@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "radius",
     "trailSeconds": 2.0,
+    "trailWindowSeconds": 0.6,
     "parameters": [
         {
             "id": "dots",
