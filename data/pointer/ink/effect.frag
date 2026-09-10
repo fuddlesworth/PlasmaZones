@@ -68,9 +68,16 @@ vec4 pPointer(vec2 uv) {
     int live = pointerLiveCount(count, lifetime);
     if (live >= 2) {
         float cull = halfWidth * 1.5 + 2.0 * scale;
-        // The smoothed far end of one segment is the near end of the next,
-        // so it is carried across iterations rather than looked up twice.
-        vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
+        // Four-point window over the smoothed path. The span drawn this
+        // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts
+        // by one per iteration, so each sample is smoothed once rather than
+        // four times. The newest end passes its endpoint twice, which gives
+        // that end a zero tangent and a span that leaves it straight down the
+        // chord.
+        vec2 c0 = pointerSmoothedAt(0, live, p_smoothing);
+        vec2 c1 = c0;
+        vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
+        vec2 c3 = pointerSmoothedAt(2, live, p_smoothing);
         for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
             if (i + 1 >= live) {
                 break;
@@ -78,7 +85,6 @@ vec4 pPointer(vec2 uv) {
             vec4 a = pointerTrailAt(i);
             vec4 b = pointerTrailAt(i + 1);
 
-            vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
             if (distance(a.xy, b.xy) < 1.0) {
                 // A stationary pair (raw positions under a pixel apart, the
                 // sampler's own rest-slot rule: a rest slot a host that feeds
@@ -88,19 +94,33 @@ vec4 pPointer(vec2 uv) {
                 // apart toward the neighbour beyond, and drawing that stub
                 // would keep the rest point wet where the compositor, which
                 // gets no event from a resting pointer, lets it dry.
-                pa = pb;
+                c0 = c1;
+                c1 = c2;
+                c2 = c3;
+                c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
                 continue;
             }
-            vec2 lo = min(pa, pb) - cull;
-            vec2 hi = max(pa, pb) + cull;
+            // The box is over ALL FOUR control points, not just the span's
+            // ends: the curve is guaranteed to stay inside their hull plus the
+            // bulge, and a box over c1..c2 alone would cut a rounded corner
+            // that leaves it.
+            float bulge = pointerCurveBulge(c0, c1, c2, c3);
+            vec2 lo = min(min(c0, c1), min(c2, c3)) - cull - bulge;
+            vec2 hi = max(max(c0, c1), max(c2, c3)) + cull + bulge;
             if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-                pa = pb;
+                c0 = c1;
+                c1 = c2;
+                c2 = c3;
+                c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
                 continue;
             }
 
             float t;
-            float d = pointerSegmentDistanceFrom(px, pa, pb, t);
-            pa = pb;
+            float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
+            c0 = c1;
+            c1 = c2;
+            c2 = c3;
+            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
             float age = mix(a.z, b.z, t);
             float remain = 1.0 - age / lifetime;
 

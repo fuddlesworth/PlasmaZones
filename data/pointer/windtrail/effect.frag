@@ -87,9 +87,15 @@ vec4 pPointer(vec2 uv) {
     // would blend a segment's far end toward one); the live count is the
     // window pointerSmoothedAt clamps its neighbours into.
     int live = pointerLiveCount(count, duration);
-    // The smoothed far end of one segment is the near end of the next, so it
-    // is carried across iterations rather than looked up twice per segment.
-    vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
+    // Four-point window over the smoothed path. The span drawn this
+    // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts by
+    // one per iteration, so each sample is smoothed once rather than four
+    // times. The newest end passes its endpoint twice, which gives that end a
+    // zero tangent and a span that leaves it straight down the chord.
+    vec2 c0 = pointerSmoothedAt(0, live, p_smoothing);
+    vec2 c1 = c0;
+    vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
+    vec2 c3 = pointerSmoothedAt(2, live, p_smoothing);
     for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
         if (i + 1 >= live) {
             break;
@@ -97,13 +103,16 @@ vec4 pPointer(vec2 uv) {
         vec4 a = pointerTrailAt(i);
         vec4 b = pointerTrailAt(i + 1);
 
-        // The far endpoint is needed either way (it is the next segment's
-        // near end), so it is looked up once; the reject box is built from
-        // the raw samples (see pointerSegmentOutside) so a rejected fragment
-        // still skips the distance maths.
-        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
-        if (pointerSegmentOutside(px, i, live, a, b, reach)) {
-            pa = pb;
+        // The reject box is built from the raw samples (see
+        // pointerSegmentOutside) so a rejected fragment still skips the
+        // distance maths. The curve can leave the box of its control points,
+        // so the box has to allow for that or a fragment the ribbon genuinely
+        // covers is skipped and the ribbon is clipped.
+        if (pointerSegmentOutside(px, i, live, a, b, reach + pointerCurveBulge(c0, c1, c2, c3))) {
+            c0 = c1;
+            c1 = c2;
+            c2 = c3;
+            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
             continue;
         }
         if (distance(a.xy, b.xy) < 1.0) {
@@ -114,12 +123,18 @@ vec4 pPointer(vec2 uv) {
             // compositor, which gets no event from a resting pointer, lets it
             // age out. Tested on the raw samples, since the smoothing kernel
             // pulls the pair's endpoints apart toward the neighbour beyond.
-            pa = pb;
+            c0 = c1;
+            c1 = c2;
+            c2 = c3;
+            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
             continue;
         }
         float t;
-        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
-        pa = pb;
+        float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
+        c0 = c1;
+        c1 = c2;
+        c2 = c3;
+        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
 
         // Per-sample speed, normalised and square-rooted. This one stays raw
         // because it describes how fast the pointer was AT this point of the

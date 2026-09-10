@@ -96,9 +96,15 @@ vec4 pPointer(vec2 uv) {
 
     float tail = 0.0;
     float tailGrain = 0.0;
-    // The smoothed far end of one segment is the near end of the next, so it
-    // is carried across iterations rather than looked up twice per segment.
-    vec2 pa = headPos;
+    // Four-point window over the smoothed path. The span drawn this iteration
+    // is c1..c2 and c0 / c3 set its tangents; the window shifts by one per
+    // iteration, so each sample is smoothed once rather than four times. The
+    // head end passes its own position twice, which gives it a zero tangent
+    // and a span that leaves the head straight down the chord.
+    vec2 c0 = headPos;
+    vec2 c1 = headPos;
+    vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
+    vec2 c3 = pointerSmoothedAt(2, live, p_smoothing);
     for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
         if (i + 1 >= live) {
             break;
@@ -108,17 +114,27 @@ vec4 pPointer(vec2 uv) {
         if (a.z >= tailSeconds) {
             break;
         }
-        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
-        vec2 lo = min(pa, pb) - reach;
-        vec2 hi = max(pa, pb) + reach;
+        // The box is over ALL FOUR control points, not just the span's ends:
+        // the curve is guaranteed to stay inside their hull plus the bulge,
+        // and a box over c1..c2 alone would cut a rounded corner that leaves
+        // it.
+        float bulge = pointerCurveBulge(c0, c1, c2, c3);
+        vec2 lo = min(min(c0, c1), min(c2, c3)) - reach - bulge;
+        vec2 hi = max(max(c0, c1), max(c2, c3)) + reach + bulge;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-            pa = pb;
+        c0 = c1;
+        c1 = c2;
+        c2 = c3;
+        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
             continue;
         }
 
         float t;
-        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
-        pa = pb;
+        float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
+        c0 = c1;
+        c1 = c2;
+        c2 = c3;
+        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
         float age = clamp(mix(a.z, b.z, t) / tailSeconds, 0.0, 1.0);
         float life = 1.0 - age;
         float w = radius * life;
