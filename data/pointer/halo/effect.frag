@@ -44,7 +44,7 @@ vec4 pPointer(vec2 uv) {
     float scale = pointerScale();
     // The reach the host resolved from `radius`, in device px, read from the
     // uniform so the damage rect and the glow's cut cannot drift.
-    float radius = max(pointerReach(), 1.0);
+    float radius = pointerReach();
     float sigma = radius * 0.4;
     float intensity = clamp(p_intensity, 0.0, 2.0);
 

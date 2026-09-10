@@ -153,6 +153,9 @@ private:
         /// tick can fill in the path it travelled rather than teleporting.
         QPointF lastDevicePos;
         bool hasLastDevicePos = false;
+        /// The scale lastDevicePos was measured in, so a move to an output
+        /// with another one is caught rather than interpolated across.
+        qreal lastDpr = 1.0;
     };
     QHash<QObject*, PointerState> m_states;
 

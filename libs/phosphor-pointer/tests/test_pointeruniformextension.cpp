@@ -267,7 +267,12 @@ void TestPointerUniformExtension::testApplyingAnIdenticalFrameLeavesTheTailClean
 
     // And each lane still flips it when it really changes, so the clean
     // result above is a compare, not a setter that stopped writing.
+    // The baseline is re-applied before each case, or every call after the
+    // first would be dirty merely because the PREVIOUS case's mutation is
+    // being undone — which makes each case pass for the wrong reason and
+    // isolates nothing.
     const auto expectDirtyAfter = [&](auto mutate) {
+        ext.apply(fullFrame());
         ext.clearDirty();
         PointerFrameState changed = fullFrame();
         mutate(changed);

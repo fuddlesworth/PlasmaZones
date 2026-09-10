@@ -172,6 +172,12 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
         // would never advance again. The discontinuity forces the append, and
         // the new slot re-anchors the ring the way accepting the event
         // re-anchors the pairing.
+        //
+        // Under a STATIONARY pointer the append below is a rest slot, which
+        // does not accept the event, so the pairing and the idle clock stay on
+        // the old timeline until the first real move re-anchors them. That
+        // self-heals and reads as live throughout, because a frozen anchor
+        // after a backwards step sits in the future.
         if (!clockStepped && gapMs < m_sampleIntervalMs) {
             // Inside the sample interval. The slot is not appended to, or the
             // ring would fill with a few ms of motion and the tail could never

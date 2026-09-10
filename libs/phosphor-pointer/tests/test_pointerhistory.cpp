@@ -8,6 +8,7 @@
 #include <QtTest/QtTest>
 
 #include <cmath>
+#include <limits>
 
 using namespace PhosphorPointerShaders;
 
@@ -710,11 +711,24 @@ void TestPointerHistory::testTrailWindowEdgeValuesFallBackToTheFloor()
 
     // Exported API, so the cast in setTrailSeconds has to stay defined for a
     // caller that is not the JSON boundary.
+    // Asserted on the STORED window, not on the interval. Without the isfinite
+    // guard the cast is undefined, and the value it happens to produce on
+    // x86-64 (INT64_MIN) still floors to kMinSampleGapMs — so an
+    // interval-only assertion passes on the broken code on the very platform
+    // CI runs.
     history.setTrailSeconds(std::numeric_limits<double>::quiet_NaN());
+    QCOMPARE(history.trailSeconds(), 0.0);
     QCOMPARE(history.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
 
+    // Infinity is not finite, so it takes the same rejection arm as NaN
+    // rather than clamping to kMaxTrailSeconds.
     history.setTrailSeconds(std::numeric_limits<double>::infinity());
-    QVERIFY(history.sampleIntervalMs() >= PointerHistory::kMinSampleGapMs);
+    QCOMPARE(history.trailSeconds(), 0.0);
+    QCOMPARE(history.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
+
+    // The upper clamp is what a large FINITE value gets.
+    history.setTrailSeconds(1.0e9);
+    QCOMPARE(history.trailSeconds(), PointerHistory::kMaxTrailSeconds);
 
     // A window whose interval would fall under the floor still gets the floor.
     history.setTrailSeconds(0.05);
@@ -737,22 +751,31 @@ void TestPointerHistory::testClockStepDoesNotLatchAcrossFollowingEvents()
     history.notePointer(QPointF(100.0, 0.0), 10050);
     QVERIFY(history.isLive(10050, 1.0));
 
-    // The clock steps back a full second, then the pointer keeps moving.
+    // The clock steps back a full second, then the pointer keeps moving. The
+    // whole run stays BELOW the pre-step stamp of 10050 on purpose: the latch
+    // only exists while the new clock is behind the frozen one, so letting the
+    // timeline overtake it lets the broken code recover on its own and the
+    // test stops discriminating.
     qint64 t = 9000;
     for (int i = 1; i <= 20; ++i) {
         t += 40;
         history.notePointer(QPointF(double(i) * 30.0, 0.0), t);
     }
+    QVERIFY(t < 10050);
     // On the new timeline the pointer has been moving continuously, so the
     // pass must still be live. Before the re-anchor this read as idle since
     // 10050 and went dark.
-    QVERIFY2(history.isLive(t, 1.0), "trail expired under a moving pointer after a clock step");
+    // The RING SIZE is the discriminator. isLive and idleSeconds cannot be:
+    // a latched idle anchor sits in the FUTURE relative to the stepped-back
+    // clock, so both of them report a healthy trail on the broken code too.
+    // They are asserted below as corroboration, not as the detection.
     const PointerFrameState state = history.frameState(t, 1.0);
+    QVERIFY2(state.trailSize() > 2,
+             "the events after a clock step were never accepted: the pairing stayed frozen and the head "
+             "refreshed in place instead of the ring advancing");
+    QVERIFY(history.isLive(t, 1.0));
     QCOMPARE(state.idleSeconds, 0.0);
     QCOMPARE(state.newestTrail().x(), 600.0f);
-    // The events after the step were accepted, so the ring grew past the two
-    // it held when the clock jumped.
-    QVERIFY(state.trailSize() > 2);
 }
 
 void TestPointerHistory::testRestingPointerEventuallyEvictsEveryMotionSample()

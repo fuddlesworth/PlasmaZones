@@ -407,7 +407,7 @@ private Q_SLOTS:
                                                                 "    vec4 s = pointerTrailAt(0);\n"
                                                                 "    return vec4(s.xy, 0.0, p_activationSpeed);\n"
                                                                 "}\n"));
-            QVERIFY2(u.report.contains(QStringLiteral("samplesTrail is false but a stage reads uPointerTrail")),
+            QVERIFY2(u.report.contains(QStringLiteral("samplesTrail is false but a stage reads the pointer trail")),
                      qPrintable(u.report));
 
             // And the other way: saying nothing (the default is true) while

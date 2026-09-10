@@ -672,7 +672,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     if (anyStage) {
         static const QRegularExpression kMirror(
             QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*|#\\s*define\\s+kTrailSeconds\\s+)"
-                           "([0-9]+\\.?[0-9]*|\\.[0-9]+)"));
+                           "([0-9]+\\.?[0-9]*(?:[eE][-+]?[0-9]+)?|\\.[0-9]+(?:[eE][-+]?[0-9]+)?)"));
         // A declaration the value pattern cannot capture (an expression, a
         // named constant, an exponent form) would otherwise slip through with
         // no diagnostic at all, which is worse than a mismatch: the author
@@ -771,12 +771,22 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         const bool declaredSamplesTrail = samplesTrailValue.toBool(true);
         if (readsTrail && !declaredSamplesTrail) {
             lints << QStringLiteral(
-                "samplesTrail is false but a stage reads uPointerTrail (the pack's own trailSeconds is then left "
+                "samplesTrail is false but a stage reads the pointer trail (the pack's own trailSeconds is then left "
                 "out of the chain's sample spacing, so it draws from slots spaced for another pack)");
         }
-        if (!readsTrail && declaredSamplesTrail) {
+        // Only when nothing could be hiding a reader. These scans run over the
+        // stage sources as written, not over the include-expanded text, so a
+        // pack that keeps its trail walk in a file it #includes reads as
+        // "no stage reads the trail" here. Telling THAT author to declare
+        // false would take a pack that really does read the ring out of the
+        // spacing decision, which is the exact mis-spacing this key exists to
+        // prevent, and the opposite lint could not catch it afterwards. The
+        // false-negative (a click pack with an include, left declaring true)
+        // costs a coarser chain; the false-positive costs a broken pack.
+        const bool anyStageIncludes = allStages.contains(QLatin1String("#include"));
+        if (!readsTrail && declaredSamplesTrail && !anyStageIncludes) {
             lints << QStringLiteral(
-                "no stage reads uPointerTrail, so declare `samplesTrail: false` (otherwise this pack's "
+                "no stage reads the pointer trail, so declare `samplesTrail: false` (otherwise this pack's "
                 "trailSeconds raises the sample spacing for every trail pack chained with it, while reading "
                 "none of it itself)");
         }

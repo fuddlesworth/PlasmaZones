@@ -613,7 +613,7 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         // hold a hide for a chain that draws nothing. Unconditionally for this
         // output: updateCursorHiding keeps a hide while the chain is live,
         // and the chain IS live here (it passed the liveness gate above), so
-        // only the foreign-paint release actually hands the cursor back.
+        // only releaseCursorHide actually hands the cursor back.
         releaseCursorHide(screen);
         return;
     }

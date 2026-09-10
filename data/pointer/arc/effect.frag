@@ -169,7 +169,10 @@ vec4 pPointer(vec2 uv) {
     // monotonic ages and answers the run LENGTH, so the last index is one
     // less; a run of 0 or 1 leaves `last` at 0 and draws nothing, which is
     // what the guard below already expects.
-    int last = max(pointerLiveCount(count, kQuietSeconds) - 1, 0);
+    // Behind the alpha test, as the loop this replaced was: arcAlpha is 0 on
+    // every idle-faded, gated-shut or between-strikes frame, which is most of
+    // them, and there is no earlier exit in this pack.
+    int last = arcAlpha > 0.0 ? max(pointerLiveCount(count, kQuietSeconds) - 1, 0) : 0;
     if (arcAlpha > 0.0 && last >= 1) {
         for (int j = 0; j < kMaxArcs; ++j) {
             if (float(j) >= budget) {

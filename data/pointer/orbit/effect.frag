@@ -209,12 +209,14 @@ vec4 pPointer(vec2 uv) {
     float stretch = 1.0 + smear * 2.0;
 
     // Direction from the raw per-event velocity, magnitude from the filtered
-    // speed. The raw vector reads 0 whenever two events land in the same
-    // millisecond (pointer_lib says so on pointerFilteredSpeed), and this is
-    // the one place left in the family where that would be VISIBLE: the smear
-    // direction would snap from the pointer's motion to the bare orbital
-    // tangent for that frame and back again. Normalising keeps the direction
-    // and takes the length from the figure that survives a shared stamp.
+    // speed, so the drift's weight against the orbital tangent stops jumping
+    // with the per-event figure. Both are device px/s, so nothing rescales.
+    //
+    // This does NOT rescue the frame where the raw vector reads 0 (two events
+    // inside one millisecond, which pointer_lib describes on
+    // pointerFilteredSpeed): the direction is gone, so drift is 0 either way
+    // and `travel` is the bare tangent for that frame. Fixing that needs a
+    // direction that survives the shared stamp, which nothing here carries.
     vec2 rawDrift = uPointerVelocity.xy;
     float rawDriftLen = length(rawDrift);
     vec2 drift = rawDriftLen > 1e-3 ? rawDrift / rawDriftLen * pointerFilteredSpeed() : vec2(0.0);

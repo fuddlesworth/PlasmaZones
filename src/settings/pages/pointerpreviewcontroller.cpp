@@ -231,13 +231,22 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
     // frame rate, but the sampler decides where to put a slot from the gap
     // since the last one, so one event per 16 ms tick meant an append could
     // only ever land on a tick boundary: the effective spacing was the sample
-    // interval rounded UP to a multiple of 16, and the ring spanned about half
-    // again as long as the pack's window. The compositor feeds real pointer
+    // interval rounded UP to a multiple of 16, so the ring overran the pack's
+    // window — by about half again at the short end, where the interval is
+    // near the tick, and by a few percent for the longer packs whose interval
+    // already exceeds it. The compositor feeds real pointer
     // events at 125-1000 Hz and lands close to the interval, so the preview
     // walks the path it covered this tick at a comparable rate. This is what
     // makes the preview's trail the same length as the one on screen, which
     // is the whole reason the window is set here at all.
     constexpr double kSimulatedEventIntervalMs = 4.0; // 250 Hz, inside the range a real mouse reports at
+    // A DPR change (the window moved to an output with another scale) leaves
+    // the stored position in the OLD device scale, and interpolating from it
+    // would lay a straight line the pointer never took across the new canvas.
+    if (st.hasLastDevicePos && !qFuzzyCompare(dpr, st.lastDpr)) {
+        st.hasLastDevicePos = false;
+    }
+    st.lastDpr = dpr;
     const QPointF from = st.hasLastDevicePos ? st.lastDevicePos : devicePos;
     const int steps = st.hasLastDevicePos ? std::clamp(static_cast<int>(stepMs / kSimulatedEventIntervalMs), 1, 64) : 1;
     for (int i = 1; i <= steps; ++i) {

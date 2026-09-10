@@ -135,13 +135,11 @@ vec4 pPointer(vec2 uv) {
         // display as every sibling pack's.
         float c = (1.0 - smoothstep(halfWidth - 0.75, halfWidth + 0.75, d)) * fade;
         float h = exp(-(d * d) / (2.0 * sigma * sigma)) * fade * 0.45 * max(p_glow, 0.0);
-        // Tracked against a running best of the SAME quantity `cover` is
-        // taken from below. Comparing against max(core, halo) instead used
-        // two independently accumulated maxima, which between them can exceed
-        // any single segment's max(c, h), so past that point no segment could
-        // win and hueAge stopped following the one that actually decides the
-        // colour. (The two maxima agree in value — a max of pairwise maxima is
-        // the max of the separate maxima — but only this form has an argmax.)
+        // Tracked against a running best of the same quantity `cover` is taken
+        // from below. This is a clarity change, not a behaviour one: a max of
+        // pairwise maxima equals the max of the separate maxima, so the old
+        // `max(c, h) > max(core, halo)` test fired on exactly these segments.
+        // The argmax form says what is meant, and costs one register.
         float thisCover = max(c, h);
         if (thisCover > bestCover) {
             bestCover = thisCover;

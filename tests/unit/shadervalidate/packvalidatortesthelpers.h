@@ -44,6 +44,28 @@ inline PackResult fixtureFailure(const QString& what)
     return failed;
 }
 
+/// Link @p target in as the fixture root's `shared/`, the directory
+/// includePathsFor searches first for a pack at `<tmp>/<name>`.
+///
+/// An existing link is accepted only when it already points AT @p target. The
+/// animation and pointer families both want this one path, so a translation
+/// unit that used both would otherwise get `true` back from a link aimed at
+/// the other family's helpers, and its includes would fall through to the
+/// INSTALLED tree — silently reintroducing the very drift this exists to
+/// close. Returning false there makes the caller's QSKIP fire loudly instead.
+inline bool linkSharedInto(const QTemporaryDir& tmp, const QString& target)
+{
+    if (!QDir(target).exists()) {
+        return false;
+    }
+    const QString link = tmp.filePath(QStringLiteral("shared"));
+    const QFileInfo info(link);
+    if (info.exists() || info.isSymLink()) {
+        return QFileInfo(info.symLinkTarget()).canonicalFilePath() == QFileInfo(target).canonicalFilePath();
+    }
+    return QFile::link(target, link);
+}
+
 /// The validator derives its include path from the pack's PARENT directory
 /// (`<packs-root>/shared`), matching the animation runtime. A temp packs-root
 /// has no such directory, so every fragment stage would fail include
@@ -55,14 +77,7 @@ inline PackResult fixtureFailure(const QString& what)
 inline bool linkSharedIncludes(const QTemporaryDir& tmp)
 {
     const QString target = QStringLiteral(P_SOURCE_DIR "/data/animations/shared");
-    if (!QDir(target).exists()) {
-        return false;
-    }
-    const QString link = tmp.filePath(QStringLiteral("shared"));
-    if (QFileInfo::exists(link)) {
-        return true;
-    }
-    return QFile::link(target, link);
+    return linkSharedInto(tmp, target);
 }
 
 /// The pointer twin of `linkSharedIncludes`. The pointer entry prologue always
@@ -79,14 +94,7 @@ inline bool linkSharedIncludes(const QTemporaryDir& tmp)
 inline bool linkPointerSharedIncludes(const QTemporaryDir& tmp)
 {
     const QString target = QStringLiteral(P_SOURCE_DIR "/data/pointer/shared");
-    if (!QDir(target).exists()) {
-        return false;
-    }
-    const QString link = tmp.filePath(QStringLiteral("shared"));
-    if (QFileInfo::exists(link)) {
-        return true;
-    }
-    return QFile::link(target, link);
+    return linkSharedInto(tmp, target);
 }
 
 /// Write @p body to @p file inside the pack directory @p dir. Returns false

@@ -183,14 +183,16 @@ void PointerDecorationPass::rebuildChain()
     // A chain whose every layer resolved away is NOT engaged: the cost rule
     // is about live layers, not about a non-empty profile.
     m_engaged = !m_engagedLayers.empty() && m_maxTrailSeconds > 0.0;
-    // The ring spreads its samples over the longest window in the chain, so a
-    // pack's tail can actually be as long as its trailSeconds says. Without
-    // this the sampler kept every event and a fast mouse filled all 32 slots
-    // in a few tens of ms, whatever the pack's length parameter said.
-    // The SAMPLING window, not the liveness one. With no trail-reading pack
-    // in the chain this is 0, which floors the interval — dense sampling
-    // nothing reads costs nothing, and it is the right state to hand the
-    // next chain that does read.
+    // The ring spreads its samples over this window, so a pack's tail can
+    // actually be as long as its trailSeconds says. Without it the sampler
+    // kept every event and a fast mouse filled all 32 slots in a few tens of
+    // ms, whatever the pack's length parameter said.
+    //
+    // This is the SAMPLING window, not the liveness one: the longest
+    // trailSeconds among the members that actually read the trail. With no
+    // such member it is 0, which floors the interval. Dense sampling nothing
+    // reads costs nothing, and it is the right state to hand the next chain
+    // that does read.
     m_history.setTrailSeconds(m_sampleWindowSeconds);
 }
 
@@ -561,16 +563,15 @@ void PointerDecorationPass::outputGeometryChanged()
     // the rescaled screen. The sprite rect is in the old scale's device px,
     // so it goes too.
     //
-    // Taken first, for the same reason as the other reset paths: from the next
-    // frame on the rect answers from an empty ring, so the band the last frame
-    // painted has nothing left to describe it. A resolution change usually
-    // forces a full output repaint, but a virtual-layout change does not
-    // necessarily re-render the output's contents.
-    const QRectF stale = staleTrailRect();
+    // No stale repaint here, unlike the other reset paths. The rect would be
+    // built from the output's NEW scale and origin while the pixels it is
+    // meant to damage were painted in the old canvas, so it would ask for the
+    // wrong band: on a layout move the origin has already shifted, and on a
+    // scale change the size is wrong too. The geometry change is itself what
+    // re-renders the output, so the band is covered without us guessing at it.
     resetHistory();
     m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
-    repaintStale(stale);
 }
 
 void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)

@@ -25,7 +25,6 @@
 const float kTrailSeconds = 0.8;
 const float kBurstSeconds = 0.35;
 
-
 vec4 pPointer(vec2 uv) {
     // No early return on an empty trail: a click before any motion this
     // session still bursts (the burst answers a resting pointer by design),
@@ -79,12 +78,18 @@ vec4 pPointer(vec2 uv) {
     // the head (Halo and Afterglow keep a similar margin). Nothing with no
     // trail: the zero entry would put a head at the canvas origin, so both
     // head terms are gated here.
+    //
+    // On `count`, NOT on the live run. The head belongs to the pointer, not to
+    // the tail the user sized: gating it on `live` would retire it as soon as
+    // the idle time passed `length`, so at the shortest length it vanished a
+    // tenth of a second after the pointer stopped while idleFade below was
+    // still saying it should be at full strength for another half second.
     float idleFade = 1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle);
-    float headFade = live >= 1 ? idleFade * gate : 0.0;
+    float headFade = count >= 1 ? idleFade * gate : 0.0;
     float dHead = length(px - headPos);
     // The head's disc, shared with the click lift below so the two cannot
     // disagree about where the head ends.
-    float headDisc = live >= 1 ? 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead) : 0.0;
+    float headDisc = count >= 1 ? 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead) : 0.0;
     float headCore = headDisc * headFade;
     float headGlow =
         exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade * pointerReachWindow(dHead, reach);
