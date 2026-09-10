@@ -78,12 +78,14 @@ vec4 pPointer(vec2 uv) {
             vec4 b = pointerTrailAt(i + 1);
 
             vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
-            if (distance(pa, pb) < 1e-4) {
-                // A stationary pair lays down no stroke. The preview appends
-                // one every interval while its pointer rests, and drawing
-                // those would keep the rest point wet there when the
-                // compositor, which gets no event from a resting pointer,
-                // lets it dry.
+            if (distance(a.xy, b.xy) < 1e-4) {
+                // A stationary pair (equal RAW positions: a rest slot a host
+                // that feeds every tick appends beside the last motion
+                // sample) lays down no stroke. Tested on the raw samples,
+                // since the smoothing kernel pulls the pair's endpoints
+                // apart toward the neighbour beyond, and drawing that stub
+                // would keep the rest point wet where the compositor, which
+                // gets no event from a resting pointer, lets it dry.
                 pa = pb;
                 continue;
             }
@@ -132,7 +134,9 @@ vec4 pPointer(vec2 uv) {
         // the same direction as the stroke's own width term. Gated on Bleed for
         // the same reason, so setting Bleed to zero really does keep one width
         // everywhere.
-        float r = halfWidth * blot * 2.0 * (1.0 + 0.18 * bleed * wet);
+        // The feather is folded into the reach, so the blot's edge ends inside
+        // the damage rect at the smallest width too.
+        float r = min(halfWidth * blot * 2.0 * (1.0 + 0.18 * bleed * wet), pointerReach() - 0.75);
         float d = length(px - uPointerPress.xy);
         float band = 1.0 - smoothstep(r - 0.75, r + 0.75, d);
         cover = max(cover, band * smoothstep(0.0, 0.30, remain));

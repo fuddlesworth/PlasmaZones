@@ -39,7 +39,8 @@ private Q_SLOTS:
     void testLivenessExpiresAfterTrailSeconds();
     void testButtonEventKeepsPassLiveWithoutMotion();
     void testVelocityDecaysWhenPointerStops();
-    void testBackwardsTimestampReportsZeroSpeed();
+    void testBackwardsOrSameStampCarriesPreviousSpeed();
+    void testFilterSeedsFromTheFirstScoredSample();
     void testSameMillisecondBurstDoesNotFillTheRing();
     void testFilteredSpeedFollowsTheCurrentStrokeOnly();
     void testStationaryAppendsAreNotMotion();
@@ -222,7 +223,44 @@ void TestPointerHistory::testVelocityDecaysWhenPointerStops()
     QCOMPARE(history.frameState(50 + PointerHistory::kVelocityHoldMs, 1.0).velocity.x(), 0.0f);
 }
 
-void TestPointerHistory::testBackwardsTimestampReportsZeroSpeed()
+void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
+{
+    // A short stroke after a park, where the seed choice moves the answer
+    // by hundreds of px/s: the start is scored 0 and must be the boundary,
+    // the first scored sample the seed. Seeding from the 0 would give 92
+    // here; seeding from the first scored sample gives 100*0.54 + 200*0.46.
+    PointerHistory history;
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(1000.0, 0.0), 5000); // park, then the start (speed 0)
+    history.notePointer(QPointF(1005.0, 0.0), 5050); // 100 px/s
+    history.notePointer(QPointF(1015.0, 0.0), 5100); // 200 px/s
+    const PointerFrameState state = history.frameState(5100, 1.0);
+    QCOMPARE(state.trailSize(), 4);
+    QCOMPARE(state.trailAt(2).w(), 0.0f); // the start
+    QVERIFY2(std::abs(state.filteredSpeed - 146.0) < 1.0,
+             qPrintable(QStringLiteral("filtered %1, expected 146").arg(state.filteredSpeed)));
+
+    // A start that a later in-interval event refreshed carries that event's
+    // scored speed and seeds: at a 4 s window (130 ms interval) the start
+    // slot at 5000 is refreshed by the event at 5050, so the ring holds one
+    // stroke slot scored 100 px/s plus the appended 5150 sample.
+    PointerHistory refreshed;
+    refreshed.setTrailSeconds(4.0);
+    refreshed.notePointer(QPointF(0.0, 0.0), 0);
+    refreshed.notePointer(QPointF(1000.0, 0.0), 5000);
+    refreshed.notePointer(QPointF(1005.0, 0.0), 5050);
+    // 30 px over 90 ms (inside the hold, so it pairs) at 140 ms from the
+    // slot's append (past the interval, so it appends): 333 px/s.
+    refreshed.notePointer(QPointF(1035.0, 0.0), 5140);
+    const PointerFrameState two = refreshed.frameState(5140, 1.0);
+    QCOMPARE(two.trailSize(), 3);
+    QCOMPARE(qRound(two.trailAt(1).w()), 100);
+    const double expected = 100.0 * 0.54 + (30.0 / 0.09) * 0.46;
+    QVERIFY2(std::abs(two.filteredSpeed - expected) < 1.0,
+             qPrintable(QStringLiteral("filtered %1, expected %2").arg(two.filteredSpeed).arg(expected)));
+}
+
+void TestPointerHistory::testBackwardsOrSameStampCarriesPreviousSpeed()
 {
     // A clock that steps back (or two events stamped identically) is not a
     // pairing anything can be divided over. Before this the negative gap
@@ -385,12 +423,20 @@ void TestPointerHistory::testSeedPositionIsNotMotion()
     // A ring with samples is left alone.
     history.seedPosition(QPointF(0.0, 0.0), 1001);
     QCOMPARE(history.frameState(1001, 1.0).newestTrail().x(), 40.0f);
-    // The first real move after the seed is motion and starts a stroke: it
-    // lands past the 8 ms floor so it appends, and the idle clock starts.
-    history.notePointer(QPointF(45.0, 50.0), 1010);
-    QCOMPARE(sampleCount(history, 1010), 2);
-    QCOMPARE(history.frameState(1010, 1.0).idleSeconds, 0.0);
-    QVERIFY(history.isLive(1010, 1.0));
+    // The compositor's real path after a click: a move INSIDE the seed slot's
+    // interval refreshes the seeded slot into motion (no slot spent, the
+    // head follows, the idle clock starts, the velocity has no pairing yet)
+    // and keeps the slot's append time as its anchor.
+    history.notePointer(QPointF(45.0, 50.0), 1004);
+    const PointerFrameState refreshed = history.frameState(1004, 1.0);
+    QCOMPARE(refreshed.trailSize(), 1);
+    QCOMPARE(refreshed.newestTrail().x(), 45.0f);
+    QCOMPARE(refreshed.idleSeconds, 0.0);
+    QCOMPARE(refreshed.velocity.x(), 0.0f);
+    QVERIFY(history.isLive(1004, 1.0));
+    // The anchor stayed at the seed time, so 8 ms after the SEED appends.
+    history.notePointer(QPointF(50.0, 50.0), 1008);
+    QCOMPARE(sampleCount(history, 1008), 2);
 }
 
 void TestPointerHistory::testStationaryAppendsAreNotMotion()
@@ -453,10 +499,15 @@ void TestPointerHistory::testStrokeBoundaryIsIndependentOfTheSampleInterval()
              qPrintable(QStringLiteral("filtered %1 collapsed to the head's %2").arg(state.filteredSpeed).arg(head)));
     // Pinned to the walk itself: the exponential filter (a = 0.46) over the
     // slots' speeds, oldest to newest, exactly as the frame state exposes
-    // them. The stroke started before the ring's oldest slot, so every slot
-    // is in the walk and the oldest seeds it.
-    double expected = state.trailAt(state.trailSize() - 1).w();
-    for (int i = state.trailSize() - 2; i >= 0; --i) {
+    // them. The ring's oldest slot is the stroke's start (the first event,
+    // scored 0), which is the boundary and not the seed, so the walk seeds
+    // from the slot before it. The seed rule itself is pinned by
+    // testFilterSeedsFromTheFirstScoredSample on a ring short enough for the
+    // choice to matter; here the difference has decayed below the tolerance.
+    const int last = state.trailSize() - 1;
+    const int seed = state.trailAt(last).w() <= 0.0f ? last - 1 : last;
+    double expected = state.trailAt(seed).w();
+    for (int i = seed - 1; i >= 0; --i) {
         expected = expected * 0.54 + state.trailAt(i).w() * 0.46;
     }
     QVERIFY2(std::abs(state.filteredSpeed - expected) < 1.0,

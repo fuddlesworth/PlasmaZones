@@ -41,6 +41,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -49,6 +50,7 @@
 #include <rhi/qshader.h>
 
 #include <algorithm>
+#include <cmath>
 
 using PhosphorPointerShaders::PointerShaderEffect;
 using PhosphorPointerShaders::PointerShaderRegistry;
@@ -197,7 +199,15 @@ QStringList speedGateParamNames(const QString& strippedSource)
             if (haveArg && j < source.size()) {
                 const QString arg = source.mid(argStart, j - argStart).trimmed();
                 if (arg.startsWith(QLatin1String("p_"))) {
-                    const QString id = arg.mid(2);
+                    // The leading identifier only: the argument is routinely
+                    // an expression (`p_activationSpeed * pointerScale()`),
+                    // and a pack written that way must not slip out of the
+                    // lint's coverage.
+                    int end = 2;
+                    while (end < arg.size() && (arg[end].isLetterOrNumber() || arg[end] == QLatin1Char('_'))) {
+                        ++end;
+                    }
+                    const QString id = arg.mid(2, end - 2);
                     if (PhosphorShaders::isValidParamId(id) && !found.contains(id)) {
                         found << id;
                     }
@@ -431,6 +441,16 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral("reach out of range [0, %1]: %2 (clamped at load)")
                          .arg(PointerShaderEffect::kMaxReach)
                          .arg(reachValue.toDouble());
+        } else if (eff.reachParam.isEmpty() && reachValue.toDouble() < kMinReachParamFloor) {
+            // The same floor the reachParam arm enforces: under it the damage
+            // rect is a sliver around the path (for a resting pointer, empty),
+            // so the pack never draws, and a shader windowing on the reach
+            // meets equal smoothstep edges at 0.
+            lints << QStringLiteral(
+                         "reach %1 is under the %2 logical px floor: the damage rect degenerates to the "
+                         "sample box and the pack cannot draw")
+                         .arg(reachValue.toDouble())
+                         .arg(kMinReachParamFloor);
         }
     }
     if (!eff.reachParam.isEmpty()) {
@@ -603,6 +623,27 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                              .arg(threshold, 0, 'g', 4)
                              .arg(PointerShaderContract::kPreviewPeakSpeedPxPerSecond, 0, 'g', 4)
                              .arg(gate, 0, 'f', 2);
+            }
+        }
+    }
+
+    // ── mirrored trailSeconds ──
+    // Every bundled pack that fades on its own clock mirrors the metadata
+    // trailSeconds as `const float kTrailSeconds`, and nothing else ties the
+    // two together: a metadata edit alone would leave the pack fading against
+    // the wrong window and freezing its last frame when the host went quiet.
+    if (anyStage) {
+        static const QRegularExpression kMirror(
+            QStringLiteral("\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*([0-9]*\\.?[0-9]+)"));
+        const QRegularExpressionMatch m = kMirror.match(allStages);
+        if (m.hasMatch()) {
+            const double mirrored = m.captured(1).toDouble();
+            if (std::abs(mirrored - eff.trailSeconds) > 1e-6) {
+                lints << QStringLiteral(
+                             "kTrailSeconds is %1 in the shader but trailSeconds is %2 in the metadata "
+                             "(the pack fades against the wrong window)")
+                             .arg(mirrored)
+                             .arg(eff.trailSeconds);
             }
         }
     }

@@ -116,11 +116,13 @@ vec4 pPointer(vec2 uv) {
             pa = pb;
             continue;
         }
-        if (distance(pa, pb) < 1e-4) {
-            // A stationary pair has no tube to draw. A host that feeds a
-            // resting pointer appends one every interval, and a point
-            // segment at age zero would hold a full-brightness dot at the
-            // rest point where the compositor lets it age out.
+        if (distance(a.xy, b.xy) < 1e-4) {
+            // A stationary pair (equal RAW positions) has no tube to draw. A
+            // host that feeds a resting pointer appends one every interval,
+            // and a point segment at age zero would hold a full-brightness
+            // dot at the rest point where the compositor lets it age out.
+            // Tested on the raw samples, since the smoothing kernel pulls the
+            // pair's endpoints apart toward the neighbour beyond.
             pa = pb;
             continue;
         }

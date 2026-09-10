@@ -12,8 +12,9 @@
 // resting and the idle fade has already taken the base glow down. It is gone
 // by kSwellSeconds, which the metadata's trailSeconds covers.
 //
-// `activationSpeed` gates the base glow through the shared pointerSpeedGate()
-// so the halo can be made to appear only once the pointer is really moving.
+// `activationSpeed` gates the base glow through the shared
+// pointerActivationGate() so the halo can be made to appear only once the
+// pointer is really moving.
 // It stacks with `speedGain` rather than duplicating it: the gate decides
 // whether the glow is there, speedGain decides how bright it is once it is.
 // At the default 0 there is no threshold, which is the behaviour the pack
@@ -22,11 +23,10 @@
 // here: this pack is a glow centred on the pointer, not a path trace, so
 // there is no curve for smoothing to act on.
 
-// How long the glow lingers after the pointer stops. Sized against
-// `trailSeconds` (0.9) so there is room for a whole breath before the fade,
-// and the breath rate below is matched to it — at the old 0.6 s, with the fade
-// starting halfway through, under a fifth of a cycle was ever on screen and
-// the "breathes while you hold still" the pack advertises was not visible.
+// How long the glow lingers after the pointer stops. Inside `trailSeconds`
+// (0.9) so the last live frame is already clear, and long enough for one
+// whole breath at the rate below before the late fade, so the "breathes
+// while you hold still" the pack advertises is actually on screen.
 const float kIdleSeconds = 0.85;
 // One full cycle inside the visible window, in radians per second. Nudged
 // at use onto a divisor of the iTime wrap (pointerWrapSafeRate) so the
@@ -41,7 +41,9 @@ const float kFullSpeed = 200.0;
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float radius = max(p_radius, 1.0) * scale;
+    // The reach the host resolved from `radius`, in device px, read from the
+    // uniform so the damage rect and the glow's cut cannot drift.
+    float radius = max(pointerReach(), 1.0);
     float sigma = radius * 0.4;
     float intensity = clamp(p_intensity, 0.0, 2.0);
 

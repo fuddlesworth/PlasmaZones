@@ -27,8 +27,8 @@
 // FADE: the dots keep orbiting while the pointer is parked, so the pack owns
 // its own quiet. Everything is multiplied by an idle envelope that starts
 // easing down at kFadeStart and is exactly zero at kQuietSeconds, which is
-// inside the metadata trailSeconds. A parked pointer therefore gets a couple
-// of seconds of orbiting, then nothing, and the host stops repainting.
+// inside the metadata trailSeconds. A parked pointer therefore gets about a
+// second of orbiting, then nothing, and the host stops repainting.
 
 const int kMaxDots = 6;
 const float kFadeStart = 1.0;
@@ -95,9 +95,10 @@ vec2 orbitCentre(int count, float lag) {
 // so the gap is the rest itself). The first move after it appends a fresh
 // head at age 0, which alone would snap the envelope back to 1 while the
 // window still holds the previous stroke's samples, popping the ring back
-// out to that stroke's radius. So the samples on the far side of a park
-// keep the weight the envelope had reached at the park's length, and the
-// ring resumes from where the draw-back left it.
+// out to that stroke's radius. So the samples on the far side of a park are
+// DOWN-WEIGHTED in the mean by the envelope at the park's length, against
+// the fresh head at full weight: the old stroke's share of the radius is
+// what the draw-back had left it, not the whole of it.
 const float kParkSeconds = 0.1;
 float orbitEnvelope(float age) {
     return 1.0 - smoothstep(0.5 * kSpeedWindowSeconds, kSpeedWindowSeconds, age);
@@ -122,9 +123,6 @@ float orbitMeanSpeed(int count) {
         float gap = s.z - prevAge;
         if (gap >= kParkSeconds) {
             weight *= orbitEnvelope(gap);
-            if (weight <= 0.0) {
-                break;
-            }
         }
         prevAge = s.z;
         sum += s.w * weight;
@@ -168,24 +166,27 @@ vec4 pPointer(vec2 uv) {
 
     float speedNorm = clamp(orbitMeanSpeed(count) / (kFullSpeed * scale), 0.0, 1.0);
 
-    // A dot's drawn extent is three dot radii (the compact window below),
-    // elongated along its travel by `stretch` when smeared. That extent comes
-    // out of the reach so the dot never meets the damage rect's edge, and
-    // what is left is the RING BUDGET the growth and the click push work
-    // inside: growing toward the whole reach and then capping at the budget
-    // left the growth inert at the shipped defaults (the cap sat a fraction
-    // of a pixel above the resting radius) and made the smear shrink the
-    // ring as the speed rose. When a legal pair of settings (Dot size up to
-    // 10 against an Orbit radius from 8) leaves no room for both, the DOT is
-    // shrunk to fit rather than the ring being collapsed onto the centre or
-    // the extent being let hang outside the rect; the dot may take at most
-    // 60 percent of the reach, so the ring always keeps a budget to orbit on.
-    float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
-    float stretch = 1.0 + smear * 2.0;
+    // A dot's drawn extent is three dot radii (the compact window below).
+    // That extent comes out of the reach so the dot never meets the damage
+    // rect's edge, and what is left is the RING BUDGET the growth and the
+    // click push work inside: growing toward the whole reach and then
+    // capping at the budget left the growth inert at the shipped defaults
+    // (the cap sat a fraction of a pixel above the resting radius). The
+    // budget is taken on the UNSTRETCHED extent, and the smear is clipped
+    // afterwards to whatever room the ring leaves: budgeting on the smeared
+    // extent made the budget itself shrink with speed, so at a high smear
+    // the ring contracted as the pointer sped up and "growth 0 holds the
+    // full radius" was false for any smear at all. When a legal pair of
+    // settings (Dot size up to 10 against an Orbit radius from 8) leaves no
+    // room for both, the DOT is shrunk to fit rather than the ring being
+    // collapsed onto the centre or the extent being let hang outside the
+    // rect; the dot may take at most 60 percent of the reach, so the ring
+    // always keeps a budget to orbit on.
+    //
     // Floored so the divides below can never see a zero dot even if a host
     // handed a zero reach; the budget is floored at zero for the same case.
-    float dotPx = max(min(max(p_dotSize, 0.25) * scale, reachPx * 0.6 / (3.0 * stretch)), 0.25 * scale);
-    float ringMax = max(reachPx - 3.0 * dotPx * stretch, 0.0);
+    float dotPx = max(min(max(p_dotSize, 0.25) * scale, reachPx * 0.2), 0.25 * scale);
+    float ringMax = max(reachPx - 3.0 * dotPx, 0.0);
 
     float grow = clamp(p_speedGrowth, 0.0, 1.0);
     float baseFrac = mix(1.0, 0.35, grow);
@@ -200,6 +201,12 @@ vec4 pPointer(vec2 uv) {
         radius += push * exp(-4.5 * k) * sin(k * 14.0) * (1.0 - k);
     }
     radius = clamp(radius, 0.0, ringMax);
+
+    // The smear elongates a dot along its travel; clipped to the room the
+    // ring leaves inside the reach, so a wide ring smears less rather than
+    // painting past the damage rect.
+    float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
+    float stretch = min(1.0 + smear * 2.0, max((reachPx - radius) / (3.0 * dotPx), 1.0));
 
     vec2 drift = uPointerVelocity.xy;
     // The spin rate is nudged onto a divisor of the iTime wrap so the ring

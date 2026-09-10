@@ -34,7 +34,7 @@
             "type": "float",
             "default": 0.5,
             "min": 0.1,
-            "max": 0.8,
+            "max": 0.72,
             "description": "How long a point on the path stays lit (seconds)"
         },
         {

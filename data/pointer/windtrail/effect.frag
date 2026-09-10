@@ -112,11 +112,13 @@ vec4 pPointer(vec2 uv) {
             pa = pb;
             continue;
         }
-        if (distance(pa, pb) < 1e-4) {
-            // A stationary pair has no ribbon to draw. The preview appends
-            // one every interval while its pointer rests, and drawing those
-            // would keep the rest point lit there when the compositor, which
-            // gets no event from a resting pointer, lets it age out.
+        if (distance(a.xy, b.xy) < 1e-4) {
+            // A stationary pair (equal RAW positions) has no ribbon to draw.
+            // A host that feeds a resting pointer appends one every interval,
+            // and drawing those would keep the rest point lit there when the
+            // compositor, which gets no event from a resting pointer, lets it
+            // age out. Tested on the raw samples, since the smoothing kernel
+            // pulls the pair's endpoints apart toward the neighbour beyond.
             pa = pb;
             continue;
         }

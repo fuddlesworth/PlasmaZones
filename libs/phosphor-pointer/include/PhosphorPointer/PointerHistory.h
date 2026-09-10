@@ -153,14 +153,6 @@ public:
     /// Null when not live.
     [[nodiscard]] QRectF damageRect(double reachDevicePx, qint64 nowMs, double trailSeconds) const;
 
-    /// Number of motion samples in the ring (0..kCapacity). The compositor
-    /// seeds an empty ring from a buttons-only event so the first live frame
-    /// after a reset has a pointer position to hand out.
-    [[nodiscard]] int sampleCount() const
-    {
-        return m_count;
-    }
-
     void reset();
 
 private:

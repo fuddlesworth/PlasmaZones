@@ -38,10 +38,10 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    // Capped at 0.9 of the window for the reason the head fade ends there:
-    // the last live frame at a low refresh rate lands just inside the
-    // window, and a tail still fading at the edge would leave its last
-    // sliver frozen at 20 Hz and below.
+    // Capped at 0.9 of the window (the metadata maximum is that cap) for the
+    // reason the head fade ends there: the last live frame at a low refresh
+    // rate lands just inside the window, and a tail still fading at the edge
+    // would leave its last sliver frozen at 20 Hz and below.
     float tailSeconds = clamp(p_length, 0.05, 0.9 * kTrailSeconds);
     // The reach in device px: both the reject box and the outer edge of every
     // glow, so the two cannot disagree. Read from the uniform the host filled
@@ -76,7 +76,8 @@ vec4 pPointer(vec2 uv) {
     // the head (Halo and Afterglow keep a similar margin). Nothing with no
     // trail: the zero entry would put a head at the canvas origin, so both
     // head terms are gated here.
-    float headFade = count >= 1 ? (1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle)) * gate : 0.0;
+    float idleFade = 1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle);
+    float headFade = count >= 1 ? idleFade * gate : 0.0;
     float dHead = length(px - headPos);
     // The head's disc, shared with the click lift below so the two cannot
     // disagree about where the head ends.
@@ -133,6 +134,13 @@ vec4 pPointer(vec2 uv) {
             tailGrain = smoothstep(0.75, 1.0, g) * soft * 3.0;
         }
     }
+
+    // The tail ends on the idle clock like the head, not only on sample age:
+    // a host that appends a rest slot every interval keeps a sample at age
+    // zero under a resting pointer, and its degenerate segment would hold a
+    // full-width disc there after the head had faded.
+    tail *= idleFade;
+    tailGrain *= idleFade;
 
     // Click burst: the head flares and sheds a fistful of extra grain from
     // the press point. Everything is cut to zero at the reach so the burst

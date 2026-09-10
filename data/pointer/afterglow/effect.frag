@@ -28,6 +28,14 @@
 //
 // Coverage is also cut to exactly zero a little above the canvas floor so the
 // pack returns transparent black everywhere once the canvas has emptied.
+//
+// The canvas runs at half resolution (metadata bufferScale 0.5): it stores a
+// soft glow that this pass samples with linear filtering, so a full-size
+// RGBA8 decay pass over the whole output every live frame bought nothing
+// visible. Both stages address it with normalised uv, and iResolution is
+// the output size in the buffer pass too, so the stamp lands where the
+// pointer is at either scale; the smallest brush (4 logical px) is still two
+// texels wide there.
 
 #include <pointer_multipass.glsl>
 #include "afterglow_common.glsl"

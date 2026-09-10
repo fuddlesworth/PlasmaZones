@@ -109,16 +109,27 @@ vec4 pPointer(vec2 uv) {
     launch *= shrink;
     gravity *= shrink;
 
+    // Only the LIVE run of samples sheds or is smoothed over, like the other
+    // trail packs: the ring is never purged, and at a life equal to the
+    // metadata trailSeconds the samples behind the run are outside the
+    // damage rect, where the smoothing kernel would otherwise pull a launch
+    // point toward them. The live count is the window pointerSmoothedAt
+    // clamps its neighbours into.
+    int live = 0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || pointerTrailAt(i).z >= life) {
+            break;
+        }
+        live = i + 1;
+    }
+
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
     for (int i = 0; i < kPointerTrailCapacity; ++i) {
-        if (i >= count || gate <= 0.0) {
+        if (i >= live || gate <= 0.0) {
             break;
         }
         vec4 s = pointerTrailAt(i);
-        if (s.z >= life) {
-            break;
-        }
         // From index 8 on (the ninth sample), only half the samples shed.
         // The inner loop below is the pack's whole cost, so thinning the
         // older part of the tail nearly halves the worst case. The half is
@@ -151,7 +162,7 @@ vec4 pPointer(vec2 uv) {
         // raw sample position: the seed has to stay put from frame to frame
         // or a spark would be re-rolled into a new direction as the smoothing
         // window slides over it.
-        vec2 origin = pointerSmoothedAt(i, count, p_smoothing);
+        vec2 origin = pointerSmoothedAt(i, live, p_smoothing);
         vec2 rel = px - origin;
         float extent = sparkExtent(s.z, launch, gravity, size);
         if (abs(rel.x) > extent || abs(rel.y) > extent) {

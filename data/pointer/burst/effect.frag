@@ -22,8 +22,9 @@
 //
 // REACH. A bit's displacement from its origin is |v|t + 0.5*g*t^2, which over
 // a life L is at most speed*L + 0.5*gravity*L*L. `speed` and `gravity` are
-// scaled down together by `k` so that bound, plus the bit's own drawn radius,
-// stays inside `reach` — the parameter `reachParam` names, so the host's
+// scaled down together by `k` so that bound, plus the bit's drawn extent
+// (three radii), stays inside `reach` — the parameter `reachParam` names, so
+// the host's
 // damage rect is exactly what the pack can paint. The travel budget is
 // floored at 35 percent of the reach (see the budget line), so a large bit
 // on a small reach may overrun the rect a little rather than never leaving

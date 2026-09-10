@@ -162,9 +162,11 @@ vec2 pointerSmoothedAt(int i, int count, float smoothing) {
 
 // pointerSegmentDistance over the smoothed path: distance from `p` to the
 // segment between smoothed samples i and i + 1, with `t` its normalized
-// position along that segment (0 at the newer end). A drop-in for callers
-// that gain a `smoothing` parameter; at smoothing 0 it is the raw-path
-// answer.
+// position along that segment (0 at the newer end). A drop-in for a caller
+// that gains a `smoothing` parameter; at smoothing 0 it is the raw-path
+// answer. No bundled pack uses it (they all hold the smoothed endpoints for
+// their own reject box and call pointerSegmentDistanceFrom); it is kept as
+// part of the public helper set for third-party packs.
 float pointerSmoothSegmentDistance(vec2 p, int i, int count, float smoothing, out float t) {
     return pointerSegmentDistanceFrom(p, pointerSmoothedAt(i, count, smoothing),
                                       pointerSmoothedAt(i + 1, count, smoothing), t);

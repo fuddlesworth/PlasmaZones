@@ -119,7 +119,9 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
     };
     const auto accept = [&](double speed) {
         if (sameTick) {
-            m_lastMotionMs = nowMs;
+            // Never backwards: a stepped-back stamp carries the previous
+            // event and must not rewind the idle clock with it.
+            m_lastMotionMs = std::max(m_lastMotionMs, nowMs);
             return;
         }
         acceptEvent(devicePx, nowMs, speed, hasPrev, prevPos, prevMs);
@@ -219,14 +221,16 @@ double PointerHistory::filteredSpeed() const
             break;
         }
     }
-    // The stroke's first sample carries speed 0 by construction (it has no
-    // usable pairing: it is the first event, or the one after a park), so it
-    // is the boundary but not the seed. The seed is the oldest sample with a
-    // scored speed, or a short stroke would read as a fraction of its speed
-    // (a three-sample nudge after a park at 71 percent of it). Only when the
-    // stroke start is the single motion sample is its 0 the answer.
+    // The stroke's first sample is scored 0 at the event that started the
+    // stroke (it has no usable pairing: it is the first event, or the one
+    // after a park), so an UNSCORED start is the boundary but not the seed.
+    // The seed is the oldest sample with a scored speed, or a short stroke
+    // would read as a fraction of its speed (a three-sample nudge after a
+    // park at 71 percent of it). A start slot that a later in-interval event
+    // refreshed in place carries that event's scored speed and seeds. Only
+    // when an unscored start is the single motion sample is its 0 the answer.
     int seed = oldest;
-    if (seed > newest && sampleAt(seed).strokeStart) {
+    if (seed > newest && sampleAt(seed).strokeStart && sampleAt(seed).speed <= 0.0) {
         for (int i = seed - 1; i >= newest; --i) {
             if (sampleAt(i).motion) {
                 seed = i;
@@ -370,9 +374,9 @@ QRectF PointerHistory::damageRect(double reachDevicePx, qint64 nowMs, double tra
         include(m_releasePos);
     }
     if (!any) {
-        // Live on motion recency alone (the newest sample is the pointer): a
-        // ring with samples always has at least the newest inside the window,
-        // so this only happens with no samples at all.
+        // Defensive only: isLive() above means the newest sample, the press
+        // or the release is inside the window, and each of those is included
+        // by the tests above, so this cannot be reached.
         return {};
     }
     const double r = std::max(0.0, reachDevicePx);

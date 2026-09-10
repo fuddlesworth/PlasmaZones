@@ -28,6 +28,9 @@
 // `reachParam` names), so nothing is painted outside the damage rect the host
 // derives from it.
 
+// The spike count cap; the metadata maximum is this number.
+const int kMaxSpikes = 12;
+
 vec4 flashColour(float button) {
     return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
@@ -74,7 +77,7 @@ vec4 pPointer(vec2 uv) {
 
     // Spikes: thin bright lines through the middle, longest along their own
     // axis and tapering to nothing at the tips.
-    int spikes = clamp(int(p_spikeCount + 0.5), 0, 12);
+    int spikes = clamp(int(p_spikeCount + 0.5), 0, kMaxSpikes);
     if (spikes > 0) {
         float len = limit * grow;
         // `across` is the distance from the spike's axis, so the parameter
@@ -82,9 +85,9 @@ vec4 pPointer(vec2 uv) {
         // the test below uses. Held under the reach so a wide spike on a
         // tiny reach still tapers rather than having its base cut square by
         // the box above.
-        float width = min(0.5 * max(p_spikeWidth, 0.25) * scale, limit * 0.4);
+        float width = min(0.5 * max(p_spikeWidth, 0.5) * scale, limit * 0.4);
         float base = radians(p_spikeAngle);
-        for (int i = 0; i < 12; ++i) {
+        for (int i = 0; i < kMaxSpikes; ++i) {
             if (i >= spikes) {
                 break;
             }

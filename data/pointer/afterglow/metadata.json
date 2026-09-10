@@ -12,6 +12,7 @@
     "multipass": true,
     "bufferShaders": ["buffer.frag"],
     "bufferFeedback": true,
+    "bufferScale": 0.5,
     "parameters": [
         {
             "id": "persistence",

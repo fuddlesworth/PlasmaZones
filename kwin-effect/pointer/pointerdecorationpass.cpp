@@ -66,6 +66,7 @@ void PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationP
         // picked up by a later chain as a stale burst.
         updateCursorHiding();
         m_history.reset();
+        m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
     }
 }
@@ -89,6 +90,7 @@ void PointerDecorationPass::setSuppressedOutputs(const QSet<KWin::LogicalOutput*
     // the history so a later un-suppress does not pick it up as a stale burst.
     updateCursorHiding();
     m_history.reset();
+    m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
 }
 
@@ -428,7 +430,13 @@ void PointerDecorationPass::invalidateShaderCache()
     // engaged-chain cache, not just the compiled shaders.
     rebuildChain();
     if (!m_engaged) {
+        // The same tidy-up setProfile does when a chain empties: a reload that
+        // removes the chain's pack and a later one that restores it must not
+        // replay the trail the pointer left in between.
         updateCursorHiding();
+        m_history.reset();
+        m_lastSpriteCanvasRect = QRectF();
+        m_hasTimeOrigin = false;
     }
 }
 

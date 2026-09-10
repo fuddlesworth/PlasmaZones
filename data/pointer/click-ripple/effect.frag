@@ -32,7 +32,10 @@ float ring(vec2 px, vec2 origin, float since, float duration, float maxRadius, f
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float duration = clamp(p_duration, 0.05, kTrailSeconds);
+    // Capped at 0.9 of the window (the metadata maximum is that cap): the
+    // last live frame at a low refresh rate lands just inside the window, and
+    // a ring still fading at the edge would leave its band frozen there.
+    float duration = clamp(p_duration, 0.05, 0.9 * kTrailSeconds);
     float thickness = max(p_thickness, 0.5) * scale;
     // The ring is drawn as a BAND around `radius`, so the painted edge is half
     // a thickness plus the antialias feather beyond it. The metadata's reach

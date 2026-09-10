@@ -911,6 +911,50 @@ private Q_SLOTS:
             QVERIFY2(!q.report.contains(QStringLiteral("include expansion failed")), qPrintable(q.report));
         }
         {
+            // A literal reach under the floor the reachParam arm enforces
+            // leaves the damage rect a sliver (empty for a resting pointer),
+            // so the pack can never draw.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-reach-tiny"), 0.0);
+            obj.insert(QStringLiteral("reach"), 0.0);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-tiny"), obj, body);
+            QVERIFY2(r.report.contains(QStringLiteral("reach 0 is under the 4 logical px floor")),
+                     qPrintable(r.report));
+        }
+        {
+            // The gate's parameter is found inside an expression too: a pack
+            // scaling the threshold itself must not slip out of the lint.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-gate-expr"), 400.0);
+            const PackResult r = validatePointer(
+                tmp, QStringLiteral("pt-gate-expr"), obj,
+                QStringLiteral("vec4 pPointer(vec2 uv) {\n"
+                               "    return vec4(pointerSpeedGate(uPointerVelocity.z, p_activationSpeed * 2.0));\n"
+                               "}\n"));
+            QVERIFY2(r.report.contains(QStringLiteral("previews as an empty stage")), qPrintable(r.report));
+        }
+        {
+            // A shader that mirrors trailSeconds as kTrailSeconds is held to
+            // the metadata, or an edit to one leaves the pack fading against
+            // the wrong window.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-trail-mirror"), 0.0);
+            obj.insert(QStringLiteral("trailSeconds"), 0.9);
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-trail-mirror"), obj,
+                                                 QStringLiteral("const float kTrailSeconds = 0.8;\n"
+                                                                "vec4 pPointer(vec2 uv) {\n"
+                                                                "    return vec4(kTrailSeconds * p_activationSpeed);\n"
+                                                                "}\n"));
+            QVERIFY2(r.report.contains(QStringLiteral("kTrailSeconds is 0.8 in the shader but trailSeconds is 0.9")),
+                     qPrintable(r.report));
+            QJsonObject ok = pointerPackWithGate(QStringLiteral("pt-trail-mirror-ok"), 0.0);
+            ok.insert(QStringLiteral("trailSeconds"), 0.8);
+            const PackResult fine =
+                validatePointer(tmp, QStringLiteral("pt-trail-mirror-ok"), ok,
+                                QStringLiteral("const float kTrailSeconds = 0.8;\n"
+                                               "vec4 pPointer(vec2 uv) {\n"
+                                               "    return vec4(kTrailSeconds * p_activationSpeed);\n"
+                                               "}\n"));
+            QVERIFY2(!fine.report.contains(QStringLiteral("kTrailSeconds is")), qPrintable(fine.report));
+        }
+        {
             // A pack helper whose name merely ends in the shared gate's name
             // is not the shared gate; the scan is identifier-bounded.
             QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-gate-lookalike"), 900.0);

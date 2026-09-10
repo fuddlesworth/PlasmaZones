@@ -52,7 +52,8 @@
 // uniforms yet run per fragment, before the per-arc reject box can cull
 // (there is no earlier place to put them in a single fragment pass). At
 // eight arcs that is eight hashes and a few dozen trail reads per fragment
-// over a pointer-sized rect, which is affordable; do not grow kMaxArcs.
+// over the trail's damage rect, which for a fast sweep is a large share of
+// the output; affordable at eight, so do not grow kMaxArcs.
 
 #include <pointer_noise.glsl>
 
@@ -90,6 +91,23 @@ float arcDistance(vec2 p, vec2 a, vec2 b, vec2 seed, float amp) {
     return best;
 }
 
+// Shade one arc at distance `dist` from it: a hot white core inside a
+// coloured halo, weighted by `strength`, accumulated premultiplied into
+// rgb / alpha. Shared by the trail arcs and the click fan so the two cannot
+// drift apart in look.
+void arcShade(float dist, float strength, float core, float glow, inout vec3 rgb, inout float alpha) {
+    float hot = exp(-(dist * dist) / (2.0 * core * core));
+    float halo = exp(-(dist * dist) / (2.0 * glow * glow)) * 0.55;
+    float cover = clamp(hot + halo, 0.0, 1.0) * strength;
+    if (cover <= 0.0) {
+        return;
+    }
+    vec3 tint = mix(p_color.rgb, vec3(1.0), hot * 0.85);
+    float ca = cover * p_color.a;
+    rgb += tint * ca;
+    alpha += ca;
+}
+
 vec4 pPointer(vec2 uv) {
     // No early return on an empty trail: a click before any motion this
     // session still bursts (the burst answers a parked pointer by design),
@@ -101,7 +119,10 @@ vec4 pPointer(vec2 uv) {
     // The reach the host resolved from the `reach` parameter, in device px,
     // read from the uniform so the damage rect and the shader cannot drift.
     float reachPx = pointerReach();
-    float rate = clamp(p_crackleRate, 1.0, 60.0);
+    // Nudged onto a divisor of the preview's iTime wrap (pointerWrapSafeRate)
+    // so the strike envelope does not snap once per wrap there; the
+    // compositor never wraps.
+    float rate = pointerWrapSafeRate(clamp(p_crackleRate, 1.0, 60.0));
     float jag = clamp(p_jaggedness, 0.0, 1.0);
     float intensity = max(p_intensity, 0.0);
 
@@ -176,17 +197,7 @@ vec4 pPointer(vec2 uv) {
                 continue;
             }
 
-            float dist = arcDistance(px, a, b, seed, amp);
-            float hot = exp(-(dist * dist) / (2.0 * core * core));
-            float halo = exp(-(dist * dist) / (2.0 * glow * glow)) * 0.55;
-            float cover = clamp(hot + halo, 0.0, 1.0) * arcAlpha * share * (0.6 + 0.4 * h.z);
-            if (cover <= 0.0) {
-                continue;
-            }
-            vec3 tint = mix(p_color.rgb, vec3(1.0), hot * 0.85);
-            float ca = cover * p_color.a;
-            rgb += tint * ca;
-            alpha += ca;
+            arcShade(arcDistance(px, a, b, seed, amp), arcAlpha * share * (0.6 + 0.4 * h.z), core, glow, rgb, alpha);
         }
     }
 
@@ -220,17 +231,7 @@ vec4 pPointer(vec2 uv) {
                 continue;
             }
             vec2 seed = vec2(roll * 0.917 + float(j) * 5.31, float(j) * 19.7 + 61.0);
-            float dist = arcDistance(px, origin, tip, seed, amp);
-            float hot = exp(-(dist * dist) / (2.0 * core * core));
-            float halo = exp(-(dist * dist) / (2.0 * glow * glow)) * 0.55;
-            float cover = clamp(hot + halo, 0.0, 1.0) * burstAlpha * (0.6 + 0.4 * h.z);
-            if (cover <= 0.0) {
-                continue;
-            }
-            vec3 tint = mix(p_color.rgb, vec3(1.0), hot * 0.85);
-            float ca = cover * p_color.a;
-            rgb += tint * ca;
-            alpha += ca;
+            arcShade(arcDistance(px, origin, tip, seed, amp), burstAlpha * (0.6 + 0.4 * h.z), core, glow, rgb, alpha);
         }
     }
 
