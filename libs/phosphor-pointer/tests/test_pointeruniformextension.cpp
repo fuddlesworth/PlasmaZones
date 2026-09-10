@@ -25,6 +25,7 @@ PointerFrameState fullFrame()
 {
     PointerFrameState state;
     state.velocity = QVector2D(3.0f, 4.0f);
+    state.filteredSpeed = 4.5;
     state.pressPos = QPointF(100.0, 200.0);
     state.pressSecondsSince = 0.25;
     state.pressButton = 2;
@@ -102,7 +103,7 @@ void TestPointerUniformExtension::testWriteLandsAtTheDeclaredTailOffset()
     QCOMPARE(ext.extensionSize(), static_cast<int>(sizeof(PointerUniformsTail)));
 
     std::vector<char> buffer(1280, char{0x7f});
-    ext.setVelocity(QVector2D(12.0f, -5.0f));
+    ext.setVelocity(QVector2D(12.0f, -5.0f), 7.5);
     ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
 
     // Everything before the tail belongs to BaseUniforms and must be
@@ -116,6 +117,9 @@ void TestPointerUniformExtension::testWriteLandsAtTheDeclaredTailOffset()
     QCOMPARE(velocity[1], -5.0f);
     // .z carries the scalar speed so a pack can read magnitude without a sqrt.
     QCOMPARE(velocity[2], 13.0f);
+    // .w carries the sampler's filtered speed, what pointerFilteredSpeed()
+    // reads, so a gate costs one uniform read rather than a walk per fragment.
+    QCOMPARE(velocity[3], 7.5f);
 }
 
 void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
@@ -129,6 +133,12 @@ void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
 
     std::vector<char> buffer(1280, char{0});
     ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
+
+    const auto velocity = vec4At(buffer, offsetof(PointerUniformsTail, uPointerVelocity));
+    QCOMPARE(velocity[0], 3.0f);
+    QCOMPARE(velocity[1], 4.0f);
+    QCOMPARE(velocity[2], 5.0f);
+    QCOMPARE(velocity[3], 4.5f); // the sampler's filtered speed
 
     const auto press = vec4At(buffer, offsetof(PointerUniformsTail, uPointerPress));
     QCOMPARE(press[0], 100.0f);
@@ -229,14 +239,14 @@ void TestPointerUniformExtension::testDirtyFlagTracksRealChangesOnly()
     ext.clearDirty();
     QVERIFY(!ext.isDirty());
 
-    ext.setVelocity(QVector2D(1.0f, 0.0f));
+    ext.setVelocity(QVector2D(1.0f, 0.0f), 0.0);
     QVERIFY(ext.isDirty());
 
     ext.clearDirty();
-    ext.setVelocity(QVector2D(1.0f, 0.0f));
+    ext.setVelocity(QVector2D(1.0f, 0.0f), 0.0);
     QVERIFY(!ext.isDirty());
 
-    ext.setVelocity(QVector2D(2.0f, 0.0f));
+    ext.setVelocity(QVector2D(2.0f, 0.0f), 0.0);
     QVERIFY(ext.isDirty());
 }
 
@@ -257,7 +267,12 @@ void TestPointerUniformExtension::testApplyingAnIdenticalFrameLeavesTheTailClean
 
     // And each lane still flips it when it really changes, so the clean
     // result above is a compare, not a setter that stopped writing.
+    // The baseline is re-applied before each case, or every call after the
+    // first would be dirty merely because the PREVIOUS case's mutation is
+    // being undone — which makes each case pass for the wrong reason and
+    // isolates nothing.
     const auto expectDirtyAfter = [&](auto mutate) {
+        ext.apply(fullFrame());
         ext.clearDirty();
         PointerFrameState changed = fullFrame();
         mutate(changed);
@@ -288,6 +303,41 @@ void TestPointerUniformExtension::testApplyingAnIdenticalFrameLeavesTheTailClean
     QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
         s.trailCount = 1;
     }));
+    // filteredSpeed shares uPointerVelocity with the velocity vector, so the
+    // velocity case above would stay green if the .w write were dropped
+    // entirely. This is the only case that moves that lane alone.
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.filteredSpeed = 9.0;
+    }));
+    // scale reaches TWO lanes by separate paths: uPointerState[2] directly,
+    // and uPointerFlags[1] as the reach scaled by it. Nothing moved it on its
+    // own, so a setFlagsLocked that stopped honouring the frame's scale left
+    // every existing assertion green.
+    QVERIFY(expectDirtyAfter([](PointerFrameState& s) {
+        s.scale = 3.0;
+    }));
+
+    // The dirty bit says something changed, not that the RIGHT thing changed.
+    // Both lanes are checked by value here, because the reach lane in
+    // particular is a product the flags path recomputes rather than a field it
+    // copies.
+    PointerFrameState scaled = fullFrame();
+    scaled.scale = 3.0;
+    scaled.filteredSpeed = 9.0;
+    ext.setReachLogicalPx(48.0);
+    ext.apply(scaled);
+
+    std::vector<char> buffer(1280, char{0});
+    ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
+    const auto stateLane = vec4At(buffer, offsetof(PointerUniformsTail, uPointerState));
+    QCOMPARE(stateLane[2], 3.0f);
+    const auto flags = vec4At(buffer, offsetof(PointerUniformsTail, uPointerFlags));
+    // The reach lane is a PRODUCT the flags path recomputes from the frame's
+    // scale, not a field it copies, which is exactly why the scale case above
+    // needs a value check behind it.
+    QCOMPARE(flags[1], 144.0f); // 48 logical px at scale 3
+    const auto velocity = vec4At(buffer, offsetof(PointerUniformsTail, uPointerVelocity));
+    QCOMPARE(velocity[3], 9.0f);
 }
 
 QTEST_MAIN(TestPointerUniformExtension)

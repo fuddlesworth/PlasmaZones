@@ -28,6 +28,15 @@ struct PHOSPHORPOINTER_EXPORT PointerFrameState
     /// Pointer velocity in device px/s.
     QVector2D velocity;
 
+    /// Pointer speed with the per-sample jitter filtered out, in device px/s:
+    /// an exponential filter walked over the current stroke's samples, oldest
+    /// to newest (see `PointerHistory::filteredSpeed`). Pushed as
+    /// `uPointerVelocity.w`, which is what `pointerFilteredSpeed()` in the
+    /// shared shader library reads, so the speed a pack gates on is computed
+    /// once per frame by the sampler that owns the ring rather than by every
+    /// fragment.
+    double filteredSpeed = 0.0;
+
     /// Last press: position, seconds since (`kNeverSeconds` when none),
     /// button code (1 left, 2 right, 3 middle, 0 none).
     QPointF pressPos;

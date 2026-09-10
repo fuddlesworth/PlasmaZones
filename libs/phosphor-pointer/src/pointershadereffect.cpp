@@ -97,6 +97,15 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
         qCWarning(lcPointerEffect) << "Pointer effect" << e.id
                                    << "declares trailSeconds 0, so it is never live and never draws";
     }
+    // Defaults TRUE, unlike its neighbours: an undeclared pack keeps its say
+    // in the chain's sample spacing, so an older pack that does read the trail
+    // is never silently dropped out of the decision.
+    e.samplesTrail = obj.value(QLatin1String("samplesTrail")).toBool(true);
+    // Clamped to trailSeconds at the boundary as well as in resolvedTrailWindow,
+    // so a declaration past the liveness window is reported once at load rather
+    // than silently narrowed on every query.
+    e.trailWindowSeconds = clampedNumber(obj, "trailWindowSeconds", 0.0, 0.0, e.trailSeconds, e.id);
+    e.trailWindowParam = obj.value(QLatin1String("trailWindowParam")).toString();
     e.needsCursor = obj.value(QLatin1String("needsCursor")).toBool(false);
 
     e.isMultipass = obj.value(QLatin1String("multipass")).toBool(false);
@@ -285,30 +294,54 @@ QString PointerShaderEffect::layerToken(Layer layer)
     return layer == Layer::Above ? QStringLiteral("above") : QStringLiteral("below");
 }
 
+double PointerShaderEffect::resolvedParam(const QString& paramId, const QVariantMap& params, double fallback) const
+{
+    if (paramId.isEmpty()) {
+        return fallback;
+    }
+    const auto declared = std::find_if(parameters.cbegin(), parameters.cend(), [&paramId](const ParameterInfo& p) {
+        return p.id == paramId;
+    });
+    const bool numericType = declared != parameters.cend()
+        && (declared->type == QLatin1String("float") || declared->type == QLatin1String("int"));
+    if (!numericType) {
+        return fallback;
+    }
+    // The user's value when present, the declaration's default when not: a
+    // pack asked about before any override exists still answers with what it
+    // will actually run at.
+    const auto it = params.constFind(paramId);
+    bool ok = false;
+    double candidate = 0.0;
+    if (it != params.constEnd()) {
+        candidate = it->toDouble(&ok);
+    }
+    if (!ok && declared->defaultValue.isValid()) {
+        candidate = declared->defaultValue.toDouble(&ok);
+    }
+    return ok ? candidate : fallback;
+}
+
+double PointerShaderEffect::resolvedTrailWindow(const QVariantMap& params) const
+{
+    if (!samplesTrail) {
+        // Reads nothing, so it has no claim on the spacing.
+        return 0.0;
+    }
+    // The declared static window when there is one, else the liveness figure,
+    // and then the named parameter over either.
+    const double declaredWindow = trailWindowSeconds > 0.0 ? trailWindowSeconds : trailSeconds;
+    const double value = resolvedParam(trailWindowParam, params, declaredWindow);
+    // Never past `trailSeconds`: the host stops feeding the ring that long
+    // after the last event, so a window claiming more would spread the slots
+    // across time the pack can never see samples from, coarsening the part it
+    // CAN see for nothing.
+    return std::clamp(value, 0.0, trailSeconds);
+}
+
 double PointerShaderEffect::resolvedReach(const QVariantMap& params) const
 {
-    double value = reach;
-    if (!reachParam.isEmpty()) {
-        const auto declared = std::find_if(parameters.cbegin(), parameters.cend(), [this](const ParameterInfo& p) {
-            return p.id == reachParam;
-        });
-        const bool numericType = declared != parameters.cend()
-            && (declared->type == QLatin1String("float") || declared->type == QLatin1String("int"));
-        if (numericType) {
-            const auto it = params.constFind(reachParam);
-            bool ok = false;
-            double candidate = 0.0;
-            if (it != params.constEnd()) {
-                candidate = it->toDouble(&ok);
-            }
-            if (!ok && declared->defaultValue.isValid()) {
-                candidate = declared->defaultValue.toDouble(&ok);
-            }
-            if (ok) {
-                value = candidate;
-            }
-        }
-    }
+    const double value = resolvedParam(reachParam, params, reach);
     // The floor is deliberate (see kMinReach): a reach of 0 leaves the damage
     // rect of a single-sample burst with no area, so the pass would sit live
     // painting nothing. The ceiling bounds the per-frame repaint region.

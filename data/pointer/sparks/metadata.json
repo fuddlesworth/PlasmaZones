@@ -7,8 +7,9 @@
     "category": "Particles",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 260,
+    "reachParam": "reach",
     "trailSeconds": 1.0,
+    "trailWindowParam": "life",
     "parameters": [
         {
             "id": "reach",
@@ -105,6 +106,5 @@
             "default": "#ffa855f7",
             "description": "Colour a spark fades toward before it is gone"
         }
-    ],
-    "reachParam": "reach"
+    ]
 }

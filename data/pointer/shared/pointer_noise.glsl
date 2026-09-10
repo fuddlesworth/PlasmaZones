@@ -10,6 +10,12 @@
 //     the default for anything that must look identical across GPUs.
 //   • hashSin / hashSin1 — the classic sin()-based hashes. These vary per
 //     driver and are kept as SEPARATE symbols for packs tuned to their output.
+//
+// The set mirrors surface_noise.glsl helper for helper, so a shader author
+// moving between the families finds the same names, and a third-party pack
+// can rely on every one of them being there whether or not a bundled pack
+// happens to use it (vnoise, hashSin and hashSin1 currently have no bundled
+// consumer).
 
 #ifndef PLASMAZONES_POINTER_NOISE_GLSL
 #define PLASMAZONES_POINTER_NOISE_GLSL

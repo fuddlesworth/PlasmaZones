@@ -17,7 +17,9 @@ namespace PhosphorPointerShaders {
 
 /// The ring-buffer pointer sampler both hosts feed: the compositor from
 /// `slotMouseChanged`, the preview from its figure-eight driver. It keeps the
-/// last `kMaxTrailPoints` motion samples plus the last press and release, and
+/// last `kMaxTrailPoints` position samples plus the last press and release
+/// (positions, because the ring also carries the slots a resting pointer and
+/// a bare seed leave, which the `motion` flag tells apart), and
 /// answers the per-frame questions the contract needs (`frameState`), whether
 /// a chain still needs frames (`isLive`) and where it may paint
 /// (`damageRect`).
@@ -25,17 +27,66 @@ namespace PhosphorPointerShaders {
 /// Positions are in device px of the canvas the caller chose; timestamps are
 /// caller-supplied milliseconds on one monotonic clock.
 ///
-/// Sampling rule: `notePointer` appends a sample when its distance from the
-/// newest is at least 1 device px OR the time gap is at least
-/// `kMinSampleGapMs`; anything closer and sooner is dropped. Ages are
-/// computed at `frameState` time. Velocity is the finite difference over the
-/// newest two samples with a floor of `kVelocityMinDtSeconds` on dt. A
-/// sample whose gap to the previous one is not a usable pairing records
-/// speed 0 instead of dividing: a timestamp at or before the newest sample
-/// (a clock that did not advance, or went backwards), and a gap of
-/// `kVelocityHoldMs` or more (the pointer was parked, so the first move
-/// after it starts the pairing fresh rather than being averaged over the
-/// idle time). Every recency window in this class is a strict `<`: velocity
+/// Sampling rule: the ring has `kCapacity` slots and has to cover the pack's
+/// whole `trailSeconds` window with them, so `notePointer` appends a new
+/// sample only when the gap since the newest one is at least the sample
+/// interval (`sampleIntervalMs`, derived from `setTrailSeconds`: the window
+/// spread over `kCapacity - 1` gaps, never under `kMinSampleGapMs`). An event
+/// inside that gap that has moved at least 1 device px REFRESHES the newest
+/// sample in place, so index 0 is always exactly where the pointer is, and a
+/// sub-pixel drift inside the gap is dropped. "Moved" is measured against
+/// the last ACCEPTED event (the head slot when there is none), so a creep of
+/// under a pixel per interval accumulates into a move rather than ageing
+/// the idle clock. (A stamp more than `kVelocityHoldMs` behind the previous
+/// event is read as a CLOCK STEP rather than a shared tick: it skips the
+/// interval gate and appends, re-anchoring the ring on the new timeline.
+/// Neither shipped host can produce one, since both feed a monotonic clock,
+/// but this is exported API.) Without the interval a 1000 Hz
+/// mouse filled all 32 slots in 32 ms, and a pack's tail could never be
+/// longer than that however long its `length` parameter asked for. A sample
+/// appended once the interval has passed WITHOUT the pointer having moved a
+/// pixel (any host that keeps feeding while the pointer is still, or a drift
+/// slower than a pixel per interval) keeps the ring's
+/// minimum sampling rate but is not motion: it neither resets the idle clock
+/// nor becomes a velocity pairing, so a resting pointer idles the same way
+/// on both hosts. Ages are computed at `frameState` time. Velocity is the
+/// finite difference over the last two ACCEPTED events (appended or folded
+/// into the head alike) with a floor of `kVelocityMinDtSeconds` on dt, and
+/// the head sample's speed is scored over the same pairing so the two agree.
+/// An event stamped at or just before the previous accepted one — the same
+/// millisecond, or a clock nudged back by less than `kVelocityHoldMs` — is
+/// not a usable pairing (nothing can be divided over it), so it carries the
+/// previous event's speed and leaves the pairing where it was, and the next
+/// event pairs across both moves; a multi-kHz mouse then reads its true
+/// speed instead of a zero for every event that shared a millisecond.
+///
+/// A stamp further back than that is a clock DISCONTINUITY, not a shared
+/// tick, and is handled the opposite way: it is accepted at speed 0 and
+/// re-anchors the pairing. Carrying it as a shared tick would leave the
+/// pairing frozen, so no event for the length of the step would be accepted
+/// and the idle clock would stand still while the pointer was plainly
+/// moving. Both shipped hosts feed a monotonic clock and cannot reach this.
+///
+/// A gap of `kVelocityHoldMs` or more (the pointer was parked) records speed 0,
+/// starts the pairing fresh rather than averaging the move over the idle time,
+/// and marks the sample as the START OF A STROKE.
+///
+/// The frame state also carries `filteredSpeed`, the same exponential filter
+/// the shared shader library used to walk per fragment, computed here once per frame over the current stroke: the
+/// motion samples back from the head to the nearest stroke start. Marking the start at the event, from the event gap,
+/// is what makes this independent of how far apart the ring's slots are: a shader-side walk over sample ages had to
+/// guess a pause from a gap, and at a long window every slot gap looked like one. Samples appended while the pointer
+/// rested are not motion and are skipped, so a host that keeps feeding through a rest holds the filtered speed across
+/// it the way the compositor does, for as long as the chain is live. Rest long enough and the rest slots rotate the
+/// last motion sample out of the ring and the figure reads zero, which is just past the point where any pack is still
+/// drawing, and further past whenever the interval is on its floor or set by a longer pack in the chain. The packs' own
+/// idle fades end the drawing, not the gate.
+///
+/// The interval is one per chain, from its LONGEST read window, so a
+/// chain that mixes a short pack with a long one samples at the long pack's
+/// spacing and the short pack draws its tail from a few slots plus the
+/// refreshed head. A per-layer spread would need a ring per layer.
+/// Every recency window in this class is a strict `<`: velocity
 /// is reported while the newest sample is younger than `kVelocityHoldMs`,
 /// the chain is live while an event is younger than `trailSeconds`, and the
 /// damage rect includes a point while it is younger than `trailSeconds`. At
@@ -44,8 +95,22 @@ class PHOSPHORPOINTER_EXPORT PointerHistory
 {
 public:
     static constexpr int kCapacity = PointerShaderContract::kMaxTrailPoints;
+    /// DEVICE px, deliberately, like every other position in this class: the
+    /// ring stores device px and the packs read them, so a cutoff in logical
+    /// px would be the one quantity here that changed meaning with the output
+    /// scale. The consequence is that a HiDPI output resolves a slower drift
+    /// as motion than a 1x one does, which is the same asymmetry the trail
+    /// positions themselves already carry.
     static constexpr double kMinSampleDistancePx = 1.0;
     static constexpr qint64 kMinSampleGapMs = 8;
+    // kCapacity is an alias for a contract constant that lives in another
+    // header, and setTrailSeconds divides by kCapacity - 1.
+    static_assert(kCapacity > 1, "the sample interval divides by kCapacity - 1");
+    /// Upper bound on the accepted trail window. Not a policy limit — the
+    /// pack schema caps `trailSeconds` far below it — but the value that keeps
+    /// the interval arithmetic in `setTrailSeconds` defined for any caller of
+    /// this exported class.
+    static constexpr double kMaxTrailSeconds = 3600.0;
     /// Floor on the dt a speed is divided by, guarding against a zero or
     /// denormal gap between two events that arrive in the same millisecond.
     ///
@@ -57,8 +122,8 @@ public:
     /// 125 Hz mouse a quarter of it, so `activationSpeed` and every other
     /// px-per-second parameter meant nothing like px per second. 1 ms clears
     /// a 1000 Hz mouse. Noise in the resulting figure is the exponential
-    /// filter's job (pointerFilteredSpeed in pointer_lib.glsl), not this
-    /// floor's.
+    /// filter's job (`filteredSpeed()`, which the shader library reads as
+    /// pointerFilteredSpeed()), not this floor's.
     static constexpr double kVelocityMinDtSeconds = 0.001;
     /// How long after the newest sample the velocity is still reported, and
     /// the longest gap between two samples that still forms a speed pairing.
@@ -68,8 +133,32 @@ public:
 
     PointerHistory();
 
+    /// The window the ring must span, in seconds: the furthest back any pack
+    /// this history feeds actually READS, which is not the same as how long
+    /// those packs stay live. Sets the sample interval (see the sampling rule
+    /// above). 0 (the default, and what a chain of packs that read nothing
+    /// gives) means the `kMinSampleGapMs` floor alone. Survives `reset()`.
+    void setTrailSeconds(double seconds);
+    [[nodiscard]] double trailSeconds() const
+    {
+        return m_trailSeconds;
+    }
+    /// Minimum gap between two appended samples, in ms.
+    [[nodiscard]] qint64 sampleIntervalMs() const
+    {
+        return m_sampleIntervalMs;
+    }
+
     /// Record a pointer position at @p nowMs (see the sampling rule above).
     void notePointer(const QPointF& devicePx, qint64 nowMs);
+
+    /// Give an EMPTY ring a position without recording motion: the slot
+    /// lands (age 0, speed 0, not a motion sample) so the first live frame
+    /// has a pointer to hand out, while the idle clock, the velocity pairing
+    /// and the filtered speed stay untouched. The compositor seeds from a
+    /// buttons-only event after a reset this way; a ring with samples is
+    /// left alone.
+    void seedPosition(const QPointF& devicePx, qint64 nowMs);
 
     /// Record a button transition from @p before to @p now at @p devicePx.
     /// A newly pressed button becomes the last press (left, then right, then
@@ -80,6 +169,19 @@ public:
     /// The contract tail for a frame at @p nowMs with canvas scale @p scale.
     /// `cursorRect` and `hasSprite` are left at their defaults for the host
     /// to fill.
+    ///
+    /// Every slot the ring holds is emitted, INCLUDING entries older than the
+    /// trail window, while `damageRect` counts only the ones inside it. So a
+    /// pack that draws every entry without gating on `.z` paints outside the
+    /// rect the host asked to repaint, and the surplus is never cleaned up.
+    /// Events arriving slower than the sample interval are the ordinary way
+    /// the ring comes to span longer than its window. Gate on age.
+    ///
+    /// A caller feeding a non-monotonic clock can also leave entries stamped
+    /// in the FUTURE after a step. Those report age 0, because the age is
+    /// floored, until they rotate out over one ring's worth of appends, so
+    /// they read as newer than the head. `damageRect` counts those too, which
+    /// over-repaints rather than under-repaints.
     [[nodiscard]] PointerFrameState frameState(qint64 nowMs, double scale) const;
 
     /// True while a motion or button event is younger than @p trailSeconds.
@@ -90,14 +192,6 @@ public:
     /// Null when not live.
     [[nodiscard]] QRectF damageRect(double reachDevicePx, qint64 nowMs, double trailSeconds) const;
 
-    /// Number of motion samples in the ring (0..kCapacity). The compositor
-    /// seeds an empty ring from a buttons-only event so the first live frame
-    /// after a reset has a pointer position to hand out.
-    [[nodiscard]] int sampleCount() const
-    {
-        return m_count;
-    }
-
     void reset();
 
 private:
@@ -105,11 +199,37 @@ private:
     {
         QPointF pos;
         qint64 timeMs = 0;
+        /// When this slot was appended. An in-place refresh moves timeMs but
+        /// not this, so the interval is measured from the append and the ring
+        /// keeps filling while the pointer moves.
+        qint64 anchorMs = 0;
         double speed = 0.0;
+        /// False for a slot appended while the pointer rested (the interval
+        /// passed with no movement of a pixel): it holds the ring's minimum
+        /// sampling rate but is not motion, so the filter skips it.
+        bool motion = true;
+        /// True when the event that appended or refreshed this slot came
+        /// after a park (`kVelocityHoldMs` or more since the previous
+        /// accepted event): the stroke the filter walks begins here.
+        bool strokeStart = false;
     };
 
     const Sample& sampleAt(int newestFirstIndex) const;
     static double secondsBetween(qint64 laterMs, qint64 earlierMs);
+    /// Speed of a move from @p earlier to @p devicePx at @p nowMs, or 0 when
+    /// the pair is not a usable pairing (see the header comment).
+    static double speedOver(const QPointF& earlierPos, qint64 earlierMs, const QPointF& devicePx, qint64 nowMs);
+    /// Record @p devicePx at @p nowMs as the newest accepted motion event,
+    /// with the previous one (if @p hasPrev) as its velocity pairing and
+    /// @p speed as the speed scored over that pairing.
+    void acceptEvent(const QPointF& devicePx, qint64 nowMs, double speed, bool hasPrev, const QPointF& prevPos,
+                     qint64 prevMs);
+    /// The exponentially filtered speed over the current stroke (see the
+    /// header comment), in device px/s.
+    [[nodiscard]] double filteredSpeed() const;
+
+    double m_trailSeconds = 0.0;
+    qint64 m_sampleIntervalMs = kMinSampleGapMs;
 
     std::array<Sample, kCapacity> m_ring{};
     int m_head = 0; ///< index of the newest sample (valid when m_count > 0)
@@ -117,6 +237,16 @@ private:
 
     qint64 m_lastMotionMs = 0;
     bool m_hasMotion = false;
+
+    /// The last two accepted motion events, the pairing velocity is read
+    /// over. Kept apart from the ring because an event inside the sample
+    /// interval folds into the head slot rather than taking one of its own.
+    QPointF m_lastEventPos;
+    qint64 m_lastEventMs = 0;
+    double m_lastEventSpeed = 0.0;
+    QPointF m_prevEventPos;
+    qint64 m_prevEventMs = 0;
+    bool m_hasPrevEvent = false;
 
     QPointF m_pressPos;
     qint64 m_pressMs = 0;

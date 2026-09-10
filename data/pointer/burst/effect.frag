@@ -22,23 +22,20 @@
 //
 // REACH. A bit's displacement from its origin is |v|t + 0.5*g*t^2, which over
 // a life L is at most speed*L + 0.5*gravity*L*L. `speed` and `gravity` are
-// scaled down together by `k` so that bound, plus the bit's own drawn radius,
-// stays inside `reach` — the parameter `reachParam` names, so the host's
-// damage rect is exactly what the pack can paint. Scaling both by the same k
-// keeps the parabola's shape, it only shrinks it.
+// scaled down together by `k` so that bound, plus the bit's drawn extent
+// (three radii), stays inside `reach`, the parameter `reachParam` names, so
+// the host's damage rect is exactly what the pack can paint. The travel
+// budget is floored at 35 percent of the reach (see the budget line), so a
+// large bit on a small reach may overrun the rect a little rather than never
+// leaving the press point; the box clip still keeps every pixel inside it.
+// Scaling both by the same k keeps the parabola's shape, it only shrinks it.
 
 #include <pointer_noise.glsl>
 
 const int kMaxBits = 48;
 
 vec4 burstColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 // A single bit's contribution. `rel` is the fragment relative to the event
@@ -73,7 +70,9 @@ vec4 pPointer(vec2 uv) {
     float scale = pointerScale();
     float life = clamp(p_life, 0.15, 0.9);
     float radius = max(p_size, 0.5) * scale;
-    float reach = max(p_reach, 1.0) * scale;
+    // The reach the host resolved from the `reach` parameter, in device px,
+    // read from the uniform so the damage rect and the shader cannot drift.
+    float reach = pointerReach();
 
     // Ballistic envelope, then the shrink factor that keeps it inside reach.
     float speed = max(p_speed, 0.0) * scale;
@@ -110,7 +109,7 @@ vec4 pPointer(vec2 uv) {
         }
     }
 
-    // The release spray: fewer bits, two thirds of the life, slower off the
+    // The release spray: fewer bits, six tenths of the life, slower off the
     // mark, so it reads as an echo of the press rather than a second event.
     float release = clamp(p_releaseSpray, 0.0, 1.0);
     float releaseLife = life * 0.6;
@@ -135,11 +134,5 @@ vec4 pPointer(vec2 uv) {
         }
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    // Overlapping bits accumulate; clamp coverage and keep the colour mix in
-    // proportion so the premultiplied result stays consistent.
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

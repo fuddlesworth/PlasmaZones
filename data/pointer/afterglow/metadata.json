@@ -9,17 +9,19 @@
     "layer": "below",
     "reach": 96,
     "trailSeconds": 1.0,
+    "trailWindowSeconds": 0.1,
     "multipass": true,
     "bufferShaders": ["buffer.frag"],
     "bufferFeedback": true,
+    "bufferScale": 0.5,
     "parameters": [
         {
             "id": "persistence",
             "name": "Persistence",
             "type": "float",
-            "default": 0.85,
+            "default": 0.8,
             "min": 0.5,
-            "max": 0.95,
+            "max": 0.82,
             "step": 0.01,
             "description": "How much of the glow survives from one frame to the next. Higher values fade more slowly"
         },

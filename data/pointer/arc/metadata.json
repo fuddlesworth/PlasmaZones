@@ -1,7 +1,7 @@
 {
     "id": "arc",
     "name": "Arc",
-    "description": "Short lightning arcs snap between points the pointer has just passed through. Each arc is a crooked line with a hot white centre and a coloured glow around it, and the whole set is re-rolled many times a second so it crackles. Moving fast lights more arcs and brightens them, slowing down leaves one dim arc, and stopping puts them out. Clicking throws a fan of extra arcs out from the press point.",
+    "description": "Short lightning arcs snap between points the pointer has just passed through. Each arc is a crooked line with a hot white centre and a coloured glow around it, and the whole set is re-rolled many times a second so it crackles. Moving fast lights more arcs and brightens them. Slow down and one dim arc is left, and stopping puts it out. Clicking throws a fan of extra arcs out from the press point.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Electric",
@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "reach",
     "trailSeconds": 0.6,
+    "trailWindowSeconds": 0.5,
     "parameters": [
         {
             "id": "arcs",
@@ -43,7 +44,7 @@
             "type": "float",
             "default": 20.0,
             "min": 1.0,
-            "max": 60.0,
+            "max": 30.0,
             "description": "How many times a second the arcs are re-rolled to new points"
         },
         {

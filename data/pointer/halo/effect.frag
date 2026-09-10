@@ -12,8 +12,9 @@
 // resting and the idle fade has already taken the base glow down. It is gone
 // by kSwellSeconds, which the metadata's trailSeconds covers.
 //
-// `activationSpeed` gates the base glow through the shared pointerSpeedGate()
-// so the halo can be made to appear only once the pointer is really moving.
+// `activationSpeed` gates the base glow through the shared
+// pointerActivationGate() so the halo can be made to appear only once the
+// pointer is really moving.
 // It stacks with `speedGain` rather than duplicating it: the gate decides
 // whether the glow is there, speedGain decides how bright it is once it is.
 // At the default 0 there is no threshold, which is the behaviour the pack
@@ -22,25 +23,28 @@
 // here: this pack is a glow centred on the pointer, not a path trace, so
 // there is no curve for smoothing to act on.
 
-// How long the glow lingers after the pointer stops. Sized against
-// `trailSeconds` (0.9) so there is room for a whole breath before the fade,
-// and the breath rate below is matched to it — at the old 0.6 s, with the fade
-// starting halfway through, under a fifth of a cycle was ever on screen and
-// the "breathes while you hold still" the pack advertises was not visible.
+// How long the glow lingers after the pointer stops. Inside the metadata
+// trailSeconds so the last live frame is already clear, and sized so one
+// whole breath at the rate below fits inside it (2π / 7.4 = 0.85 s), with
+// the late fade only taking the last quarter of that breath, so the
+// "breathes while you hold still" the pack advertises is on screen.
 const float kIdleSeconds = 0.85;
 // One full cycle inside the visible window, in radians per second. Nudged
 // at use onto a divisor of the iTime wrap (pointerWrapSafeRate) so the
 // breath does not jump when iTime wraps.
 const float kBreathRate = 7.4;
 const float kSwellSeconds = 0.55;
-// Speed (device px/s) at which speedGain is fully applied. Deliberately low:
-// the settings preview's simulated pointer peaks near 324 px/s.
+// Speed (logical px/s, scaled at use) at which speedGain is fully applied.
+// Deliberately low: the settings preview's simulated pointer peaks near
+// 324 px/s.
 const float kFullSpeed = 200.0;
 
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float radius = max(p_radius, 1.0) * scale;
+    // The reach the host resolved from `radius`, in device px, read from the
+    // uniform so the damage rect and the glow's cut cannot drift.
+    float radius = pointerReach();
     float sigma = radius * 0.4;
     float intensity = clamp(p_intensity, 0.0, 2.0);
 
@@ -52,11 +56,14 @@ vec4 pPointer(vec2 uv) {
         // Gaussian body that reaches zero exactly at the radius, so the pack
         // never paints outside the reach it declares.
         float body = exp(-(d * d) / (2.0 * sigma * sigma));
-        body *= 1.0 - smoothstep(radius * 0.8, radius, d);
+        body *= pointerReachWindow(d, radius);
 
-        float speed = uPointerVelocity.z;
-        float gain = 1.0 + p_speedGain * clamp(speed / kFullSpeed, 0.0, 1.0);
-        float gate = pointerSpeedGate(speed, p_activationSpeed);
+        // The filtered speed, not the raw per-event velocity, which reads 0
+        // whenever two events share a millisecond and would blink both the
+        // gate and the gain.
+        float speed = pointerFilteredSpeed();
+        float gain = 1.0 + p_speedGain * clamp(speed / (kFullSpeed * scale), 0.0, 1.0);
+        float gate = pointerActivationGate(p_activationSpeed);
 
         // Idle envelope: settle to idleDim over the first third of the window
         // while breathing, then fade out over the rest.
@@ -81,7 +88,7 @@ vec4 pPointer(vec2 uv) {
             float env = ct * exp(1.0 - 4.0 * ct) * (1.0 - ct);
             float swellSigma = sigma * mix(0.7, 1.15, ct);
             float body = exp(-(dp * dp) / (2.0 * swellSigma * swellSigma));
-            body *= 1.0 - smoothstep(radius * 0.8, radius, dp);
+            body *= pointerReachWindow(dp, radius);
             alpha += body * env * intensity * p_clickSwell;
         }
     }

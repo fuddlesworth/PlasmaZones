@@ -32,6 +32,7 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QDir>
@@ -40,6 +41,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -48,6 +50,7 @@
 #include <rhi/qshader.h>
 
 #include <algorithm>
+#include <cmath>
 
 using PhosphorPointerShaders::PointerShaderEffect;
 using PhosphorPointerShaders::PointerShaderRegistry;
@@ -68,7 +71,17 @@ constexpr double kMinPreviewGate = 0.15;
 // this small clips a pack to a sliver around the path: nothing the pack
 // paints further out ever reaches the screen, and the user sees a broken
 // pack rather than a small one.
-constexpr double kMinReachParamFloor = 4.0;
+//
+// A USABILITY floor, deliberately above the runtime's hard one. Load clamps
+// reach to PointerShaderEffect::kMinReach (1.0), which the library documents
+// as the smallest value that still turns a point into a region — so a reach
+// between the two draws, it is just clipped too tight to be worth shipping.
+// The lints below have to say that rather than claim the pack cannot draw.
+//
+// Two bundled packs (ink, windtrail) declare a reachParam minimum of exactly
+// this value, so they pass on the strict `<` with no margin at all. Raising
+// the floor, or relaxing the comparison to `<=`, breaks both at once.
+constexpr double kUsableReachFloor = 4.0;
 
 // GLSL smoothstep, so the lint computes the same number pointerSpeedGate does.
 double smoothstepAt(double edge0, double edge1, double x)
@@ -100,6 +113,10 @@ QString withoutComments(const QString& source)
                 }
                 ++i;
                 if (end) {
+                    // Blank the closing slash without stepping past it: the
+                    // for loop's own increment moves on, so the character
+                    // after the comment (`/**///x`, or a second block
+                    // comment starting right there) is not skipped.
                     out[i] = QLatin1Char(' ');
                     break;
                 }
@@ -137,50 +154,91 @@ bool mentionsParam(const QString& source, const QString& id)
 }
 
 // The `p_<id>` names a pack passes as the `activationSpeed` argument of
-// pointerSpeedGate(). Parsed rather than regexed because the first argument is
-// routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so the
-// split has to happen at the top-level comma.
+// pointerSpeedGate() (its second argument) or of the pointerActivationGate()
+// wrapper (its only argument), which is what a pack whose threshold defaults
+// to 0 calls so the filtered walk is skipped there. Both are scanned, or a
+// pack moving to the wrapper would silently leave this lint's coverage.
+// Parsed rather than regexed because pointerSpeedGate's first argument is
+// routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so
+// the split has to happen at the top-level comma.
 QStringList speedGateParamNames(const QString& strippedSource)
 {
+    struct Callee
+    {
+        QLatin1String name;
+        bool argAfterComma;
+    };
+    static const Callee kCallees[] = {
+        {QLatin1String("pointerSpeedGate"), true},
+        {QLatin1String("pointerActivationGate"), false},
+    };
     const QString& source = strippedSource;
-    const QLatin1String callee("pointerSpeedGate");
     QStringList found;
-    int at = 0;
-    while ((at = source.indexOf(callee, at)) >= 0) {
-        int i = at + callee.size();
-        while (i < source.size() && source[i].isSpace()) {
-            ++i;
-        }
-        if (i >= source.size() || source[i] != QLatin1Char('(')) {
-            at += callee.size();
-            continue;
-        }
-        // Walk the argument list, remembering where the top-level comma fell.
-        int depth = 0;
-        int comma = -1;
-        int j = i;
-        for (; j < source.size(); ++j) {
-            const QChar c = source[j];
-            if (c == QLatin1Char('(')) {
-                ++depth;
-            } else if (c == QLatin1Char(')')) {
-                if (--depth == 0) {
-                    break;
-                }
-            } else if (c == QLatin1Char(',') && depth == 1 && comma < 0) {
-                comma = j;
+    for (const Callee& callee : kCallees) {
+        int at = 0;
+        while ((at = source.indexOf(callee.name, at)) >= 0) {
+            // Identifier-bounded on the left, like mentionsToken: a pack
+            // helper named e.g. my_pointerSpeedGate is not the shared gate.
+            // The match is case-sensitive, so a name that also changes the
+            // case (myPointerSpeedGate) never reaches this check at all.
+            if (at > 0 && (source[at - 1].isLetterOrNumber() || source[at - 1] == QLatin1Char('_'))) {
+                at += callee.name.size();
+                continue;
             }
-        }
-        if (comma > 0 && j < source.size()) {
-            const QString arg = source.mid(comma + 1, j - comma - 1).trimmed();
-            if (arg.startsWith(QLatin1String("p_"))) {
-                const QString id = arg.mid(2);
-                if (PhosphorShaders::isValidParamId(id) && !found.contains(id)) {
-                    found << id;
+            int i = at + callee.name.size();
+            while (i < source.size() && source[i].isSpace()) {
+                ++i;
+            }
+            if (i >= source.size() || source[i] != QLatin1Char('(')) {
+                at += callee.name.size();
+                continue;
+            }
+            // Walk the argument list, remembering where the top-level comma
+            // fell.
+            int depth = 0;
+            int comma = -1;
+            int j = i;
+            for (; j < source.size(); ++j) {
+                const QChar c = source[j];
+                if (c == QLatin1Char('(')) {
+                    ++depth;
+                } else if (c == QLatin1Char(')')) {
+                    if (--depth == 0) {
+                        break;
+                    }
+                } else if (c == QLatin1Char(',') && depth == 1 && comma < 0) {
+                    comma = j;
                 }
             }
+            const int argStart = callee.argAfterComma ? comma + 1 : i + 1;
+            const bool haveArg = callee.argAfterComma ? comma > 0 : comma < 0;
+            if (haveArg && j < source.size()) {
+                const QString arg = source.mid(argStart, j - argStart);
+                // The first identifier-bounded `p_<id>` token anywhere in the
+                // argument: the argument is routinely an expression
+                // (`p_activationSpeed * pointerScale()`, `2.0 * p_speed`,
+                // `(p_speed)`), and a pack written any of those ways must not
+                // slip out of the lint's coverage.
+                int at2 = 0;
+                while ((at2 = arg.indexOf(QLatin1String("p_"), at2)) >= 0) {
+                    const bool boundedLeft =
+                        at2 == 0 || !(arg[at2 - 1].isLetterOrNumber() || arg[at2 - 1] == QLatin1Char('_'));
+                    int end = at2 + 2;
+                    while (end < arg.size() && (arg[end].isLetterOrNumber() || arg[end] == QLatin1Char('_'))) {
+                        ++end;
+                    }
+                    const QString id = arg.mid(at2 + 2, end - at2 - 2);
+                    if (boundedLeft && PhosphorShaders::isValidParamId(id)) {
+                        if (!found.contains(id)) {
+                            found << id;
+                        }
+                        break;
+                    }
+                    at2 = end;
+                }
+            }
+            at = j > at ? j : at + callee.name.size();
         }
-        at = j > at ? j : at + callee.size();
     }
     return found;
 }
@@ -215,9 +273,19 @@ QString readStage(const QString& path)
 // COVERAGE BOUNDARY, the same one the animation arm records: the source is
 // handed to glslang with the pack's `#version 450` intact, while KWin
 // recompiles at the GL context's core version. A construct legal at 450 and
-// illegal there still passes here. What this does cover is every identifier
-// the two dialects disagree on, which is the class that shipped uncaught
-// while only the preview branch was baked.
+// illegal there still passes here. The compositor also splices KWin's own
+// colour-management block ahead of the source, which is not reproduced
+// here, so an identifier colliding with that block passes here and fails
+// live. What this does cover is every identifier the two dialects disagree
+// on, which is the class that shipped uncaught while only the preview
+// branch was baked.
+//
+// INCLUDES are expanded the way the compositor expands them, through the
+// resolver with the registry roots alone: the angle form searches only those
+// roots, and only the quoted form looks beside the including file. The
+// preview bake (ShaderCompiler::expandSource) is more forgiving and lets an
+// angle include find a pack-local file, so a pack written that way baked
+// clean everywhere and then failed include expansion where it ships.
 int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const QString& path, const QString& label,
                         const QString& stage, const QStringList& includePaths, bool scaffold)
 {
@@ -251,9 +319,19 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
                                               PointerShaderRegistry::pointerEntryCandidates())
         : raw;
     QString err;
-    QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
+    QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
+                                                                         includePaths, &err);
     if (src.isEmpty()) {
-        out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
+        // The resolver returns empty for any failure — a missing file, an
+        // unreadable one, a malformed directive, a cycle. Naming the
+        // angle-versus-quoted case as THE cause sent an author with a simple
+        // typo off changing bracket style, so it is offered as the likely
+        // explanation rather than asserted, and the resolver's own message
+        // leads.
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
+            << "expands it: " << err
+            << "\n    (if the file sits beside this one, note that the compositor resolves an angle include only "
+            << "against the registry roots; the quoted form is the pack-local one)\n";
         return 1;
     }
     if (scaffold) {
@@ -394,6 +472,18 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral("reach out of range [0, %1]: %2 (clamped at load)")
                          .arg(PointerShaderEffect::kMaxReach)
                          .arg(reachValue.toDouble());
+        } else if (eff.reachParam.isEmpty() && reachValue.toDouble() < kUsableReachFloor) {
+            // The same floor the reachParam arm enforces: under it the damage
+            // rect is a sliver around the path (for a resting pointer, empty),
+            // so the pack never draws, and a shader windowing on the reach
+            // meets equal smoothstep edges at 0.
+            lints << QStringLiteral(
+                         "reach %1 is under the %2 logical px floor: the damage rect is the path inflated by "
+                         "the reach, so the pack is clipped to a sliver around it (load clamps reach to %3 px, "
+                         "below which a resting pointer's rect has no area at all)")
+                         .arg(reachValue.toDouble())
+                         .arg(kUsableReachFloor)
+                         .arg(PointerShaderEffect::kMinReach);
         }
     }
     if (!eff.reachParam.isEmpty()) {
@@ -426,14 +516,14 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             }
             // The floor matters as much as the cap: a reach the user can drag
             // down to a few pixels clips the pack to nothing around the path.
-            if (declared->minValue.isValid() && declared->minValue.toDouble() < kMinReachParamFloor) {
+            if (declared->minValue.isValid() && declared->minValue.toDouble() < kUsableReachFloor) {
                 lints << QStringLiteral(
                              "reachParam '%1' allows a minimum of %2 logical px, below the %3 px floor (a reach "
                              "that small clips the pack to nothing: the damage rect is the path inflated by "
                              "the reach, and nothing painted outside it reaches the screen)")
                              .arg(eff.reachParam)
                              .arg(declared->minValue.toDouble())
-                             .arg(kMinReachParamFloor);
+                             .arg(kUsableReachFloor);
             }
         }
     }
@@ -494,6 +584,21 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             if (!PhosphorShaders::isValidParamId(p.id)) {
                 continue; // already linted above, and it has no p_ define
             }
+            // The reachParam parameter is consumed by the HOST: it sizes the
+            // damage rect and is handed back to every stage as uPointerFlags.y
+            // (pointerReach()), which is how the shared helpers tell a pack to
+            // read its budget so the two cannot drift. A pack that reads it
+            // only that way has a live control, not a dead one.
+            if (!eff.reachParam.isEmpty() && p.id == eff.reachParam) {
+                if (!mentionsToken(allStages, QStringLiteral("pointerReach")) && !mentionsParam(allStages, p.id)) {
+                    lints << QStringLiteral(
+                                 "reachParam '%1' sizes the damage rect but no stage reads "
+                                 "pointerReach() or p_%1, so the shader cannot be bounding itself "
+                                 "to the reach it declares")
+                                 .arg(p.id);
+                }
+                continue;
+            }
             const bool bySlot = p.type == QLatin1String("color") ? bufferReadsColors : bufferReadsScalars;
             if (!bySlot && !mentionsParam(allStages, p.id)) {
                 lints << QStringLiteral(
@@ -526,8 +631,9 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                                                });
             if (declared == eff.parameters.cend()) {
                 lints << QStringLiteral(
-                             "pointerSpeedGate() is passed p_%1, which is no declared parameter (it "
-                             "expands to an unwritten slot, so the gate reads whatever is in it)")
+                             "a speed gate (pointerSpeedGate or pointerActivationGate) is passed p_%1, which "
+                             "is no declared parameter (it expands to an unwritten slot, so the gate reads "
+                             "whatever is in it)")
                              .arg(gateId);
                 continue;
             }
@@ -554,6 +660,108 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         }
     }
 
+    // ── mirrored trailSeconds ──
+    // A pack that declares `kTrailSeconds` (as a const or a #define, in any
+    // stage) is mirroring the metadata trailSeconds, and nothing else ties
+    // the two together: a metadata edit alone would leave the pack fading
+    // against the wrong window and freezing its last frame when the host
+    // went quiet. Packs that fade on a constant of their own (halo's
+    // kIdleSeconds, afterglow's kIdleCutSeconds) keep a margin under the
+    // window by design and are not held here. Every declaration is checked,
+    // so two stages that disagree with each other are both reported.
+    if (anyStage) {
+        static const QRegularExpression kMirror(
+            QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*|#\\s*define\\s+kTrailSeconds\\s+)"
+                           "([0-9]+\\.?[0-9]*(?:[eE][-+]?[0-9]+)?|\\.[0-9]+(?:[eE][-+]?[0-9]+)?)"));
+        // A declaration the value pattern cannot capture (an expression, or a
+        // named constant) would otherwise slip through with
+        // no diagnostic at all, which is worse than a mismatch: the author
+        // believes the mirror is being checked. Count the declarations and the
+        // captures separately, and report the shortfall.
+        static const QRegularExpression kMirrorToken(
+            QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=|#\\s*define\\s+kTrailSeconds\\b)"));
+        int declaredMirrors = 0;
+        auto tokens = kMirrorToken.globalMatch(allStages);
+        while (tokens.hasNext()) {
+            tokens.next();
+            ++declaredMirrors;
+        }
+        int capturedMirrors = 0;
+        auto matches = kMirror.globalMatch(allStages);
+        while (matches.hasNext()) {
+            const QRegularExpressionMatch m = matches.next();
+            ++capturedMirrors;
+            const double mirrored = m.captured(1).toDouble();
+            if (std::abs(mirrored - eff.trailSeconds) > 1e-6) {
+                // eff.trailSeconds is the CLAMPED value, which is the right
+                // one to compare against because it is what the pack runs on.
+                // It is the wrong one to quote back when the two differ: an
+                // author who wrote 90 was being told their metadata said 60.
+                const double declared = root.value(QLatin1String("trailSeconds")).toDouble(eff.trailSeconds);
+                const QString metadataText = std::abs(declared - eff.trailSeconds) > 1e-6
+                    ? QStringLiteral("%1 in the metadata (clamped to %2 at load)").arg(declared).arg(eff.trailSeconds)
+                    : QStringLiteral("%1 in the metadata").arg(eff.trailSeconds);
+                lints << QStringLiteral(
+                             "kTrailSeconds is %1 in the shader but trailSeconds is %2 "
+                             "(the pack fades against the wrong window)")
+                             .arg(mirrored)
+                             .arg(metadataText);
+            }
+        }
+        if (declaredMirrors > capturedMirrors) {
+            lints << QStringLiteral(
+                         "kTrailSeconds is declared %1 time(s) but only %2 could be read as a plain number, so "
+                         "the rest are NOT checked against the metadata (write the mirror as a decimal literal)")
+                         .arg(declaredMirrors)
+                         .arg(capturedMirrors);
+        }
+    }
+
+    // ── trail window ──
+    // The window is what spaces the ring's slots, so a wrong one is not
+    // cosmetic in either direction: too long and the pack pays a coarser
+    // stroke than it needs (and drags every pack sharing the chain down with
+    // it), too short and it reads slots that fell out of the ring before it
+    // was done with them.
+    if (!eff.trailWindowParam.isEmpty()) {
+        const auto declared = std::find_if(eff.parameters.cbegin(), eff.parameters.cend(),
+                                           [&eff](const PointerShaderEffect::ParameterInfo& p) {
+                                               return p.id == eff.trailWindowParam;
+                                           });
+        if (declared == eff.parameters.cend()) {
+            lints << QStringLiteral(
+                         "trailWindowParam '%1' names no declared parameter (the window falls back to "
+                         "trailSeconds at load, so the ring is spaced for the liveness figure)")
+                         .arg(eff.trailWindowParam);
+        } else if (declared->type != QLatin1String("float") && declared->type != QLatin1String("int")) {
+            lints << QStringLiteral(
+                         "trailWindowParam '%1' has type '%2', which is not float or int (the window "
+                         "falls back to trailSeconds at load)")
+                         .arg(eff.trailWindowParam, declared->type);
+        } else if (declared->maxValue.isValid() && declared->maxValue.toDouble() > eff.trailSeconds) {
+            // Clamped at the query, so this is a coverage gap rather than a
+            // crash: at the top of the slider the pack asks to read further
+            // back than the host keeps it alive, and those samples are simply
+            // not there.
+            lints << QStringLiteral(
+                         "trailWindowParam '%1' allows up to %2 s but trailSeconds is %3 s, so at the "
+                         "top of its range the pack reads further back than it stays live for")
+                         .arg(eff.trailWindowParam)
+                         .arg(declared->maxValue.toDouble())
+                         .arg(eff.trailSeconds);
+        }
+    }
+    if (eff.trailWindowSeconds > 0.0 && !eff.trailWindowParam.isEmpty()) {
+        lints << QStringLiteral(
+            "both trailWindowSeconds and trailWindowParam are declared; the parameter wins, so "
+            "the fixed figure is dead weight");
+    }
+    if (!eff.samplesTrail && (eff.trailWindowSeconds > 0.0 || !eff.trailWindowParam.isEmpty())) {
+        lints << QStringLiteral(
+            "samplesTrail is false, so the declared trail window is ignored (a pack that reads "
+            "no samples has no say in the spacing)");
+    }
+
     // ── cursor sprite ──
     // The contract puts the static gate for these here. On the compositor an
     // unbound sampler reads texture unit 0, which is whatever happened to be
@@ -573,6 +781,59 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral(
                 "needsCursor is declared but no stage samples uCursorSprite (the sprite is bound and uploaded "
                 "every frame for nothing)");
+        }
+
+        // samplesTrail decides whether this pack's trailSeconds gets a say in
+        // how the shared history ring is spaced, so a wrong answer is not
+        // cosmetic: declaring false while reading the trail leaves the pack
+        // drawing from slots spaced for somebody else, and declaring true (or
+        // saying nothing) while reading none of it coarsens the stroke of
+        // every trail pack chained beside it. Both directions are checked
+        // against the stage sources so the declaration cannot drift.
+        // The uniform itself appears only inside pointer_lib.glsl, which is
+        // spliced in at bake time and is not part of the pack's own sources,
+        // so looking for it alone would say "reads nothing" about every pack
+        // in the bundle. What a pack writes is one of the accessors. These are
+        // every helper in pointer_lib.glsl that reaches uPointerTrail, plus
+        // the uniform for a pack that indexes the array directly.
+        static const QLatin1String kTrailReaders[] = {
+            QLatin1String("pointerTrailAt"),
+            QLatin1String("pointerTrailCount"),
+            QLatin1String("pointerLiveCount"),
+            QLatin1String("pointerSmoothedAt"),
+            QLatin1String("pointerSegmentDistance"),
+            QLatin1String("pointerSegmentOutside"),
+            QLatin1String("pointerSmoothSegmentDistance"),
+        };
+        bool readsTrail = mentionsToken(allStages, QString::fromLatin1(PointerShaderContract::kUPointerTrail));
+        for (const QLatin1String& reader : kTrailReaders) {
+            if (readsTrail) {
+                break;
+            }
+            readsTrail = mentionsToken(allStages, QString(reader));
+        }
+        const QJsonValue samplesTrailValue = root.value(QLatin1String("samplesTrail"));
+        const bool declaredSamplesTrail = samplesTrailValue.toBool(true);
+        if (readsTrail && !declaredSamplesTrail) {
+            lints << QStringLiteral(
+                "samplesTrail is false but a stage reads the pointer trail (the pack's own trailSeconds is then left "
+                "out of the chain's sample spacing, so it draws from slots spaced for another pack)");
+        }
+        // Only when nothing could be hiding a reader. These scans run over the
+        // stage sources as written, not over the include-expanded text, so a
+        // pack that keeps its trail walk in a file it #includes reads as
+        // "no stage reads the trail" here. Telling THAT author to declare
+        // false would take a pack that really does read the ring out of the
+        // spacing decision, which is the exact mis-spacing this key exists to
+        // prevent, and the opposite lint could not catch it afterwards. The
+        // false-negative (a click pack with an include, left declaring true)
+        // costs a coarser chain; the false-positive costs a broken pack.
+        const bool anyStageIncludes = allStages.contains(QLatin1String("#include"));
+        if (!readsTrail && declaredSamplesTrail && !anyStageIncludes) {
+            lints << QStringLiteral(
+                "no stage reads the pointer trail, so declare `samplesTrail: false` (otherwise this pack's "
+                "trailSeconds raises the sample spacing for every trail pack chained with it, while reading "
+                "none of it itself)");
         }
     }
 
@@ -640,6 +901,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // Raw again: fromJson caps the pass count, skips empty entries, clamps
     // bufferScale and fail-closes multipass entirely on a missing buffer.
     const bool declaredMultipass = root.value(QLatin1String("multipass")).toBool(false);
+    const bool declaredFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     const QJsonArray declaredBuffers = root.value(QLatin1String("bufferShaders")).toArray();
     if (declaredMultipass) {
         if (declaredBuffers.isEmpty()) {
@@ -701,10 +963,31 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                     "multipass is true but the main fragment never samples an iChannel (every buffer pass "
                     "is drawn and nothing reads it)");
             }
-            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && !readsAnyChannel(bufferText)) {
+            if (declaredFeedback && !readsAnyChannel(bufferText)) {
                 lints << QStringLiteral(
                     "bufferFeedback is true but no buffer pass samples an iChannel (its previous frame is "
                     "bound and never read, so nothing persists)");
+            }
+            // The preview's multi-buffer path draws every pass into a single
+            // cleared target per frame and keeps a feedback pair only for the
+            // single-buffer path, so a two-pass feedback pack persists on the
+            // compositor and starts from black in the browser every frame.
+            // Counted over the entries that survive the load, which means both
+            // filters fromJson applies: an empty entry is dropped there (and
+            // linted above), and everything past kMaxBufferPasses is dropped
+            // too. Without the cap a pack declaring three non-empty buffers
+            // was told it had three passes when only two ever run.
+            const auto nonEmpty =
+                std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
+                    return !v.toString().isEmpty();
+                });
+            const auto livePasses = std::min<qsizetype>(nonEmpty, PointerShaderContract::kMaxBufferPasses);
+            if (declaredFeedback && livePasses > 1) {
+                lints << QStringLiteral(
+                             "bufferFeedback with %1 buffer passes persists on the compositor only: the settings "
+                             "preview keeps a previous frame for a single buffer pass, so the browser shows this "
+                             "pack without its state")
+                             .arg(livePasses);
             }
         }
     } else {
@@ -713,7 +996,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         if (!declaredBuffers.isEmpty()) {
             lints << QStringLiteral("bufferShaders declared without `multipass: true` (ignored at load)");
         }
-        if (root.value(QLatin1String("bufferFeedback")).toBool(false)) {
+        if (declaredFeedback) {
             lints << QStringLiteral("bufferFeedback declared without `multipass: true` (ignored at load)");
         }
     }

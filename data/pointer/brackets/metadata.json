@@ -1,15 +1,15 @@
 {
     "id": "brackets",
     "name": "Brackets",
-    "description": "Four corner brackets snap inward onto the point you click, the way a camera locks focus on its subject. They start out wide, close in with a small turn that unwinds as they arrive, sit square for a moment and then fade. A lighter second set marks where you let the button go. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
+    "description": "Four corner brackets snap inward onto the point you click, the way a camera locks focus on its subject. They start out wide and close in with a small turn that unwinds as they arrive. Then they sit square for a moment before fading. A lighter second set marks where you let the button go. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Click",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 44,
     "reachParam": "spread",
     "trailSeconds": 1.7,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "spread",
@@ -18,7 +18,7 @@
             "default": 44.0,
             "min": 16.0,
             "max": 300.0,
-            "description": "How far out the brackets start, measured from the click (px). Every other length is a share of this."
+            "description": "How far the brackets may reach from the click (px). They start inside that, and every other length except the line thickness is a share of it"
         },
         {
             "id": "rest",
@@ -28,7 +28,7 @@
             "min": 0.05,
             "max": 1.0,
             "step": 0.01,
-            "description": "Where the brackets come to rest, as a share of the spread"
+            "description": "Where the brackets come to rest, as a share of where they start"
         },
         {
             "id": "arm",
@@ -38,7 +38,7 @@
             "min": 0.05,
             "max": 1.0,
             "step": 0.01,
-            "description": "Length of each bracket arm, as a share of the spread"
+            "description": "Length of each bracket arm, as a share of the spread. An arm is never longer than its corner's distance from the click, so the arms cannot cross"
         },
         {
             "id": "thickness",
@@ -88,7 +88,7 @@
             "min": 0.0,
             "max": 1.0,
             "step": 0.05,
-            "description": "Strength of the smaller second set drawn when the button is released. Set it to 0 to leave the release unmarked."
+            "description": "Strength of the smaller second set drawn when the button is released. Set it to 0 to leave the release unmarked"
         },
         {
             "id": "colorLeft",

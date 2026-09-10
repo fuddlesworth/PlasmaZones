@@ -27,8 +27,11 @@
 //
 // CANVAS: the whole output in DEVICE px, top-down, origin at the output's
 // top-left. Every position uniform below is in that space and iResolution.xy
-// is the output size in device px. Lengths a pack declares as parameters are
-// LOGICAL px; multiply by pointerScale() (uPointerState.z) to reach device px.
+// is the output size in device px, in a BUFFER PASS as well as the main one
+// (a downscaled buffer target's own size is iChannelResolution[N].xy), so
+// pointerPixel(uv) reaches the position uniforms from every stage. Lengths a
+// pack declares as parameters are LOGICAL px; multiply by pointerScale()
+// (uPointerState.z) to reach device px.
 //
 // OUTPUT: packs return PREMULTIPLIED rgba composited source-over the scene
 // (`glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)` on both runtimes). Return
@@ -42,8 +45,10 @@
 
 // ── Compositor branch — classic default-block uniforms ──────────────────────
 
-// Continuously-increasing seconds (wrapped like every family; the base
-// iTimeHi wrap counterpart is not used by pointer packs).
+// Seconds since this burst of pointer activity began: restarts at 0 for each
+// burst and never wraps on the compositor. (The preview wraps it at 1024 s
+// like every family; the base iTimeHi counterpart is not used by pointer
+// packs on either runtime.)
 uniform float iTime;
 
 // The rest of the preview branch's BaseUniforms members, declared here too so
@@ -87,7 +92,9 @@ uniform vec4 iTextureResolution[4];
 
 // ── Pointer tail ────────────────────────────────────────────────────────────
 
-// .xy pointer velocity in device px/s, .z speed (length of .xy), .w unused.
+// .xy pointer velocity in device px/s, .z speed (length of .xy), .w the
+// filtered speed over the current stroke (read it through
+// pointerFilteredSpeed()).
 uniform vec4 uPointerVelocity;
 
 // Last button PRESS: .xy canvas px, .z seconds since it (1e6 when there has
@@ -98,8 +105,8 @@ uniform vec4 uPointerPress;
 uniform vec4 uPointerRelease;
 
 // .x pressed-button bitmask as a float (1 left, 2 right, 4 middle),
-// .y seconds since the last motion, .z logical-to-device scale,
-// .w trail point count actually filled (0..32).
+// .y seconds since the last motion (1e6 before any motion this session),
+// .z logical-to-device scale, .w trail point count actually filled (0..32).
 uniform vec4 uPointerState;
 
 // Cursor sprite rect in canvas px (x, y, w, h), hotspot already applied so it
@@ -158,7 +165,7 @@ layout(std140, binding = 0) uniform PointerUniforms {
     // implicit 8-byte std140 pad here — base region ends at 672.
 
     // ── pointer tail (PointerUniformsTail, 608 bytes) ──
-    vec4 uPointerVelocity;       // offset 672 (16)  — .xy device px/s, .z speed, .w unused
+    vec4 uPointerVelocity;       // offset 672 (16)  — .xy device px/s, .z speed, .w filtered speed
     vec4 uPointerPress;          // offset 688 (16)  — .xy canvas px, .z seconds since (1e6 = none), .w button
     vec4 uPointerRelease;        // offset 704 (16)  — same shape as uPointerPress
     vec4 uPointerState;          // offset 720 (16)  — .x buttons mask, .y idle s, .z scale, .w trail count

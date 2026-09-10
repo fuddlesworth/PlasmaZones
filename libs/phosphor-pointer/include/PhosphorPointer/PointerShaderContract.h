@@ -51,8 +51,10 @@ namespace PointerShaderContract {
 
 // ── Base (both runtimes; UBO: BaseUniforms members) ──────────────────────
 
-/// `float iTime` — continuously increasing seconds, wrapped like every
-/// family (`iTimeHi` is unused on this contract).
+/// `float iTime` — seconds since the current burst of pointer activity began.
+/// The compositor restarts it at 0 per burst and never wraps it; the preview
+/// wraps it at 1024 s like every family (`iTimeHi` is unused on this
+/// contract on either runtime).
 inline constexpr const char* kITime = "iTime";
 
 /// `vec2 iResolution` — canvas size in device px.
@@ -77,7 +79,9 @@ inline constexpr const char* kITextureResolution = "iTextureResolution";
 // ── Pointer tail (UBO offsets 672..1279, see PointerShaderUniforms.h) ────
 
 /// `vec4 uPointerVelocity` — `.xy` device px/s, `.z` speed (length), `.w`
-/// unused. UBO offset 672.
+/// the filtered speed over the current stroke
+/// (`PointerFrameState::filteredSpeed`, read by `pointerFilteredSpeed()`).
+/// UBO offset 672.
 inline constexpr const char* kUPointerVelocity = "uPointerVelocity";
 
 /// `vec4 uPointerPress` — `.xy` canvas px of the last button press, `.z`

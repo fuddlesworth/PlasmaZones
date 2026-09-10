@@ -539,7 +539,7 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // frame of every switch its cursor. Gated on the manager's own per-output
     // check, the same shape the strip arm below uses.
     if (m_desktopTransition.isRunningForOutput(screen)) {
-        m_pointerPass.releaseCursorHideForForeignPaint(screen);
+        m_pointerPass.releaseCursorHide(screen);
     }
     if (m_desktopTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         // A desktop switch replaces this output's frame and draws no cursor
@@ -551,7 +551,7 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
         // The pointer pass's hide is normally already back by now (above), but
         // a switch that became live inside paintOutput itself has not passed
         // that gate, so release again — it is idempotent.
-        m_pointerPass.releaseCursorHideForForeignPaint(screen);
+        m_pointerPass.releaseCursorHide(screen);
         return;
     }
     // A strip leg is about to take this output's frame. Hand the pointer
@@ -564,7 +564,7 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // failed to allocate), costing one frame with both cursors on that path.
     // Accepted rather than plumbing a will-paint predicate through.
     if (m_stripTransition.isRunningForOutput(screen)) {
-        m_pointerPass.releaseCursorHideForForeignPaint(screen);
+        m_pointerPass.releaseCursorHide(screen);
     }
     // The strip pass sits BELOW the desktop transition on purpose: a desktop
     // switch replaces the scene wholesale, so a strip pass under it would

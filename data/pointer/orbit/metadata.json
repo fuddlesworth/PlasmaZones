@@ -1,7 +1,7 @@
 {
     "id": "orbit",
     "name": "Orbit",
-    "description": "A few small dots circle the pointer and nothing is drawn along the path behind it. The ring widens as the pointer picks up speed and eases back in as it slows, and it hangs a little behind the cursor while moving, as though the dots were being dragged along. At speed each dot can smear slightly along its own direction of travel. Clicking makes the ring scatter outward and spring back. The dots keep circling for a couple of seconds after the pointer stops, then fade out.",
+    "description": "A few small dots circle the pointer and nothing is drawn along the path behind it. The ring widens as the pointer picks up speed and eases back in as it slows, and it hangs a little behind the cursor while moving, as though the dots were being dragged along. At speed each dot can smear slightly along its own direction of travel. Clicking makes the ring scatter outward and spring back. The dots keep circling for about a second after the pointer stops, then fade out.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Glow",
@@ -9,6 +9,7 @@
     "layer": "below",
     "reachParam": "radius",
     "trailSeconds": 2.0,
+    "trailWindowSeconds": 0.6,
     "parameters": [
         {
             "id": "dots",

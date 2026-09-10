@@ -38,8 +38,14 @@ public:
     bool isDirty() const override;
     void clearDirty() override;
 
-    /// `uPointerVelocity`: .xy = @p velocity in device px/s, .z its length.
-    void setVelocity(const QVector2D& velocity);
+    /// `uPointerVelocity`: .xy = @p velocity in device px/s, .z its length,
+    /// .w = @p filteredSpeed (`PointerFrameState::filteredSpeed`).
+    ///
+    /// filteredSpeed is required rather than defaulted. It is the lane
+    /// `pointerFilteredSpeed()` reads, and every speed gate in the pack family
+    /// is built on it, so a caller that omitted it would silently gate every
+    /// pack shut instead of failing to compile.
+    void setVelocity(const QVector2D& velocity, double filteredSpeed);
 
     /// `uPointerPress`: canvas px, seconds since the press, button code.
     void setPress(const QPointF& pos, double secondsSince, int button);
@@ -79,7 +85,7 @@ private:
     // The public setters lock around one of them; apply() locks once around
     // all of them.
     void setVec4Locked(float (&dst)[4], float x, float y, float z, float w);
-    void setVelocityLocked(const QVector2D& velocity);
+    void setVelocityLocked(const QVector2D& velocity, double filteredSpeed);
     void setPressLocked(const QPointF& pos, double secondsSince, int button);
     void setReleaseLocked(const QPointF& pos, double secondsSince, int button);
     void setStateLocked(int buttonsMask, double idleSeconds, double scale);

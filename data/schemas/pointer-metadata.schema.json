@@ -23,7 +23,7 @@
         },
         "reach": {
             "type": "number",
-            "minimum": 0,
+            "minimum": 1,
             "maximum": 1024,
             "description": "How far (logical px, default 64) from any trail point or press point the pack may paint. The host derives the damage rect from it, so painting outside it gets clipped."
         },
@@ -33,8 +33,23 @@
         },
         "trailSeconds": {
             "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 60,
+            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event. This is a liveness figure and nothing else. What spaces the history's samples is how far back the pack READS, which defaults to this but should be declared separately through trailWindowParam or trailWindowSeconds whenever the two differ."
+        },
+        "trailWindowSeconds": {
+            "type": "number",
             "minimum": 0,
-            "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event."
+            "maximum": 60,
+            "description": "How far back (seconds) the pack's stages actually read the trail, when that is a fixed figure rather than a slider. Defaults to trailSeconds. This is what spaces the history's slots, so a pack that needs frames for two seconds but only ever looks at the last half second of path should say so and get a four times finer stroke for it."
+        },
+        "trailWindowParam": {
+            "type": "string",
+            "description": "Name of an int or float parameter whose resolved value replaces trailWindowSeconds, the same shape reachParam has over reach. Use it when how far back the pack reads is a slider, such as a trail's lifetime, so shortening the tail buys a finer stroke for it."
+        },
+        "samplesTrail": {
+            "type": "boolean",
+            "description": "Whether any stage reads uPointerTrail. Defaults true. A click pack that draws only at the press point should set it false, so its trailSeconds keeps its own animation running without coarsening the sample spacing of the trail packs beside it."
         },
         "needsCursor": {
             "type": "boolean",

@@ -9,6 +9,7 @@
     "layer": "above",
     "reach": 160,
     "trailSeconds": 0.9,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "size",
@@ -17,7 +18,7 @@
             "default": 120.0,
             "min": 16.0,
             "max": 320.0,
-            "description": "Diameter the ring grows to before it is gone (px)"
+            "description": "Diameter the ring grows to before it is gone, pulled in at large thicknesses so the band stays inside the painted area (px)"
         },
         {
             "id": "thickness",
@@ -34,7 +35,7 @@
             "type": "float",
             "default": 0.6,
             "min": 0.2,
-            "max": 0.9,
+            "max": 0.81,
             "description": "How long a ring takes to expand and fade (seconds)"
         },
         {

@@ -10,20 +10,14 @@
 const float kTrailSeconds = 0.9;
 
 vec4 buttonColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 // Ring coverage for an event at `origin`, `since` seconds old, at the
 // given line thickness (device px). Radius eases out (cubic) to `maxRadius`.
 float ring(vec2 px, vec2 origin, float since, float duration, float maxRadius, float thickness) {
     float t = since / duration;
-    if (t < 0.0 || t >= 1.0) {
+    if (t >= 1.0) {
         return 0.0;
     }
     float ease = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);
@@ -38,7 +32,10 @@ float ring(vec2 px, vec2 origin, float since, float duration, float maxRadius, f
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float duration = clamp(p_duration, 0.05, kTrailSeconds);
+    // Capped at 0.9 of the window (the metadata maximum is that cap): the
+    // last live frame at a low refresh rate lands just inside the window, and
+    // a ring still fading at the edge would leave its band frozen there.
+    float duration = clamp(p_duration, 0.05, 0.9 * kTrailSeconds);
     float thickness = max(p_thickness, 0.5) * scale;
     // The ring is drawn as a BAND around `radius`, so the painted edge is half
     // a thickness plus the antialias feather beyond it. The metadata's reach
@@ -70,11 +67,5 @@ vec4 pPointer(vec2 uv) {
         alpha += a;
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    // The two rings are already premultiplied sums; clamp coverage and keep
-    // the colour in proportion.
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

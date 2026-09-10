@@ -17,40 +17,63 @@
 // declaration order: persistence is the first float declared, radius the
 // second.
 //
+// So the ORDER of the `parameters` array in metadata.json is load-bearing for
+// this pack in a way it is not for any single-pass one. Reordering those two
+// entries, or inserting another scalar ahead of them, silently swaps what
+// this stage reads: nothing fails to build, nothing fails to validate, and
+// the decay constant arrives as a radius. Add new scalars AFTER these two.
+//
 // ORIENTATION. vTexCoord addresses this pass's own target and the main pass
 // samples iChannel0 with the same vTexCoord it hands to pointerPixel(), so a
 // texel written for pointerPixel(vTexCoord) here is read back for the same
 // canvas position there, on both runtimes, with no flip of its own.
 //
-// The stamp is gated on the newest sample being fresh: a resting pointer
-// stops laying down glow, so the canvas empties within trailSeconds and the
-// host can stop repainting. Left ungated it would refresh the resting spot
-// forever and a frozen dot would be left behind when the pass went quiet.
+// The stamp is gated on the pointer having MOVED within kFreshSeconds, read
+// from the idle clock rather than the newest sample's age: a host that feeds
+// a resting pointer every tick still appends a slot at age zero every
+// interval, and gating on that age kept re-stamping the resting spot at full
+// energy while the idle clock rose. On the idle clock a resting pointer
+// stops laying down glow on both hosts, so the canvas empties within
+// trailSeconds and the host can stop repainting.
+//
+// The decay is per frame, so at a low refresh rate the canvas is not empty
+// when the host goes quiet at trailSeconds. The idle envelope below is the
+// same wall-clock cut effect.frag applies to its coverage: it takes the
+// stored energy to zero over the same window, so the stroke the pointer left
+// before a pause is not still on the canvas when the next stroke starts.
 
 #version 450
 
 #include <pointer_lib.glsl>
 #include <pointer_multipass.glsl>
+#include "afterglow_common.glsl"
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-const float kFreshSeconds = 0.05;
+// One frame at the lowest refresh rate the family designs for (20 Hz) plus
+// scheduling latency: a frame painted later than this after the last move
+// would skip the stamp and never lay that segment down. Rest slots are
+// excluded by the idle clock itself, which they do not reset.
+const float kFreshSeconds = 0.1;
 
 void main() {
-    float persistence = clamp(customParams[0].x, 0.0, 0.97);
+    float persistence = clamp(customParams[0].x, 0.0, kMaxPersistence);
     float radius = max(customParams[0].y, 1.0) * pointerScale();
 
-    float energy = texture(iChannel0, vTexCoord).r * persistence;
+    float idleCut = 1.0 - smoothstep(kIdleCutStart, kIdleCutSeconds, pointerIdleSeconds());
+    float energy = texture(iChannel0, vTexCoord).r * persistence * idleCut;
     // Below one 8-bit step the canvas is empty in every way that matters, so
-    // snap it to zero rather than let the decay asymptote leave a faint
-    // residue that never clears.
+    // snap it to zero. This only completes the idle cut: while the pointer
+    // moves, 8-bit rounding stalls the decay well above one step (see
+    // afterglow_common.glsl), and it is the main pass's coverage floor that
+    // hides that residue, not this snap.
     if (energy < 1.0 / 255.0) {
         energy = 0.0;
     }
 
     int count = pointerTrailCount();
-    if (count >= 1 && pointerTrailAt(0).z < kFreshSeconds) {
+    if (count >= 1 && pointerIdleSeconds() < kFreshSeconds) {
         vec2 px = pointerPixel(vTexCoord);
         float d;
         if (count >= 2) {

@@ -24,93 +24,122 @@
 // path pack, so two packs in one chain trace the same curve from the same
 // pointer. It defaults to 0.5, the value the pack used to hardcode.
 
-const int kMaxTrail = 32;
-
-// Speed at which the stroke reaches its thinnest, in px/s.
+// Speed at which the stroke reaches its thinnest, in logical px/s (scaled at
+// use).
 const float kThinSpeed = 1200.0;
+// The metadata trailSeconds. The host does not clamp parameters to their
+// declared range, so a hand-edited lifetime past this would outlive the
+// window and freeze its last frame on screen.
+const float kLifetimeMax = 2.5;
+
+// Wet ink spreads a little into the paper for the first part of its life,
+// then stops. It never spreads again once dry. Shared by the stroke and the
+// blot so the two swell on one curve.
+float inkWet(float remain) {
+    return 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
+}
+
+// Drying: held at full opacity for most of the life, then taken off quickly,
+// which is what makes the tail vanish rather than dim evenly. Shared by the
+// stroke and the blot so the two dry on one curve.
+float inkDry(float remain) {
+    return smoothstep(0.0, 0.30, remain);
+}
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
     float halfWidth = 0.5 * max(p_width, 1.0) * scale;
-    float lifetime = max(p_lifetime, 0.05);
+    float lifetime = clamp(p_lifetime, 0.05, kLifetimeMax);
     float bleed = clamp(p_bleed, 0.0, 1.0);
 
     float cover = 0.0;
 
     // ── The stroke ──
-    if (count >= 2) {
+    // Only the LIVE run of samples is drawn or smoothed over. The ring is
+    // never purged, so behind the live run sit samples older than the
+    // lifetime, and at a lifetime equal to the metadata trailSeconds those
+    // are outside the damage rect, which covers only live samples. A segment
+    // reaching one would leave its last sliver frozen there on the
+    // compositor, and the smoothing kernel blends a segment's far end toward
+    // the sample beyond it, so the live count is handed to pointerSmoothedAt
+    // as the window it clamps its neighbours into.
+    int live = pointerLiveCount(count, lifetime);
+    if (live >= 2) {
         float cull = halfWidth * 1.5 + 2.0 * scale;
-        for (int i = 0; i < kMaxTrail - 1; ++i) {
-            if (i + 1 >= count) {
+        // The smoothed far end of one segment is the near end of the next,
+        // so it is carried across iterations rather than looked up twice.
+        vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
+        for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
+            if (i + 1 >= live) {
                 break;
             }
             vec4 a = pointerTrailAt(i);
             vec4 b = pointerTrailAt(i + 1);
-            if (a.z >= lifetime) {
-                break;
-            }
 
-            vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
-            vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-            vec2 ab = pb - pa;
-            float len = length(ab);
-            if (len < 1e-4) {
+            vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
+            if (distance(a.xy, b.xy) < 1.0) {
+                // A stationary pair (raw positions under a pixel apart, the
+                // sampler's own rest-slot rule: a rest slot a host that feeds
+                // every tick appends beside the last motion sample) lays down
+                // no stroke. Tested on the raw samples,
+                // since the smoothing kernel pulls the pair's endpoints
+                // apart toward the neighbour beyond, and drawing that stub
+                // would keep the rest point wet where the compositor, which
+                // gets no event from a resting pointer, lets it dry.
+                pa = pb;
                 continue;
             }
             vec2 lo = min(pa, pb) - cull;
             vec2 hi = max(pa, pb) + cull;
             if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
+                pa = pb;
                 continue;
             }
 
-            float t = clamp(dot(px - pa, ab) / (len * len), 0.0, 1.0);
-            float d = length(px - (pa + ab * t));
+            float t;
+            float d = pointerSegmentDistanceFrom(px, pa, pb, t);
+            pa = pb;
             float age = mix(a.z, b.z, t);
-            if (age >= lifetime) {
-                continue;
-            }
             float remain = 1.0 - age / lifetime;
 
             // The brush curve: broad where the hand was slow, thin where it
             // was quick.
-            float speedNorm = clamp(mix(a.w, b.w, t) / kThinSpeed, 0.0, 1.0);
+            float speedNorm = clamp(mix(a.w, b.w, t) / (kThinSpeed * scale), 0.0, 1.0);
             float w = halfWidth * mix(1.0, 0.30, sqrt(speedNorm));
 
-            // Wet ink spreads a little into the paper for the first part of
-            // its life, then stops. It never spreads again once dry.
-            float wet = 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
+            float wet = inkWet(remain);
             w *= 1.0 + 0.18 * bleed * wet;
             w = max(w, 0.4 * scale);
 
             // A clean antialiased edge. This is the only softness in the pack.
             float band = 1.0 - smoothstep(w - 0.75, w + 0.75, d);
 
-            // Drying: the oldest end of the stroke lifts first. Held at full
-            // opacity for most of the life, then taken off quickly, which is
-            // what makes the tail vanish rather than dim evenly.
-            float dry = smoothstep(0.0, 0.30, remain);
+            // Drying: the oldest end of the stroke lifts first.
+            float dry = inkDry(remain);
             cover = max(cover, band * dry);
         }
     }
 
     // ── The blot ──
     // A click lands a drop of ink. Round and clean, on the same wet then dry
-    // curve as the stroke. Bounded well inside the reach `width` buys.
+    // curve as the stroke. Bounded inside the reach `width` buys.
     float blot = clamp(p_blot, 0.0, 0.7);
     float since = pointerSincePress();
     if (blot > 0.0 && uPointerPress.w > 0.5 && since < lifetime) {
         float remain = 1.0 - since / lifetime;
-        float wet = 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
+        float wet = inkWet(remain);
         // Widest while WET and drawing back in as it dries, the same shape and
         // the same direction as the stroke's own width term. Gated on Bleed for
         // the same reason, so setting Bleed to zero really does keep one width
         // everywhere.
-        float r = halfWidth * blot * 2.0 * (1.0 + 0.18 * bleed * wet);
+        // The feather is folded into the reach, so the blot's edge ends inside
+        // the damage rect at the smallest width too.
+        float r = min(halfWidth * blot * 2.0 * (1.0 + 0.18 * bleed * wet), pointerReach() - 0.75);
         float d = length(px - uPointerPress.xy);
         float band = 1.0 - smoothstep(r - 0.75, r + 0.75, d);
-        cover = max(cover, band * smoothstep(0.0, 0.30, remain));
+        cover = max(cover, band * inkDry(remain));
     }
 
     float alpha = clamp(cover * p_color.a, 0.0, 1.0);

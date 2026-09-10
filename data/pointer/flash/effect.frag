@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Flash pointer shader — a click-led pack. A press lights a soft round bloom
-// at the press point with `spikeCount` thin spikes crossing through it, the
+// at the press point with `spikeCount` thin spikes radiating from it, the
 // shape a lens flare makes, and the whole thing is gone again in `duration`
 // (a fifth of a second by default).
 //
@@ -11,8 +11,9 @@
 //
 // NOT A RING. The bloom is brightest at the middle at every moment of its
 // life and its falloff is monotonic outward, so the silhouette never opens up
-// into an annulus. It grows by 18 percent over its life, which is a swell in
-// place rather than an outward travel. Click Ripple owns the expanding ring.
+// into an annulus. It swells from 82 percent of its size to full over its
+// life, a swell in place rather than an outward travel. Click Ripple owns the
+// expanding ring.
 //
 // The fade is pow(1 - t, 4): almost all the light is spent in the first third
 // of the life, so it snaps rather than lingering, and it is exactly zero at
@@ -27,16 +28,11 @@
 // `reachParam` names), so nothing is painted outside the damage rect the host
 // derives from it.
 
-const float kDegreesToRadians = 0.01745329252;
+// The spike count cap; the metadata maximum is this number.
+const int kMaxSpikes = 12;
 
 vec4 flashColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 vec4 pPointer(vec2 uv) {
@@ -53,7 +49,9 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float limit = max(p_spikeLength, 1.0) * scale;
+    // The reach the host resolved from `spikeLength`, in device px, read from
+    // the uniform so the damage rect and the shader cannot drift.
+    float limit = pointerReach();
 
     vec2 rel = px - uPointerPress.xy;
     if (abs(rel.x) > limit || abs(rel.y) > limit) {
@@ -79,12 +77,17 @@ vec4 pPointer(vec2 uv) {
 
     // Spikes: thin bright lines through the middle, longest along their own
     // axis and tapering to nothing at the tips.
-    int spikes = clamp(int(p_spikeCount + 0.5), 0, 12);
+    int spikes = clamp(int(p_spikeCount + 0.5), 0, kMaxSpikes);
     if (spikes > 0) {
         float len = limit * grow;
-        float width = max(p_spikeWidth, 0.25) * scale;
-        float base = p_spikeAngle * kDegreesToRadians;
-        for (int i = 0; i < 12; ++i) {
+        // `across` is the distance from the spike's axis, so the parameter
+        // (a thickness, as its description says) is halved to the half-width
+        // the test below uses. Held under the reach so a wide spike on a
+        // tiny reach still tapers rather than having its base cut square by
+        // the box above.
+        float width = min(0.5 * max(p_spikeWidth, 0.5) * scale, limit * 0.4);
+        float base = radians(p_spikeAngle);
+        for (int i = 0; i < kMaxSpikes; ++i) {
             if (i >= spikes) {
                 break;
             }
@@ -96,7 +99,9 @@ vec4 pPointer(vec2 uv) {
             }
             float across = abs(rel.x * dir.y - rel.y * dir.x);
             float taper = 1.0 - along / len;
-            float w = max(width * taper, 0.35);
+            // The tip floor is a device-px hairline, scaled like the width it
+            // floors so the tip is the same share of the spike on any display.
+            float w = max(width * taper, 0.35 * scale);
             if (across >= w) {
                 continue;
             }

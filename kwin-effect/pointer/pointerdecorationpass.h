@@ -57,7 +57,10 @@ namespace PlasmaZones {
 /// feature off, an empty chain, or a chain whose every layer is disabled or
 /// unresolvable, notePointer writes no history, isLive() is false so the
 /// effect is not held in the paint chain by us, scheduleRepaints requests
-/// nothing and paintOutput allocates and draws nothing.
+/// nothing and paintOutput allocates and draws nothing. The rule is per
+/// FRAME: a suppressed output still reads the clock once per pointer event,
+/// and an event that crosses outputs still computes the departing output's
+/// damage once, neither of which scales with frames drawn.
 ///
 /// COORDINATE SPACE. The contract's canvas is ONE output in device px,
 /// top-down, origin at that output's top-left (pointer_uniforms.glsl). So the
@@ -95,10 +98,12 @@ namespace PlasmaZones {
 /// pass, which hides the cursor for the same reason:
 ///   • hideCursorForPass() refuses when KWin already reports the cursor
 ///     hidden, so whoever asked first keeps it and draws it.
-///   • releaseCursorHideForForeignPaint() hands it back when a desktop
-///     transition or a strip leg is about to take this output's frame. Those
+///   • releaseCursorHide() hands it back when a desktop
+///     transition or a strip leg is about to take this output's frame, and
+///     when this pass finished its own chain having drawn nothing. Those
 ///     passes replace the whole paint, this pass never reaches paintOutput
-///     for that output, and nothing would draw the cursor otherwise. The
+///     for that output, and nothing would draw the cursor otherwise; a chain
+///     that drew nothing leaves the same hole. The
 ///     effect's paintScreen calls it BEFORE those passes run, so the strip
 ///     pass's own hide can then succeed.
 /// A `layer: below` chain never touches cursor visibility at all: it paints
@@ -187,7 +192,7 @@ public:
 
     /// Give the cursor back because ANOTHER pass is taking @p screen's frame
     /// (a desktop transition, a strip leg). See the class note.
-    void releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen);
+    void releaseCursorHide(KWin::LogicalOutput* screen);
 
     /// Drop every compiled pack so the next live frame recompiles against
     /// freshly reloaded source. Called from the registry's `effectsChanged`
@@ -315,6 +320,11 @@ private:
         bool bufferAllocFailed = false;
     };
 
+    /// Set by resetHistory(), consumed by runBufferPasses on the next live
+    /// frame, which clears both slots of every pair. Kept on the pass rather
+    /// than the pack because the packs outlive a reset in the cache.
+    bool m_bufferFeedbackStale = false;
+
     // ── pointerdecorationshader.cpp ─────────────────────────────────────────
 
     /// Populate the registry's XDG search paths, once. Same order as
@@ -394,16 +404,36 @@ private:
     // ── pointerdecorationpass.cpp ───────────────────────────────────────────
 
     /// Rebuild m_engaged / m_engagedLayers / m_maxReachLogical /
-    /// m_maxTrailSeconds from the enable flag, the profile and the registry.
+    /// m_maxTrailSeconds / m_sampleWindowSeconds from the enable flag, the
+    /// profile and the registry.
     /// The one place the cost rule's verdict is decided.
     void rebuildChain();
 
     /// This frame's damage in @p screen's device-px canvas, already clipped
     /// to the output. Empty when nothing is live. Not const: it records the
     /// sprite rect it saw (m_lastSpriteCanvasRect) for the next call's union.
-    QRectF damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs);
+    QRectF damageDeviceRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression = false);
     /// The same rect in GLOBAL LOGICAL px, the space addRepaint speaks.
-    QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs);
+    QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression = false);
+    /// Ask the pointer's current output to repaint the trail it still shows,
+    /// before the history is reset because the pointer is moving to @p next.
+    /// Takes a clock stamp because the sampling path already has one.
+    void repaintStaleTrail(KWin::LogicalOutput* next, qint64 nowMs);
+    /// The rect the trail currently on screen occupies, for a caller about to
+    /// drop it. Must be taken BEFORE the state that describes it is torn down,
+    /// because it answers from the CURRENT chain and history.
+    QRectF staleTrailRect();
+    /// Drop the sampled history AND mark the multipass feedback canvas stale.
+    /// The two belong together: a feedback pack's buffer holds the burst the
+    /// history just discarded, and runBufferPasses only reallocates (and so
+    /// only clears) when the target SIZE changes. An output crossing between
+    /// two same-size outputs, or an un-suppress on the same one, would
+    /// otherwise let the previous burst's glow bleed into the next one's
+    /// first frames. Every reset goes through here so no future path can
+    /// clear one without the other.
+    void resetHistory();
+    /// Ask for @p stale to be repainted, if there is anything to repaint.
+    void repaintStale(const QRectF& stale) const;
 
     /// The cursor sprite's rect in @p screen's device-px canvas, hotspot
     /// applied. A null rect when the compositor reports no cursor image.
@@ -444,6 +474,14 @@ private:
     QSet<KWin::LogicalOutput*> m_suppressedOutputs;
     double m_maxReachLogical = 0.0;
     double m_maxTrailSeconds = 0.0;
+    /// The longest READ WINDOW among the chain's members, which is what
+    /// spaces the history ring. Separate from m_maxTrailSeconds, the liveness
+    /// deadline over every member: a click pack needs frames without needing
+    /// samples, and a trail pack needs frames for as long as its stroke takes
+    /// to fade while only reading the part of the path its length covers.
+    /// Resolved per layer against that layer's parameter overrides, so it
+    /// follows a slider the way m_maxReachLogical does.
+    double m_sampleWindowSeconds = 0.0;
 
     /// The output the history's canvas belongs to. Changing it resets the
     /// history (see the class note on coordinate space).

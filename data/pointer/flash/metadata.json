@@ -1,15 +1,15 @@
 {
     "id": "flash",
     "name": "Flash",
-    "description": "Clicking sets off a short snap of light at the pointer. A soft round bloom lights up with thin bright spikes crossing through it, the way a lens flare does, and it is gone again in a fifth of a second. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
+    "description": "Clicking sets off a short snap of light at the pointer. A soft round bloom lights up with thin bright spikes radiating from it, the way a lens flare does, and it is gone again in a fifth of a second. Each button has its own colour. Nothing is drawn while the pointer is only moving.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Click",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 90,
     "reachParam": "spikeLength",
     "trailSeconds": 0.5,
+    "samplesTrail": false,
     "parameters": [
         {
             "id": "bloomSize",
@@ -27,7 +27,7 @@
             "default": 4,
             "min": 0,
             "max": 12,
-            "description": "How many spikes cross the bloom, spread evenly around it"
+            "description": "How many spikes radiate from the bloom, spread evenly around it"
         },
         {
             "id": "spikeLength",

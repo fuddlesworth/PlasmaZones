@@ -6,9 +6,14 @@
 // the velocity, so the pack paints exactly nothing while the pointer is merely
 // moving: every contribution is gated on uPointerPress / uPointerRelease.
 //
-// All lengths derive from p_spread, which is the pack's reachParam, and each
-// event is additionally clipped to a box of half-extent `spread` around its
-// own origin, so the pack cannot paint outside the damage rect the host buys.
+// Every length except the line thickness derives from the resolved spread
+// (pointerReach(), filled by the host from `spread`, the pack's reachParam),
+// and each event is additionally clipped to a box of
+// half-extent `spread` around its own origin, so the pack cannot paint
+// outside the damage rect the host buys. The starting corner offset is held
+// far enough inside that box for the turned corner, its half thickness and
+// the antialias feather to fit, or at the smallest spread the outermost
+// bracket edge was clipped square.
 
 // The longest response the pack can produce is kDurationMax + kHoldMax, since
 // the hold is added on top of the duration rather than carved out of it. The
@@ -16,29 +21,18 @@
 const float kDurationMax = 1.2;
 const float kHoldMax = 0.5;
 const float kConvergeFraction = 0.42; // share of `duration` spent closing in
-const float kCornerFraction = 0.70;   // starting corner offset, as a share of spread
+const float kCornerFraction = 0.70;   // cap on the starting corner offset, as a share of spread; see response()
 const float kArmMax = 0.9;            // arm length cap, as a share of the corner offset
 
 vec4 buttonColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
-// Distance from `q` to the straight segment a..b. Written out rather than
-// reusing the trail helpers, which work on pointer history and not on marks.
+// Distance from `q` to the straight segment a..b, through the shared
+// point-taking helper; the position along the arm is not needed.
 float armDistance(vec2 q, vec2 a, vec2 b) {
-    vec2 ab = b - a;
-    float len2 = dot(ab, ab);
-    if (len2 < 1e-6) {
-        return length(q - a);
-    }
-    float t = clamp(dot(q - a, ab) / len2, 0.0, 1.0);
-    return length(q - (a + ab * t));
+    float t;
+    return pointerSegmentDistanceFrom(q, a, b, t);
 }
 
 // Coverage of the four corner brackets for a point `q` already relative to the
@@ -73,9 +67,19 @@ float response(vec2 px, vec2 origin, float since, float duration, float hold, fl
     float k = clamp(since / max(converge, 1e-4), 0.0, 1.0);
     float ease = 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k);
 
-    float start = spread * kCornerFraction;
+    // A corner turned by up to 12 degrees reaches cos + sin, about 1.19, of
+    // its offset along an axis; the line's half thickness and feather sit
+    // beyond that (see the header).
+    // Floored at 0: at a small spread the second term goes negative, which
+    // flips the corner signs and sends the arms outward from the press point
+    // instead of back toward it. Zero collapses the marks onto the point,
+    // which is the honest picture of "no room to draw".
+    float start = max(min(spread * kCornerFraction, spread / 1.19 - half_ - 0.75), 0.0);
     float rest = start * clamp(p_rest, 0.0, 1.0);
     float d = mix(start, rest, ease);
+    // Capped at the corner's distance from the press point: the arms run from
+    // the corner back toward it, and a longer arm would cross the centre and
+    // meet its opposite. The metadata description tells the user so.
     float arm = min(spread * clamp(p_arm, 0.0, 1.0), d * kArmMax);
 
     // A small turn that unwinds as the marks arrive, so they settle square.
@@ -100,10 +104,12 @@ float response(vec2 px, vec2 origin, float since, float duration, float hold, fl
 vec4 pPointer(vec2 uv) {
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float duration = clamp(p_duration, 0.15, kDurationMax);
+    float duration = clamp(p_duration, 0.2, kDurationMax);
     float hold = clamp(p_hold, 0.0, kHoldMax);
     float total = duration + hold;
-    float spread = max(p_spread, 16.0) * scale;
+    // The reach the host resolved from `spread`, in device px, read from the
+    // uniform so the damage rect and the shader cannot drift.
+    float spread = pointerReach();
     float half_ = 0.5 * clamp(p_thickness, 0.5, 6.0) * scale;
 
     vec3 rgb = vec3(0.0);
@@ -131,9 +137,5 @@ vec4 pPointer(vec2 uv) {
         alpha += a;
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

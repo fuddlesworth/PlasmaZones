@@ -10,8 +10,9 @@
 //
 //   • Speed is filtered before anything is decided by it. Upstream keeps one
 //     exponentially filtered speed (a = 0.46) rather than reading the raw
-//     per-frame figure. pointerFilteredSpeed() is that filter. Gating on the
-//     raw per-sample speed is what made this pack blink on and off.
+//     per-frame figure. The host sampler runs that filter once per frame and
+//     pointerFilteredSpeed() reads it. Gating on the raw per-sample speed is
+//     what made this pack blink on and off.
 //   • Width answers to the SQUARE ROOT of speed, which compresses the top of
 //     the range so a fast flick is not absurdly fatter than a brisk drag.
 //   • Width also tapers with age on a `pow(smoothstep(life), 1.55)` curve, so
@@ -30,10 +31,9 @@
 //
 // Coverage is the max over segments so a folded path does not stack.
 
-const int kMaxTrail = 32;
-
-// Speed at which the ribbon reaches full width, in px/s. The sqrt response is
-// normalised against this so `thickness` means the same width on any machine.
+// Speed at which the ribbon reaches full width, in logical px/s (scaled at
+// use). The sqrt response is normalised against this so `thickness` means
+// the same width on any machine.
 const float kFullWidthSpeed = 900.0;
 
 // Stop fade, as a share of `duration`: the seconds of stillness over which
@@ -42,8 +42,10 @@ const float kFullWidthSpeed = 900.0;
 // long before a 1.2 s duration had let its far end age out, which made most
 // of the Duration slider inert once the hand stopped. The ratio reproduces
 // the old 0.35 s at the default 0.5 s duration, and the result is floored so
-// a very short duration still gets a fade rather than a cut, and capped at
-// the duration itself so it stays inside trailSeconds.
+// a very short duration still gets a fade rather than a cut. No cap is
+// needed to stay inside trailSeconds: at the longest duration the fade is
+// 0.84 s against a 1.4 s window. (A clamp against the duration had its
+// bounds cross below 0.2 s, which GLSL leaves undefined.)
 const float kStopFadeShare = 0.35 / 0.5;
 const float kStopFadeFloorSeconds = 0.2;
 
@@ -62,13 +64,13 @@ vec4 pPointer(vec2 uv) {
     // whether a trail starts at all, not each segment every frame, so the
     // ribbon appears and retreats as a whole instead of breaking into
     // flickering patches wherever the raw speed dipped for one sample.
-    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+    float gate = pointerActivationGate(p_activationSpeed);
     if (gate <= 0.0) {
         return vec4(0.0);
     }
 
     // Stop fade: rest dims the whole ribbon out rather than cutting it.
-    float stopFadeSeconds = clamp(kStopFadeShare * duration, kStopFadeFloorSeconds, duration);
+    float stopFadeSeconds = max(kStopFadeShare * duration, kStopFadeFloorSeconds);
     float stopFade = 1.0 - smoothstep(0.0, stopFadeSeconds, pointerIdleSeconds());
     if (stopFade <= 0.0) {
         return vec4(0.0);
@@ -80,37 +82,50 @@ vec4 pPointer(vec2 uv) {
     float reach = pointerReach();
 
     float cover = 0.0;
-    for (int i = 0; i < kMaxTrail - 1; ++i) {
-        if (i + 1 >= count) {
+    // Only the LIVE run of samples is drawn or smoothed over (the samples
+    // behind it can be outside the damage rect, and the smoothing kernel
+    // would blend a segment's far end toward one); the live count is the
+    // window pointerSmoothedAt clamps its neighbours into.
+    int live = pointerLiveCount(count, duration);
+    // The smoothed far end of one segment is the near end of the next, so it
+    // is carried across iterations rather than looked up twice per segment.
+    vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
+    for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
+        if (i + 1 >= live) {
             break;
         }
         vec4 a = pointerTrailAt(i);
         vec4 b = pointerTrailAt(i + 1);
-        if (a.z >= duration) {
-            break;
-        }
 
-        vec2 pa = pointerSmoothedAt(i, count, p_smoothing);
-        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-        vec2 ab = pb - pa;
-        float len = length(ab);
-        if (len < 1e-4) {
+        // The far endpoint is needed either way (it is the next segment's
+        // near end), so it is looked up once; the reject box is built from
+        // the raw samples (see pointerSegmentOutside) so a rejected fragment
+        // still skips the distance maths.
+        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
+        if (pointerSegmentOutside(px, i, live, a, b, reach)) {
+            pa = pb;
             continue;
         }
-        vec2 lo = min(pa, pb) - reach;
-        vec2 hi = max(pa, pb) + reach;
-        if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
+        if (distance(a.xy, b.xy) < 1.0) {
+            // A stationary pair (raw positions under a pixel apart, the
+            // sampler's own rest-slot rule) has no ribbon to draw. A host
+            // that feeds a resting pointer appends one every interval,
+            // and drawing those would keep the rest point lit there when the
+            // compositor, which gets no event from a resting pointer, lets it
+            // age out. Tested on the raw samples, since the smoothing kernel
+            // pulls the pair's endpoints apart toward the neighbour beyond.
+            pa = pb;
             continue;
         }
-
-        float t = clamp(dot(px - pa, ab) / (len * len), 0.0, 1.0);
-        float d = length(px - (pa + ab * t));
+        float t;
+        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
+        pa = pb;
 
         // Per-sample speed, normalised and square-rooted. This one stays raw
         // because it describes how fast the pointer was AT this point of the
         // path, which is a property of the path and not of the frame clock.
         float segSpeed = mix(a.w, b.w, t);
-        float speedNorm = clamp(segSpeed / kFullWidthSpeed, 0.0, 1.0);
+        float speedNorm = clamp(segSpeed / (kFullWidthSpeed * scale), 0.0, 1.0);
         float responsive = sqrt(speedNorm);
 
         // Lifetime answers to speed, floored at 53% of duration as upstream
@@ -133,7 +148,7 @@ vec4 pPointer(vec2 uv) {
         float sigma = w + 1.5 * scale;
         // Compact support: the gaussian alone is still visible at the reject
         // box, so it is windowed to reach exactly zero at the reach.
-        float soft = exp(-(d * d) / (2.0 * sigma * sigma)) * 0.4 * (1.0 - smoothstep(0.8 * reach, reach, d));
+        float soft = exp(-(d * d) / (2.0 * sigma * sigma)) * 0.4 * pointerReachWindow(d, reach);
         // `tail` is applied a second time here, on the opacity, after it
         // already shaped the width above. That is deliberate and not a
         // duplicate: the width has a floor (0.35 px) it can never taper
