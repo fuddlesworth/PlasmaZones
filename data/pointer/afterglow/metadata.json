@@ -18,9 +18,9 @@
             "id": "persistence",
             "name": "Persistence",
             "type": "float",
-            "default": 0.85,
+            "default": 0.8,
             "min": 0.5,
-            "max": 0.87,
+            "max": 0.82,
             "step": 0.01,
             "description": "How much of the glow survives from one frame to the next. Higher values fade more slowly"
         },

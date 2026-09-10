@@ -919,6 +919,11 @@ private Q_SLOTS:
             const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-tiny"), obj, body);
             QVERIFY2(r.report.contains(QStringLiteral("reach 0 is under the 4 logical px floor")),
                      qPrintable(r.report));
+            // Exactly at the floor is allowed: the comparison is strict.
+            QJsonObject at = pointerPackWithGate(QStringLiteral("pt-reach-floor"), 0.0);
+            at.insert(QStringLiteral("reach"), 4.0);
+            const PackResult fine = validatePointer(tmp, QStringLiteral("pt-reach-floor"), at, body);
+            QVERIFY2(!fine.report.contains(QStringLiteral("is under the")), qPrintable(fine.report));
         }
         {
             // The gate's parameter is found inside an expression too: a pack
@@ -930,6 +935,14 @@ private Q_SLOTS:
                                "    return vec4(pointerSpeedGate(uPointerVelocity.z, p_activationSpeed * 2.0));\n"
                                "}\n"));
             QVERIFY2(r.report.contains(QStringLiteral("previews as an empty stage")), qPrintable(r.report));
+            // And in a non-leading position, wrapped in parentheses.
+            QJsonObject trailing = pointerPackWithGate(QStringLiteral("pt-gate-trailing"), 400.0);
+            const PackResult t = validatePointer(
+                tmp, QStringLiteral("pt-gate-trailing"), trailing,
+                QStringLiteral("vec4 pPointer(vec2 uv) {\n"
+                               "    return vec4(pointerSpeedGate(uPointerVelocity.z, 2.0 * (p_activationSpeed)));\n"
+                               "}\n"));
+            QVERIFY2(t.report.contains(QStringLiteral("previews as an empty stage")), qPrintable(t.report));
         }
         {
             // A shader that mirrors trailSeconds as kTrailSeconds is held to
@@ -953,6 +966,28 @@ private Q_SLOTS:
                                                "    return vec4(kTrailSeconds * p_activationSpeed);\n"
                                                "}\n"));
             QVERIFY2(!fine.report.contains(QStringLiteral("kTrailSeconds is")), qPrintable(fine.report));
+            // The mirror is found in a buffer stage too, and as a #define.
+            QJsonObject buf = pointerPackWithGate(QStringLiteral("pt-trail-mirror-buf"), 0.0);
+            buf.insert(QStringLiteral("trailSeconds"), 0.9);
+            buf.insert(QStringLiteral("multipass"), true);
+            buf.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-trail-mirror-buf"), QStringLiteral("buffer.frag"),
+                                       QStringLiteral("#version 450\n"
+                                                      "#define kTrailSeconds 0.8\n"
+                                                      "uniform sampler2D iChannel0;\n"
+                                                      "layout(location = 0) in vec2 vTexCoord;\n"
+                                                      "layout(location = 0) out vec4 fragColor;\n"
+                                                      "void main() {\n"
+                                                      "    fragColor = texture(iChannel0, vTexCoord) * kTrailSeconds;\n"
+                                                      "}\n")));
+            const PackResult b =
+                validatePointer(tmp, QStringLiteral("pt-trail-mirror-buf"), buf,
+                                QStringLiteral("uniform sampler2D iChannel0;\n"
+                                               "vec4 pPointer(vec2 uv) {\n"
+                                               "    return texture(iChannel0, uv) * p_activationSpeed;\n"
+                                               "}\n"));
+            QVERIFY2(b.report.contains(QStringLiteral("kTrailSeconds is 0.8 in the shader but trailSeconds is 0.9")),
+                     qPrintable(b.report));
         }
         {
             // A pack helper whose name merely ends in the shared gate's name

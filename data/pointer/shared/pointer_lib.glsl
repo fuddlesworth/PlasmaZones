@@ -204,6 +204,24 @@ vec3 phosphorGradient(float t) {
     return mix(purple, rose, t - 2.0);
 }
 
+// Number of trail samples, newest first, younger than `maxAge`: the LIVE
+// run a pack draws and smooths over. Ages are monotonic in the index, so the
+// walk ends at the first old sample. Hand this to pointerSmoothedAt as its
+// `count` so the kernel clamps its neighbours into the live run: the ring is
+// never purged, and at a window equal to the metadata trailSeconds the
+// samples behind the run are outside the damage rect, where a blended
+// endpoint would leave a sliver frozen on the compositor.
+int pointerLiveCount(int count, float maxAge) {
+    int live = 0;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || pointerTrailAt(i).z >= maxAge) {
+            break;
+        }
+        live = i + 1;
+    }
+    return live;
+}
+
 // Premultiplied output from a straight colour and coverage.
 vec4 premul(vec3 rgb, float a) {
     // Both halves clamped. The blend is GL_ONE / GL_ONE_MINUS_SRC_ALPHA, which
@@ -212,6 +230,19 @@ vec4 premul(vec3 rgb, float a) {
     // own coverage and add light it never claimed.
     a = clamp(a, 0.0, 1.0);
     return vec4(clamp(rgb, 0.0, 1.0) * a, a);
+}
+
+// Premultiplied output from an ADDITIVE accumulation: `rgb` is the sum of
+// colour times coverage over every shape and `alpha` the sum of coverages.
+// Overlaps push the sum past 1; the coverage is clamped and the colour kept
+// in proportion, so the result stays a valid premultiplied colour. Zero when
+// nothing accumulated.
+vec4 premulAccumulated(vec3 rgb, float alpha) {
+    if (alpha <= 0.0) {
+        return vec4(0.0);
+    }
+    float clamped = min(alpha, 1.0);
+    return vec4(rgb * (clamped / alpha), clamped);
 }
 
 // Pointer speed with the per-sample jitter filtered out, in px/s.

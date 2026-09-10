@@ -121,8 +121,12 @@ vec4 pPointer(vec2 uv) {
     float reachPx = pointerReach();
     // Nudged onto a divisor of the preview's iTime wrap (pointerWrapSafeRate)
     // so the strike envelope does not snap once per wrap there; the
-    // compositor never wraps.
-    float rate = pointerWrapSafeRate(clamp(p_crackleRate, 1.0, 60.0));
+    // compositor never wraps. Capped at 30 (the metadata maximum): the
+    // envelope is sampled once per frame, and a rate at the display's
+    // refresh (60 on a 60 Hz output) advances the phase a whole cycle per
+    // frame, so every frame sampled the same phase and the arcs sat dim
+    // instead of crackling.
+    float rate = pointerWrapSafeRate(clamp(p_crackleRate, 1.0, 30.0));
     float jag = clamp(p_jaggedness, 0.0, 1.0);
     float intensity = max(p_intensity, 0.0);
 
@@ -235,9 +239,5 @@ vec4 pPointer(vec2 uv) {
         }
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

@@ -173,23 +173,31 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
     if (!screen) {
         return;
     }
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     if (suppressedOn(screen)) {
         // The fullscreen gate covers this output. Record the canvas so a later
         // un-suppress (or a move to another output) still sees the crossing and
-        // resets, but write NO history and request NO repaint: not sampling is
-        // what makes this cost nothing, where sampling and then drawing nothing
-        // would keep the pass in the frame loop.
+        // resets, but write NO history and request NO repaint for THIS output:
+        // not sampling is what makes this cost nothing, where sampling and then
+        // drawing nothing would keep the pass in the frame loop. The output
+        // the pointer LEFT still gets its last trail damaged (see
+        // repaintStaleTrail), and a hide held there is released now rather
+        // than on the next scheduleRepaints.
+        repaintStaleTrail(screen, nowMs);
         m_output = screen;
         m_history.reset();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
+        updateCursorHiding();
         return;
     }
     if (screen != m_output) {
         // A new canvas. The samples in the ring are positions against the old
         // output's origin and scale, so carrying them over would draw the
         // trail at an arbitrary offset on the new output for the length of
-        // one trailSeconds window. Start clean.
+        // one trailSeconds window. Start clean, after asking the old output
+        // to repaint the trail it still shows.
+        repaintStaleTrail(screen, nowMs);
         m_history.reset();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
@@ -197,7 +205,6 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
     }
     const qreal scale = screen->scale();
     const QPointF devicePx = (pos - screen->geometryF().topLeft()) * scale;
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     // A buttons-only event (the early return above means !moved implies
     // buttonsChanged) writes no motion sample, so after a reset (an output
     // crossing, an un-suppress) the first live frame would hand packs
@@ -220,6 +227,24 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
     const QRectF logical = damageLogicalRect(screen, nowMs);
     if (!logical.isEmpty()) {
         KWin::effects->addRepaint(KWin::RectF(logical));
+    }
+}
+
+void PointerDecorationPass::repaintStaleTrail(KWin::LogicalOutput* next, qint64 nowMs)
+{
+    // The trail a reset is about to drop was painted on the pointer's
+    // previous output, and nothing else damages it there: paintOutput only
+    // draws for m_output, scheduleRepaints only asks for m_output, and a
+    // hardware-plane cursor leaving the output damages nothing. Without this
+    // the last frame's trail (and, for an `above` chain, its sprite copy)
+    // stayed frozen at the edge of the previous monitor on every crossing,
+    // until something else happened to repaint that region.
+    if (!m_output || m_output == next || !KWin::effects) {
+        return;
+    }
+    const QRectF stale = damageLogicalRect(m_output, nowMs);
+    if (!stale.isEmpty()) {
+        KWin::effects->addRepaint(KWin::RectF(stale));
     }
 }
 
@@ -425,6 +450,12 @@ void PointerDecorationPass::releaseGl()
 void PointerDecorationPass::invalidateShaderCache()
 {
     releaseGl();
+    // The trail on screen right now, taken BEFORE the rebuild: once the chain
+    // disengages damageLogicalRect answers empty, and the caller deliberately
+    // requests no repaint of its own, so a mid-trail disengage would leave
+    // the last frame's trail frozen where it was.
+    const QRectF stale =
+        m_output && KWin::effects ? damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs()) : QRectF();
     // A reload can add the pack a chain names, or remove one it resolved to,
     // and it can change reach / trailSeconds / layer — all of which feed the
     // engaged-chain cache, not just the compiled shaders.
@@ -437,6 +468,9 @@ void PointerDecorationPass::invalidateShaderCache()
         m_history.reset();
         m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
+        if (!stale.isEmpty()) {
+            KWin::effects->addRepaint(KWin::RectF(stale));
+        }
     }
 }
 
@@ -448,8 +482,10 @@ void PointerDecorationPass::outputGeometryChanged()
     // Only the samples. The output is still ours and a live chain stays live —
     // what is stale is the canvas the ring was measured in, so the trail
     // restarts from the pointer's next position instead of streaking across
-    // the rescaled screen.
+    // the rescaled screen. The sprite rect is in the old scale's device px,
+    // so it goes too.
     m_history.reset();
+    m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;
 }
 

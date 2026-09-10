@@ -45,7 +45,11 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-const float kFreshSeconds = 0.05;
+// One frame at the lowest refresh rate the family designs for (20 Hz) plus
+// scheduling latency: a frame painted later than this after the last move
+// would skip the stamp and never lay that segment down. Rest slots are
+// excluded by the idle clock itself, which they do not reset.
+const float kFreshSeconds = 0.1;
 
 void main() {
     float persistence = clamp(customParams[0].x, 0.0, kMaxPersistence);

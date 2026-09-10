@@ -301,6 +301,9 @@ void TestPointerHistory::testBackwardsOrSameStampCarriesPreviousSpeed()
     QCOMPARE(carriedState.newestTrail().x(), 105.0f);
     QCOMPARE(qRound(carriedState.newestTrail().w()), 2000);
     QCOMPARE(qRound(carriedState.velocity.x()), 2000);
+    // And the idle clock did not rewind to the stepped-back stamp: at the
+    // frame of the last real event it still reads 0, not 10 ms.
+    QCOMPARE(carriedState.idleSeconds, 0.0);
 }
 
 void TestPointerHistory::testSameMillisecondBurstDoesNotFillTheRing()

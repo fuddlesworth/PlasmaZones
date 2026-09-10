@@ -103,6 +103,10 @@ QString withoutComments(const QString& source)
                 }
                 ++i;
                 if (end) {
+                    // Blank the closing slash without stepping past it: the
+                    // for loop's own increment moves on, so the character
+                    // after the comment (`/**///x`, or a second block
+                    // comment starting right there) is not skipped.
                     out[i] = QLatin1Char(' ');
                     break;
                 }
@@ -197,20 +201,28 @@ QStringList speedGateParamNames(const QString& strippedSource)
             const int argStart = callee.argAfterComma ? comma + 1 : i + 1;
             const bool haveArg = callee.argAfterComma ? comma > 0 : comma < 0;
             if (haveArg && j < source.size()) {
-                const QString arg = source.mid(argStart, j - argStart).trimmed();
-                if (arg.startsWith(QLatin1String("p_"))) {
-                    // The leading identifier only: the argument is routinely
-                    // an expression (`p_activationSpeed * pointerScale()`),
-                    // and a pack written that way must not slip out of the
-                    // lint's coverage.
-                    int end = 2;
+                const QString arg = source.mid(argStart, j - argStart);
+                // The first identifier-bounded `p_<id>` token anywhere in the
+                // argument: the argument is routinely an expression
+                // (`p_activationSpeed * pointerScale()`, `2.0 * p_speed`,
+                // `(p_speed)`), and a pack written any of those ways must not
+                // slip out of the lint's coverage.
+                int at2 = 0;
+                while ((at2 = arg.indexOf(QLatin1String("p_"), at2)) >= 0) {
+                    const bool boundedLeft =
+                        at2 == 0 || !(arg[at2 - 1].isLetterOrNumber() || arg[at2 - 1] == QLatin1Char('_'));
+                    int end = at2 + 2;
                     while (end < arg.size() && (arg[end].isLetterOrNumber() || arg[end] == QLatin1Char('_'))) {
                         ++end;
                     }
-                    const QString id = arg.mid(2, end - 2);
-                    if (PhosphorShaders::isValidParamId(id) && !found.contains(id)) {
-                        found << id;
+                    const QString id = arg.mid(at2 + 2, end - at2 - 2);
+                    if (boundedLeft && PhosphorShaders::isValidParamId(id)) {
+                        if (!found.contains(id)) {
+                            found << id;
+                        }
+                        break;
                     }
+                    at2 = end;
                 }
             }
             at = j > at ? j : at + callee.name.size();
@@ -628,15 +640,21 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     }
 
     // ── mirrored trailSeconds ──
-    // Every bundled pack that fades on its own clock mirrors the metadata
-    // trailSeconds as `const float kTrailSeconds`, and nothing else ties the
-    // two together: a metadata edit alone would leave the pack fading against
-    // the wrong window and freezing its last frame when the host went quiet.
+    // A pack that declares `kTrailSeconds` (as a const or a #define, in any
+    // stage) is mirroring the metadata trailSeconds, and nothing else ties
+    // the two together: a metadata edit alone would leave the pack fading
+    // against the wrong window and freezing its last frame when the host
+    // went quiet. Packs that fade on a constant of their own (halo's
+    // kIdleSeconds, afterglow's kIdleCutSeconds) keep a margin under the
+    // window by design and are not held here. Every declaration is checked,
+    // so two stages that disagree with each other are both reported.
     if (anyStage) {
         static const QRegularExpression kMirror(
-            QStringLiteral("\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*([0-9]*\\.?[0-9]+)"));
-        const QRegularExpressionMatch m = kMirror.match(allStages);
-        if (m.hasMatch()) {
+            QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*|#\\s*define\\s+kTrailSeconds\\s+)"
+                           "([0-9]+\\.?[0-9]*|\\.[0-9]+)"));
+        auto matches = kMirror.globalMatch(allStages);
+        while (matches.hasNext()) {
+            const QRegularExpressionMatch m = matches.next();
             const double mirrored = m.captured(1).toDouble();
             if (std::abs(mirrored - eff.trailSeconds) > 1e-6) {
                 lints << QStringLiteral(

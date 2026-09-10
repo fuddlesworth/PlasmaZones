@@ -23,10 +23,11 @@
 // here: this pack is a glow centred on the pointer, not a path trace, so
 // there is no curve for smoothing to act on.
 
-// How long the glow lingers after the pointer stops. Inside `trailSeconds`
-// (0.9) so the last live frame is already clear, and long enough for one
-// whole breath at the rate below before the late fade, so the "breathes
-// while you hold still" the pack advertises is actually on screen.
+// How long the glow lingers after the pointer stops. Inside the metadata
+// trailSeconds so the last live frame is already clear, and sized so one
+// whole breath at the rate below fits inside it (2π / 7.4 = 0.85 s), with
+// the late fade only taking the last quarter of that breath, so the
+// "breathes while you hold still" the pack advertises is on screen.
 const float kIdleSeconds = 0.85;
 // One full cycle inside the visible window, in radians per second. Nudged
 // at use onto a divisor of the iTime wrap (pointerWrapSafeRate) so the

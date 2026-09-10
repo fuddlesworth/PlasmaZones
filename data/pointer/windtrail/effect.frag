@@ -86,13 +86,7 @@ vec4 pPointer(vec2 uv) {
     // behind it can be outside the damage rect, and the smoothing kernel
     // would blend a segment's far end toward one); the live count is the
     // window pointerSmoothedAt clamps its neighbours into.
-    int live = 0;
-    for (int i = 0; i < kPointerTrailCapacity; ++i) {
-        if (i >= count || pointerTrailAt(i).z >= duration) {
-            break;
-        }
-        live = i + 1;
-    }
+    int live = pointerLiveCount(count, duration);
     // The smoothed far end of one segment is the near end of the next, so it
     // is carried across iterations rather than looked up twice per segment.
     vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
@@ -112,9 +106,10 @@ vec4 pPointer(vec2 uv) {
             pa = pb;
             continue;
         }
-        if (distance(a.xy, b.xy) < 1e-4) {
-            // A stationary pair (equal RAW positions) has no ribbon to draw.
-            // A host that feeds a resting pointer appends one every interval,
+        if (distance(a.xy, b.xy) < 1.0) {
+            // A stationary pair (raw positions under a pixel apart, the
+            // sampler's own rest-slot rule) has no ribbon to draw. A host
+            // that feeds a resting pointer appends one every interval,
             // and drawing those would keep the rest point lit there when the
             // compositor, which gets no event from a resting pointer, lets it
             // age out. Tested on the raw samples, since the smoothing kernel

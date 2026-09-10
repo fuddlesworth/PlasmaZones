@@ -23,13 +23,12 @@
 // REACH. A bit's displacement from its origin is |v|t + 0.5*g*t^2, which over
 // a life L is at most speed*L + 0.5*gravity*L*L. `speed` and `gravity` are
 // scaled down together by `k` so that bound, plus the bit's drawn extent
-// (three radii), stays inside `reach` — the parameter `reachParam` names, so
-// the host's
-// damage rect is exactly what the pack can paint. The travel budget is
-// floored at 35 percent of the reach (see the budget line), so a large bit
-// on a small reach may overrun the rect a little rather than never leaving
-// the press point; the box clip still keeps every pixel inside it. Scaling
-// both by the same k keeps the parabola's shape, it only shrinks it.
+// (three radii), stays inside `reach`, the parameter `reachParam` names, so
+// the host's damage rect is exactly what the pack can paint. The travel
+// budget is floored at 35 percent of the reach (see the budget line), so a
+// large bit on a small reach may overrun the rect a little rather than never
+// leaving the press point; the box clip still keeps every pixel inside it.
+// Scaling both by the same k keeps the parabola's shape, it only shrinks it.
 
 #include <pointer_noise.glsl>
 
@@ -135,11 +134,5 @@ vec4 pPointer(vec2 uv) {
         }
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    // Overlapping bits accumulate; clamp coverage and keep the colour mix in
-    // proportion so the premultiplied result stays consistent.
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

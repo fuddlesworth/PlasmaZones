@@ -112,12 +112,16 @@ vec4 pPointer(vec2 uv) {
         float d = pointerSegmentDistanceFrom(px, pa, pb, t);
         pa = pb;
         float age = clamp(mix(a.z, b.z, t) / tailSeconds, 0.0, 1.0);
-        float life = (1.0 - age) * gate;
+        float life = 1.0 - age;
         float w = radius * life;
         float body = (1.0 - smoothstep(w - 0.75, w + 0.75, d)) * life * life;
         float soft = exp(-(d * d) / (2.0 * (w + scale) * (w + scale) * 4.0)) * 0.3 * life * life
             * cometWindow(d, reach);
-        float here = max(body, soft);
+        // The gate is applied once, on the coverage, as it is on the head:
+        // folding it into `life` scaled the width and then squared it in
+        // the body, so the tail vanished through the activation band well
+        // before the head did.
+        float here = max(body, soft) * gate;
         if (here > tail) {
             tail = here;
             // Grain that lives in the tail's own frame: the cell is addressed

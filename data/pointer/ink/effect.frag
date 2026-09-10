@@ -39,6 +39,13 @@ float inkWet(float remain) {
     return 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
 }
 
+// Drying: held at full opacity for most of the life, then taken off quickly,
+// which is what makes the tail vanish rather than dim evenly. Shared by the
+// stroke and the blot so the two dry on one curve.
+float inkDry(float remain) {
+    return smoothstep(0.0, 0.30, remain);
+}
+
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
     vec2 px = pointerPixel(uv);
@@ -58,13 +65,7 @@ vec4 pPointer(vec2 uv) {
     // compositor, and the smoothing kernel blends a segment's far end toward
     // the sample beyond it, so the live count is handed to pointerSmoothedAt
     // as the window it clamps its neighbours into.
-    int live = 0;
-    for (int i = 0; i < kPointerTrailCapacity; ++i) {
-        if (i >= count || pointerTrailAt(i).z >= lifetime) {
-            break;
-        }
-        live = i + 1;
-    }
+    int live = pointerLiveCount(count, lifetime);
     if (live >= 2) {
         float cull = halfWidth * 1.5 + 2.0 * scale;
         // The smoothed far end of one segment is the near end of the next,
@@ -78,10 +79,11 @@ vec4 pPointer(vec2 uv) {
             vec4 b = pointerTrailAt(i + 1);
 
             vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
-            if (distance(a.xy, b.xy) < 1e-4) {
-                // A stationary pair (equal RAW positions: a rest slot a host
-                // that feeds every tick appends beside the last motion
-                // sample) lays down no stroke. Tested on the raw samples,
+            if (distance(a.xy, b.xy) < 1.0) {
+                // A stationary pair (raw positions under a pixel apart, the
+                // sampler's own rest-slot rule: a rest slot a host that feeds
+                // every tick appends beside the last motion sample) lays down
+                // no stroke. Tested on the raw samples,
                 // since the smoothing kernel pulls the pair's endpoints
                 // apart toward the neighbour beyond, and drawing that stub
                 // would keep the rest point wet where the compositor, which
@@ -114,10 +116,8 @@ vec4 pPointer(vec2 uv) {
             // A clean antialiased edge. This is the only softness in the pack.
             float band = 1.0 - smoothstep(w - 0.75, w + 0.75, d);
 
-            // Drying: the oldest end of the stroke lifts first. Held at full
-            // opacity for most of the life, then taken off quickly, which is
-            // what makes the tail vanish rather than dim evenly.
-            float dry = smoothstep(0.0, 0.30, remain);
+            // Drying: the oldest end of the stroke lifts first.
+            float dry = inkDry(remain);
             cover = max(cover, band * dry);
         }
     }
@@ -139,7 +139,7 @@ vec4 pPointer(vec2 uv) {
         float r = min(halfWidth * blot * 2.0 * (1.0 + 0.18 * bleed * wet), pointerReach() - 0.75);
         float d = length(px - uPointerPress.xy);
         float band = 1.0 - smoothstep(r - 0.75, r + 0.75, d);
-        cover = max(cover, band * smoothstep(0.0, 0.30, remain));
+        cover = max(cover, band * inkDry(remain));
     }
 
     float alpha = clamp(cover * p_color.a, 0.0, 1.0);

@@ -115,13 +115,7 @@ vec4 pPointer(vec2 uv) {
     // damage rect, where the smoothing kernel would otherwise pull a launch
     // point toward them. The live count is the window pointerSmoothedAt
     // clamps its neighbours into.
-    int live = 0;
-    for (int i = 0; i < kPointerTrailCapacity; ++i) {
-        if (i >= count || pointerTrailAt(i).z >= life) {
-            break;
-        }
-        live = i + 1;
-    }
+    int live = pointerLiveCount(count, life);
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -203,9 +197,5 @@ vec4 pPointer(vec2 uv) {
             }
         }
     }
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

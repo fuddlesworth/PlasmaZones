@@ -67,11 +67,5 @@ vec4 pPointer(vec2 uv) {
         alpha += a;
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    // The two rings are already premultiplied sums; clamp coverage and keep
-    // the colour in proportion.
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }

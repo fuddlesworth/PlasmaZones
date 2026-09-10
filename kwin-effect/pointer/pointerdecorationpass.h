@@ -153,6 +153,9 @@ public:
     /// Requests the repaint for this event itself, so a pointer moving over a
     /// hardware cursor plane (which damages nothing) still gets frames.
     void notePointer(const QPointF& pos, const QPointF& oldPos, Qt::MouseButtons buttons, Qt::MouseButtons oldButtons);
+    /// Ask the pointer's current output to repaint the trail it still shows,
+    /// before the history is reset because the pointer is moving to @p next.
+    void repaintStaleTrail(KWin::LogicalOutput* next, qint64 nowMs);
 
     /// True while the chain is engaged AND the history is inside the longest
     /// `trailSeconds` of it. ORed into PlasmaZonesEffect::isActive(): without

@@ -93,13 +93,7 @@ vec4 pPointer(vec2 uv) {
     // the damage rect, and the smoothing kernel would otherwise blend a
     // segment's far end toward one of them. The live count is the window
     // pointerSmoothedAt clamps its neighbours into.
-    int live = 0;
-    for (int i = 0; i < kPointerTrailCapacity; ++i) {
-        if (i >= count || pointerTrailAt(i).z >= lifetime) {
-            break;
-        }
-        live = i + 1;
-    }
+    int live = pointerLiveCount(count, lifetime);
     // The smoothed far end of one segment is the near end of the next, so it
     // is carried across iterations rather than looked up twice.
     vec2 pa = pointerSmoothedAt(0, live, p_smoothing);
@@ -116,9 +110,10 @@ vec4 pPointer(vec2 uv) {
             pa = pb;
             continue;
         }
-        if (distance(a.xy, b.xy) < 1e-4) {
-            // A stationary pair (equal RAW positions) has no tube to draw. A
-            // host that feeds a resting pointer appends one every interval,
+        if (distance(a.xy, b.xy) < 1.0) {
+            // A stationary pair (raw positions under a pixel apart, the
+            // sampler's own rest-slot rule) has no tube to draw. A host that
+            // feeds a resting pointer appends one every interval,
             // and a point segment at age zero would hold a full-brightness
             // dot at the rest point where the compositor lets it age out.
             // Tested on the raw samples, since the smoothing kernel pulls the

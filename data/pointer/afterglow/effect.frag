@@ -34,8 +34,8 @@
 // RGBA8 decay pass over the whole output every live frame bought nothing
 // visible. Both stages address it with normalised uv, and iResolution is
 // the output size in the buffer pass too, so the stamp lands where the
-// pointer is at either scale; the smallest brush (4 logical px) is still two
-// texels wide there.
+// pointer is at either scale; the smallest brush (4 logical px radius) is
+// still two texels of radius there.
 
 #include <pointer_multipass.glsl>
 #include "afterglow_common.glsl"

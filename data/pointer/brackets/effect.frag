@@ -6,8 +6,9 @@
 // the velocity, so the pack paints exactly nothing while the pointer is merely
 // moving: every contribution is gated on uPointerPress / uPointerRelease.
 //
-// Every length except the line thickness derives from p_spread, which is
-// the pack's reachParam, and each event is additionally clipped to a box of
+// Every length except the line thickness derives from the resolved spread
+// (pointerReach(), filled by the host from `spread`, the pack's reachParam),
+// and each event is additionally clipped to a box of
 // half-extent `spread` around its own origin, so the pack cannot paint
 // outside the damage rect the host buys. The starting corner offset is held
 // far enough inside that box for the turned corner, its half thickness and
@@ -132,9 +133,5 @@ vec4 pPointer(vec2 uv) {
         alpha += a;
     }
 
-    if (alpha <= 0.0) {
-        return vec4(0.0);
-    }
-    float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return premulAccumulated(rgb, alpha);
 }
