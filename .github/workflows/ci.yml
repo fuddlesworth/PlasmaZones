@@ -237,6 +237,107 @@ jobs:
             ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$EXCLUDE"
           fi
 
+  # ─── Build against the NEXT Plasma: the `build` job above uses Arch's
+  # stable Plasma, so nothing there exercises the KWin effect against the
+  # upcoming release. kde-unstable carries the beta (Plasma 6.8 = KWin
+  # 6.7.90), where the paint hooks return bool, RenderDevice exists, and
+  # Scene::renderer() takes a device. kwin-effect/kwincompat.h adapts to
+  # either, and this job is what keeps that true.
+  #
+  # ADVISORY (continue-on-error): kde-unstable is a moving target that is
+  # legitimately mid-rebuild at times, and a beta repo's health must not block
+  # merging unrelated work. Failures still show on the PR. Flip this to
+  # required if the noise turns out to be lower than the risk.
+  #
+  # This job's whole life is the gap between a Plasma beta and that Plasma
+  # reaching Arch stable. Once the `build` job's own KWin is 6.8 or newer, this
+  # is redundant and goes away with the 6.7 half of kwincompat.h.
+  build-plasma-next:
+    name: Build (arch kde-unstable, next Plasma)
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Setup (Arch + kde-unstable)
+        run: |
+          set -euo pipefail
+          # kde-unstable must precede core/extra so its newer Plasma and KF6 win
+          # dependency resolution; appending it would leave pacman on stable.
+          printf '[kde-unstable]\nInclude = /etc/pacman.d/mirrorlist\n\n' > /tmp/kde-unstable.conf
+          cat /tmp/kde-unstable.conf /etc/pacman.conf > /tmp/pacman.conf.new
+          mv /tmp/pacman.conf.new /etc/pacman.conf
+          # Same package set as the `build` job. Kept in step with it by hand:
+          # this job exists to change the Plasma VERSION, not the dependencies.
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            git base-devel ccache \
+            cmake ninja extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
+            qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
+            kwin \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
+            plasma-activities \
+            vulkan-headers vulkan-icd-loader glslang \
+            xorg-server-xvfb mesa cava ffmpeg
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d
+        with:
+          key: arch-plasma-next
+          max-size: 500M
+
+      - name: Configure
+        env:
+          CC: ccache gcc
+          CXX: ccache g++
+        run: |
+          set -euo pipefail
+          # Output kept so the next step can read which paint API was selected.
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DUSE_KDE_FRAMEWORKS=ON \
+            -DBUILD_TESTING=ON \
+            -DBUILD_TOOLS=ON 2>&1 | tee configure.log
+
+      # Without this the job can go GREEN while testing nothing new: whenever
+      # kde-unstable holds no Plasma newer than stable (it is emptied and
+      # resynced between releases), the effect silently compiles its 6.7 arm and
+      # this job becomes a duplicate of `build`. Assert the NEW arm was actually
+      # selected, so "no newer Plasma to test" is a visible state rather than a
+      # false pass. kwin-effect/CMakeLists.txt emits the line.
+      - name: Verify the next-Plasma paint API was selected
+        run: |
+          set -euo pipefail
+          grep -F 'building against KWin' configure.log || true
+          if ! grep -qF 'Plasma 6.8 paint API' configure.log; then
+            echo "::error::kde-unstable did not provide a Plasma 6.8 KWin, so this job compiled the 6.7 arm and duplicated the 'build' job. If 6.8 has reached Arch stable, retire this job and the 6.7 half of kwin-effect/kwincompat.h."
+            exit 1
+          fi
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          # XDG_RUNTIME_DIR for the same reason as the `build` job: an unset one
+          # makes Qt emit a warning that warning-asserting tests then fail on.
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          if command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
+          else
+            ctest --test-dir build --output-on-failure -j "$(nproc)"
+          fi
+
   # ─── Lint: clang-format + qmlformat mirror the lefthook hooks so a
   # contributor who skipped them can't merge unformatted code. Only
   # lints files changed in the PR (or HEAD~1..HEAD for direct pushes)
