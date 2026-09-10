@@ -43,6 +43,7 @@ add_library(PhosphorTileEngine SHARED
     src/autotileengine/layout_apply.cpp
     src/autotileengine/drag_preview.cpp
     src/autotileengine/facade.cpp
+    src/autotileengine/engine_overview.cpp
     src/AutotileConfig.cpp
     src/NavigationController.cpp
     src/NavigationController_crosssurface.cpp

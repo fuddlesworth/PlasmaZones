@@ -86,7 +86,30 @@ SnapshotExtent snapshotExtentFor(const QRectF& logicalGeometry, const KWin::Logi
     if (longestPx > kMaxSnapshotDim) {
         e.scale *= kMaxSnapshotDim / longestPx;
     }
-    e.textureSize = (logicalGeometry.size() * e.scale).toSize();
+    // Sized the way the capture's own RenderViewport sizes itself, from the
+    // RECT rather than the SIZE. RenderViewport holds
+    // `renderRect.scaled(scale).rounded()` and reports that rect's size as its
+    // device size, and RectF::rounded() rounds the two CORNERS — so its width
+    // is round((x+w)*s) - round(x*s), which is not round(w*s) whenever the
+    // scaled origin has a fractional part. The old `(size * scale).toSize()`
+    // computed the latter, so at a fractional scale the FBO could be a device
+    // pixel wider or narrower than the viewport drawn into it. The ortho then
+    // mapped the window across a slightly different extent than the texture
+    // it landed in, and the draw side — which samples the snapshot as though
+    // it spans exactly `logicalGeometry` — read it back sub-pixel off the live
+    // window. That is a shimmering double edge for the length of a tab-swap
+    // cross-fade.
+    //
+    // Deliberately NOT the device-aligned-rect treatment surface_fold.h gives
+    // its canvas. That path owns both ends and rewrites its logical geometry to
+    // match the aligned box; here the draw side maps the snapshot through the
+    // window's own rect (see ShaderTransition::oldSnapshot), so widening the
+    // capture would move the misregistration rather than remove it. Matching
+    // the viewport is the whole fix.
+    const qreal s = e.scale;
+    e.textureSize =
+        QSize(qRound((logicalGeometry.x() + logicalGeometry.width()) * s) - qRound(logicalGeometry.x() * s),
+              qRound((logicalGeometry.y() + logicalGeometry.height()) * s) - qRound(logicalGeometry.y() * s));
     return e;
 }
 } // namespace

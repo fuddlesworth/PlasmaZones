@@ -26,8 +26,8 @@ namespace {
 using namespace ShortcutIds;
 
 // ─── Static shortcut table ──────────────────────────────────────────────────
-// One row per settings-driven shortcut. The four indexed slot families
-// (quick_layout_N, snap_to_zone_N, workspace_move_slot_N,
+// One row per settings-driven shortcut. The five indexed slot families
+// (quick_layout_N, snap_to_zone_N, scroll_focus_tab_N, workspace_move_slot_N,
 // workspace_focus_slot_N) are absent: their getters are array-indexed rather
 // than per-id, so ShortcutManager::buildEntries registers them in its own
 // loops.
@@ -38,6 +38,11 @@ using namespace ShortcutIds;
 // can decay to a function pointer for storage in the table.
 const StaticEntry kStaticEntries[] = {
     // ─── Dynamic workspaces ────────────────────────────────────────────────
+    {kIdOverviewToggle, &ConfigDefaults::overviewToggleShortcut, &Settings::overviewToggleShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Toggle Workspace Overview"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->overviewToggleRequested();
+     }},
     {kIdWorkspaceFocusUp, &ConfigDefaults::workspaceFocusUpShortcut, &Settings::workspaceFocusUpShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Focus Workspace Above"),
      [](ShortcutManager* sm) {
@@ -407,6 +412,19 @@ const StaticEntry kStaticEntries[] = {
      &Settings::scrollingToggleColumnTabbedShortcut, QT_TRANSLATE_NOOP("plasmazones", "Toggle Tabbed Column"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollToggleColumnTabbedRequested();
+     }},
+    // POLARITY CONTRACT: -1 walks toward the first tab and +1 toward the
+    // last, matching the delta the engine's cycleTab takes. Swapping these
+    // compiles clean and only shows up as a backwards chord in the field.
+    {kIdScrollCycleTab, &ConfigDefaults::scrollingCycleTabShortcut, &Settings::scrollingCycleTabShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Next Tab in Column"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollCycleTabRequested(1);
+     }},
+    {kIdScrollCycleTabBack, &ConfigDefaults::scrollingCycleTabBackShortcut, &Settings::scrollingCycleTabBackShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Previous Tab in Column"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollCycleTabRequested(-1);
      }},
     {kIdScrollToggleWindowedFullscreen, &ConfigDefaults::scrollingToggleWindowedFullscreenShortcut,
      &Settings::scrollingToggleWindowedFullscreenShortcut,

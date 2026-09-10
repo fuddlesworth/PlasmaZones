@@ -421,6 +421,15 @@ QVariant Store::readVariant(const QString& group, const QString& key) const
     return value;
 }
 
+bool Store::hasExplicitValue(const QString& group, const QString& key) const
+{
+    if (!d->schema.findKey(group, key)) {
+        return false;
+    }
+    auto g = d->backend->group(group);
+    return g->hasKey(key);
+}
+
 void Store::write(const QString& group, const QString& key, const QVariant& value)
 {
     const KeyDef* def = d->schema.findKey(group, key);

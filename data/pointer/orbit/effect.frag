@@ -1,0 +1,296 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Orbit pointer shader — a few small dots circling the pointer. Nothing is
+// drawn along the path, which is the whole point of the pack: every other
+// trail pack paints where the pointer has been, this one paints only around
+// where it is.
+//
+// LAG IS THE CHARACTER. Two things lag, and both come out of the trail
+// history rather than any stored state:
+//
+//   • The orbit centre is the pointer position `lag` seconds ago, read out of
+//     the trail by interpolating between the two samples that straddle that
+//     age. Standing still that is the cursor itself; moving fast the ring
+//     hangs behind the cursor as if dragged.
+//   • The orbit radius follows the speed averaged over the samples of the
+//     last kSpeedWindowSeconds rather than the instantaneous one, so it
+//     swells and draws back in smoothly instead of snapping.
+//
+// Each dot is a round gaussian point, optionally stretched along its own
+// direction of travel (its orbital tangent plus the centre's motion) into a
+// short smear at speed.
+//
+// A press makes the ring scatter outward and spring back: a damped
+// oscillation added to the radius over kClickLife, ending exactly at rest.
+//
+// FADE: the dots keep orbiting while the pointer is parked, so the pack owns
+// its own quiet. Everything is multiplied by an idle envelope that starts
+// easing down at kFadeStart and is exactly zero at kQuietSeconds, which is
+// inside the metadata trailSeconds. A parked pointer therefore gets about a
+// second of orbiting, then nothing, and the host stops repainting.
+
+const int kMaxDots = 6;
+const float kFadeStart = 1.0;
+const float kQuietSeconds = 1.8;
+const float kClickLife = 0.55;
+// Speed (logical px/s, scaled at use) at which the orbit is fully grown.
+// Deliberately low: the settings preview's simulated pointer peaks near
+// 324 px/s.
+const float kFullSpeed = 220.0;
+// Age window the radius's averaged speed is read over. The ring is never
+// purged while the pointer rests and a park appends only one speed-0 sample
+// on the first move after it, so an average over EVERY slot would read the
+// previous stroke's speeds for a whole window after a pause and pop the ring
+// out to its old radius instead of growing it from rest.
+const float kSpeedWindowSeconds = 0.6;
+
+// The orbit centre: the pointer position `lag` seconds ago, interpolated
+// between the trail samples on either side of that age. Falls back to the
+// oldest sample when the trail does not reach that far back yet, so the lag
+// is clamped to the history available. Stops at the first sample past the
+// lag, which at this pack's window and the default lag is slot 1, so a
+// fragment the reject box below throws out pays for almost none of the walk.
+vec2 orbitCentre(int count, float lag) {
+    vec4 newest = pointerTrailAt(0);
+    if (lag <= 0.0 || count < 2) {
+        return newest.xy;
+    }
+    vec2 prev = newest.xy;
+    float prevAge = newest.z;
+    for (int i = 1; i < kPointerTrailCapacity; ++i) {
+        if (i >= count) {
+            break;
+        }
+        vec4 s = pointerTrailAt(i);
+        if (s.z >= lag) {
+            float span = max(s.z - prevAge, 1e-4);
+            return mix(prev, s.xy, clamp((lag - prevAge) / span, 0.0, 1.0));
+        }
+        prev = s.xy;
+        prevAge = s.z;
+    }
+    return prev;
+}
+
+// Mean sample speed over the samples younger than kSpeedWindowSeconds, the
+// eased stand-in for a smoothed speed the contract gives no state to keep.
+// Ages are monotonic in the index, so the walk ends at the first old sample.
+//
+// The draw-back after a stop is an ENVELOPE on the head's age, not the mean
+// itself: on the compositor a resting pointer sends no events, so the
+// in-window set empties from its oldest end until only the head is left,
+// and any average of the remaining samples (weighted or not) still reads
+// the final stroke speed until the head crosses the window edge and then
+// drops to zero in one frame, popping the ring inward while it is still
+// fully live. The head's age is under one sample interval while the pointer
+// moves, so the envelope is 1 there, and it eases the mean to zero across
+// the second half of the window once the pointer rests. The preview appends
+// speed-0 rest samples every interval, which decay the mean on their own,
+// and the envelope agrees with that on both runtimes.
+//
+// A PARK inside the window is a gap between two neighbouring samples (on
+// the compositor a resting pointer sends nothing, so the gap is the rest
+// itself). The first move after it appends a fresh head at age 0, which
+// alone would snap the envelope back to 1 while the window still holds the
+// previous stroke's samples, popping the ring back out to that stroke's
+// radius. So the samples on the far side of a gap are DOWN-WEIGHTED in the
+// mean by the envelope at the gap's length, against the fresh head at full
+// weight: the old stroke's share of the radius is what the draw-back had
+// left it, not the whole of it. The envelope is 1 for any gap under half
+// the window, so ordinary sample spacing weighs nothing and only a real
+// park does; a gap that short has not drawn the ring back either.
+float orbitEnvelope(float age) {
+    return 1.0 - smoothstep(0.5 * kSpeedWindowSeconds, kSpeedWindowSeconds, age);
+}
+float orbitMeanSpeed(int count) {
+    // The head's own envelope is the rest draw-back (see above); the park
+    // weight below only shares the mean between the strokes on either side
+    // of a park, so the two are kept apart or a park would decay twice.
+    float headEase = orbitEnvelope(pointerTrailAt(0).z);
+    float sum = 0.0;
+    float n = 0.0;
+    float weight = 1.0;
+    float prevAge = pointerTrailAt(0).z;
+    for (int i = 0; i < kPointerTrailCapacity; ++i) {
+        if (i >= count) {
+            break;
+        }
+        vec4 s = pointerTrailAt(i);
+        if (s.z >= kSpeedWindowSeconds) {
+            break;
+        }
+        weight *= orbitEnvelope(s.z - prevAge);
+        prevAge = s.z;
+        sum += s.w * weight;
+        n += weight;
+    }
+    return n > 0.0 ? sum / n * headEase : 0.0;
+}
+
+vec4 pPointer(vec2 uv) {
+    int count = pointerTrailCount();
+    if (count < 1) {
+        return vec4(0.0);
+    }
+
+    // A click wakes the ring back up even under a pointer that has been
+    // parked past the idle fade, so the scatter is never invisible.
+    float live = 1.0 - smoothstep(kFadeStart, kQuietSeconds, pointerIdleSeconds());
+    if (uPointerPress.w > 0.5) {
+        live = max(live, clamp(1.0 - pointerSincePress() / kClickLife, 0.0, 1.0));
+    }
+    if (live <= 0.0) {
+        return vec4(0.0);
+    }
+
+    vec2 px = pointerPixel(uv);
+    float scale = pointerScale();
+    int dots = clamp(int(p_dots + 0.5), 1, kMaxDots);
+    // The budget everything below has to fit in: the reach the host resolved
+    // from the `radius` parameter, in device px, read from the uniform so the
+    // damage rect and the shader cannot disagree about it.
+    float reachPx = pointerReach();
+
+    vec2 centre = orbitCentre(count, max(p_lag, 0.0));
+    // Nothing is painted further than the reach from the centre, so a
+    // fragment outside that box is done before the speed walk and the six
+    // dots' trigonometry. The damage rect spans the whole live trail (up to
+    // two seconds of path), which for a fast sweep is most of the screen.
+    if (any(greaterThan(abs(px - centre), vec2(reachPx)))) {
+        return vec4(0.0);
+    }
+
+    float speedNorm = clamp(orbitMeanSpeed(count) / (kFullSpeed * scale), 0.0, 1.0);
+
+    // A dot's drawn extent is three dot radii (the compact window below),
+    // elongated along its travel by up to `stretchMax` at the user's smear.
+    // That extent comes out of the reach so the dot never meets the damage
+    // rect's edge, and what is left is the RING BUDGET the growth and the
+    // click push work inside: growing toward the whole reach and then
+    // capping at the budget left the growth inert at the shipped defaults
+    // (the cap sat a fraction of a pixel above the resting radius). The
+    // reservation is STATIC, from the smear parameter rather than the
+    // speed-scaled smear: budgeting on the speed-scaled extent made the
+    // budget shrink with speed (the ring contracted as the pointer sped up
+    // at a high smear), and clipping the smear to the room a grown ring left
+    // made the smear vanish at exactly the speed it is meant to act. A ring
+    // is now a constant size per setting, smaller by six dot radii times the
+    // smear, and the smear is monotone in speed and always fits. When a
+    // legal pair of settings (Dot size up to 10 against an Orbit radius from
+    // 8) leaves no room for both, the DOT is shrunk to fit rather than the
+    // ring being collapsed onto the centre or the extent being let hang
+    // outside the rect; the dot's stretched extent may take at most 60
+    // percent of the reach, so the ring always keeps a budget to orbit on.
+    //
+    // Floored so the divides below can never see a zero dot even if a host
+    // handed a zero reach; the budget is floored at zero for the same case.
+    float stretchMax = 1.0 + 2.0 * clamp(p_smear, 0.0, 1.0);
+    float dotPx = max(min(max(p_dotSize, 0.25) * scale, reachPx * 0.2 / stretchMax), 0.25 * scale);
+    float ringMax = max(reachPx - 3.0 * dotPx * stretchMax, 0.0);
+
+    float grow = clamp(p_speedGrowth, 0.0, 1.0);
+    float baseFrac = mix(1.0, 0.35, grow);
+    float radius = ringMax * (baseFrac + (1.0 - baseFrac) * speedNorm);
+
+    // Click: a damped spring on the radius, at rest at both ends of its life,
+    // held inside the budget on the way out.
+    float sincePress = pointerSincePress();
+    float push = max(p_clickPush, 0.0) * scale;
+    if (push > 0.0 && uPointerPress.w > 0.5 && sincePress < kClickLife) {
+        float k = sincePress / kClickLife;
+        radius += push * exp(-4.5 * k) * sin(k * 14.0) * (1.0 - k);
+    }
+    radius = clamp(radius, 0.0, ringMax);
+
+    // The smear elongates a dot along its travel, rising with speed to the
+    // stretch the budget above reserved.
+    float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
+    float stretch = 1.0 + smear * 2.0;
+
+    // Direction from the raw per-event velocity, magnitude from the filtered
+    // speed, so the drift's weight against the orbital tangent stops jumping
+    // with the per-event figure. Both are device px/s, so nothing rescales.
+    //
+    // This does NOT rescue the frame where the raw vector reads 0 (two events
+    // inside one millisecond, which pointer_lib describes on
+    // pointerFilteredSpeed): the direction is gone, so drift is 0 either way
+    // and `travel` is the bare tangent for that frame. Fixing that needs a
+    // direction that survives the shared stamp, which nothing here carries.
+    vec2 rawDrift = uPointerVelocity.xy;
+    float rawDriftLen = length(rawDrift);
+    vec2 drift = rawDriftLen > 1e-3 ? rawDrift / rawDriftLen * pointerFilteredSpeed() : vec2(0.0);
+    // The spin rate is nudged onto a divisor of the iTime wrap so the ring
+    // does not jump at the wrap; see pointerWrapSafeRate.
+    float orbitRate = pointerWrapSafeRate(max(p_orbitRate, 0.0));
+    float spin = iTime * orbitRate * TAU;
+
+    vec3 rgb = vec3(0.0);
+    float alpha = 0.0;
+    for (int j = 0; j < kMaxDots; ++j) {
+        if (j >= dots) {
+            break;
+        }
+        float angle = spin + float(j) / float(dots) * TAU;
+        vec2 radial = vec2(cos(angle), sin(angle));
+        vec2 pos = centre + radial * radius;
+        vec2 rel = px - pos;
+
+        // Travel direction: the orbital tangent plus the pointer's own
+        // motion. The drift is the CURRENT velocity while the centre lags,
+        // so through a turn the dots smear toward where the pointer is
+        // going rather than where the ring is; read as anticipation, and
+        // kept because deriving the lagged velocity would cost another walk.
+        vec2 tangent = vec2(-radial.y, radial.x) * (radius * orbitRate * TAU);
+        vec2 travel = tangent + drift;
+        float travelLen = length(travel);
+        float along = rel.x;
+        float across = rel.y;
+        float dotStretch = 1.0;
+        if (travelLen > 1e-3 && smear > 0.0) {
+            vec2 dir = travel / travelLen;
+            along = dot(rel, dir);
+            across = dot(rel, vec2(-dir.y, dir.x));
+            dotStretch = stretch;
+        }
+        float da = along / (dotPx * dotStretch);
+        float db = across / dotPx;
+        float q = da * da + db * db;
+        float body = exp(-q * 0.5);
+        float halo = exp(-q / 8.0) * 0.35;
+        // Compact support, like the shapes in Halo and Flash: exactly zero at
+        // three dot radii, which is the extent the radius cap above reserves
+        // inside the reach, so the two agree in every direction.
+        //
+        // The window goes on the SUM, in the same stretched space the shape is
+        // drawn in. Windowing only the halo left `body` — the very term the
+        // smear elongates — unbounded, and windowing in unstretched space
+        // would clip the smear back toward a circle, which is the shape's whole
+        // point.
+        float cover = clamp(body + halo, 0.0, 1.0) * (1.0 - smoothstep(2.0, 3.0, sqrt(q))) * live;
+        if (cover <= 0.0) {
+            continue;
+        }
+        // Ping-pong, not a straight ramp: the dots sit on a closed circle, so
+        // a ramp that ends on colorB puts the last dot right beside the first,
+        // and the seam between the two colours lands there. Walking back down
+        // the ramp keeps neighbours close in colour all the way round. The
+        // half-turn phase puts dot 0 at colorA, which is what "First colour"
+        // promises.
+        // Normalised over the half-turn rather than the whole ring, so the
+        // dot furthest round from the first one lands exactly on colorB.
+        // Dividing by `dots` reached t = 1 only when j/dots fell on 0.5,
+        // which happens at even counts alone: at the shipped default of 3 the
+        // ramp stopped at 0.667, so the "Last colour" the user picked was
+        // never actually shown. A single dot stays on colorA, which is what
+        // "First colour" promises and leaves no remaining dots to shade.
+        float apex = max(floor(float(dots) * 0.5), 1.0);
+        float t = 1.0 - abs(float(j) - apex) / apex;
+        vec3 c = mix(p_colorA.rgb, p_colorB.rgb, t);
+        float ca = cover * mix(p_colorA.a, p_colorB.a, t);
+        rgb += c * ca;
+        alpha += ca;
+    }
+
+    return premulAccumulated(rgb, alpha);
+}

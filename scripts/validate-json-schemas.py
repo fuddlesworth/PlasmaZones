@@ -49,6 +49,7 @@ SCHEMA_MAP: dict[str, list[str]] = {
     "data/schemas/animation-metadata.schema.json": ["data/animations/*/metadata.json"],
     "data/schemas/shader-metadata.schema.json": ["data/overlays/*/metadata.json"],
     "data/schemas/surface-metadata.schema.json": ["data/surface/*/metadata.json"],
+    "data/schemas/pointer-metadata.schema.json": ["data/pointer/*/metadata.json"],
     "data/schemas/whatsnew.schema.json": ["data/whatsnew.json"],
 }
 

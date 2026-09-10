@@ -278,15 +278,17 @@ public:
      * @brief Set a window's floating state
      * @param windowId Window to modify
      * @param floating true to exclude from tiling
+     *
+     * Silently no-ops for a window this state does not contain, and for a
+     * window already in the requested state (no signal in either case). This
+     * is the ONLY float mutator: a caller that needs to distinguish "refused"
+     * from "already there" checks containsWindow() first, and a caller that
+     * wants a toggle writes setFloating(id, !isFloating(id)). There used to be
+     * a toggleFloating() returning the post-flip value, and reading that value
+     * as a success flag turned every unfloat into a silent early return
+     * (discussion #1076); it was removed rather than documented around.
      */
     void setFloating(const QString& windowId, bool floating);
-
-    /**
-     * @brief Toggle a window's floating state
-     * @param windowId Window to toggle
-     * @return Current floating state after toggle (unchanged if window not tracked)
-     */
-    bool toggleFloating(const QString& windowId);
 
     /**
      * @brief Get list of floating windows

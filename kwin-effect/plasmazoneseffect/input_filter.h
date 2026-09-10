@@ -44,7 +44,8 @@ class PlasmaZonesEffect;
  *
  * This filter ALSO owns part of the pointer input for the compositor-drawn
  * scrolling TAB INDICATORS (ScrollTabIndicatorPainter): pointerMotion hovers
- * the pill under the cursor and pointerButton / touchDown activate it. The
+ * the pill under the cursor, pointerButton / touchDown activate it, and
+ * pointerAxis steps the owning column's tabs. The
  * pills are not windows, so no window-level input path sees them; a filter
  * at this weight is the one place the press can be claimed before
  * click-to-focus hands it to the column underneath. The OTHER part is the
@@ -54,7 +55,11 @@ class PlasmaZonesEffect;
  * pointer press over a hovered pill reaches PlasmaZonesEffect::pointerButton
  * and never this filter. This filter's pill press branch therefore covers
  * touch (no hover, no interception) and a press that arrives with no prior
- * motion. Hover updates gate on "some payload exists"
+ * motion. The same split applies to the tab WHEEL: the interception is held
+ * for as long as the pointer sits over a pill, so an unmodified wheel there
+ * arrives at PlasmaZonesEffect::pointerAxis, which routes both axis gestures
+ * in this filter's order. This filter's axis branch covers the residual
+ * cases where no interception is held. Hover updates gate on "some payload exists"
  * (TilingHandler::updateScrollTabHover), so a desktop with no tabbed column
  * pays one branch per motion.
  *
@@ -90,8 +95,8 @@ public:
 
     /// Forget the window the v120 residues belong to and zero them. Called on
     /// every axis tick that does not scale (no rule, no target, consumed
-    /// overhang) so one window's fractional remainder can never be applied to
-    /// the next stream the filter does scale.
+    /// overhang, consumed tab wheel) so one window's fractional remainder can
+    /// never be applied to the next stream the filter does scale.
     ///
     /// Public because this filter is not the only place an axis event can be
     /// claimed. While the scroll-tab pill holds a mouse interception, KWin

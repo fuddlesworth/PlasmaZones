@@ -21,7 +21,6 @@
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
@@ -35,12 +34,15 @@
 
 namespace PlasmaZones {
 
-// Paths that follow the user's `Settings.animationProfile` slider
-// directly. Every other PhosphorAnimation path is served by
-// `${KDE_INSTALL_DATADIR}/plasmazones/profiles/<path>.json` (shipped
-// defaults), with user overrides at
-// `~/.local/share/plasmazones/profiles/<path>.json` — all discovered
-// and merged by `ProfileLoader`.
+// Paths that follow the user's `Settings.animationProfile` slider directly.
+//
+// `global` is the root of every other path's chain, so what this publish does
+// to the rest of the tree depends on WHICH LAYER it lands in, and that is
+// decided in publishActiveAnimationProfile by whether the user has actually
+// written the global blob. Unset, it joins the family seeds and the deeper
+// per-family seeds override it. Set, it outranks them, which is what a
+// "retime everything" control has to mean. Either way the user's per-event
+// overrides from `Animations/MotionProfileTree` sit above both.
 //
 // Keeping this list in a file-scope array lets us add another
 // settings-backed path (e.g., a second slider for snap-specific
@@ -56,13 +58,11 @@ static const auto kSettingsDrivenProfilePaths = std::array{
     &PhosphorAnimation::ProfilePaths::Global,
 };
 
-/// Owner tag used to partition every profile registered by the daemon's
-/// ProfileLoader (user-authored JSON files under
-/// `~/.local/share/plasmazones/profiles/`). Lives in the registry's
-/// partitioned-ownership map so a `clearOwner` call on this tag wipes
-/// only the user-JSON partition without touching settings-driven entries
-/// (which are owned by the empty/direct tag) or any other consumer's
-/// registrations.
+/// Owner tag used to partition the user's per-event TIMING overrides, read
+/// from `Animations/MotionProfileTree`. Lives in the registry's
+/// partitioned-ownership map so replacing that partition on a settings change
+/// wipes only these entries, leaving the settings-driven ones (owned by the
+/// empty/direct tag) and the family seeds alone.
 static constexpr QLatin1StringView kPlasmaZonesUserProfilesOwnerTag{"plasmazones-user-profiles"};
 
 void Daemon::setupAnimationProfiles()
@@ -84,6 +84,12 @@ void Daemon::setupAnimationProfiles()
     // in production today but the narrower scope is the correct
     // contract for a registry that may be shared with other consumers.
     PhosphorProfileRegistry& registry = m_profileRegistry;
+    // Note these clears run BEFORE the seed tag is set below, so at this point
+    // the seed tag is still empty and clearOwner takes its non-seed branch.
+    // That is correct on this path only because it is construction: there are
+    // no seeds yet to miss. Anywhere the registry is already seeded, clearing
+    // the seed partition has to happen with the tag SET, or it walks the wrong
+    // store and silently clears nothing.
     registry.clearOwner(QString(kPlasmaZonesUserProfilesOwnerTag));
     registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
     for (const QString* path : kSettingsDrivenProfilePaths) {
@@ -97,60 +103,51 @@ void Daemon::setupAnimationProfiles()
     // internal lock.
     registry.setLowPrecedenceOwnerTag(QString(kShellAnimationFamilySeedsOwnerTag));
 
-    // Discover XDG `plasmazones/{curves,profiles}` dirs, materialise the
-    // user-writable dirs, construct the loaders, and wire the
-    // curveLoader→profileLoader rescan. Shared with the secondary
-    // composition roots (settings / editor) via `AnimationBootstrap` —
-    // both paths funnel through `constructAnimationLoaders` so the
-    // dir-discovery and loader-construction logic only exists in one
-    // place. The owner tag here is daemon-specific so the registry's
-    // partitioned-ownership map keeps daemon-loaded user JSON entries
-    // distinct from any secondary process's loader entries (today
-    // they're separate processes, but the partitioning preserves the
-    // contract).
+    // Discover the XDG `plasmazones/curves` dirs, materialise the
+    // user-writable ones, and construct the curve loader. Shared with the
+    // secondary composition roots (settings / editor) via
+    // `AnimationBootstrap`, so dir discovery and loader construction exist in
+    // one place.
     //
-    // The initial `loadFromDirectories` scan is deferred until AFTER
-    // the daemon's pre-scan signal wiring below — a loader's
-    // initial-scan emit otherwise fires before the
-    // publishActiveAnimationProfile listener is installed and is
-    // silently dropped. Triggered explicitly by the three-phase load
-    // further down.
-    auto loaderHandles =
-        constructAnimationLoaders(m_curveRegistry, m_profileRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
+    // The initial `loadFromDirectories` scan is deferred until AFTER the
+    // daemon's pre-scan signal wiring below — a loader's initial-scan emit
+    // otherwise fires before the publishActiveAnimationProfile listener is
+    // installed and is silently dropped. Triggered explicitly by the
+    // three-phase load further down.
+    //
+    // There is no per-event profile LOADER any more. Since schema v8 an
+    // event's timing lives beside its pack in config, under
+    // `Animations/MotionProfileTree`, and reaches the registry through
+    // `installMotionProfileTree` below.
+    auto loaderHandles = constructAnimationLoaders(m_curveRegistry, nullptr);
     m_curveLoader = std::move(loaderHandles.curveLoader);
-    m_profileLoader = std::move(loaderHandles.profileLoader);
     const AnimationLoaderDirs loaderDirs = std::move(loaderHandles.dirs);
 
     // Connect BEFORE the initial scans below so any signal Settings
-    // fires during load (or any signal the ProfileLoader fires during
-    // its own initial scan) is captured. The registry's value-changed
+    // fires during load is captured. The registry's value-changed
     // guard makes the subsequent publishActiveAnimationProfile a no-op
     // if the signal-driven path already published the same values.
     //
     // Re-publish on:
     //   - Settings edits (slider drag, per-field setter) — the aggregate
     //     animationProfileChanged signal fires.
-    //   - ProfileLoader rescans — user added/removed a JSON file, which
-    //     flips the hasProfile() check for some paths.
+    //   - Per-event timing edits — motionProfileTreeChanged fires when the
+    //     user adds or clears an override, which flips the hasProfile()
+    //     check for that path.
     //   - CurveLoader rescans — a curve JSON referenced by the
     //     settings-driven Global profile changed on disk. Settings
     //     ::animationProfile() reparses the stored blob through
     //     CurveRegistry on every call (no cache), so republishing
     //     re-resolves the curve against the fresh registry state.
-    //     Without this wire, a curve edit is only visible to profiles
-    //     loaded from JSON (via the curveLoader→profileLoader rescan
-    //     above), NOT to the settings-fanout path — the Global slider's
-    //     curve reference would silently go stale until the next
-    //     Settings edit.
+    //     Without this wire the Global slider's curve reference would
+    //     silently go stale until the next Settings edit.
     // All three signals route through `requestAnimationProfilePublish`
     // — a coalescing trampoline that collapses every fan-in within the
     // same event-loop tick into exactly one `publishActiveAnimationProfile`
     // call. The settings-slider drag on its own fires the aggregate at
-    // ~30 Hz, and a curve-pack edit can fire `curvesChanged` then
-    // `profilesChanged` (via the `curveLoader → profileLoader` rescan
-    // wire) within the same tick — without coalescing, the publish
-    // path's Settings parse + curve resolve runs three times per tick
-    // for one user action.
+    // ~30 Hz, and one user action can fire two of these in the same tick —
+    // without coalescing, the publish path's Settings parse and curve resolve
+    // would run once per signal rather than once per tick.
     m_animationPublishTimer.setSingleShot(true);
     m_animationPublishTimer.setInterval(0);
     connect(&m_animationPublishTimer, &QTimer::timeout, this, [this]() {
@@ -160,21 +157,33 @@ void Daemon::setupAnimationProfiles()
     connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
         requestAnimationProfilePublish();
     });
-    connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
-        // The loader has replaced its owned entries, so the cached raw JSON
-        // profiles are stale. Drop them before republishing; the publish
-        // re-snapshots from the registry, which holds the freshly parsed
-        // entries at this point.
+    connect(m_settings.get(), &Settings::motionProfileTreeChanged, this, [this]() {
+        // The per-event timing tree moved. Re-register this owner's whole
+        // partition (a cleared path must LEAVE the registry, which is why
+        // installMotionProfileTree replaces rather than merges) and drop the
+        // cached raw profiles the publish path re-snapshots from.
+        installMotionProfileTree(m_profileRegistry, m_curveRegistry, m_settings->motionProfileTree(),
+                                 QString(kPlasmaZonesUserProfilesOwnerTag));
         m_rawJsonProfiles.clear();
         requestAnimationProfilePublish();
     });
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
-        // Same staleness rule as the profilesChanged handler above: a cached
-        // raw profile may hold a Profile::curve pointer resolved against the
-        // pre-edit curve. Self-correcting even without this (curvesChanged is
-        // also wired to the profile loader's debounced rescan, whose
-        // profilesChanged clears the cache), but that leaves one publish tick
-        // serving the stale curve; the clear is free.
+        // A cached raw profile may hold a Profile::curve pointer resolved
+        // against the pre-edit curve, and nothing else clears it — since
+        // schema v8 there is no profile loader whose rescan would.
+        //
+        // Everything holding a resolved curve has to be re-parsed, in the same
+        // curves → seeds → tree order the initial load uses. Each Profile holds
+        // the curve it RESOLVED at parse time, so an entry naming a curve that
+        // did not exist yet stores a null curve and silently animates on the
+        // library default until it is parsed again.
+        //
+        // The seeds need this as much as the tree does: their curve specs are
+        // real files in data/curves, so editing one leaves every family seed
+        // pinned to the pre-edit curve object for the life of the process.
+        seedShellAnimationFamilies(m_profileRegistry, m_curveRegistry);
+        installMotionProfileTree(m_profileRegistry, m_curveRegistry, m_settings->motionProfileTree(),
+                                 QString(kPlasmaZonesUserProfilesOwnerTag));
         m_rawJsonProfiles.clear();
         requestAnimationProfilePublish();
     });
@@ -206,18 +215,18 @@ void Daemon::setupAnimationProfiles()
     // Cleared in `stop()` before the manager destructs.
     QtQuickClockManager::setDefaultManager(m_clockManager.get());
 
-    // Three-phase initial load — curves first so the family-seed step
-    // can resolve named curves like `widget-out`; family seeds next so
-    // the profile loader's reloadFromOwner correctly overwrites a seed
-    // when the user authored a JSON at the same path; profiles last.
-    // The split mirrors AnimationBootstrap so secondary composition
-    // roots get the same seeding shape.
+    // Three-phase initial load — curves first so the family-seed step and the
+    // timing tree can both resolve named curves like `widget-out`; family
+    // seeds next; the config-backed per-event timing tree last, so a user
+    // override at a seeded path takes the slot. The order mirrors
+    // AnimationBootstrap so secondary composition roots get the same shape.
     runInitialCurveLoad(*m_curveLoader, loaderDirs);
     seedShellAnimationFamilies(m_profileRegistry, m_curveRegistry);
-    runInitialProfileLoad(*m_profileLoader, loaderDirs);
+    installMotionProfileTree(m_profileRegistry, m_curveRegistry, m_settings->motionProfileTree(),
+                             QString(kPlasmaZonesUserProfilesOwnerTag));
 
     // Final explicit publish covers the case where neither the Settings
-    // nor the ProfileLoader emitted during the loads above (e.g. fresh
+    // nor the timing-tree install emitted during the loads above (e.g. fresh
     // install with no user JSON, no settings edit during construction).
     // Partitioned-ownership in the registry ensures the loader's
     // user-files entries are not wiped by this direct-owner publish.
@@ -239,30 +248,26 @@ void Daemon::publishActiveAnimationProfile()
 {
     using namespace PhosphorAnimation;
 
-    // Publish the settings-driven paths (Global). Every OTHER path is
-    // served by `ProfileLoader` from `plasmazones/profiles/*.json` —
-    // shipped defaults live in `${KDE_INSTALL_DATADIR}/plasmazones/
-    // profiles/`, user overrides in `~/.local/share/plasmazones/
-    // profiles/`. `registerProfile` has an equality guard so
-    // re-publishing identical values on every settingsChanged signal
-    // is a cheap no-op on the hot path.
+    // Publish the settings-driven paths (Global). Every OTHER path is served
+    // by the family seeds plus the user's per-event overrides from
+    // `Animations/MotionProfileTree`. `registerProfile` has an equality guard
+    // so re-publishing identical values on every settingsChanged signal is a
+    // cheap no-op on the hot path.
     //
-    // User-wins at the registry level: if the ProfileLoader owns a
-    // user-authored JSON file at a settings-driven path, its set fields
-    // win and its UNSET fields merge from the user's settings (never from
-    // library defaults) — see the per-path ownership + merge logic below.
-    // On JSON delete, the loader emits profilesChanged, this function
-    // re-runs, and the settings-default path is restored.
+    // User-wins at the registry level: if the timing tree carries an override
+    // at a settings-driven path, its set fields win and its UNSET fields merge
+    // from the user's settings, never from library defaults — see the per-path
+    // ownership and merge logic below. Clearing that override re-runs this
+    // function and restores the settings-default path.
     //
-    // SCOPE of that contract: it holds when the JSON exists at the loader's
-    // FIRST scan (setup runs the scan before the first untagged publish).
-    // A user JSON dropped at a settings-driven path AT RUNTIME, into a
-    // session that already published untagged, is deliberately NOT adopted:
-    // reloadFromOwner's "direct owner always wins" rule makes the loader
-    // step aside for the untagged entry, so the file takes effect on the
-    // next daemon start. That is the ownership model, not an accident —
-    // Settings is the live tuning surface, and handing a live session over
-    // to a file drop mid-run would fight the slider the user is holding.
+    // SCOPE of that contract: it holds when the override is present at the
+    // first install (setup installs the tree before the first untagged
+    // publish). An override that appears AT RUNTIME at a settings-driven path,
+    // in a session that already published untagged, is deliberately NOT
+    // adopted: reloadFromOwner's "direct owner always wins" rule makes the
+    // tree step aside for the untagged entry, so it takes effect on the next
+    // daemon start. Nothing in the UI writes one — `global` is not an event
+    // path — so this is a hand-edited-config case only.
     //
     // This runs on the settings-slider hot path (~30 Hz during drag), so
     // ownership is resolved with an O(1) `ownerOf()` lookup rather than
@@ -270,47 +275,36 @@ void Daemon::publishActiveAnimationProfile()
     auto& reg = m_profileRegistry;
 
     const Profile settingsProfile = m_settings->animationProfile();
+    // Read once per publish, not per path: it is a backend key lookup and
+    // this runs at slider-drag rate.
+    const bool settingsExplicit = m_settings->hasExplicitAnimationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
-        // OWNERSHIP, not existence. Asking the loader's own bookkeeping whether
-        // it parsed a file for this path answers the wrong question: it stays
-        // true even when the registry entry is something else entirely —
-        // including this function's OWN untagged publish from a previous tick.
-        // (ProfileLoader deliberately exposes no such accessor for exactly this
-        // reason; see its class doc.) Merging over that is
+        // OWNERSHIP, not existence. Asking whether the timing tree CONTAINS
+        // this path answers the wrong question: it stays true even when the
+        // registry entry is something else entirely, including this function's
+        // OWN untagged publish from a previous tick. Merging over that is
         // self-poisoning: the settings profile has every field engaged, so
         // nothing falls back, the entry freezes, and every later slider move is
         // silently dropped until the daemon restarts.
         //
-        // Two ways in, both previously live. A registry/loader disagreement,
-        // and — with no invariant violated at all — a user dropping a
-        // Global.json into a session that already published untagged, where
-        // reloadFromOwner's "direct owner always wins" rule makes the loader
-        // skip the path while still emitting profilesChanged.
-        //
         // ownerOf() answers the question that actually matters: is this entry
-        // the loader's parsed JSON? Only then is it a valid merge base.
+        // the one the tree install put here? Only then is it a valid merge
+        // base.
         //
         // Resolved ONCE per path: the tag is needed again at the re-register
         // below, and this is a ~30 Hz path where each ownerOf() is a locked
         // lookup.
         const QString pathOwner = reg.ownerOf(*path);
-        // Compared against the tag CONSTANT, not m_profileLoader->ownerTag(): the
-        // tag is a file-scope constant, so ownership is knowable without the
-        // loader object being alive. Keying on the object's liveness meant that
-        // a settings write after stop() (which resets m_profileLoader but leaves
-        // the animationProfileChanged connection armed) evaluated this false and
-        // re-registered the path UNTAGGED, overwriting the user's Global.json
-        // entry with settings defaults and permanently orphaning the file.
-        const bool loaderOwnsPath = pathOwner == QString(kPlasmaZonesUserProfilesOwnerTag);
-        if (loaderOwnsPath) {
-            // A user JSON owns this path, but its unset fields must still fall
+        const bool treeOwnsPath = pathOwner == QString(kPlasmaZonesUserProfilesOwnerTag);
+        if (treeOwnsPath) {
+            // The tree owns this path, but its unset fields must still fall
             // back to the user's settings rather than to library defaults.
-            // Skipping wholesale left a Global.json that set only `duration`
+            // Skipping wholesale left an override that set only `duration`
             // animating minDistance / sequenceMode / staggerInterval / curve at
             // built-in defaults, while the settings app resolved them from
             // ISettings and showed the user's values.
             //
-            // Merge from a cached RAW snapshot taken once per loader reload,
+            // Merge from a cached RAW snapshot taken once per tree install,
             // never from the registry's current entry — that is the merged
             // result of the previous tick, and reading it back is the freeze
             // described above.
@@ -368,7 +362,51 @@ void Daemon::publishActiveAnimationProfile()
             reg.registerProfile(*path, mergedProfile, pathOwner);
             continue;
         }
-        reg.registerProfile(*path, settingsProfile);
+
+        // `global` is the root of EVERY path's chain (ProfilePaths::parentPath
+        // answers "global" for every category root), so whichever layer this
+        // entry lands in applies to the whole tree.
+        //
+        // Published untagged it sits in the resolver's upper layer and, being
+        // fully engaged whether or not the user ever opened the page,
+        // overwrites every field of every family seed on every path —
+        // leaving the seed table inert and every surface animating with one
+        // uniform feel. Published under the seed tag it sits alongside the
+        // seeds at the chain root, where the deeper per-family seeds
+        // correctly override it.
+        //
+        // So the tag follows user intent: while the global blob is unset the
+        // shipped per-family character wins, and the moment the user actually
+        // sets a global value it outranks the seeds again, which is what a
+        // "retime everything" control has to mean.
+        if (settingsExplicit) {
+            reg.registerProfile(*path, settingsProfile);
+        } else {
+            // Moving `global` down to the seed layer is a two-store MOVE, and
+            // registerProfile is not one: its seed branch writes only the seed
+            // store and leaves any untagged entry sitting in the upper store,
+            // where pass 2 of resolveWithInheritance keeps overlaying it over
+            // every seed on every path for the rest of the session. Dropping
+            // the untagged entry first is what makes the layer change take.
+            //
+            // Evicting inside registerProfile instead would be wrong: the two
+            // stores exist precisely so a user override and a seed can share a
+            // path (see PhosphorProfileRegistry.h), and evicting on every
+            // register would destroy the seed under any override.
+            //
+            // Guarded on an empty owner so this reclaims only the untagged
+            // entry THIS function publishes; an entry owned by another tag is
+            // not ours to drop. Idempotent, which matters on a ~30 Hz path:
+            // once the entry is gone unregisterProfile removes nothing and
+            // emits nothing. The emit on the first call is wanted — the seed
+            // register below is a no-op whenever the unset blob already equals
+            // the seed, so without it nothing would tell consumers to
+            // re-resolve out of the stale state.
+            if (pathOwner.isEmpty()) {
+                reg.unregisterProfile(*path);
+            }
+            reg.registerProfile(*path, settingsProfile, QString(kShellAnimationFamilySeedsOwnerTag));
+        }
     }
 }
 

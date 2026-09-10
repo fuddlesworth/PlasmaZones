@@ -56,10 +56,11 @@
 #include <PhosphorRules/RuleStoreWatcher.h>
 
 #include "core/interfaces/shaderregistry.h"
-#include "settings/pages/snappingshaderspagecontroller.h"
+#include "settings/pages/overlayspagecontroller.h"
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
+#include <PhosphorPointer/PointerShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
@@ -273,14 +274,10 @@ void SettingsController::sortMergedLayoutList(QVariantList& list)
 
 SettingsController::~SettingsController()
 {
-    // The ProfilePageController's ProfileStore holds closures over m_rulesPage
-    // (a RuleController&). Both are children of `this`, and ~QObject deletes
-    // children in construction order — m_rulesPage first — which would leave
-    // the store holding a dangling reference for the remainder of teardown.
-    // Delete the profiles page up front so the reference holder is gone while
-    // the RuleController is still alive.
-    delete m_profilesPage;
-    m_profilesPage = nullptr;
+    // m_profilesPage is a unique_ptr member for the ordering it needs (see its
+    // declaration): its ProfileStore borrows m_rulesPage, and member resets run
+    // before ~QObject reaches the raw children, so it is gone while the
+    // RuleController it borrows is still alive.
 
     // Tear down the RuleController's label lookups while the
     // captured member containers (m_layouts, m_activities, m_screens,
@@ -762,10 +759,9 @@ SettingsController::SettingsController(QObject* parent)
     registerXdgPackDirs(m_animationShaderRegistry, ConfigDefaults::userAnimationsSubdir());
 
     // Animations page sub-controller — Q_PROPERTY surface for the new
-    // animation-event drilldown. Per-event motion overrides persist as
-    // JSON files under `~/.local/share/plasmazones/profiles/`, picked up
-    // by the daemon's existing `PhosphorAnimation::ProfileLoader` watch;
-    // shader assignments persist via Settings::shaderProfileTree.
+    // animation-event drilldown. Both halves of an event persist as config
+    // keys since schema v8: timing via Settings::motionProfileTree and the
+    // pack assignment via Settings::shaderProfileTree.
     m_animationsPage = new AnimationsPageController(m_animationShaderRegistry, &m_settings, this);
     // Mark dirty whenever the user has unsaved animation changes the
     // Discard button could revert. We don't auto-clear when pending
@@ -804,6 +800,13 @@ SettingsController::SettingsController(QObject* parent)
     m_surfaceShaderRegistry = new PhosphorSurfaceShaders::SurfaceShaderRegistry(this);
     registerXdgPackDirs(m_surfaceShaderRegistry, ConfigDefaults::userSurfaceSubdir());
 
+    // Pointer shader registry — the fourth pack family, scanning the XDG
+    // `plasmazones/pointer` dirs the same way the two registries above scan
+    // theirs. Built BEFORE the decoration page: the pointer is a decoration
+    // surface, so that page owns the pointer chain and takes this registry.
+    m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
+    registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
+
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
     // DecorationProfileTree (per-surface chains of decoration packs) with a
     // baseline global default + walk-up inheritance. The tree persists via the
@@ -812,8 +815,10 @@ SettingsController::SettingsController(QObject* parent)
     // into onSettingsPropertyChanged for dirty tracking — so this controller
     // needs no per-page staging (isDirty/apply/discard are no-ops). It is
     // registered with the framework as a headless domain (the drill-down nav
-    // nodes are virtual PageAdapters) in buildApplicationController.
-    m_decorationPage = new DecorationPageController(m_surfaceShaderRegistry, &m_settings, this);
+    // nodes are virtual PageAdapters) in buildApplicationController. It takes
+    // both pack registries: `pointer` is one of its surfaces.
+    m_decorationPage =
+        new DecorationPageController(m_surfaceShaderRegistry, &m_settings, m_pointerShaderRegistry, this);
 
     // Rules page sub-controller — the unified rule surface. It owns
     // its own RuleModel and talks to the daemon's
@@ -878,7 +883,7 @@ SettingsController::SettingsController(QObject* parent)
     // staging path (owning pages badge value-based). Registered via regPage in
     // buildApplicationController(), which trackDomain()s it so its isDirty /
     // apply / discard participate in the framework's Save/Discard.
-    m_profilesPage = new ProfilePageController(m_settings, *m_rulesPage, this);
+    m_profilesPage = std::make_unique<ProfilePageController>(m_settings, *m_rulesPage, this);
 
     // The rule-list label lookups (screen / activity / desktop / zone / layout
     // / algorithm / shader / event / decoration) and the refreshes that keep
@@ -888,10 +893,10 @@ SettingsController::SettingsController(QObject* parent)
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
     // + user search paths (`plasmazones/overlays`), so no extra path
-    // bookkeeping is needed here. Read-only browser surface — there is no
-    // per-event override store; assignments live on `Layout::shaderId`
-    // (per-layout) and the snapping page surfaces "Used by" by walking
-    // m_localLayoutManager's catalogue.
+    // bookkeeping is needed here. Assignments live in the config as the
+    // OverlayShaderTree (Settings::overlayShaderTree — global baseline +
+    // per-layout overrides); the Overlays pages edit that tree and resolve
+    // layout names through m_localLayoutManager's catalogue.
     //
     // The page controller is a `unique_ptr<>` declared after
     // `m_localLayoutManager` (see header), so member-destructor reverse-order
@@ -916,8 +921,8 @@ SettingsController::SettingsController(QObject* parent)
     // without a parent, registerPage would adopt it to m_app (destroyed first)
     // and the unique_ptr would then double-free it on close. The unique_ptr
     // still drives destruction in member order, before the borrowed registries.
-    m_snappingShadersPage = std::make_unique<SnappingShadersPageController>(
-        m_overlayShaderRegistry, m_localLayoutManager.get(), m_shaderPreviewController.get(), this);
+    m_overlaysPage = std::make_unique<OverlaysPageController>(m_overlayShaderRegistry, m_localLayoutManager.get(),
+                                                              &m_settings, m_shaderPreviewController.get(), this);
 
     // Screen helper signals — wire BEFORE the initial refreshScreens()
     // so a synchronous screensChanged emit from the refresh reaches our
@@ -987,61 +992,10 @@ SettingsController::SettingsController(QObject* parent)
         QSettings appSettings;
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
+        m_whatsNewBaselineVersion = m_lastSeenWhatsNewVersion;
     }
 
-    // Load What's New entries from embedded resource
-    {
-        QFile whatsNewFile(QStringLiteral(":/whatsnew.json"));
-        if (whatsNewFile.open(QIODevice::ReadOnly)) {
-            const auto doc = QJsonDocument::fromJson(whatsNewFile.readAll());
-
-            // Validate against the embedded schema before consuming. The same
-            // schema CI validates the file against. fromResource fails closed if
-            // the resource is missing (a build error), so malformed or
-            // unvalidatable data is skipped rather than surfaced (the page
-            // simply shows nothing).
-            const auto validator = PhosphorFsLoader::SchemaValidator::fromResource(
-                QStringLiteral(":/schemas/whatsnew.schema.json"), PlasmaZones::lcCore());
-            QJsonArray releases;
-            if (const auto errors = validator.validate(doc.object())) {
-                qCWarning(PlasmaZones::lcCore) << "whatsnew.json failed schema validation; skipping What's New entries";
-                PhosphorFsLoader::logSchemaErrors(PlasmaZones::lcCore(), *errors);
-            } else {
-                releases = doc.object().value(QLatin1String("releases")).toArray();
-            }
-            // Only entries for THIS build or older are consumed: whatsnew.json
-            // gains the next release's entry while it is still unreleased, and
-            // without the clamp a user opening What's New on the current build
-            // would both SEE the unreleased entry and get it stamped as seen,
-            // so the badge never fires when that release actually ships. An
-            // unparsable app version fails open (no filtering).
-            // VERSION_STRING, not applicationVersion(): the latter is only
-            // set by the settings app's own main(); a host that skips
-            // setApplicationVersion would fail the clamp open, let the
-            // unreleased entry through, AND let markWhatsNewSeen stamp it —
-            // exactly the badge-never-fires bug the clamp prevents. An
-            // unparsable VERSION_STRING (impossible for a release build)
-            // fails open: no filtering, and the stamp risk returns with it.
-            const QVersionNumber appVersion = QVersionNumber::fromString(PlasmaZones::VERSION_STRING);
-            for (const auto& entry : releases) {
-                const auto obj = entry.toObject();
-                const QVersionNumber entryVersion =
-                    QVersionNumber::fromString(obj.value(QLatin1String("version")).toString());
-                if (!appVersion.isNull() && !entryVersion.isNull() && entryVersion > appVersion) {
-                    continue;
-                }
-                QVariantMap release;
-                release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
-                release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
-                QVariantList highlights;
-                const auto arr = obj.value(QLatin1String("highlights")).toArray();
-                for (const auto& h : arr)
-                    highlights.append(h.toString());
-                release[QStringLiteral("highlights")] = highlights;
-                m_whatsNewEntries.append(release);
-            }
-        }
-    }
+    loadWhatsNew();
 
     // PhosphorControl integration — must run AFTER every page controller
     // has been constructed (the registry holds stable pointers to them).
@@ -1096,9 +1050,9 @@ SnappingEffectsController* SettingsController::snappingEffectsPage() const
     return m_snappingEffectsPage;
 }
 
-SnappingShadersPageController* SettingsController::snappingShadersPage() const
+OverlaysPageController* SettingsController::overlaysPage() const
 {
-    return m_snappingShadersPage.get();
+    return m_overlaysPage.get();
 }
 
 TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const

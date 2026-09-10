@@ -39,6 +39,9 @@ void OverlayService::setSettings(ISettings* settings)
         }
 
         m_settings = settings;
+        // Seed the cached overlay shader tree for the new source (cleared
+        // when settings detach so no stale assignments survive).
+        m_overlayShaderTree = m_settings ? m_settings->overlayShaderTree() : OverlayShaderTree{};
 
         // Connect to new settings signals
         if (m_settings) {
@@ -145,6 +148,22 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
+            // Zone-overlay shader tree: an assignment edit in the settings
+            // app can flip a screen between rectangle and shader overlay
+            // modes (none↔shader), which refreshVisibleWindows alone cannot
+            // apply — same reasoning as the layoutModified coalesced-refresh
+            // hook (see observeLayout below). No coalescing needed here: tree
+            // writes arrive one per user action, not per drag frame.
+            connect(m_settings, &ISettings::overlayShaderTreeChanged, this, [this]() {
+                // Refresh the cached tree BEFORE the recreate/refresh below
+                // re-resolves shaders through effectiveOverlayShader().
+                m_overlayShaderTree = m_settings ? m_settings->overlayShaderTree() : OverlayShaderTree{};
+                if (m_visible) {
+                    recreateOverlayWindowsOnTypeMismatch();
+                }
+                refreshVisibleWindows();
+            });
+
             // Global animations toggle: when off, SurfaceAnimator snaps
             // beginShow / beginHide to the target opacity and fires
             // completion synchronously, skipping motion + shader legs.
@@ -182,10 +201,6 @@ void OverlayService::setSettings(ISettings* settings)
                             QMetaObject::invokeMethod(slot, "reloadShader");
                         }
                     }
-                    if (m_shaderPreviewWindow
-                        && m_shaderPreviewWindow->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
-                        QMetaObject::invokeMethod(m_shaderPreviewWindow, "reloadShader");
-                    }
                 });
             }
 
@@ -221,14 +236,28 @@ void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layout
     if (m_layoutManager) {
         // Update visible zone selector and overlay windows when layout changes.
         // Hidden windows are skipped: showZoneSelector()/show() refresh before showing.
+        // Both arms recreate before refreshing, for the same reason the
+        // layoutModified path below does: the new layout may resolve to a
+        // different overlay TYPE. updateOverlayWindow's two arms both require
+        // the slot to already be a shader slot, so a switch from a no-shader
+        // layout to a shader one matches neither and the overlay keeps drawing
+        // rectangles, and a switch the other way clears the shader properties
+        // without ever returning the slot to rectangle mode. The recreate is
+        // what flips the slot; it self-guards when no overlay window exists.
         connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
                     observeLayoutForLiveEdits(layout);
+                    if (m_visible) {
+                        recreateOverlayWindowsOnTypeMismatch();
+                    }
                     refreshVisibleWindows();
                 });
         connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this,
                 [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                     observeLayoutForLiveEdits(layout);
+                    if (m_visible) {
+                        recreateOverlayWindowsOnTypeMismatch();
+                    }
                     refreshVisibleWindows();
                 });
         // Observe newly-created layouts so edits reach the overlay before
@@ -290,8 +319,8 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
             ++it;
         }
     }
-    // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
-    // shaderParams, zones, appearance, etc.). Without this hook the editor's
+    // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (zones,
+    // appearance, overlay display mode, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
     // restart, since PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged only fires on switch.
     //
@@ -367,8 +396,7 @@ static constexpr int kIdleQuiesceGraceMs = 5000;
 
 bool OverlayService::isOverlayDisplaying() const
 {
-    const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
-    return (m_visible && !m_overlayIdled) || previewVisible;
+    return m_visible && !m_overlayIdled;
 }
 
 void OverlayService::syncCavaState()
@@ -427,10 +455,6 @@ void OverlayService::syncCavaState()
                         writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                     }
                 }
-            }
-            if (m_shaderPreviewWindow) {
-                writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::AudioSpectrum),
-                                 QVariantList());
             }
         }
     }
@@ -508,21 +532,6 @@ void OverlayService::scheduleIdleQuiesce()
                             qCWarning(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on slot"
                                                  << "(installed shell QML out of date?)";
                         }
-                    }
-                }
-            }
-            // The editor's shader-preview window rides the same render loop;
-            // when it is alive but not displaying (isOverlayDisplaying() was
-            // false above, so it is not visible), release its shader FBOs
-            // too rather than leaving it the one surface that pins them.
-            if (m_shaderPreviewWindow) {
-                if (!QMetaObject::invokeMethod(m_shaderPreviewWindow, "releaseIdleGraphicsResources")) {
-                    // Same once-per-process latch rationale as the slot loop.
-                    static bool warnedPreviewSkew = false;
-                    if (!warnedPreviewSkew) {
-                        warnedPreviewSkew = true;
-                        qCWarning(lcOverlay)
-                            << "idle quiesce: releaseIdleGraphicsResources not invokable on preview window";
                     }
                 }
             }

@@ -15,6 +15,7 @@
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <effect/effecthandler.h>
 
@@ -145,6 +146,22 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (m_animateFocusedOnly != b) {
             m_animateFocusedOnly = b;
             repaintAllDecorations();
+        }
+    });
+    // Same variant-TYPE guard and the same default-true reason: read
+    // unguarded, an empty reply would invert the setting and leave decorations
+    // running over every fullscreen window. Flipping it re-derives the covered
+    // outputs, which is what sweeps the surfaces back into (or out of) their
+    // decorations — refreshFullscreenSuppression only acts on a real change, so
+    // a broadcast that touched something else costs one set comparison.
+    loadSettingAsync(QStringLiteral("decorationSuppressWhileFullscreen"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_suppressDecorationsWhileFullscreen != b) {
+            m_suppressDecorationsWhileFullscreen = b;
+            refreshFullscreenSuppression();
         }
     });
     loadSettingAsync(QStringLiteral("decorationPauseWhenIdle"), [this](const QVariant& v) {
@@ -883,6 +900,13 @@ void PlasmaZonesEffect::loadCachedSettings()
             surfaceState.prefixChainEnd = -1;
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
+        // The pointer is a surface in this same tree (path `pointer`), so its
+        // chain re-derives here rather than from a config domain of its own.
+        // It is baseline-isolated, so a global window chain resolves onto it as
+        // nothing — the cursor stays undecorated until a pointer chain is set
+        // at that exact path. setProfile short-circuits on an unchanged
+        // profile, so a tree edit elsewhere does not restart a live trail.
+        m_pointerPass.setProfile(m_decorationTree.resolve(PhosphorSurfaceShaders::decorationPointerPath()));
         updateAllDecorations();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();

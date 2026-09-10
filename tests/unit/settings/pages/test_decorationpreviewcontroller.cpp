@@ -593,9 +593,25 @@ private Q_SLOTS:
         // controller to its calls would demand the wrong route's API — the
         // exact mistake the note above describes for the dialog. Its own
         // metaobject mirror lives in test_animations_qml_contracts.
+        // PointerPreviewPane and PointerPreviewCanvas are the POINTER route,
+        // on a PointerPreviewController, and are excluded for the same reason
+        // as the animation pane rather than as a blanket pass: their own
+        // metaobject mirror lives in test_pointer_qml_contracts.
+        // PackPreview is the shared stage every family's preview is rendered
+        // through, so its previewController is whichever one the host supplied
+        // — the same route-agnostic exemption the dialog above takes, and for
+        // the same reason. Holding it to THIS controller would demand one
+        // family's API of all three. The two names it reads on every route
+        // (previewRevision, packInfo) are common to all three controllers;
+        // audioSpectrum is read only inside its decoration branch, where this
+        // controller is the one supplied.
         const QStringList excluded{settingsQml + QStringLiteral("/ShaderBrowserCard.qml"),
                                    settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml"),
-                                   settingsQml + QStringLiteral("/AnimationPreviewPane.qml")};
+                                   settingsQml + QStringLiteral("/AnimationPreviewPane.qml"),
+                                   settingsQml + QStringLiteral("/PointerPreviewPane.qml"),
+                                   settingsQml + QStringLiteral("/PointerPreviewCanvas.qml"),
+                                   settingsQml + QStringLiteral("/PointerPackNotices.qml"),
+                                   settingsQml + QStringLiteral("/PackPreview.qml")};
         QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
         while (sweep.hasNext()) {
             const QString path = sweep.next();

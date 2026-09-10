@@ -11,14 +11,12 @@ import org.kde.kirigami as Kirigami
  * Each card edits one event in the `PhosphorAnimation::ProfilePaths`
  * taxonomy (e.g. `editor.snapIn`, `osd.show`). Overrides are PER FIELD:
  * editing the duration writes only the duration field and editing the
- * curve writes only the curve field into this event's Profile JSON file
- * under `~/.local/share/plasmazones/profiles/`, so the untouched field
- * keeps following the parent chain and the Global defaults. Flipping the
- * Override toggle ON just opens the timing editor (nothing is written
- * until a control is actually edited); flipping it OFF deletes the
- * override file. The daemon's `ProfileLoader` watches that dir and live-reloads
- * the registry, and the settings app runs one of its own over the same dir, so
- * an edit made outside this page reaches every card as a tree-wide
+ * curve writes only the curve field into this event's entry in the
+ * `Animations/MotionProfileTree` config key, so the untouched field keeps following
+ * the parent chain and the Global defaults. Flipping the Override toggle ON
+ * just opens the timing editor (nothing is written until a control is actually
+ * edited); flipping it OFF removes the override. A reload of the whole config
+ * (Discard, a settings profile) reaches every card as a tree-wide
  * `overrideChanged("")` broadcast.
  *
  * The shader axis follows the same per-field principle through a different
@@ -97,34 +95,6 @@ Item {
     /// tree (_setShaderOverrideOnAll, _setShaderParamsOnAll and the two
     /// shader clears).
     property bool _committingShader: false
-
-    /// "The controller refused the last write, so stop re-issuing it."
-    ///
-    /// Every group writer returns whether its write landed, and the refusal
-    /// case is an async discard owning the tree. The controller TOASTS that
-    /// reason on every refusal, and a toast announces itself to assistive tech
-    /// on every show. Both continuous edit paths run at pointer rate — a
-    /// duration drag emits per move, and so does a shader parameter drag — so a
-    /// discard that overlapped a drag produced one refused write, one toast and
-    /// one screen-reader announcement per pointer move for the length of the
-    /// drag. The toast's own animation coalesces visually, which is why this
-    /// has to be fixed at the source of the repeat rather than at the toast.
-    ///
-    /// Cleared in two places, and it needs both. A refresh this card did not
-    /// drive itself covers an outside edit; `onPendingChangesChanged` below
-    /// covers the end of the discard. The second is NOT redundant: the
-    /// discard's terminal handler emits `overrideChanged` only for the profile
-    /// files it actually restored, so a card none of those paths reaches would
-    /// otherwise never refresh and would stay latched for the rest of the
-    /// session. A card's own writes refresh with `selfDriven` set, so the latch
-    /// survives the drag that tripped it.
-    property bool _writesRefused: false
-
-    /// Record whether a write landed. Takes the boolean every group writer
-    /// already returns and that every drag-rate caller used to discard.
-    function _noteWriteResult(landed) {
-        root._writesRefused = !landed;
-    }
 
     /// The declared mirrors minus any the controller rejects as an event path.
     /// A misspelled entry is refused by every writer, so it can never receive
@@ -287,7 +257,8 @@ Item {
         // label was going to trigger anyway) rather than a full refreshFromTree, which
         // would re-create the very N-round-trip storm _inheritRev exists to
         // prevent: this fires at slider rate while the Global duration is
-        // dragged, and every built card would pay six file opens per tick.
+        // dragged, and every built card would re-read the whole override tree
+        // several times per tick.
         function onAnimationDurationChanged() {
             root._reseedFromInherited();
         }
@@ -402,8 +373,21 @@ Item {
         return i18nc("curve, then duration in milliseconds", "%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
     }
 
+    /// The isolation root governing this event's SHADER resolution, or "" when
+    /// the pack inherits normally.
+    ///
+    /// The parent chain below is the TIMING story and is always true: ProfileTree
+    /// isolates nothing. The shader resolver does isolate — it cuts the chain at
+    /// this root and substitutes an empty baseline — so on a `shell.*` event the
+    /// two axes genuinely disagree about what is inherited, and a card that shows
+    /// only the chain states something false about the pack. Asked of C++ rather
+    /// than derived from a path prefix here, which is what ShaderProfileTree.h
+    /// asks callers to do so a second copy cannot drift from the resolver.
+    readonly property string _shaderIsolationRoot: settingsController.animationsPage.shaderIsolationRoot(root.eventPath)
+
     function parentChainText() {
-        var chain = settingsController.animationsPage.parentChain(root.eventPath);
+        // Labels, not raw dotted paths: this text is read by the user.
+        var chain = settingsController.animationsPage.parentChainLabels(root.eventPath);
         // Drop chain[0] (self) — show only ancestors as "window ← global"
         if (chain.length <= 1)
             return "";
@@ -521,14 +505,6 @@ Item {
     /// other caller (Component.onCompleted, the two signal handlers) leaves it
     /// undefined, which reads as external.
     function refreshFromTree(selfDriven) {
-        // A refresh this card did not cause means something else moved the
-        // store, which for a refusal-latched card is the discard that was
-        // holding it finishing. Retry from here. Own writes pass `selfDriven`,
-        // so a drag that trips the latch keeps it for the rest of the drag
-        // rather than re-arming on its own refusal refresh.
-        if (!selfDriven)
-            root._writesRefused = false;
-
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
         // Every caller that can MOVE the timing chain bumps _inheritRev before
         // calling — the three timing group writers and onOverrideChanged — so
@@ -630,14 +606,13 @@ Item {
     // never edited. That was exactly the old commitOverride's bug in advanced
     // mode (a Duration drag pinned the curve and vice versa); simple mode had
     // already carved the curve out, and the per-axis split extends the same
-    // rule to both fields in both modes. The controller stamps the `name`
-    // field automatically.
+    // rule to both fields in both modes. The controller strips any `name`
+    // field on the way in.
     // Two emitters pass an empty path, and both mean "reload everything":
     // `shaderProfileChanged` on a full-tree reload, and `overrideChanged` from
-    // the controller's `forgetCachedOverrideFiles`, which fires when somebody
-    // OUTSIDE the settings app writes to the profiles directory. The controller
-    // suppresses that broadcast for its own writes, which carry precise
-    // per-path signals instead.
+    // the controller's `revertPending`, which cannot say which paths a
+    // whole-config reload moved. Ordinary edits carry precise per-path signals
+    // instead.
     function _pathAffectsThisCard(path) {
         if (path === "")
             return true;
@@ -739,43 +714,6 @@ Item {
             root._shaderRegistryRev++;
         }
 
-        // The refusal latch's guaranteed release, and it has to be THIS signal.
-        //
-        // The latch is what stops a drag re-issuing a write the controller is
-        // refusing, and only a refresh the card did not drive itself clears it.
-        // The discard that causes those refusals does NOT end with a
-        // path-agnostic broadcast: its terminal handler emits `overrideChanged`
-        // only for the profile files the worker actually restored, so a card
-        // none of those paths reaches never refreshes, and the latch would stay
-        // set for the rest of the session. Nothing reconstructs the card to
-        // recover, because the list's Loaders latch built and never unload.
-        //
-        // `pendingChangesChanged` is emitted unconditionally by that same
-        // handler, so it is the one signal every card is guaranteed to see when
-        // the discard settles. It also fires on ordinary writes, which is
-        // harmless: a card still mid-drag re-arms the latch on its very next
-        // refused tick, so this costs at most one extra toast per discard and
-        // keeps the anti-repeat property that matters.
-        function onPendingChangesChanged() {
-            // Deliberately just the flag, with no refresh alongside it. A card
-            // whose writes were all refused never entered the pending-snapshot
-            // map, so the discard has nothing of its to restore and its working
-            // values are the ones the user dragged, not what is on disk.
-            //
-            // That residue is now drag-rate only: the discrete refusal paths
-            // (`_writeAllShaderParams`, `commitCurveOverride`) restore
-            // themselves, and the two continuous ones deliberately do not,
-            // because refreshing per tick would drag the control back out from
-            // under the user. What is left is a slider still showing the value
-            // the user dragged to. It does NOT correct itself on the next edit
-            // — the next accepted write commits that value — which is the
-            // reasonable outcome for a drag the user meant, so it is left
-            // alone. Refreshing here instead would also be defensible, but it
-            // would put a full timing refresh on a signal every card receives,
-            // for a property that is one bool.
-            root._writesRefused = false;
-        }
-
         target: settingsController.animationsPage
     }
 
@@ -849,19 +787,19 @@ Item {
                 // writes a shader. Blocking an inherited shader is the picker's job and
                 // the picker is reachable independently of this toggle.
                 //
-                // Shader first, then timing: if the timing clear fails
-                // mid-flight (a QFile error inside clearOverride's on-disk
-                // write), the shader side is already committed, so a partial
-                // failure still moves toward the user's intent instead of
-                // recording neither half.
+                // Shader first, then timing: if the timing clear does not land,
+                // the shader side is already committed, so a partial failure
+                // still moves toward the user's intent instead of recording
+                // neither half. Both halves are config keys, so "committed"
+                // here means staged for Save, and one Discard reverts either.
                 if (root._anyWritePathSupportsShaderLeg())
                     root._clearShaderOverrideOnAll();
 
-                // Gated: the controller refuses (and toasts) during an async
-                // discard, and on a partial failure — closing the editor anyway
-                // left the toggle visibly off beside a message saying it could
-                // not be changed. refreshFromTree has already run inside the
-                // call, so the toggle re-derives from the tree either way.
+                // Gated on the clear having actually removed something: a clear
+                // that found nothing to clear must not flip the latch, or the
+                // editor closes on a card whose state never changed.
+                // refreshFromTree has already run inside the call, so the
+                // toggle re-derives from the tree either way.
                 if (root._clearOverrideOnAll())
                     root._editingTiming = false;
             }
@@ -886,6 +824,7 @@ Item {
                 divergentPathCount: root._divergentPathCount
                 writePathCount: root._writePaths.length
                 parentChain: root.parentChainText()
+                shaderIsolationRoot: root._shaderIsolationRoot
                 inheritSummary: root.inheritSummaryText()
                 // The return is deliberately not read. Both branches are
                 // self-correcting: the writer's `finally` runs
@@ -929,6 +868,9 @@ Item {
                 enableLocking: true
                 enableRandomize: true
                 enableImage: false
+                // Live preview of the picked pack in the expanded shader
+                // section, on the animations page's own preview controller.
+                shaderPreviewController: settingsController.animationsPage.previewController
                 // Live per-field commit — the slider's 30 Hz drag fires
                 // `durationEdited` on every move, writing only the duration
                 // field of the merged Profile JSON; curve edits (mode combo,
@@ -954,9 +896,9 @@ Item {
                 // via `overrideEnabled` and the latch is false. Reverting the
                 // last remaining field then drops overrideEnabled and collapses
                 // the editor under the cursor of the user who just clicked
-                // inside it. Gated on the return, which is false ONLY when the
-                // controller refused the call outright and attempted nothing (an
-                // async discard owns the tree, and it toasts). A PARTIAL failure
+                // inside it. Gated on the return, which is a CHANGED COUNT: 0
+                // means the field was already inherited everywhere and nothing
+                // needed doing, so the editor stays as it was. A PARTIAL result
                 // reports the count that did land and so still latches the editor
                 // open, because the primary path really was cleared and
                 // collapsing the card under the user is the regression this whole

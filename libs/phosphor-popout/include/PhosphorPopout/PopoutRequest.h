@@ -94,6 +94,7 @@ class PHOSPHORPOPOUT_EXPORT PopoutRequest
     Q_PROPERTY(PhosphorPopout::ExclusiveMode exclusive MEMBER exclusive)
     Q_PROPERTY(QString scope MEMBER scope)
     Q_PROPERTY(bool keyboardFocus MEMBER keyboardFocus)
+    Q_PROPERTY(bool exclusiveKeyboard MEMBER exclusiveKeyboard)
     Q_PROPERTY(bool dismissOnFocusLoss MEMBER dismissOnFocusLoss)
     Q_PROPERTY(QVariantMap props MEMBER props)
 
@@ -161,6 +162,13 @@ public:
     // calendar popout does not need keyboard while it's just showing
     // dates.
     bool keyboardFocus = true;
+
+    // Whether the popout must hold the keyboard EXCLUSIVELY while open,
+    // without being Modal: no scrim, other popouts stay allowed, but the
+    // compositor routes every key here until the surface goes away. The
+    // case is a credential prompt (polkit) that cannot lose focus to a
+    // click on another window. Ignored when keyboardFocus is false.
+    bool exclusiveKeyboard = false;
 
     // Whether the popout should close when focus moves away from it.
     // Toggleable so plugins can pin a popout open. Examples are the

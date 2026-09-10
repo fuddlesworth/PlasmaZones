@@ -1,0 +1,78 @@
+{
+    "id": "phosphor-trail",
+    "name": "Phosphor Trail",
+    "description": "A single smooth tube of light follows the recent path of the pointer. A thin bright core sits inside a soft bloom and the stroke keeps the same width from end to end, dimming with age rather than narrowing to a point. The whole tube is one colour at any moment, drawn from the cyan to rose spectrum, and that colour drifts slowly along the spectrum as the seconds pass. A click sends a bright pulse running outward along the stroke. It can be set to appear only once the pointer passes a chosen speed, and to follow a smoothed path so an unsteady hand still gets a clean curve.",
+    "author": "PlasmaZones",
+    "version": "3.0",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 96,
+    "trailSeconds": 2.0,
+    "trailWindowParam": "lifetime",
+    "parameters": [
+        {
+            "id": "width",
+            "name": "Width",
+            "type": "float",
+            "default": 6.0,
+            "min": 1.0,
+            "max": 24.0,
+            "description": "Width of the bright core of the stroke (px)"
+        },
+        {
+            "id": "lifetime",
+            "name": "Lifetime",
+            "type": "float",
+            "default": 0.9,
+            "min": 0.2,
+            "max": 2.0,
+            "description": "How long a point on the path stays lit (seconds)"
+        },
+        {
+            "id": "glow",
+            "name": "Glow",
+            "type": "float",
+            "default": 1.2,
+            "min": 0.0,
+            "max": 3.0,
+            "description": "Strength of the soft bloom around the core, 0 to leave only the core"
+        },
+        {
+            "id": "colorCycle",
+            "name": "Colour cycle",
+            "type": "float",
+            "default": 10.0,
+            "min": 0.0,
+            "max": 60.0,
+            "description": "Seconds the colour takes to travel once through the whole spectrum, 0 to hold one colour"
+        },
+        {
+            "id": "activationSpeed",
+            "name": "Activation speed",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2000.0,
+            "description": "Pointer speed below which the stroke is not drawn (px per second), 0 to always draw"
+        },
+        {
+            "id": "smoothing",
+            "name": "Smoothing",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much the path is smoothed before it is drawn, 0 to follow it exactly"
+        },
+        {
+            "id": "clickFlare",
+            "name": "Click flare",
+            "type": "float",
+            "default": 0.9,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Brightness of the pulse a click sends along the stroke, 0 to disable"
+        }
+    ]
+}

@@ -44,6 +44,8 @@ FocusScope {
     property Component contentComponent: null
 
     Loader {
+        id: contentLoader
+
         parent: body
         anchors.fill: parent
         active: root.open && root.contentComponent !== null
@@ -124,14 +126,21 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        radius: Tokens.radius_l
+        radius: Tokens.radius_tile
         color: Theme.surface_container
         // An outlined edge, matching the tiles the panel slides over. Without
         // it the panel is the same colour as the surface behind it and has no
         // edge at all, so a drill-in reads as the tiles vanishing rather than
         // as a new view arriving.
-        border.width: 1
-        border.color: Theme.outline_variant
+        border.width: 0
+
+        // Depth is a stroke, not a border or a shadow (05 R2).
+        SpectrumStroke {
+            anchors.fill: parent
+            radius: parent.radius
+            t: 0.5
+            active: true
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -209,6 +218,14 @@ FocusScope {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                // A bare Item derives no implicit size from an anchors-filled
+                // child, so without this `body.implicitHeight` is permanently
+                // 0 and the panel's own implicitHeight (and the host's
+                // max against the grid) can never account for the detail
+                // view — a tall one is clipped. Read from the loaded ITEM's
+                // intrinsic implicitHeight rather than from the loader's
+                // filled size, which would close a loop through the anchor.
+                implicitHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
             }
         }
     }

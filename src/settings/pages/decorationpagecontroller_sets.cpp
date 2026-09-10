@@ -31,6 +31,8 @@
 #include <QStandardPaths>
 #include <QStringList>
 
+#include <functional>
+
 namespace PlasmaZones {
 
 namespace {
@@ -50,12 +52,17 @@ struct StagedEntry
     PhosphorSurfaceShaders::DecorationProfile profile;
 };
 
+/// The controller's family gate, handed in because this function has no
+/// controller: given a surface path and a chain, the pack ids that path's
+/// family cannot resolve.
+using UnresolvableFn = std::function<QStringList(const QString&, const QStringList&)>;
+
 /// Validate + stage every entry in @p root. Whole-set discipline: one
 /// malformed entry rejects the set rather than committing partial state.
 /// Shared by validate (the import / apply gate) and apply (the commit), so the
 /// two can never drift apart on what counts as a valid entry.
 /// @return false when any entry is malformed, or when the set covers nothing.
-bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
+bool stageEntries(const QJsonObject& root, const UnresolvableFn& unresolvable, QList<StagedEntry>* staged)
 {
     using PhosphorSurfaceShaders::DecorationProfile;
 
@@ -110,6 +117,19 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
         if (profile == DecorationProfile{}) {
             qCWarning(lcConfig) << "decorationset: profile for" << path << "engages no field, refusing the set";
             return false;
+        }
+        // The path check above admits the pointer surface, but a chain there
+        // has to be pointer packs, and a chain anywhere else surface packs:
+        // the pass that draws each surface knows only its own contract, so a
+        // pack from the other family would persist and then never render.
+        // Same gate as DecorationPageController::setChain.
+        if (profile.chain) {
+            const QStringList foreign = unresolvable(path, *profile.chain);
+            if (!foreign.isEmpty()) {
+                qCWarning(lcConfig) << "decorationset: profile for" << path
+                                    << "names packs the surface cannot draw, refusing the set:" << foreign;
+                return false;
+            }
         }
         staged->push_back({path, profile});
     }
@@ -182,19 +202,23 @@ void DecorationPageController::initSetsStore()
         return root;
     };
 
-    config.validate = [](const QJsonObject& root) -> bool {
+    const UnresolvableFn unresolvable = [this](const QString& path, const QStringList& chain) {
+        return unresolvableChainPacks(path, chain);
+    };
+
+    config.validate = [unresolvable](const QJsonObject& root) -> bool {
         QList<StagedEntry> staged;
-        return stageEntries(root, &staged);
+        return stageEntries(root, unresolvable, &staged);
     };
 
     // ── Apply: merge into ONE tree and persist once. Surfaces the set does
     //    not cover keep their current overrides (motion-set semantics).
-    config.apply = [this](const QJsonObject& root) -> bool {
+    config.apply = [this, unresolvable](const QJsonObject& root) -> bool {
         if (!m_settings) {
             return false;
         }
         QList<StagedEntry> staged;
-        if (!stageEntries(root, &staged)) {
+        if (!stageEntries(root, unresolvable, &staged)) {
             return false;
         }
         DecorationProfileTree tree = this->tree(); // a COPY: the closure mutates it

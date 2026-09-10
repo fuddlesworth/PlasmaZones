@@ -998,6 +998,33 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 27,
         .tags = {QString(Tag::LayoutEngine)},
     });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenTabGroup),
+        .slotFor = constantSlot(ActionSlot::OpenTabGroup),
+        .validate =
+            [](const QJsonObject& p) {
+                // Non-empty on the TRIMMED value: a name of spaces names
+                // nothing, and the daemon trims before it compares.
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isString()) {
+                    return false;
+                }
+                const QString name = v.toString().trimmed();
+                return !name.isEmpty() && name.size() <= kMaxTabGroupNameLength;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("string"),
+                     .max = static_cast<double>(kMaxTabGroupNameLength)}},
+        .category = QStringLiteral("layoutEngine"),
+        // 29..38 are taken by the scroll-behaviour toggle table, the
+        // sticky-handling and strip-axis enums and the focus-follows-mouse
+        // cap; the category's uniqueness test pins this.
+        .displayOrder = 39,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
     // Effect-consumed, unlike its Open* siblings: Tag::EffectVerdict (not
     // LayoutEngine) admits the rule into the KWin effect's rule set, where
     // the open-time fullscreen flip lives. The VERDICT tag rather than

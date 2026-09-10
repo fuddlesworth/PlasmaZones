@@ -64,6 +64,10 @@ namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 }
 
+namespace PhosphorPointerShaders {
+class PointerShaderRegistry;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -104,7 +108,7 @@ class RegistryShaderPreviewBackend;
 #include "settings/pages/snappingzonescontroller.h"
 #include "settings/pages/snappingbehaviorcontroller.h"
 #include "settings/pages/snappingeffectscontroller.h"
-#include "settings/pages/snappingshaderspagecontroller.h"
+#include "settings/pages/overlayspagecontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/decorationpagecontroller.h"
 #include "settings/services/stagingservice.h"
@@ -134,11 +138,17 @@ class SettingsController : public QObject
     Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
+    // Whether this build carries the Phosphor shell (BUILD_PHOSPHOR_SHELL).
+    // Pages that list the shell's own surfaces (the `shell.phosphor.*`
+    // decoration cards) bind their model on this so a plain build never shows
+    // a tree no surface reads.
+    Q_PROPERTY(bool hasPhosphorShell READ hasPhosphorShell CONSTANT)
 
-    // What's New
-    Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
+    // What's New — see loadWhatsNew() for the baseline snapshot contract.
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
+    Q_PROPERTY(QString whatsNewBaselineVersion READ whatsNewBaselineVersion CONSTANT)
+    Q_PROPERTY(int unseenWhatsNewReleaseCount READ unseenWhatsNewReleaseCount CONSTANT)
 
     // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
@@ -172,7 +182,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
     Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
-    Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
+    Q_PROPERTY(OverlaysPageController* overlaysPage READ overlaysPage CONSTANT)
     Q_PROPERTY(WindowAppearanceController* windowAppearancePage READ windowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -393,6 +403,15 @@ public:
     }
     void setAdvancedMode(bool advanced);
 
+    bool hasPhosphorShell() const
+    {
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
+        return true;
+#else
+        return false;
+#endif
+    }
+
     Settings* settings()
     {
         return &m_settings;
@@ -402,22 +421,12 @@ public:
         return &m_daemonController;
     }
     // What's New
-    QString lastSeenWhatsNewVersion() const
-    {
-        return m_lastSeenWhatsNewVersion;
-    }
     bool hasUnseenWhatsNew() const;
-    QVariantList whatsNewEntries() const
-    {
-        return m_whatsNewEntries;
-    }
+    QVariantList whatsNewEntries() const;
+    QString whatsNewBaselineVersion() const;
+    int unseenWhatsNewReleaseCount() const;
     Q_INVOKABLE void markWhatsNewSeen();
 
-private:
-    /// Highest entry version in m_whatsNewEntries, or empty if no entries.
-    QString latestWhatsNewVersion() const;
-
-public:
     // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
@@ -572,7 +581,7 @@ public:
     }
     SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const;
-    SnappingShadersPageController* snappingShadersPage() const;
+    OverlaysPageController* overlaysPage() const;
     WindowAppearanceController* windowAppearancePage() const;
     TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const
@@ -593,7 +602,7 @@ public:
     }
     ProfilePageController* profilesPage() const
     {
-        return m_profilesPage;
+        return m_profilesPage.get();
     }
 
     PhosphorControl::ApplicationController* app() const
@@ -837,8 +846,9 @@ Q_SIGNALS:
     /// pageResetFailed. The animation branch reconciles value-based, so a
     /// refused revert leaves the page BADGED with no other word. The only
     /// refusal is a WRITE that could not complete, so `reason` is always
-    /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
-    /// first so a benign refusal during a global async discard never emits.
+    /// `ReasonOverridesNotCleared`. Since schema v8 the animation revert has
+    /// no failure mode a user can reach — it refuses only with no settings
+    /// object at all — so this is effectively a wiring-bug signal there.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
     void workspacesAtCapChanged();
@@ -935,6 +945,10 @@ private Q_SLOTS:
     void reloadLocalRuleStore(bool persisted);
 
 private:
+    /// Highest parseable entry version in m_whatsNewEntries, or empty.
+    QString latestWhatsNewVersion() const;
+    /// Reads the bundled release history into m_whatsNewEntries. Ctor-only.
+    void loadWhatsNew();
     /// Install the RuleController's label resolvers (settingscontroller_rulelookups.cpp).
     /// Called once from the ctor after m_rulesPage and the registries it reads exist.
     void installRuleLabelLookups();
@@ -1049,13 +1063,7 @@ private:
     /// same thing done to the in-memory session. The whole body runs under
     /// m_loading, and the caller owns the trailing setNeedsSave(false).
     ///
-    /// @param treatAsyncRevertAsClean whether an animation revert refused because
-    ///        an async discard already owns the snapshot map counts as clean. True
-    ///        on Discard, where that worker IS the restore. False on import, where
-    ///        the snapshots hold pre-import content for files just rewritten.
-    /// @return whether the animation page's snapshots came back clean. False means
-    ///         the adopt only partly landed and needsSave must not be cleared.
-    bool adoptOnDiskState(bool treatAsyncRevertAsClean);
+    void adoptOnDiskState();
 
     /// Shared tail of the two KZones import entry points: stash the layout to
     /// auto-select, schedule the layout refresh, report count and message to QML,
@@ -1121,18 +1129,23 @@ private:
     /// Safe only while `~DecorationPageController` stays `= default`.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
     DecorationPageController* m_decorationPage = nullptr;
+    /// Settings-side mirror of the daemon's / compositor's pointer-pack
+    /// registry — the pack family the `pointer` decoration surface draws from.
+    /// Same parent / construction-order situation as the two registries above:
+    /// a QObject child of `this` constructed before the page controller that
+    /// borrows it, so insertion-order child deletion tears the registry down
+    /// FIRST and the page's non-owned registry pointer dangles through its own
+    /// destruction. Safe only while that page's destructor stays `= default`.
+    PhosphorPointerShaders::PointerShaderRegistry* m_pointerShaderRegistry = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
-    /// Profiles page sub-controller. Parented to `this`; owns its ProfileStore
-    /// internally. Registered via regPage so its active-pointer staging
-    /// participates in the framework's Save/Discard.
-    ProfilePageController* m_profilesPage = nullptr;
-    /// Settings-side mirror of the daemon's overlay-shader registry —
-    /// drives the read-only Snapping → Shaders browser. Same parent /
+    /// Settings-side mirror of the daemon's overlay-shader registry — drives
+    /// the Appearance → Overlays pages, both the read-only Library browser and
+    /// the Layouts assignment page that writes the tree. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.
-    /// The companion `m_snappingShadersPage` is declared further down as
+    /// The companion `m_overlaysPage` is declared further down as
     /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
     /// page borrows the layout registry — see the declaration-order
     /// invariant block below.
@@ -1142,13 +1155,15 @@ private:
     // (T3.1). The backend borrows m_overlayShaderRegistry + m_settings; the
     // controller borrows the backend. Declared backend-before-controller so
     // reverse member destruction tears the controller down first;
-    // m_snappingShadersPage (declared later) borrows the controller and is
+    // m_overlaysPage (declared later) borrows the controller and is
     // destroyed before it.
     std::unique_ptr<RegistryShaderPreviewBackend> m_shaderPreviewBackend;
     std::unique_ptr<ShaderPreviewController> m_shaderPreviewController;
 
     DaemonController m_daemonController;
     QString m_lastSeenWhatsNewVersion;
+    QString m_whatsNewBaselineVersion;
+    int m_unseenWhatsNewReleaseCount = 0;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
     /// Simple/advanced UI mode. THE single source of the default: false
@@ -1221,7 +1236,7 @@ private:
     // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
     // m_localAlgorithmRegistry + m_localLayoutManager are borrowed by the
     // bundle's sources and by m_scriptLoader. Reverse-order member destruction
-    // runs, in order: the borrowers declared after them (~m_snappingShadersPage,
+    // runs, in order: the borrowers declared after them (~m_overlaysPage,
     // ~m_tilingAlgorithmPage, ~m_algorithmService, which disconnects its
     // registry watchers); ~m_scriptLoader, which unregisters scripted algorithms
     // while the registry is still alive (a UAF the QObject-child pattern had,
@@ -1266,7 +1281,7 @@ private:
     /// first and would double-free this object on close.
     std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
 
-    /// Snapping→Shaders page sub-controller. Same rationale as
+    /// Appearance→Overlays page sub-controller. Same rationale as
     /// `m_tilingAlgorithmPage`: borrows `m_localLayoutManager` (the registry
     /// walked by `shaderEffectUsages` for the "Used in:" reverse-lookup), so it
     /// MUST be a `unique_ptr<>` declared AFTER that registry — the unique_ptr
@@ -1275,7 +1290,7 @@ private:
     /// does not adopt it to the first-destroyed m_app (double-free on close).
     /// Borrows `m_overlayShaderRegistry` too, but that registry is a QObject
     /// child of `this` and survives until ~QObject — fine.
-    std::unique_ptr<SnappingShadersPageController> m_snappingShadersPage;
+    std::unique_ptr<OverlaysPageController> m_overlaysPage;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so
@@ -1337,6 +1352,24 @@ private:
     // determinism: m_app unregisters its tracked domains against live objects
     // instead of leaving the teardown order to self-nulling handles.
     std::unique_ptr<PhosphorControl::ApplicationController> m_app;
+
+    /// Profiles page sub-controller. Owns its ProfileStore internally, and
+    /// that store holds closures over `m_rulesPage` (a RuleController&).
+    ///
+    /// Hence the `unique_ptr`, following the `m_tilingAlgorithmPage` idiom: a
+    /// member unique_ptr resets BEFORE ~QObject reaches the raw children, so
+    /// this is destroyed while the RuleController it borrows is still alive.
+    /// As a plain child it would have gone the other way — ~QObject deletes
+    /// children in construction order, m_rulesPage first, leaving the store
+    /// holding a dangling reference for the rest of teardown. Still
+    /// constructed with parent `this`, because regPage adopts a parentless
+    /// page to m_app, which is destroyed first and would double-free it.
+    /// Registered via regPage so its active-pointer staging participates in
+    /// the framework's Save/Discard, which is why it is declared AFTER m_app:
+    /// reverse member order then destroys this page first, with m_app still up
+    /// to unregister it, exactly as the old explicit delete at the top of the
+    /// destructor body did.
+    std::unique_ptr<ProfilePageController> m_profilesPage;
 
     void buildApplicationController();
 

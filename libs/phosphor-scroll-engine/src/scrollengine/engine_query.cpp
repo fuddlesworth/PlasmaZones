@@ -21,6 +21,15 @@ namespace PhosphorScrollEngine {
 
 ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, int columnCountOverride) const
 {
+    // Desktop 0 / empty activity is the provider's "whatever the screen shows
+    // now" spelling, which is what every current-context caller wants.
+    return layoutParamsForKey(PhosphorEngine::PlacementStateKey{screenId, 0, QString()}, columnCountOverride);
+}
+
+ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::PlacementStateKey& key,
+                                                    int columnCountOverride) const
+{
+    const QString& screenId = key.screenId;
     ScrollLayoutParams params;
     QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
                                  : (m_availableGeometryProvider ? m_availableGeometryProvider(screenId) : QRect());
@@ -59,7 +68,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     if (m_contextGapProvider) {
         namespace PSK = PhosphorEngine::PerScreenKeys;
         namespace GR = PhosphorEngine::GapResolution;
-        const QVariantMap overrides = m_contextGapProvider(screenId);
+        const QVariantMap overrides = m_contextGapProvider(screenId, key.desktop, key.activity);
         // The shared atomic-layer resolution both sibling pipelines use (the
         // snap-side GeometryUtils and the autotile PerScreenConfigResolver):
         // an override map that carries outer-gap info wins WHOLESALE, and
@@ -468,6 +477,26 @@ QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(c
                     static_cast<qreal>(r.height()) / area.height())});
     }
     return out;
+}
+
+ScrollStripModel ScrollEngine::stripModelForScreen(const QString& screenId) const
+{
+    // Non-creating lookup, like visibleTilesWithRects. Unlike that walk an
+    // owned screen with no state still answers: the map draws an empty strip
+    // for it, and it needs the axis and viewport to know which way to draw.
+    // The params are resolved once and handed down; the strip runs the one
+    // relayout inside stripModel.
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state) {
+        ScrollStripModel empty;
+        if (params.workArea.isValid()) {
+            empty.axis = params.axis;
+            empty.viewportPx = params.axis.mainSize(params.workArea);
+        }
+        return empty;
+    }
+    return state->strip().stripModel(params);
 }
 
 QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const

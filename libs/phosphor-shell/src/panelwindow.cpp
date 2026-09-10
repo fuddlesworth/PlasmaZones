@@ -4,8 +4,12 @@
 #include <PhosphorShell/PanelWindow.h>
 
 #include <QLoggingCategory>
+#include <QPoint>
 #include <QRect>
+#include <QRectF>
+#include <QRegion>
 #include <QSize>
+#include <QVariantList>
 
 namespace {
 Q_LOGGING_CATEGORY(lcPanelWindow, "phosphorshell.panelwindow")
@@ -128,6 +132,67 @@ void PanelWindow::setInteractiveThickness(int thickness)
 int PanelWindow::effectiveInputThickness() const
 {
     return m_interactiveThickness > 0 ? m_interactiveThickness : m_thickness;
+}
+
+QVariant PanelWindow::inputRegion() const
+{
+    return m_inputRegion;
+}
+
+void PanelWindow::setInputRegion(const QVariant& region)
+{
+    // A QML `[]` arrives as a QVariantList (or a QJSValue holding one), and
+    // `undefined` / `null` as an invalid variant, which is the unset state.
+    // Normalise to a QVariantList here so the change check compares values
+    // rather than two QJSValue wrappers that never compare equal.
+    QVariant normalised;
+    if (region.isValid() && !region.isNull()) {
+        if (region.canConvert<QVariantList>()) {
+            normalised = QVariant(region.toList());
+        } else {
+            qCWarning(lcPanelWindow) << "inputRegion expects a list of rects, got" << region.typeName()
+                                     << "— treating it as an empty region (click-through)";
+            normalised = QVariant(QVariantList{});
+        }
+    }
+    // Two invalid variants compare equal, and an invalid one never equals
+    // a list, so this covers unset → set, set → unset and value changes.
+    if (m_inputRegion == normalised) {
+        return;
+    }
+    m_inputRegion = normalised;
+    Q_EMIT inputRegionChanged();
+}
+
+bool PanelWindow::hasExplicitInputRegion() const
+{
+    return m_inputRegion.isValid();
+}
+
+QRegion PanelWindow::explicitInputRegion(const QVariant& region, QSize surfaceSize)
+{
+    QRegion result;
+    if (!region.isValid() || surfaceSize.isEmpty()) {
+        return result;
+    }
+    const QRect surface(QPoint(0, 0), surfaceSize);
+    const QVariantList rects = region.toList();
+    for (const QVariant& entry : rects) {
+        // Qt.rect() in QML is a QRectF; a C++ caller may hand a QRect.
+        QRect rect;
+        if (entry.canConvert<QRectF>()) {
+            rect = entry.toRectF().toAlignedRect();
+        } else if (entry.canConvert<QRect>()) {
+            rect = entry.toRect();
+        } else {
+            continue;
+        }
+        const QRect clamped = rect.intersected(surface);
+        if (!clamped.isEmpty()) {
+            result += clamped;
+        }
+    }
+    return result;
 }
 
 int PanelWindow::cornerCarveRadius() const

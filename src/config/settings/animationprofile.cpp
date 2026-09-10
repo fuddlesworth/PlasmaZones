@@ -58,6 +58,17 @@ void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
 }
 } // namespace
 
+bool Settings::hasExplicitAnimationProfile() const
+{
+    // Deliberately NOT derived from animationProfile(): that accessor
+    // substitutes the ConfigDefaults blob for an absent key (see
+    // readProfileObject above), so every field is engaged whether or not the
+    // user has ever opened the page. Callers that must rank the global
+    // profile as user INTENT rather than as a shipped default need the
+    // storage fact, which only the store can answer.
+    return m_store->hasExplicitValue(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+}
+
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
     // Only a MALFORMED blob returns an empty object here (yielding a
@@ -250,6 +261,13 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // call site: a refresh inside the helper would run AFTER that read, and the
 // no-op guard would compare against the stale value — swallowing exactly the
 // healing write the refresh exists to enable.
+/// Reparse the backend from disk IF it holds no pending writes.
+/// Called by every composite-value setter (animation Profile blob,
+/// shader/decoration profile trees, autotile per-algorithm map,
+/// snapping and tiling trigger lists including the zoneSpan pair, and
+/// the named-workspace declaration list)
+/// before its stale-sensitive read; see the definition for the
+/// cross-process coherence rationale.
 void Settings::refreshCleanBackendFromDisk()
 {
     if (!m_configBackend || m_configBackend->isDirty()) {

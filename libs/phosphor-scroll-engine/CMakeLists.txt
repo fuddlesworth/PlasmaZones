@@ -35,8 +35,10 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollstrip_relayout.cpp
     src/scrollstrip_sizing.cpp
     src/scrollstrip_sizing_height.cpp
+    src/scrollstrip_model.cpp
     src/scrollengine/engine_core.cpp
     src/scrollengine/engine_overrides.cpp
+    src/scrollengine/engine_grouping.cpp
     src/scrollengine/engine_context.cpp
     src/scrollengine/enginelimits.h
     src/scrollengine/engine_apply.cpp
@@ -44,6 +46,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/scrollpark_p.h
     src/scrollengine/engine_park.cpp
     src/scrollengine/engine_snapshot.cpp
+    src/scrollengine/engine_overview.cpp
     src/scrollengine/drag_autoscroll.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp

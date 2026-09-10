@@ -83,9 +83,10 @@ public:
      * Idempotent — re-registering the same id updates the callback in place;
      * the description is updated in the registry record but is not re-sent to
      * the backend for an already-registered id (Registry::bind contract).
-     * Ids colliding with the settings-driven table or the indexed slot
-     * prefixes are rejected with a warning: an adhoc unregister on such an id
-     * would purge the persistent binding's saved kglobalshortcutsrc record.
+     * Ids colliding with the settings-driven table or any of the three
+     * indexed slot prefixes are rejected with a warning: an adhoc unregister
+     * on such an id would purge the persistent binding's saved
+     * kglobalshortcutsrc record.
      */
     void registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                std::function<void()> callback) override;
@@ -148,6 +149,16 @@ public:
      */
     QVariantList cheatsheetModel() const;
 
+    /**
+     * The same catalog UNCOMPRESSED: one row per registered action, with
+     * the same keys as cheatsheetModel() and the same category / row
+     * ordering, but no family folding, so a consumer that places chords
+     * spatially (the Phosphor shell cheatsheet drawn on the placement map)
+     * sees move_window_left and move_window_right as two rows with their
+     * own triggers. Served over org.plasmazones.Control.getShortcutsJson.
+     */
+    QVariantList shortcutCatalog() const;
+
     /// One collapsible cheatsheet family: parallel id / expected-final-token
     /// lists, the combined row label, the tail token for the merged chip,
     /// and an optional combined tooltip for the merged row.
@@ -173,11 +184,12 @@ public:
 
     /**
      * Every action id in the STATIC registration table
-     * (shortcutmanager_table.cpp), in declaration order. The FOUR indexed slot
-     * families (quick_layout_N, snap_to_zone_N, workspace_move_slot_N,
-     * workspace_focus_slot_N, kIndexedSlotCount ids each) are registered
-     * separately by buildEntries() and are NOT returned here — this is the
-     * static portion of the registration surface, not all of it.
+     * (shortcutmanager_table.cpp), in declaration order. The FIVE indexed slot
+     * families (quick_layout_N, snap_to_zone_N, scroll_focus_tab_N,
+     * workspace_move_slot_N, workspace_focus_slot_N, kIndexedSlotCount ids
+     * each) are registered separately by buildEntries() and are NOT returned
+     * here — this is the static portion of the registration surface, not all
+     * of it.
      *
      * The table is an array in its own TU reached only through
      * ShortcutTable::staticEntries(), and
@@ -236,6 +248,8 @@ Q_SIGNALS:
     void workspaceMoveColumnRequested(int delta);
     void workspaceReorderRequested(int delta);
     void workspaceMoveToMonitorRequested(const QString& direction);
+    /// The workspace overview toggle chord fired.
+    void overviewToggleRequested();
     /// Quick-shortcut slot (1-based): send the active window to the Nth
     /// workspace of the acting monitor's own list.
     void workspaceMoveSlotRequested(int slot);
@@ -293,6 +307,9 @@ Q_SIGNALS:
     void scrollConsumeOrExpelRequested(int delta);
     void scrollCenterColumnRequested();
     void scrollToggleColumnTabbedRequested();
+    void scrollCycleTabRequested(int delta);
+    /// One of the tab-ordinal slots fired; @p ordinal is 1-based.
+    void scrollFocusTabRequested(int ordinal);
     void scrollToggleWindowedFullscreenRequested();
     void scrollCycleColumnWidthRequested(int delta);
     void scrollAdjustColumnWidthRequested(int deltaPercent);
@@ -386,6 +403,11 @@ private:
     quint64 m_registrationGeneration = 0;
 
     void buildEntries();
+    /// The catalog rows before family compression, in registration order:
+    /// the shared producer behind cheatsheetModel() and shortcutCatalog().
+    QVector<QVariantMap> catalogRows() const;
+    /// Category blocks in display order, then authored row order within.
+    static void sortCatalogRows(QVector<QVariantMap>& rows);
     /// Re-applies every entry's current sequence; returns true when any
     /// binding actually differed from the registry's stored sequence.
     bool rebindAll();

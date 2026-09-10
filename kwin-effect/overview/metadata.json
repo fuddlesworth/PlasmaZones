@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Category": "Window Management",
+        "Description": "Shows every workspace of every monitor at once, zoomed out, so windows can be moved between workspaces and monitors by dragging",
+        "EnabledByDefault": true,
+        "License": "GPL",
+        "Name": "PlasmaZones Overview",
+        "Authors": [
+            {
+                "Name": "fuddlesworth"
+            }
+        ]
+    },
+    "org.kde.kwin.effect": {
+        "enabledByDefaultMethod": true
+    }
+}

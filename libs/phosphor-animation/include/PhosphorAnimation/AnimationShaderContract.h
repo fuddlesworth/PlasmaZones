@@ -371,15 +371,15 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 /// (new frame) by `iTime`, cross-fading the captured old content
 /// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
 /// for non-morph transitions (window.open/close/etc.), which a shader can
-/// treat as "no morph". COMPOSITOR PATH ONLY, and deliberately NOT
-/// declared by the canonical shared header: geometry-morph packs are
-/// compositor-only (`appliesTo: ["geometry"]`), so each one (flow, fold,
-/// phosphor-stream, ripple-snap, stretch, window-morph) declares the pair
-/// as plain default-block uniforms with no guard — the daemon never
-/// bakes or attaches such packs (`shaderEffectIsCompositorOnly` gates
-/// the warm-bake, SurfaceAnimator, the daemon-target bake tests, and
-/// shadervalidate), so its strict SPIR-V path never sees the loose
-/// declarations.
+/// treat as "no morph". Pushed by the COMPOSITOR PATH ONLY, and
+/// deliberately NOT declared in the shared header's kwin branch. The
+/// preview's UBO branch carries both as block members (the settings
+/// preview stages every class, geometry included), so a geometry pack
+/// declares the pair as default-block uniforms inside its own
+/// `#ifdef PLASMAZONES_KWIN` block and reads the UBO members otherwise.
+/// The daemon never attaches such packs (`shaderEffectIsCompositorOnly`
+/// gates the warm-bake and SurfaceAnimator); the offline validator bakes
+/// every pack on both branches and so needs the guard to hold.
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
 
@@ -397,13 +397,12 @@ inline constexpr const char* kIToRect = "iToRect";
 /// window is painted only during its own output's pass, so a
 /// deformation toward a foreign-output icon clips at that output's
 /// edge. COMPOSITOR PATH ONLY and deliberately NOT declared by the
-/// canonical shared header. Unlike `iFromRect` / `iToRect` (whose
-/// geometry-pack consumers are compositor-only and declare them
-/// unguarded), the packs that read this one (genie, phosphor-siphon)
-/// are appearance-class and DAEMON-CAPABLE, so each declares it inside
-/// its own `#ifdef PLASMAZONES_KWIN` block — that guard is what keeps
-/// the daemon's strict SPIR-V bake of these dual-runtime packs away
-/// from the loose declaration.
+/// canonical shared header's kwin branch. Like `iFromRect` / `iToRect`
+/// it is a UBO member on the preview branch, so the packs that read it
+/// (genie, phosphor-siphon) declare it inside their own
+/// `#ifdef PLASMAZONES_KWIN` block — that guard is what keeps the
+/// strict SPIR-V bake of these dual-runtime packs away from the loose
+/// declaration.
 inline constexpr const char* kIIconRect = "iIconRect";
 
 /// `sampler2D uOldWindow` — snapshot of the window's content captured at
@@ -416,8 +415,8 @@ inline constexpr const char* kIIconRect = "iIconRect";
 /// declared by the canonical header — only the `iHasOldWindow` gate int
 /// is; packs that sample old content opt in via
 /// `data/animations/shared/old_content.glsl`, which declares the sampler
-/// unguarded: every including pack is compositor-only, excluded from the
-/// daemon's SPIR-V bake entirely via `shaderEffectIsCompositorOnly`.
+/// under `PLASMAZONES_KWIN` and aliases it onto `uTexture3` on the
+/// preview branch, so a tab pack compiles on both.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
 /// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface

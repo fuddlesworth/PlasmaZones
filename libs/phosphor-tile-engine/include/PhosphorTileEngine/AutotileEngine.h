@@ -379,6 +379,7 @@ public:
     void pruneStatesForDesktop(int removedDesktop) override;
     void reapDesktopState(int desktop) override;
     void renumberDesktopState(const QHash<int, int>& oldToNew) override;
+    void renumberDesktopsAfterRemoval(int removedDesktop) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState entries for activities not in the given set
@@ -454,6 +455,16 @@ public:
      * @return Pointer to PhosphorTiles::TilingState (owned by engine)
      */
     PhosphorTiles::TilingState* tilingStateForScreen(const QString& screenId);
+
+    /**
+     * @brief Get the tiling state for an explicit (screen, desktop, activity) key
+     *
+     * The per-key form of tilingStateForScreen: creates the state when it does
+     * not exist yet, with the same known-screen gate and the same config
+     * seeding. A cross-desktop handoff uses it to adopt a window into a
+     * desktop the screen is not currently showing.
+     */
+    PhosphorTiles::TilingState* tilingStateForKey(const PhosphorEngine::TilingStateKey& key);
 
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
     const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
@@ -569,7 +580,7 @@ public:
 
     QString engineId() const override
     {
-        return QStringLiteral("autotile");
+        return PhosphorEngine::WindowPlacement::autotileEngineId();
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
@@ -1102,12 +1113,15 @@ public:
     /// floats them — an optimistic claim would phantom-key the window);
     /// decides via the store's live-instance-excluding peekForReclaim;
     /// requires the recorded home in the LIVE autotile set AND the record's
-    /// (desktop, activity) to equal the home screen's current key; returns
+    /// (desktop, activity) to match the home screen's current key through
+    /// recordContextMatchesLive, which exempts the sticky and unknown-context
+    /// sentinel records; returns
     /// the REAL adoption outcome verified by membership, sweeping the
     /// phantom key on a refusal.
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
                                 int minHeight) override;
     QString heldScreenForWindow(const QString& windowId) const override;
+    std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -1398,6 +1412,26 @@ public:
     /// tiled here (or has closed).
     QRect lastManagedRect(const QString& rawWindowId) const override;
 
+    /// IOverviewModelSource: the windows this engine holds under @p key, read
+    /// straight from the existing TilingState without creating one. Tiled
+    /// windows carry their calculated zone (an over-cap window carries the
+    /// tile rect it was last applied at), floats carry the last tile rect
+    /// this engine emitted for them, if any. Implemented in
+    /// src/autotileengine/engine_overview.cpp.
+    std::optional<QList<PhosphorEngine::OverviewWindowEntry>>
+    overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key) const override;
+
+    /// The window-order index a window dropped at @p pos should take in the
+    /// state under @p key: the order position of the tiled window whose
+    /// calculated zone contains the point, or the end of the order when no
+    /// zone does. Answers 0 for a key with no state. The unit is the one
+    /// handoffReceive consumes through HandoffContext::insertIndex (a raw
+    /// windowOrder() position, floats counted), so the overview can hand the
+    /// result straight to a cross-desktop receive. Pure read: no state is
+    /// created and no drag preview is consulted. Implemented in
+    /// src/autotileengine/engine_overview.cpp.
+    int insertIndexForPoint(const PhosphorEngine::PlacementStateKey& key, const QPoint& pos) const;
+
 private Q_SLOTS:
     void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);
@@ -1434,6 +1468,17 @@ private:
     void dropClosedWindowFromDragPreview(const QString& windowId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
+    /// The body of recalculateLayout for an explicit key and its state: runs
+    /// the algorithm and stores the zones on @p state without applying any
+    /// geometry. recalculateLayout is this for the screen's current key; a
+    /// cross-desktop handoff calls it for a non-current key so that state's
+    /// calculatedZones reflect the arrival while the visible desktop is left
+    /// alone.
+    bool recalculateLayoutForState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
+    /// After a cross-desktop handoffReceive pulled a window out of another
+    /// state of this engine, reflow that state: a full retile when it is its
+    /// screen's current key, a zone recompute otherwise. No-op for nullopt.
+    void reflowPriorKeyAfterHandoff(const std::optional<PhosphorEngine::TilingStateKey>& priorKey);
     void applyTiling(const QString& screenId);
 
     /**
@@ -1492,6 +1537,29 @@ private:
     bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
                                        QStringList& releasedWindows, bool drainOverflow = true,
                                        bool clearScreenOrderMaps = true);
+
+    /**
+     * @brief Move a whole TilingState from one context key to another, with
+     *        everything else keyed alongside it.
+     *
+     * The shared body of the sticky-unpin migration and the post-removal
+     * desktop renumber. Both move a state between keys on the SAME screen and
+     * must carry the same set: the per-key user-tuned split ratio and master
+     * count, the stashed script bag, and every reverse-map entry. A partial
+     * move parts a layout from its script state, and restore never consumes a
+     * stranded bag, so the old key would keep one ready to hand to whatever
+     * state is built there next.
+     *
+     * A state already sitting at @p newKey is displaced. If it holds windows
+     * they go through the full teardown and are reported through
+     * windowsReleased, so the daemon's restore consumers can re-home them —
+     * a bare delete would strand their reverse-map entries pointing at a key
+     * that now resolves to the migrated state, which does not contain them.
+     *
+     * @return Whether a state existed at @p oldKey and was moved.
+     */
+    bool migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
+                         const PhosphorEngine::PlacementStateKey& newKey);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.
@@ -1654,8 +1722,9 @@ private:
      *
      * Every path that stops managing a window owes this, or applyTiling's
      * drain emits activateWindowRequested for a window this engine no longer
-     * holds. Shared by removeWindow, handoffRelease and the insert refusal
-     * sweep so the three cannot drift; see purgeFromPendingOrders for the
+     * holds. Shared by every drop path — removeWindow, handoffRelease,
+     * the insert refusal, the shared phantom sweep and the off-autotile focus
+     * arm — so none of them can drift; see purgeFromPendingOrders for the
      * pending-order half of the same obligation.
      */
     void purgePendingFocusForWindow(const QString& windowId);
@@ -1702,7 +1771,18 @@ private:
     /**
      * @brief Shared toggle-float implementation for toggleFocusedWindowFloat/toggleWindowFloat
      *
-     * Toggles the floating state, retiles, and emits windowFloatingChanged.
+     * Flips the floating state, retiles, and emits windowFloatingChanged with
+     * user-intent semantics (the downstream handler restores pre-tile
+     * geometry). Two contract points a caller must know:
+     *
+     * - Membership is checked FIRST and a state that does not contain the
+     *   window is refused with a warning and no mutation. The check cannot be
+     *   dropped: toggleWindowFloatAs resolves the state through a cross-screen
+     *   fallback, so the callee cannot assume containment.
+     * - When the retile's overflow pass re-floats the window (an unfloat that
+     *   landed at or above the tiled cap), the net change is nothing and the
+     *   outcome is announced on the PASSIVE windowFloatingStateSynced channel
+     *   instead, so the user's free-float position is not overwritten.
      */
     void performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
 
@@ -1905,8 +1985,10 @@ private:
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
     // Consumed by the strict seed in setAutotileScreens() (visible windows,
     // eagerly) and by insertWindow() as remaining windows arrive; purged
-    // per-window via purgeFromPendingOrders (close, insert refusal, handoff
-    // release, the defer gate, the off-autotile focus arm), swept
+    // per-window via purgeFromPendingOrders on every path that stops managing
+    // the window (close, insert refusal, handoff release, the defer gate, the
+    // off-autotile focus arm, the cross-screen claim refusal, the onWindowAdded
+    // skip arm and the shared phantom sweep), swept
     // by pruneStaleWindows, and reaped by the pending-order timeout — which
     // deliberately RETAINS an order holding live minimized placeholders, so
     // those entries persist until the window opens or closes.

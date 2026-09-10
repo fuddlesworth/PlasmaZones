@@ -42,9 +42,12 @@ set(plasmazones_core_SRCS
     # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
     # directly.
     core/interfaces/ioverlayservice.h
+    core/interfaces/ioverviewpolicy.h
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h
     core/types/animationshadersupportedpaths.h
+    core/types/overlayshadertree.h
+    core/types/overlayshadertree.cpp
     core/types/stripselectorhittest.h
     core/types/types.h
     core/types/zoneselectorlayout.h
@@ -121,6 +124,7 @@ set(plasmazones_core_SRCS
     config/settingsschema.h
     config/settingsschema.cpp
     config/settingsschema_p.h
+    config/settingsschema_overlayshaders.cpp
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
     config/settingsschema_workspaces.cpp
@@ -139,6 +143,8 @@ set(plasmazones_core_SRCS
     config/configmigration_v5.cpp
     config/configmigration_v6.cpp
     config/configmigration_v7.cpp
+    config/configmigration_v8.cpp
+    config/configmigration_v8overlay.cpp
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
@@ -157,9 +163,14 @@ set(plasmazones_core_SRCS
     dbus/compositorbridgeadaptor.cpp
     dbus/compositorbridgeadaptor.h
     dbus/controladaptor.cpp
+    dbus/controladaptor_shortcuts.cpp
     dbus/controladaptor.h
+    dbus/kwinsendertrust.cpp
+    dbus/kwinsendertrust.h
     dbus/overlayadaptor.cpp
     dbus/overlayadaptor.h
+    dbus/overviewadaptor.cpp
+    dbus/overviewadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
     dbus/ruleadaptor.cpp
@@ -180,6 +191,8 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistenceworker.cpp
     dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/convenience.cpp
+    dbus/windowtrackingadaptor/shellsurface.cpp
+    dbus/windowtrackingadaptor/shellsurface_desktop.cpp
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/windowdragadaptor/windowdragadaptor.cpp
@@ -191,6 +204,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/dragzonespan.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
+    dbus/windowdragadaptor/dropproxy.cpp
+    dbus/windowdragadaptor/dropproxy.h
     dbus/windowdragadaptor/windowdragadaptor.h
     dbus/scrollingadaptor/scrollingadaptor.cpp
     dbus/scrollingadaptor/scrollingadaptor.h
@@ -199,6 +214,8 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor/autotileadaptor.h
     dbus/tilingadaptor/tilingadaptor.cpp
     dbus/tilingadaptor/relay.cpp
+    dbus/tilingadaptor/mapmodel.cpp
+    dbus/tilingadaptor/desktopreconcile.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
@@ -226,9 +243,10 @@ generate_export_header(plasmazones_core
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
-# All five TUs below are excluded from unity build:
+# All seven TUs below are excluded from unity build:
 #   configdefaults.cpp — Settings PCH includes that conflict with unity macros
-#   drag.cpp / drag_protocol.cpp / drop.cpp / selector_gate.cpp —
+#   drag.cpp / drag_protocol.cpp / drop.cpp / dragtimers.cpp /
+#   dragzonespan.cpp / selector_gate.cpp —
 #     forward-declaration conflicts with the d-bus-adaptor-generated extern
 #     declarations across these TUs
 set_source_files_properties(
@@ -391,7 +409,7 @@ install(TARGETS plasmazones_core
 # which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland.
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Rendering Library (ZoneShaderItem, shared between daemon and editor)
+# Rendering Library (ZoneShaderItem, shared between the daemon and the settings app)
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
     daemon/rendering/zoneentryscaffold.h
@@ -454,10 +472,10 @@ install(TARGETS plasmazones_rendering
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-# plasmazones_shaderpreview: shared zone-shader live-preview feed. Used by BOTH
-# the editor and the settings app (each injects its own IShaderPreviewBackend);
-# deliberately NOT linked by the daemon so the audio (CAVA) + preview deps stay
-# out of the compositor service.
+# plasmazones_shaderpreview: shared zone-shader live-preview feed. Used by the
+# settings app (which injects its own IShaderPreviewBackend); deliberately NOT
+# linked by the daemon so the audio (CAVA) + preview deps stay out of the
+# compositor service.
 set(plasmazones_shaderpreview_SRCS
     shaderpreview/ishaderpreviewbackend.h
     shaderpreview/shaderpreviewcontroller.h
@@ -503,6 +521,7 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
+    daemon/controllers/shortcutmanager_adhoc.cpp
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/controllers/shortcutmanager_table.cpp
@@ -513,6 +532,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/scrolling_init.cpp
     daemon/daemon/scrolling.cpp
     daemon/daemon/workspaces.cpp
+    daemon/daemon/overview.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp
@@ -587,7 +607,16 @@ set(plasmazones_daemon_SRCS
     # Dynamic per-monitor workspaces
     daemon/controllers/workspacecontroller.cpp
     daemon/controllers/workspacecontroller_verbs.cpp
+    daemon/controllers/workspacecontroller_overview.cpp
     daemon/controllers/workspacecontroller.h
+    daemon/controllers/overviewcontroller.cpp
+    daemon/controllers/overviewcontroller_model.cpp
+    daemon/controllers/overviewcontroller_verbs.cpp
+    daemon/controllers/overviewdropresolver.cpp
+    daemon/controllers/overviewdropresolver.h
+    daemon/controllers/overviewcontroller.h
+    daemon/controllers/overviewmodelbuilder.cpp
+    daemon/controllers/overviewmodelbuilder.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )
 
@@ -737,11 +766,46 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/routingpopouttransport.cpp
         shell/SocketPopoutTransport.h
         shell/socketpopouttransport.cpp
+        # The engine-placed pane (A2 §4): a real toplevel the daemon
+        # places, with the bar-socket transport as its floating fallback;
+        # the bundled window rule that names its placement; and the
+        # compositor blur request behind the bar's band.
+        shell/PanePopoutTransport.h
+        shell/panepopouttransport.cpp
+        shell/PaneRules.h
+        shell/panerules.cpp
+        shell/ShellEffects.h
+        shell/shelleffects.cpp
+        shell/ShellMotion.h
+        shell/shellmotion.cpp
+        shell/ShellGestures.h
+        shell/shellgestures.cpp
+        shell/ShellChrome.h
+        shell/shellchrome.cpp
         # The launcher's registry owner: built-in providers, the model the
         # launcher popout binds, and the clipboard + Toplevels services the
         # providers read that nothing else in the shell owns yet.
         shell/LauncherController.h
         shell/launchercontroller.cpp
+        # The OSD registry owner + its generic QML-component factory, and
+        # the toast broker: the per-screen OSDHost / ToastHost surfaces in
+        # shell.qml read them as the OsdRegistry / ToastRegistry context
+        # properties, and the `osd` / `notify` IpcTargets fan out through
+        # them.
+        shell/OsdController.h
+        shell/osdcontroller.cpp
+        shell/QmlComponentOSDFactory.h
+        shell/qmlcomponentosdfactory.cpp
+        shell/ToastController.h
+        shell/toastcontroller.cpp
+        # The PolicyKit agent owner (registers the shell as the session's
+        # agent, starts each PAM conversation, carries the requester's pid
+        # and the prompt's placement) and the picker strip's open state:
+        # the PolkitRegistry / PickerRegistry context properties.
+        shell/PolkitController.h
+        shell/polkitcontroller.cpp
+        shell/PickerController.h
+        shell/pickercontroller.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -769,6 +833,47 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellLauncher::PhosphorShellLauncher
             PhosphorShellLauncher::PhosphorShellLauncherQml
             PhosphorShellLauncherQmlplugin
+            # Phosphor.OSD and Phosphor.Notifications + their registrars,
+            # for the per-screen OSD and toast overlays shell.qml mounts.
+            PhosphorShellOsd::PhosphorShellOsdQml
+            PhosphorShellOsdQmlplugin
+            PhosphorShellNotifications::PhosphorShellNotificationsQml
+            PhosphorShellNotificationsQmlplugin
+            # Phosphor.Dashboard + its registrar: the dashboard and the
+            # cheatsheet popouts shell.qml opens, and the ShortcutCatalog
+            # the sheet reads its chords through.
+            PhosphorShellDashboard::PhosphorShellDashboardQml
+            PhosphorShellDashboardQmlplugin
+            # Phosphor.Lock + its registrar, for the per-screen lock
+            # surfaces shell.qml mounts (LockSurface windows + LockScreen).
+            PhosphorShellLock::PhosphorShellLockQml
+            PhosphorShellLockQmlplugin
+            # Phosphor.Picker (the wallpaper and theme strip, whose C++
+            # types ride in the module) and Phosphor.Polkit (the prompt)
+            # + their registrars, for the per-screen strips and the polkit
+            # popout shell.qml mounts. The picker's committed palette is
+            # loaded at startup through PaletteStore (see main.cpp).
+            PhosphorShellPicker::PhosphorShellPickerQml
+            PhosphorShellPickerQmlplugin
+            # ShellGestures subscribes to the daemon's gestureReported relay
+            # by the protocol's interface constants.
+            PhosphorProtocol::PhosphorProtocol
+            # ShellChrome: the decoration tree + pack registry (PhosphorSurface),
+            # the SurfaceShaderItem stage (plasmazones_rendering) and the shared
+            # SurfaceDecoration.qml host (org.plasmazones.common) that draws a
+            # pack chain on the chrome.
+            PhosphorSurface::PhosphorSurface
+            plasmazones_rendering
+            plasmazones_shared_qml
+            plasmazones_shared_qmlplugin
+            # ShellMotion owns the profile registry behind SettleAnimation
+            # and publishes the QML-side motion defaults.
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorAnimation::PhosphorAnimationQml
+            PhosphorAnimationQmlplugin
+            PhosphorShellPolkit::PhosphorShellPolkitQml
+            PhosphorShellPolkitQmlplugin
+            PhosphorTheme::PhosphorTheme
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.
@@ -806,11 +911,28 @@ if(BUILD_PHOSPHOR_SHELL)
             # under XDG paths, ShellLoader falls back to qrc:/qt/qml/...
             # so the binary works without the optional DATADIR install.
             phosphor_shell_exampleplugin
+            # The pane rule is built with the rules library's own types
+            # and seeded over org.plasmazones.Rules.
+            PhosphorRules::PhosphorRules
+            PhosphorProtocol::PhosphorProtocol
             Qt6::Core
             Qt6::Gui
             Qt6::Quick
             Qt6::Qml
+            Qt6::DBus
     )
+
+    # Compositor blur behind the bar's band goes through the kde-blur
+    # Wayland protocol, which KWindowEffects speaks. Optional: without it
+    # the band is a plain navy tint and ShellEffects.blurAvailable() says
+    # so, rather than the whole shell tier failing to configure.
+    find_package(KF6WindowSystem QUIET)
+    if(KF6WindowSystem_FOUND)
+        target_link_libraries(phosphor-shell PRIVATE KF6::WindowSystem)
+        target_compile_definitions(phosphor-shell PRIVATE PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM)
+    else()
+        message(STATUS "KF6WindowSystem not found: the Phosphor bar band gets no compositor blur")
+    endif()
 
     install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
 endif()
@@ -821,7 +943,6 @@ endif()
 
 set(plasmazones_editor_SRCS
     editor/main.cpp
-    daemon/rendering/vulkansupport.cpp
     editor/EditorController.cpp
     editor/EditorGapsModel.cpp
     editor/EditorGapsModel.h
@@ -832,7 +953,6 @@ set(plasmazones_editor_SRCS
     editor/EditorAppAdaptor.cpp
     editor/EditorAppAdaptor.h
     editor/controller/gaps.cpp
-    editor/controller/shader.cpp
     editor/controller/layout.cpp
     editor/controller/selection.cpp
     editor/controller/multiselect.cpp
@@ -848,8 +968,6 @@ set(plasmazones_editor_SRCS
     editor/helpers/ZoneSerialization.h
     editor/helpers/SettingsDbusQueries.cpp
     editor/helpers/SettingsDbusQueries.h
-    editor/helpers/ShaderDbusQueries.cpp
-    editor/helpers/ShaderDbusQueries.h
     editor/services/ILayoutService.h
     editor/services/DBusLayoutService.cpp
     editor/services/DBusLayoutService.h
@@ -906,10 +1024,6 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/BatchUpdateAppearanceCommand.h
     editor/undo/commands/PasteZonesCommand.cpp
     editor/undo/commands/PasteZonesCommand.h
-    editor/undo/commands/UpdateShaderIdCommand.cpp
-    editor/undo/commands/UpdateShaderIdCommand.h
-    editor/undo/commands/UpdateShaderParamsCommand.cpp
-    editor/undo/commands/UpdateShaderParamsCommand.h
     editor/undo/commands/UpdateGapOverrideCommand.cpp
     editor/undo/commands/UpdateGapOverrideCommand.h
     editor/undo/commands/UpdateFullScreenGeometryCommand.cpp
@@ -984,7 +1098,6 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/TemplateStripCanvas.qml
         editor/qml/TemplatePropertyPanel.qml
         editor/qml/PresetChipEditor.qml
-        editor/qml/ShaderSettingsDialog.qml
         editor/qml/VisibilitySettingsDialog.qml
         editor/qml/LayoutSettingsDialog.qml
         editor/qml/SectionHeader.qml
@@ -999,13 +1112,10 @@ qt_add_qml_module(plasmazones-editor
 target_link_libraries(plasmazones-editor
     PRIVATE
         plasmazones_core
-        plasmazones_rendering
-        plasmazones_shaderpreview  # shared zone-shader preview feed (delegated to)
         plasmazones_shared_qml
         plasmazones_shared_qmlplugin  # Generated by qt_add_qml_module
         PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module
         PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
-        PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         # Qt6::Widgets is REQUIRED even though src/editor has no direct QWidget
         # usage: the editor runs under QApplication and uses the org.kde.desktop
         # QtQuick Controls style (qqc2-desktop-style), which renders controls
@@ -1018,9 +1128,6 @@ target_link_libraries(plasmazones-editor
         Qt6::QuickControls2
         Qt6::DBus
 )
-
-# Qt6::GuiPrivate and Qt6::ShaderToolsPrivate for ZoneShaderItem (shader preview)
-target_link_libraries(plasmazones-editor PRIVATE Qt6::GuiPrivate Qt6::ShaderToolsPrivate)
 
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 
@@ -1035,6 +1142,7 @@ add_executable(plasmazones-shader-validate
     shadervalidate/packvalidator_overlay.cpp
     shadervalidate/packvalidator_animation.cpp
     shadervalidate/packvalidator_surface.cpp
+    shadervalidate/packvalidator_pointer.cpp
     shadervalidate/packvalidatorcommon.cpp
 )
 target_link_libraries(plasmazones-shader-validate
@@ -1044,6 +1152,7 @@ target_link_libraries(plasmazones-shader-validate
         PhosphorShaders::PhosphorShaders
         PhosphorAnimation::PhosphorAnimation
         PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer
         Qt6::Core
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -1052,22 +1161,24 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 
 # CI gate: every bundled pack must parse + bake clean. Headless glslang, so this
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
-# packs (data/overlays), animation packs (--animation, data/animations), and
-# surface packs (--surface, data/surface) are distinct authoring models with
-# different entry conventions, so each gets its own invocation. (The validator
-# also detects the model per pack now, so the flags are belt-and-braces here;
+# packs (data/overlays), animation packs (--animation, data/animations),
+# surface packs (--surface, data/surface) and pointer packs (--pointer,
+# data/pointer) are distinct authoring models with different entry conventions,
+# so each gets its own invocation. (The validator also detects the model per
+# pack now, so the flags are belt-and-braces here;
 # they pin each test to one model regardless of what a tree grows later.)
 #
 # REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
-# accepted) on PATH for shader_validate_animations.
-# Compositor-only animation packs (35 of the bundled 94, every desktop-* and the
-# geometry set) are classic-GL, which QShaderBaker's SPIR-V target rejects by
-# design, so they are compiled out of process through glslang's default
-# GLSL-semantics mode. That invocation FAILS rather than skips when the binary
-# is absent: those packs are compiled nowhere else in a headless run (the
-# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip
-# would put the gate back to lints-only for a third of the set. The other two
-# invocations need no such tool.
+# accepted) on PATH for shader_validate_animations and shader_validate_pointer.
+# Every animation pack's fragment and declared vertex, and every pointer pack's
+# stages, are compiled for the compositor's classic-GL branch (default-block
+# uniforms, which QShaderBaker's SPIR-V target rejects by design), so they go
+# out of process through glslang's default GLSL-semantics mode. Those two
+# invocations FAIL rather than skip when the binary is absent: the compositor
+# branch is compiled nowhere else in a headless run (the GPU bake test QSKIPs
+# without a desktop GL 4.5 context), so a silent skip would put the gate back
+# to lints-only. The overlay and surface invocations bake through QShaderBaker
+# alone and need no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)
@@ -1075,27 +1186,33 @@ if(BUILD_TESTING)
              COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
     add_test(NAME shader_validate_surface
              COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
+    add_test(NAME shader_validate_pointer
+             COMMAND plasmazones-shader-validate --pointer ${PROJECT_SOURCE_DIR}/data/pointer)
 
     # The XDG half of the standard isolation, applied by hand — NOT a stray copy
-    # that should have used the shared helper. These three tests have no target of
+    # that should have used the shared helper. These tests have no target of
     # their own (they all invoke the one `plasmazones-shader-validate` command), and
     # `phosphor_apply_test_isolation` keys its sandbox on a TARGET name, so it
     # cannot apply here. Giving the module a sandbox key independent of the
     # target name is the only way to fold this in.
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
-    # the explicit --overlay/--animation/--surface directory arguments and
-    # derives include paths from them (the packvalidator_* arms). The one host
-    # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
-    # `builtin:` buffer fallback resolves through QStandardPaths when a pack
-    # names a builtin buffer whose sibling `../shared/` copy is missing —
-    # never the case for the bundled packs today, so this is a
-    # belt-and-braces pin rather than a live-failure fix.
+    # the explicit --overlay/--animation/--surface/--pointer directory arguments.
+    # Include roots come from packSharedRoots: a bundled pack sits in the
+    # self-contained `data/<family>/<id>` layout and resolves against its
+    # sibling shared/ only, so the XDG chain is never consulted for these runs
+    # either; the widening to QStandardPaths::locateAll is reserved for the
+    # installed `plasmazones/<family>/<id>` layout. What this sandbox pins is
+    # the residue: SurfaceShaderRegistry's `builtin:` buffer fallback resolves
+    # through QStandardPaths when a pack names a builtin buffer whose sibling
+    # `../shared/` copy is missing — never the case for the bundled packs
+    # today, so this is a belt-and-braces pin rather than a live-failure fix.
     # The bus half is not needed: the validator never touches D-Bus.
     set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
     file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"
                         "${_pz_shader_validate_xdg}/state" "${_pz_shader_validate_xdg}/cache")
-    foreach(_pz_sv shader_validate_bundled shader_validate_animations shader_validate_surface)
+    foreach(_pz_sv shader_validate_bundled shader_validate_animations shader_validate_surface
+                   shader_validate_pointer)
         set_property(TEST ${_pz_sv} APPEND PROPERTY ENVIRONMENT
             "XDG_CONFIG_HOME=${_pz_shader_validate_xdg}/config"
             "XDG_DATA_HOME=${_pz_shader_validate_xdg}/data"

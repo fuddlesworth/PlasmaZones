@@ -5,7 +5,7 @@
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Thirteen siblings carry the rest of the suite (enumerated below),
+// been done. Sixteen siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -24,8 +24,8 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Thirteen siblings carry the rest of the suite:
-// test_scrollengine_persistence.cpp owns the stash focus/anchor carry
+// Sixteen siblings carry the rest of the suite, split off at this file's size
+// ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
 // owns the per-screen override resolution, test_scrollengine_draginsert owns
@@ -37,14 +37,20 @@
 // test_scrollengine_behaviour.cpp owns the per-screen BEHAVIOUR overrides,
 // test_scrollengine_snapshot.cpp owns stripSnapshot and its index contract,
 // test_scrollengine_template.cpp owns the strip-template seed and its
-// blueprint progress, test_scrollengine_closehold.cpp owns the close-settle
-// reflow hold, test_scrollengine_desktopreap.cpp owns the dynamic-workspaces
-// desktop axis (identity reap and renumber), test_scrollengine_maximize.cpp
-// owns the maximize-column claim (the flag riding tiles the user cannot see,
-// two columns maximized at once, the named verb's second press, and survival
-// across a mode round trip), and test_scrollengine_stripcontext.cpp owns
+// blueprint progress, test_scrollengine_desktopreap.cpp owns the
+// dynamic-workspaces desktop axis (identity reap and renumber),
+// test_scrollengine_maximize.cpp owns the maximize-column claim (the flag
+// riding tiles the user cannot see, two columns maximized at once, the named
+// verb's second press, and survival across a mode round trip),
+// test_scrollengine_stripcontext.cpp owns
 // strip IDENTITY across the seam (the announced epoch, its lifecycle drops,
-// and the context-switch force-emit that rides the same transitions).
+// and the context-switch force-emit that rides the same transitions),
+// test_scrollengine_focusreport.cpp owns the compositor focus-report
+// contract, test_scrollengine_grouping.cpp owns same-application and
+// named tab grouping, test_scrollengine_tabfocus.cpp owns the tile-focus
+// family (cycleTab, focusTab, and the float refusal and view hand-back they
+// share with the stack-end verbs), and test_scrollengine_handoff.cpp owns the
+// cross-screen handoff path.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -83,6 +89,7 @@ private Q_SLOTS:
     void handoffReceiveAdoptsFloatingWindow();
     void lastManagedRectSurvivesClose();
     void pruneStaleWindowsReclaimsRectsAndSeeds();
+    void backgroundCloseResolvesGapsForTheWindowsOwnContext();
     void contextKeysSeparateDesktops();
     void floatRestoresDisplayIntent();
     void pruneStatesForDesktopDropsWindowBookkeeping();
@@ -91,8 +98,11 @@ private Q_SLOTS:
     void scheduledRetileRunsUnderEventLoop();
     void columnMaximizeFlagRidesEveryTileOfTheColumn();
     void columnMaximizeTargetsTheNamedWindowsColumn();
-    void minSizeOutgrowingWorkAreaFloatsTheWindow();
+    // minPinned... is declared before minSize... to match DEFINITION order,
+    // which is what a reader following this list as a table of contents
+    // needs. The two had drifted apart.
     void minPinnedFullWidthColumnDoesNotPublishMaximized();
+    void minSizeOutgrowingWorkAreaFloatsTheWindow();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
@@ -462,6 +472,49 @@ void TestScrollEngineSmoke::contextKeysSeparateDesktops()
     engine->pruneStatesForDesktop(2);
     QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{1}));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
+}
+
+void TestScrollEngineSmoke::backgroundCloseResolvesGapsForTheWindowsOwnContext()
+{
+    // Gap rules are per (screen, desktop, activity), so a mutation on a state
+    // that is NOT the one in view has to resolve the gaps of the context the
+    // state belongs to. Resolving the screen's CURRENT context instead lays the
+    // background strip out against the wrong rules, and removeWindow re-derives
+    // the view anchor from them.
+    //
+    // Asserted on what the provider is ASKED rather than on pixels: the
+    // question is whether the window's own key is passed through, and a
+    // geometry assertion would additionally depend on the layout maths.
+    QObject owner;
+    ScrollEngine* engine = ScrollTestUtils::makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QList<int> askedDesktops;
+    engine->setContextGapProvider([&askedDesktops](const QString&, int desktop, const QString&) {
+        askedDesktops.append(desktop);
+        QVariantMap gaps;
+        gaps.insert(QStringLiteral("InnerGap"), 6);
+        return gaps;
+    });
+
+    // Per-OUTPUT desktop, not the global one: currentKeyForScreen prefers the
+    // per-output value, so setting only the global leaves the strip on the
+    // screen's own desktop and the close is never a background one.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->heldKeyForWindow(QStringLiteral("app|a"))->desktop, 2);
+
+    // Desktop 3 is in view; desktop 2's strip is now a background one.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 3);
+    askedDesktops.clear();
+
+    engine->windowClosed(QStringLiteral("app|a"));
+
+    QVERIFY2(!askedDesktops.isEmpty(), "the close must resolve layout params at all");
+    // Every resolve this close performs is for the window's own desktop. A
+    // screen-only provider, or one handed the current context, asks for 3.
+    for (const int desktop : std::as_const(askedDesktops)) {
+        QCOMPARE(desktop, 2);
+    }
 }
 
 void TestScrollEngineSmoke::floatRestoresDisplayIntent()
@@ -848,7 +901,8 @@ void TestScrollEngineSmoke::minPinnedFullWidthColumnDoesNotPublishMaximized()
     // The band is exactly one value. Below kMainExtent the column does not
     // render full and the flag is false for an ordinary reason; above it the
     // oversized verdict floats the window out of the strip before any of this
-    // matters (the float test above pins that at 1300). Only a minimum equal
+    // matters (minSizeOutgrowingWorkAreaFloatsTheWindow pins that at 1300).
+    // Only a minimum equal
     // to the work area's main extent is both full-width and still tiled.
     //
     // Set BY ROLE, never symmetrically: passing (1200, 1200) would set a cross
@@ -1901,6 +1955,12 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     // The POSITIVE half: the work area genuinely changes, so the same retile
     // call that was silent above must now deliver. Without this the whole slot
     // is satisfied by an apply path that never emits at all.
+    //
+    // Not transposed, unlike the axis-sensitive slots elsewhere in this file:
+    // any change to the work area moves the tile rects, so shrinking the raw
+    // width discriminates on the vertical arm too, where it takes the CROSS
+    // extent. Transpose this if the assertion is ever narrowed to the main
+    // axis.
     sharedRect->setWidth(sharedRect->width() - 200);
     engine->retile(QStringLiteral("S1"));
     QCoreApplication::processEvents();

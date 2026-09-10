@@ -9,6 +9,7 @@
 #include <QDBusMessage>
 #include <QFutureWatcher>
 #include <QPointer>
+#include <functional>
 #include <QString>
 #include <QStringList>
 
@@ -129,6 +130,35 @@ public Q_SLOTS:
      */
     void quit();
 
+    /**
+     * @brief Every settings-driven shortcut as a JSON array, for the
+     *        Phosphor shell's keybind cheatsheet.
+     *
+     * One object per action, uncompressed (a directional quad is four
+     * rows): id, label, description, category, categoryOrder, rowOrder,
+     * triggers (array of PortableText key sequences, the user's effective
+     * bindings), assigned, mode ("all" | "snapping" | "autotile" |
+     * "scrolling" | "layouts" | "managed"). "[]" before the daemon has
+     * registered its shortcuts or after it has released them. Body in
+     * controladaptor_shortcuts.cpp.
+     */
+    QString getShortcutsJson();
+
+Q_SIGNALS:
+    /// The catalog behind getShortcutsJson changed: a sequence was rebound
+    /// or the registration batch settled. Consumers re-read.
+    void shortcutsChanged();
+
+public:
+    /// The catalog source. ShortcutManager lives in the daemon, not in the
+    /// core library this adaptor ships in, so the daemon hands the read in
+    /// as a callable rather than a type. Cleared by detach().
+    void setShortcutCatalogProvider(std::function<QVariantList()> provider);
+    /// Relay for ShortcutManager::cheatsheetModelChanged: emits
+    /// shortcutsChanged on the bus. Not a slot on purpose, so it is not a
+    /// D-Bus method.
+    void notifyShortcutsChanged();
+
 private:
     WindowTrackingAdaptor* m_wta;
     SnapAdaptor* m_snapAdaptor;
@@ -140,6 +170,7 @@ private:
     PhosphorEngine::IPlacementEngine* m_scrollEngine;
     const ScreenModeRouter* m_modeRouter;
     QPointer<QFutureWatcher<QString>> m_reportWatcher;
+    std::function<QVariantList()> m_shortcutCatalog;
 };
 
 } // namespace PlasmaZones

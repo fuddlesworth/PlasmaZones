@@ -309,6 +309,21 @@ QString WindowTrackingAdaptor::resolveScreenForSnap(const QString& callerScreen,
 
 void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* registry)
 {
+    if (m_windowRegistry == registry) {
+        return;
+    }
+    // Drop the previous registry's subscriptions, and the state they built.
+    // Adding a second set on top left both registries feeding this adaptor,
+    // and the shell-surface mirror below describing windows the old registry
+    // owned. Disconnected by recorded handle rather than by a blanket
+    // disconnect, so nothing else's connections to this object are caught.
+    for (const QMetaObject::Connection& c : std::as_const(m_registryConnections)) {
+        QObject::disconnect(c);
+    }
+    m_registryConnections.clear();
+    m_shellWindowFacts.clear();
+    m_urgentWindowIds.clear();
+
     m_windowRegistry = registry;
     if (m_service) {
         m_service->setWindowRegistry(registry);
@@ -316,36 +331,58 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
     if (!registry) {
         return;
     }
+    // Shell-surface mirror (shellsurface.cpp): urgency set and identity
+    // announcements, fed by the same registry edges. Subscribed before the
+    // retag relay below so the urgent set is current by the time any later
+    // subscriber reads getUrgentWindows from a metadataChanged handler.
+    m_registryConnections << QObject::connect(registry, &PhosphorEngine::WindowRegistry::windowAppeared, this,
+                                              [this](const QString& instanceId) {
+                                                  if (!m_windowRegistry) {
+                                                      return;
+                                                  }
+                                                  if (const auto meta = m_windowRegistry->metadata(instanceId)) {
+                                                      onShellRegistryMetadata(instanceId, nullptr, *meta);
+                                                  }
+                                              });
+    m_registryConnections << QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                                              [this](const QString& instanceId,
+                                                     const PhosphorEngine::WindowMetadata& oldMeta,
+                                                     const PhosphorEngine::WindowMetadata& newMeta) {
+                                                  onShellRegistryMetadata(instanceId, &oldMeta, newMeta);
+                                              });
+    m_registryConnections << QObject::connect(registry, &PhosphorEngine::WindowRegistry::windowDisappeared, this,
+                                              &WindowTrackingAdaptor::onShellRegistryWindowGone);
     // Reactive metadata updates. Per feedback_class_change_exclusion.md we do
     // NOT retroactively enforce rules — a committed snap/autotile/float state
     // stays put even if the new class would have behaved differently at open.
     // The only safe reactive update is refreshing tracking fields that mirror
     // the app class, so future lookups don't compare against a stale string.
-    QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
-                     [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
-                            const PhosphorEngine::WindowMetadata& newMeta) {
-                         // QPointer auto-nulls m_windowRegistry if the registered
-                         // object outlives this adaptor — guard against that
-                         // alongside the m_service belt-and-braces guard so the
-                         // `m_windowRegistry->instancesWithAppId(...)` deref
-                         // below can't fault.
-                         if (oldMeta.appId == newMeta.appId || !m_service || !m_windowRegistry) {
-                             return;
-                         }
-                         // If the last-used-zone tracking is stamped with the old class and
-                         // the renamed window was the only instance of that class, update
-                         // the tag so the next auto-snap-by-class check sees the live name.
-                         // Any other tracking that's keyed internally by windowId (zone
-                         // assignments, pre-float zones, etc.) already uses the canonical
-                         // key from WindowRegistry::canonicalizeWindowId, so it doesn't
-                         // need migration — only human-readable class tags do.
-                         if (m_service->lastUsedZoneClass() == oldMeta.appId
-                             && m_windowRegistry->instancesWithAppId(oldMeta.appId).isEmpty()) {
-                             m_service->retagLastUsedZoneClass(newMeta.appId);
-                             qCDebug(lcDbusWindow) << "Retagged last-used-zone class after rename:" << oldMeta.appId
-                                                   << "→" << newMeta.appId << "(instance" << instanceId << ")";
-                         }
-                     });
+    m_registryConnections << QObject::connect(
+        registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
+        [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
+               const PhosphorEngine::WindowMetadata& newMeta) {
+            // QPointer auto-nulls m_windowRegistry if the registered
+            // object outlives this adaptor — guard against that
+            // alongside the m_service belt-and-braces guard so the
+            // `m_windowRegistry->instancesWithAppId(...)` deref
+            // below can't fault.
+            if (oldMeta.appId == newMeta.appId || !m_service || !m_windowRegistry) {
+                return;
+            }
+            // If the last-used-zone tracking is stamped with the old class and
+            // the renamed window was the only instance of that class, update
+            // the tag so the next auto-snap-by-class check sees the live name.
+            // Any other tracking that's keyed internally by windowId (zone
+            // assignments, pre-float zones, etc.) already uses the canonical
+            // key from WindowRegistry::canonicalizeWindowId, so it doesn't
+            // need migration — only human-readable class tags do.
+            if (m_service->lastUsedZoneClass() == oldMeta.appId
+                && m_windowRegistry->instancesWithAppId(oldMeta.appId).isEmpty()) {
+                m_service->retagLastUsedZoneClass(newMeta.appId);
+                qCDebug(lcDbusWindow) << "Retagged last-used-zone class after rename:" << oldMeta.appId << "→"
+                                      << newMeta.appId << "(instance" << instanceId << ")";
+            }
+        });
 }
 
 void WindowTrackingAdaptor::reapplyWindowAppearance()

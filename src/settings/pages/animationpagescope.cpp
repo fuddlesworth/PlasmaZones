@@ -117,6 +117,16 @@ QStringList animationScopedBuiltInPaths(const AnimationPageScope& scope)
     return out;
 }
 
+QStringList animationScopedTimingPaths(const AnimationPageScope& scope, const QStringList& storedPaths)
+{
+    QStringList out = animationScopedBuiltInPaths(scope);
+    for (const QString& path : storedPaths) {
+        if (animationPathInScope(path, scope) && !out.contains(path))
+            out.append(path);
+    }
+    return out;
+}
+
 bool shaderTreeScopeDiffers(const PhosphorAnimationShaders::ShaderProfileTree& current,
                             const PhosphorAnimationShaders::ShaderProfileTree& baseline,
                             const AnimationPageScope& scope)

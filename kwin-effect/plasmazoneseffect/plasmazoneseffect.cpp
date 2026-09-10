@@ -185,6 +185,13 @@ bool PlasmaZonesEffect::isActive() const
     // design — see StripTransitionManager::paintOutput). Keep both: the
     // spring clause is not a substitute for the fade tail, and the pass
     // clause is not a substitute for the pack-less spring.
+    // `m_stripTransition.holdsCursorHide()` outlives the pass clause by one
+    // frame on purpose: the strip pass hides KWin's cursor while it paints
+    // and, on the settle path, releases it only from our paint hooks (the
+    // off-paint kill paths release it themselves), so the effect must stay
+    // in the chain until that release has run. Without it, a settle fade that
+    // closes between two frames dropped the effect with the cursor still
+    // hidden, and nothing ever showed it again (see the accessor's doc).
     // The compositor-drawn tab pills exist only while this effect is in the
     // paint chain: they are blitted from paintWindow (at the anchor slot) or
     // paintScreen (the post-walk fallback), so on an
@@ -203,7 +210,18 @@ bool PlasmaZonesEffect::isActive() const
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
-        || m_scrollTabPainter->hasAnyIndicators() || !m_scrollCorpseFreeze.isEmpty();
+        || m_stripTransition.holdsCursorHide() || m_scrollTabPainter->hasAnyIndicators()
+        || !m_scrollCorpseFreeze.isEmpty()
+        // The POINTER pass, same two clauses and the same reasoning as the
+        // strip pass's pair. `isLive()` is what puts the effect in the chain
+        // while a pointer trail is alive: nothing else here is true for a
+        // pointer that merely moved, so without it paintScreen is never
+        // called and the repaints the pass schedules would paint nothing.
+        // `holdsCursorHide()` outlives it by one frame for a `layer: above`
+        // pack, so the frame that shows the cursor again still runs. Both are
+        // O(1) and short-circuit on the pass's cached engaged verdict, so a
+        // disabled or empty chain costs one bool read per paint cycle.
+        || m_pointerPass.isLive() || m_pointerPass.holdsCursorHide();
 }
 
 void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)
@@ -254,18 +272,35 @@ void PlasmaZonesEffect::pointerAxis(KWin::PointerAxisEvent* event)
     // that filter is ordered below the Effects filter, so an event the
     // interception claims never reaches it. Route the chord here so wheeling
     // over a tab pill still moves the strip.
+    //
+    // Both axis gestures must be routed here, in the same order the filter
+    // uses them. The interception is held for exactly as long as the pointer
+    // sits over a pill, so this is the ONLY path an unmodified wheel over a
+    // pill can take; routing the chord alone would leave the tab wheel
+    // reachable only in the residual cases where no interception is held
+    // (a pill appearing under a stationary cursor, a live drag, teardown).
     if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
         return;
     }
-    if (m_tilingHandler->handleWheelChord(event->delta, event->deltaV120, event->orientation, event->modifiers,
-                                          event->buttons)
-        && m_overhangInputFilter) {
-        // The client never sees a claimed tick, so end the ScrollFactor
-        // stream exactly as the filter's own chord branch does. Skipping this
-        // would leave a fractional v120 remainder to be applied to the next
-        // tick the client DOES see.
+    // Under the interception the client sees NO tick at all, claimed or not,
+    // so the ScrollFactor stream ends here unconditionally rather than once
+    // per claiming branch. Doing it per branch would leave a fractional v120
+    // remainder from an unclaimed tick (a Ctrl+wheel over a pill, say) to be
+    // applied to the next tick the client does see.
+    if (m_overhangInputFilter) {
         m_overhangInputFilter->resetScrollFactorStream();
     }
+    if (m_tilingHandler->handleWheelChord(event->delta, event->deltaV120, event->orientation, event->modifiers,
+                                          event->buttons)) {
+        return;
+    }
+    // Tab indicators next, and AFTER the chords, matching the filter: a chord
+    // is an explicit modifier gesture over the strip and must keep working
+    // wherever the cursor sits, including over a pill. What reaches here is
+    // an unmodified wheel, so an application's own Ctrl+wheel is never
+    // swallowed either.
+    m_tilingHandler->handleTabWheel(event->position, event->delta, event->deltaV120, event->orientation,
+                                    event->modifiers, event->buttons);
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

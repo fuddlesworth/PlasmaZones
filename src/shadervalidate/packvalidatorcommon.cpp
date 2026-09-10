@@ -24,6 +24,7 @@
 #include <algorithm>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
+using PhosphorPointerShaders::PointerShaderEffect;
 using PhosphorRendering::ShaderCompiler;
 using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
@@ -31,6 +32,14 @@ using PhosphorSurfaceShaders::SurfaceShaderEffect;
 
 namespace PlasmaZones::ShaderValidate {
 
+// Two comparison domains. When both the pack dir and the candidate exist on
+// disk the check is CANONICAL (symlinks resolved on both sides), so a symlink
+// inside the pack that points outside it is rejected even though its lexical
+// path sits under the pack. When the candidate does not exist yet (a stage the
+// author has not written, an --emit-preamble run before the shader) the check
+// falls back to the LEXICAL cleaned path, which still rejects `../` escapes and
+// absolute paths. The runtime only canonicalises, so this gate is deliberately
+// the stricter of the two.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel)
 {
     if (rel.isEmpty()) {
@@ -126,17 +135,90 @@ void appendDidYouMean(QTextStream& out, const QString& diagnostic, const QString
     }
 }
 
-std::optional<PackModel> detectPackModel(const QString& packDir)
+namespace {
+
+/// The family directory names the runtime registries scan under
+/// `plasmazones/`. An installed pack always sits directly inside one of them,
+/// so the name identifies the family without guessing at metadata.
+bool isKnownFamilyDir(const QString& name)
 {
-    const QDir shared(QFileInfo(packDir).absolutePath() + QStringLiteral("/shared"));
+    return name == QLatin1String("animations") || name == QLatin1String("overlays") || name == QLatin1String("surface")
+        || name == QLatin1String("pointer");
+}
+
+/// Which family's marker header @p shared holds, if any.
+std::optional<PackModel> modelFromSharedDir(const QDir& shared)
+{
     if (shared.exists(QStringLiteral("animation_uniforms.glsl"))) {
         return PackModel::Animation;
     }
     if (shared.exists(QStringLiteral("surface_uniforms.glsl"))) {
         return PackModel::Surface;
     }
+    if (shared.exists(QStringLiteral("pointer_uniforms.glsl"))) {
+        return PackModel::Pointer;
+    }
     if (shared.exists(QStringLiteral("common.glsl"))) {
         return PackModel::Overlay;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+QStringList packSharedRoots(const QString& packDir)
+{
+    // Normalised once: a trailing slash makes QFileInfo::absolutePath() answer
+    // the pack itself rather than its parent, which would derive the sibling
+    // as `<pack>/shared` and the family as the pack id.
+    const QString dir = QDir::cleanPath(QDir(packDir).absolutePath());
+    const QString parent = QFileInfo(dir).absolutePath();
+    const QString sibling = QDir::cleanPath(parent + QStringLiteral("/shared"));
+
+    // Only the INSTALLED layout, `<data root>/plasmazones/<family>/<id>`, is
+    // widened to the XDG chain. Such a pack usually has no sibling `shared/`
+    // at all (the helpers ship once into the system prefix while the pack
+    // sits in the user's data dir), and when it has one it may be a PARTIAL
+    // user override of a header or two, which the runtime resolves alongside
+    // the system copy; a sibling-only lookup would fail both. The widened
+    // list is the same set of roots the runtime registries resolve against,
+    // so this stays a marker lookup rather than becoming a guess.
+    //
+    // Everything else (the source tree's `data/<family>/<id>`, a scratchpad
+    // laid out like it, a vendored pack set) is self-contained: it resolves
+    // against its sibling and nowhere else, so an installed copy of the
+    // helpers can never satisfy an include the tree itself lacks.
+    const QString family = QFileInfo(parent).fileName();
+    const QString dataRootChild = QFileInfo(QFileInfo(parent).absolutePath()).fileName();
+    const bool installedLayout = isKnownFamilyDir(family) && dataRootChild == QLatin1String("plasmazones");
+    if (!installedLayout) {
+        return {sibling};
+    }
+
+    QStringList roots{sibling};
+    {
+        const QStringList installed = QStandardPaths::locateAll(
+            QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/") + family + QStringLiteral("/shared"),
+            QStandardPaths::LocateDirectory);
+        for (const QString& dir : installed) {
+            const QString clean = QDir::cleanPath(dir);
+            if (!roots.contains(clean)) {
+                roots << clean;
+            }
+        }
+    }
+    return roots;
+}
+
+std::optional<PackModel> detectPackModel(const QString& packDir)
+{
+    // The same roots the stage bakes resolve against: a self-contained tree
+    // has only its sibling, and an installed pack is found through its
+    // family's XDG chain.
+    for (const QString& root : packSharedRoots(packDir)) {
+        if (const std::optional<PackModel> model = modelFromSharedDir(QDir(root))) {
+            return model;
+        }
     }
     return std::nullopt;
 }
@@ -174,21 +256,21 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     // takes the file with it on scope exit.
     QTemporaryDir tmp;
     if (!tmp.isValid()) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    cannot create a temporary directory for the "
+        out << "  " << padLabel(label) << "ERROR\n    cannot create a temporary directory for the "
             << "compositor bake\n";
         return 1;
     }
     const QString srcPath = tmp.filePath(QStringLiteral("kwin.") + stage);
     QFile srcFile(srcPath);
     if (!srcFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    cannot write " << srcPath << "\n";
+        out << "  " << padLabel(label) << "ERROR\n    cannot write " << srcPath << "\n";
         return 1;
     }
     // Checked: a short write stages a TRUNCATED shader, and glslang would then
     // report a syntax error the author's file does not contain.
     const QByteArray encoded = source.toUtf8();
     if (srcFile.write(encoded) != encoded.size()) {
-        out << "  " << label.leftJustified(15)
+        out << "  " << padLabel(label)
             << "ERROR\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
         return 1;
     }
@@ -209,22 +291,22 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         // execute bit, the wrong ELF class) fails here too, and reporting
         // that as a timeout sends the reader after the wrong problem.
         if (proc.error() == QProcess::FailedToStart) {
-            out << "  " << label.leftJustified(15) << "ERROR\n    could not run " << toolPath << ": "
-                << proc.errorString() << "\n";
+            out << "  " << padLabel(label) << "ERROR\n    could not run " << toolPath << ": " << proc.errorString()
+                << "\n";
             return 1;
         }
         proc.kill();
         proc.waitForFinished(1000);
-        out << "  " << label.leftJustified(15) << "ERROR\n    " << toolPath << " timed out\n";
+        out << "  " << padLabel(label) << "ERROR\n    " << toolPath << " timed out\n";
         return 1;
     }
     const QString log =
         QString::fromUtf8(proc.readAllStandardOutput()) + QString::fromUtf8(proc.readAllStandardError());
     if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0) {
-        out << "  " << label.leftJustified(15) << "OK (compositor)\n";
+        out << "  " << padLabel(label) << "OK (compositor)\n";
         return 0;
     }
-    out << "  " << label.leftJustified(15) << "ERROR (compositor)\n";
+    out << "  " << padLabel(label) << "ERROR (compositor)\n";
     // glslang leads with the temp file name and then one line per diagnostic.
     // Drop the echoed name so the report shows the author's errors and nothing
     // about where the file happened to be staged.
@@ -247,18 +329,24 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     return 1;
 }
 
+QString padLabel(const QString& label)
+{
+    constexpr int kColumn = 15;
+    return label.size() < kColumn ? label.leftJustified(kColumn) : label + QLatin1Char(' ');
+}
+
 // Report a compiled stage's outcome: "OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line (T1.3 #line) plus the
 // did-you-mean hint. @p declared is the list of generated `p_<id>` names.
-// Returns 1 on failure, 0 on success. Shared by the zone and animation paths.
+// Returns 1 on failure, 0 on success. Shared by all four validators.
 int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::Result& result,
                   const QStringList& declared)
 {
     if (result.success) {
-        out << "  " << label.leftJustified(15) << "OK\n";
+        out << "  " << padLabel(label) << "OK\n";
         return 0;
     }
-    out << "  " << label.leftJustified(15) << "ERROR\n";
+    out << "  " << padLabel(label) << "ERROR\n";
     const QStringList diagLines = result.error.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString& line : diagLines) {
         // glslang names the root source (file id 0, via the T1.3 #line directives)
@@ -298,6 +386,14 @@ QStringList declaredParamNames(const QList<SurfaceShaderEffect::ParameterInfo>& 
     }
     return declared;
 }
+QStringList declaredParamNames(const QList<PointerShaderEffect::ParameterInfo>& params)
+{
+    QStringList declared;
+    for (const PointerShaderEffect::ParameterInfo& p : params) {
+        declared << QStringLiteral("p_") + p.id;
+    }
+    return declared;
+}
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.
@@ -307,7 +403,7 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
 {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << path << "\n";
+        out << "  " << padLabel(label) << "ERROR\n    cannot read " << path << "\n";
         return 1;
     }
     const QString raw = QString::fromUtf8(f.readAll());
@@ -321,7 +417,7 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
     QString expanded =
         ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
     if (expanded.isEmpty()) {
-        out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+        out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
         return 1;
     }
     // The p_<id> preamble is spliced only into the scaffolded main fragment, the
@@ -331,7 +427,10 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
     }
 
     const ShaderCompiler::Result result = ShaderCompiler::compile(expanded.toUtf8(), stage);
-    return reportCompile(out, label, result, declaredParamNames(info.parameters));
+    // The did-you-mean hint only makes sense for the stage that received the
+    // preamble: an unscaffolded stage cannot see any p_<id>, so suggesting
+    // one would send the author after a name that stage can never use.
+    return reportCompile(out, label, result, useScaffold ? declaredParamNames(info.parameters) : QStringList());
 }
 
 } // namespace PlasmaZones::ShaderValidate

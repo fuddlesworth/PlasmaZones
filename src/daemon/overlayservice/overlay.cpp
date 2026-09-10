@@ -59,6 +59,45 @@ void releaseOverlaySlotTextures(QQuickItem* slot)
     writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), placeholderVar);
 }
 
+// Reset every property the shader apply path writes, so a slot leaving shader
+// mode does not keep the last pack's source, buffers, param defines and
+// wallpaper QImage pinned. Deliberately does NOT touch labelsTexture or
+// PerScreenOverlayState::labelsTextureHash: the shader branch of
+// createOverlayWindow owns those and resets the hash itself, and clearing them
+// here would fight that.
+//
+// Shared by the two paths that leave shader mode, which must stay in lockstep:
+// updateOverlayWindow's clear arm (the slot stays mounted) and
+// createOverlayWindow's non-shader branch (the slot is being remounted by
+// recreateOverlayWindowsOnTypeMismatch, which never routes through a
+// destroy/dismiss and so gets no release from them).
+void clearShaderSlotProperties(QQuickItem* slot)
+{
+    if (!slot) {
+        return;
+    }
+    writeQmlProperty(slot, QStringLiteral("shaderSource"), QUrl());
+    writeQmlProperty(slot, QStringLiteral("bufferShaderPath"), QString());
+    writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
+    writeQmlProperty(slot, QStringLiteral("bufferFeedback"), false);
+    writeQmlProperty(slot, QStringLiteral("bufferScale"), 1.0);
+    // Parse-default spelling, not a magic value: keep in lockstep with
+    // ShaderRegistry's absent-key default so a future default flip cannot
+    // silently diverge here.
+    writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), ShaderRegistry::ShaderInfo{}.halfFloatBuffers);
+    writeQmlProperty(slot, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
+    writeQmlProperty(slot, QStringLiteral("bufferWraps"), QStringList());
+    writeQmlProperty(slot, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
+    writeQmlProperty(slot, QStringLiteral("bufferFilters"), QStringList());
+    writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), false);
+    writeQmlProperty(slot, QStringLiteral("shaderParams"), QVariantMap());
+    writeQmlProperty(slot, QStringLiteral("paramPreamble"), QString());
+    writeQmlProperty(slot, QStringLiteral("useWallpaper"), false);
+    QImage placeholder(1, 1, QImage::Format_ARGB32);
+    placeholder.fill(Qt::transparent);
+    writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), QVariant::fromValue(placeholder));
+}
+
 } // namespace
 
 void OverlayService::destroyIfTypeMismatch(const QString& screenId)
@@ -361,12 +400,7 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
                     startShaderAnimation();
                 }
             }
-        } else if (!(m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible())) {
-            // m_shaderUpdateTimer is the SHARED iTime clock: it also drives the
-            // editor's shader preview (updateShaderUniforms writes iTime to
-            // m_shaderPreviewWindow), and only showShaderPreview restarts it.
-            // Stopping it here with the preview open would freeze the preview's
-            // animation until the editor re-opens it.
+        } else {
             stopShaderAnimation();
         }
     }
@@ -609,6 +643,13 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         // recreateOverlayWindowsOnTypeMismatch (shader->rectangle->shader
         // flip), which routes here without a destroy/dismiss in between.
         state->labelsTextureHash = 0;
+    } else {
+        // Mirror of the above for the other direction. updateOverlayWindow's
+        // clear arm cannot do this on a recreate: useShader is written false
+        // just below, before that function reads it, so its arm never fires
+        // and the slot would keep the last pack's shader payload for the whole
+        // non-shader session.
+        clearShaderSlotProperties(slot);
     }
     writeQmlProperty(slot, QStringLiteral("useShader"), usingShader);
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -623,19 +664,18 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     if (usingShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            // A context overlay rule may override the layout's shader (with
-            // optional uniform params). When the rule sets the shader, use its
-            // params — an override with no params falls back to the shader's
-            // defaults; otherwise use the layout's params.
+            // A context overlay rule may override the resolved shader (with
+            // optional uniform params); otherwise the OverlayShaderTree
+            // resolves per layout with baseline fallback. See
+            // effectiveOverlayShader for the precedence contract.
             const PhosphorZones::ContextOverlayOverride overlayOverride =
                 overlayOverrideForScreen(m_layoutManager, screenId);
-            const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
-            const QVariantMap rawParams =
-                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
+            const OverlayShaderProfile shader = effectiveOverlayShader(overlayOverride, screenLayout);
+            const QString shaderId = shader.shaderId;
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
                                << "bufferPaths=" << info.bufferShaderPaths.size();
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, shader.parameters);
             applyShaderInfoToWindow(slot, info, translatedParams, geometry, physScreenGeom);
         }
     }
@@ -693,11 +733,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         return;
 
     const bool wasVisible = m_visible;
-    // Same shared-clock guard as updateLayout: the editor preview rides
-    // m_shaderUpdateTimer, and the restart below is gated on
-    // anyScreenUsesShader(), which ignores the preview - so stopping with the
-    // preview open would freeze it when every screen flips to non-shader.
-    if (wasVisible && !(m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible()))
+    if (wasVisible)
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {
@@ -889,42 +925,20 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
-            const QVariantMap rawParams =
-                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
+            const OverlayShaderProfile shader = effectiveOverlayShader(overlayOverride, screenLayout);
+            const QString shaderId = shader.shaderId;
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, shader.parameters);
             const QRect vsGeom = resolveScreenGeometry(m_screenManager, screenId);
             const QRect physGeom = physScreen ? physScreen->geometry() : vsGeom;
             applyShaderInfoToWindow(slot, info, translatedParams, vsGeom, physGeom);
         }
     } else if (windowIsShader && !screenUsesShader) {
-        writeQmlProperty(slot, QStringLiteral("shaderSource"), QUrl());
-        writeQmlProperty(slot, QStringLiteral("bufferShaderPath"), QString());
-        writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
-        writeQmlProperty(slot, QStringLiteral("bufferFeedback"), false);
-        writeQmlProperty(slot, QStringLiteral("bufferScale"), 1.0);
-        // Parse-default spelling, not a magic value: keep in lockstep with
-        // ShaderRegistry's absent-key default so a future default flip cannot
-        // silently diverge here.
-        writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), ShaderRegistry::ShaderInfo{}.halfFloatBuffers);
-        writeQmlProperty(slot, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
-        writeQmlProperty(slot, QStringLiteral("bufferWraps"), QStringList());
-        writeQmlProperty(slot, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
-        writeQmlProperty(slot, QStringLiteral("bufferFilters"), QStringList());
-        writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), false);
-        writeQmlProperty(slot, QStringLiteral("shaderParams"), QVariantMap());
-        // The apply path writes these three unconditionally / conditionally
-        // (applyShaderInfoToWindow), so the clear must reset them too or the
-        // slot keeps the old pack's param defines and pins the wallpaper
+        // The apply path writes paramPreamble, useWallpaper and the wallpaper
+        // texture (applyShaderInfoToWindow), so the clear must reset them too
+        // or the slot keeps the old pack's param defines and pins the wallpaper
         // QImage reference for its whole non-shader session.
-        writeQmlProperty(slot, QStringLiteral("paramPreamble"), QString());
-        writeQmlProperty(slot, QStringLiteral("useWallpaper"), false);
-        {
-            QImage placeholder(1, 1, QImage::Format_ARGB32);
-            placeholder.fill(Qt::transparent);
-            writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), QVariant::fromValue(placeholder));
-        }
+        clearShaderSlotProperties(slot);
     }
 
     QVariantList zones = buildZonesList(screenId, physScreen);

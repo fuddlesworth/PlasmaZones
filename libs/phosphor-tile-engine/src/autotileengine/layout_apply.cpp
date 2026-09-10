@@ -53,6 +53,16 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     if (!state) {
         return false;
     }
+    return recalculateLayoutForState(currentKeyForScreen(screenId), state);
+}
+
+bool AutotileEngine::recalculateLayoutForState(const PhosphorEngine::TilingStateKey& key,
+                                               PhosphorTiles::TilingState* state)
+{
+    if (!state || key.screenId.isEmpty()) {
+        return false;
+    }
+    const QString& screenId = key.screenId;
 
     PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
     if (!algo) {
@@ -188,7 +198,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // user's manual splits with uniform defaults. Runs here rather than at state
     // creation because it needs the re-added windows to check against, and no-ops
     // unless the tree still matches them.
-    restoreStashedSplitTree(currentKeyForScreen(screenId), state, algo);
+    restoreStashedSplitTree(key, state, algo);
 
     // Let memory-based algorithms prepare their state (e.g., lazily create a PhosphorTiles::SplitTree)
     // before calculateZones(). Virtual dispatch avoids concrete type casts here.

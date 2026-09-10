@@ -6,13 +6,24 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include "plasmazoneseffect/shader_internal.h"
+
 #include <core/rendertarget.h>
+#include <core/region.h>
 #include <core/renderviewport.h>
+#include <effect/effect.h>
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
 #include <opengl/glvertexbuffer.h>
 
+#include <scene/itemrenderer.h>
+#include <scene/windowitem.h>
+#include <scene/workspacescene.h>
+
 #include <QColor>
+#include <QList>
 #include <QSize>
 #include <QVector2D>
 
@@ -28,6 +39,35 @@ GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
     const KWin::GLFramebuffer* const fb = outputTarget.framebuffer();
     const KWin::GLTexture* const targetTex = fb ? fb->colorAttachment() : nullptr;
     return targetTex ? targetTex->internalFormat() : GL_RGBA8;
+}
+
+GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget)
+{
+    return alphaCaptureFormatForInternalFormat(captureFormatFor(outputTarget));
+}
+
+void clearAlpha(float alpha)
+{
+    // KWin's renderer leaves the scissor test off between windows, but a
+    // third-party effect ordered after us may not, and a scissored clear
+    // would stamp only a window's rect of the target. Save and restore what
+    // is touched; the colour mask is restored to the all-on state KWin's
+    // renderer expects rather than read back, because nothing in the paint
+    // chain runs with a partial mask.
+    const GLboolean scissorWas = glIsEnabled(GL_SCISSOR_TEST);
+    GLfloat clearWas[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clearWas);
+    if (scissorWas) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, alpha);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(clearWas[0], clearWas[1], clearWas[2], clearWas[3]);
+    if (scissorWas) {
+        glEnable(GL_SCISSOR_TEST);
+    }
 }
 
 std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, GLenum internalFormat)
@@ -66,17 +106,37 @@ void drawOutputQuad(const KWin::RenderViewport& viewport)
 
 const char* outputQuadVertexSource()
 {
-    static constexpr const char* kSource =
-        "#version 450\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n";
-    return kSource;
+    return kOutputQuadVertexSource;
+}
+
+void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport)
+{
+    if (!KWin::effects) {
+        return;
+    }
+    // The workspace scene is reached through any window item: the effects
+    // API exposes no scene accessor, and Item::scene() on a member of the
+    // scene IS the workspace scene. An empty stacking order means there is
+    // no scene to draw the cursor over either.
+    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    KWin::WorkspaceScene* scene = nullptr;
+    for (KWin::EffectWindow* w : stack) {
+        if (w && w->windowItem()) {
+            scene = qobject_cast<KWin::WorkspaceScene*>(w->windowItem()->scene());
+            break;
+        }
+    }
+    if (!scene || !scene->cursorItem()) {
+        return;
+    }
+    // WorkspaceScene::updateCursor only moves the item while the cursor is
+    // shown; hidden, its position is whatever the pointer was at when the
+    // hide landed. Track the live pointer the way that slot does (the item's
+    // own hotspot offset lives in its child, so the position IS the pointer).
+    scene->cursorItem()->setPosition(KWin::effects->cursorPos());
+    const ShaderInternal::ScopedGlState glStateGuard;
+    scene->renderer()->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
+                                  KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
 }
 
 void translatePackParams(

@@ -603,25 +603,46 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::Effect)},
     });
 
-    // ── overlay-property slots — context-domain overrides of the active
-    //    layout's zone-overlay shader / style. Daemon-side only
-    //    (LayoutRegistry::resolveContextOverlay → OverlayService); no Tag::Effect.
-    //    Shader-id vocabulary validation lives at the consumer (the overlay
-    //    service falls back to the layout default for an unknown id), mirroring
-    //    SetEngineMode's open-vocabulary rationale above.
+    // ── overlay-property slots — context-domain overrides of the zone-overlay
+    //    shader / style. Daemon-side only (LayoutRegistry::resolveContextOverlay
+    //    → OverlayService); no Tag::Effect. Shader-id vocabulary validation
+    //    lives at the consumer (the overlay service falls back to the tree's
+    //    answer for an unknown id), mirroring SetEngineMode's open-vocabulary
+    //    rationale above.
+    //
+    //    The shader action is node-scoped, "overlay-shader:<layoutId>", the
+    //    overlay twin of the "anim-shader:<event>" slot above: the node is the
+    //    OverlayShaderTree path the rule overrides, a layout uuid or the empty
+    //    global-default node. LayoutId is optional and absent means the global
+    //    node, so a rule written before the node existed keeps meaning "every
+    //    layout in this context". EffectId must be PRESENT but may be empty:
+    //    engaged-empty is the same "block the tree, no shader" sentinel the
+    //    animation action carries, and the resolver relies on the slot being
+    //    filled to tell it from an unmatched rule. Requiring the key keeps a
+    //    hand-edited rule that simply forgot the shader from silently blocking.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::OverrideOverlayShader),
-        .slotFor = constantSlot(ActionSlot::OverlayShader),
+        .slotFor = [](const QJsonObject& p) -> QString {
+            return QString(ActionSlot::OverlayShaderPrefix) + p.value(ActionParam::LayoutId).toString();
+        },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::EffectId);
+                const QJsonValue effect = p.value(ActionParam::EffectId);
+                if (!effect.isString()) {
+                    return false;
+                }
+                const QJsonValue node = p.value(ActionParam::LayoutId);
+                return node.isUndefined() || node.isString();
             },
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring
         // OverrideAnimationShader; the inline ParameterEditor writes it.
-        .allowedKeys = {QString(ActionParam::EffectId), QString(ActionParam::Params)},
+        .allowedKeys = {QString(ActionParam::LayoutId), QString(ActionParam::EffectId), QString(ActionParam::Params)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")}},
+        // Node first, shader second: the node decides what the shader applies
+        // to, the same order the animation action lists Event before EffectId.
+        .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("overlayLayout")},
+                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 0,
         .tags = {QString(Tag::Overlay)},

@@ -11,6 +11,8 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <PhosphorEngine/HandoffIntent.h>
+
 #include <QScopeGuard>
 
 class TestWtaRouting : public QObject, protected WtaConvenienceFixture
@@ -47,6 +49,38 @@ private Q_SLOTS:
     }
 
     // ── Open routing: RouteToScreen / RouteToDesktop rules ──
+    /// The overview drop onto a snapping workspace: the zone under the drop
+    /// point on the target desktop's layout is the landing zone; a point
+    /// outside every zone leaves the window free (no zone, non-floating).
+    void testOverviewDrop_snapZoneUnderDropPoint()
+    {
+        const QString windowId = QStringLiteral("app|w1");
+        const QString screen = QStringLiteral("DP-1");
+        QVERIFY(m_zoneIds.size() >= 2);
+        SnapState* state = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        state->assignWindowToZone(windowId, m_zoneIds.at(0), screen, 1);
+        QVERIFY(m_snapEngine->isWindowTracked(windowId));
+
+        const QRect target = m_wta->service()->zoneGeometry(m_zoneIds.at(1), screen);
+        if (!target.isValid()) {
+            QSKIP("zone geometry does not resolve without a screen");
+        }
+        PhosphorEngine::HandoffIntent intent;
+        intent.dropPos = target.center();
+        m_wta->moveWindowToWorkspaceWithIntent(windowId, screen, 2, QString(), intent);
+        SnapState* after = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        QCOMPARE(after->zoneForWindow(windowId), m_zoneIds.at(1));
+        QCOMPARE(after->desktopForWindow(windowId), 2);
+
+        // A drop outside every zone: no zone, and not floating either.
+        PhosphorEngine::HandoffIntent free;
+        free.dropPos = QPoint(-5000, -5000);
+        m_wta->moveWindowToWorkspaceWithIntent(windowId, screen, 1, QString(), free);
+        SnapState* freed = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        QVERIFY(freed->zoneForWindow(windowId).isEmpty());
+        QVERIFY(!freed->isFloating(windowId));
+    }
+
     void testApplyOpenRoutingForTiling_routesToAutotileScreenAndDesktop()
     {
         // DP-2 is an AUTOTILE screen; DP-1 (the spawn screen) stays snapping (the

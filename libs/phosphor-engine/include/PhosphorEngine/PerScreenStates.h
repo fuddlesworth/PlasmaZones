@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorengine_export.h>
+
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementState.h>
 
@@ -11,11 +13,16 @@
 #include <type_traits>
 
 #include <QHash>
+#include <QLoggingCategory>
 #include <QSet>
 #include <QString>
 #include <QtGlobal>
 
 namespace PhosphorEngine {
+
+/// Exported because this is a header-only template used from every engine
+/// library, so the category has to resolve outside phosphor-engine.
+Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcPerScreenStates, PHOSPHORENGINE_EXPORT)
 
 /// Whether a desktop renumber mapping may be applied at all. KWin desktops are
 /// 1-based, so a mapped value below 1 is a poisoned mapping — and rejecting
@@ -24,17 +31,12 @@ namespace PhosphorEngine {
 /// manufacturing exactly the collision the callers' injectivity precondition
 /// exists to rule out. So the verdict is all-or-nothing, for every consumer of
 /// the mapping, and a refusal leaves every map untouched.
-///
-/// The warnings in this header are plain qWarning, not qCWarning: phosphor-engine
-/// declares no logging category, and this is a header-only template consumed by
-/// three engines that each have their own — a category defined here would either
-/// leak into all of them or force a new library-level one for four call sites.
 inline bool desktopRenumberMappingIsValid(const QHash<int, int>& oldToNew)
 {
     for (auto it = oldToNew.constBegin(); it != oldToNew.constEnd(); ++it) {
         if (it.value() < 1) {
-            qWarning("PhosphorEngine: refusing a desktop renumber mapping with a target below 1 (%d -> %d)", it.key(),
-                     it.value());
+            qCWarning(lcPerScreenStates) << "PhosphorEngine: refusing a desktop renumber mapping with a target below 1"
+                                         << it.key() << "->" << it.value();
             return false;
         }
     }
@@ -87,11 +89,10 @@ void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHas
         // warning names the collision either way, and the caller contract
         // above is the real defence.
         if (hash.contains(key)) {
-            qWarning(
-                "PhosphorEngine::renumberDesktopKeyedHash: target key (desktop %d) is already occupied — "
-                "mapping is not injective, or an unmapped key holds the target; the entry already there is "
-                "being replaced",
-                key.desktop);
+            qCWarning(lcPerScreenStates)
+                << "PhosphorEngine::renumberDesktopKeyedHash: target key (desktop" << key.desktop
+                << ") is already occupied — mapping is not injective, or an unmapped key holds the target; "
+                   "the entry already there is being replaced";
         }
         hash.insert(key, std::move(value));
     }
@@ -266,20 +267,24 @@ public:
     /// Move a window's reverse-map entry from `oldKey` to `newKey`. Only the
     /// reverse map moves; the engine wraps its own remove-from-old / add-to-new
     /// state lifecycle hooks around this call. `oldKey` is the caller's asserted
-    /// current key: the reverse map is authoritative, so `oldKey` only guards against
-    /// a stale-caller bug (in debug builds) rather than driving the move.
+    /// current key: the reverse map is authoritative, so `oldKey` only reports a
+    /// stale-caller bug rather than driving the move.
     void migrate(const QString& windowId, const PlacementStateKey& oldKey, const PlacementStateKey& newKey)
     {
-        const auto tracked = m_windowToKey.constFind(windowId);
-        const bool staleCaller = tracked != m_windowToKey.constEnd() && !(tracked.value() == oldKey);
-        if (staleCaller) {
-            // Diagnostic only — the reverse map is authoritative and the move
-            // proceeds either way; the caller's asserted key being stale means
-            // ITS bookkeeping is wrong, which the log surfaces in release too.
-            qWarning("PhosphorEngine::PerScreenStates::migrate: caller's oldKey is stale for window %ls",
-                     qUtf16Printable(windowId));
+        // Debug assert AND a release-build warning for the same condition: a
+        // stale-caller bug silently rewrote the reverse map in release, which
+        // is exactly the case that leaves a window resolving to a state that
+        // does not hold it. The move still happens either way — the map is
+        // authoritative and refusing here would strand the window worse — so
+        // this reports rather than guards.
+        const auto it = m_windowToKey.constFind(windowId);
+        if (it != m_windowToKey.constEnd() && it.value() != oldKey) {
+            Q_ASSERT(false);
+            qCWarning(lcPerScreenStates) << "PerScreenStates::migrate: caller asserted" << windowId << "was on desktop"
+                                         << oldKey.desktop << "of screen" << oldKey.screenId
+                                         << "but the reverse map says desktop" << it.value().desktop << "of screen"
+                                         << it.value().screenId << "— migrating from the map's key";
         }
-        Q_ASSERT(!staleCaller);
         m_windowToKey.insert(windowId, newKey);
     }
 
@@ -384,11 +389,10 @@ public:
             // displaced state and strand its windows' reverse entries, so the
             // collision is still surfaced, matching migrate() above.
             if (m_states.contains(key)) {
-                qWarning(
-                    "PhosphorEngine::PerScreenStates::renumberDesktops: target key (desktop %d) is already "
-                    "occupied — mapping is not injective, or an unmapped key holds the target; the state "
-                    "already there is being replaced",
-                    key.desktop);
+                qCWarning(lcPerScreenStates)
+                    << "PhosphorEngine::PerScreenStates::renumberDesktops: target key (desktop" << key.desktop
+                    << ") is already occupied — mapping is not injective, or an unmapped key holds the target; "
+                       "the state already there is being replaced";
             }
             m_states.insert(key, state);
         }

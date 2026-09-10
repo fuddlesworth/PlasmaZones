@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the dozen TUs in this
-// directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp, signals.cpp,
-// windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
-// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp) —
+// and the implementation is already partitioned across the thirteen TUs in
+// this directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp,
+// signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
+// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp,
+// wheelchord.cpp) —
 // every one of those TUs calls back
 // through this single declaration, which C++ requires to be whole. Most of the
 // length is the per-member invariant prose the split files depend on: the
@@ -144,10 +145,19 @@ public:
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
     /// Drop a LIVE window from engine tracking without a close (the
-    /// drag-bypass revert). Same effect-side cleanup as onWindowClosed, but
-    /// the daemon relay is Tiling.releaseWindowTracking, which runs NO
+    /// drag-bypass revert, and the desktop arms). The same
+    /// cleanupAutotileTracking teardown as onWindowClosed, minus that one's
+    /// unconditional maximize-ledger scrub, and the daemon relay is
+    /// Tiling.releaseWindowTracking, which runs NO
     /// placement capture — the window is mid-drag and its frame must never
     /// be recorded as a float-back.
+    ///
+    /// The daemon relay fires only when @p screenId is managed in the CURRENT
+    /// context. That gate is deliberately NOT lifted for a window arriving
+    /// from another desktop: which desktop's state still lists a window is
+    /// the daemon's question, answered by TilingAdaptor's desktop-membership
+    /// reconcile off the window's registry desktop set (#1076), never by this
+    /// screen's managed set, which says nothing about the desktop it left.
     void releaseWindowTracking(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)
@@ -342,8 +352,9 @@ public:
 
     /// Cleanup: unmaximize all monocle-maximized windows.
     ///
-    /// Three callers, all of them shedding a dead session's claims: daemon
-    /// loss, effect teardown, and daemon BRING-UP via drainDeadSessionState.
+    /// Four callers: daemon loss, effect teardown, engine disable, and daemon
+    /// BRING-UP via drainDeadSessionState. Three of them shed a dead
+    /// session's claims; engine disable is a live session giving them up.
     /// The bring-up one is not redundant with the teardown pair — it makes
     /// bring-up authoritative on its own rather than on what the loss edge
     /// left behind, and this ledger needs that more than its siblings do,
@@ -712,6 +723,13 @@ public:
     /// when a pill was hit AND the activation ran (the caller consumes the
     /// press); false lets the press fall through to what is underneath.
     bool activateScrollTabAt(const QPointF& pos);
+    /// An UNMODIFIED wheel event at @p pos: when it lands on a pill, step the
+    /// owning column's tabs by the notches it carries, wrapping at either end
+    /// like the engine's own cycleTab verb. Returns true when the event was
+    /// claimed (the caller consumes it), which includes the sub-notch ticks
+    /// of a live gesture and a run too short to step through.
+    bool handleTabWheel(const QPointF& pos, qreal delta, qint32 deltaV120, Qt::Orientation orientation,
+                        Qt::KeyboardModifiers mods, Qt::MouseButtons buttons);
     /// A left press was consumed on a pill under the interception: keep the
     /// interception until the matching release even if the pointer leaves
     /// the pill, so the window underneath never sees an unpaired release.
@@ -1478,8 +1496,9 @@ private:
     /// loadSettings owns the re-announce — announcing there desyncs the
     /// daemon's view from the effect's until that batch lands.
     void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
-    /// The three bring-up property Gets loadSettings dispatches (scrolling
-    /// screens, active layouts, scroll effect behaviour), factored out
+    /// The bring-up property Gets loadSettings dispatches (scrolling screens,
+    /// active layouts, scroll effect behaviour, and the scroll cap's
+    /// blocked-window list), factored out
     /// so their bounded failure retries can re-dispatch exactly one fetch.
     /// Every dispatch bumps the matching per-query generation, so a stale
     /// retry reply loses to any newer query or live-signal write.
@@ -1520,6 +1539,20 @@ private:
     /// later re-tab re-queries instead of painting a verdict the daemon's
     /// strip-gated title relay could not have refreshed meanwhile.
     void dropScrollTabColorsForUnindexed(const QList<QString>& indexedBefore);
+    /// Damage @p bounds on @p out WHERE THE BAND IS ACTUALLY DRAWN, i.e.
+    /// shifted by the strip view spring's live offset for that output.
+    ///
+    /// The painter stores the band offset-free (the model does not move during
+    /// a scroll; the blit adds the offset), so damaging the raw bounds is only
+    /// correct at rest. Mid-leg it damages where the band WAS, and the pills
+    /// are drawn somewhere else — visible as a hover highlight that does not
+    /// appear until the leg ends, on any frame the spring's own full-output
+    /// repaint does not happen to cover. A no-op at rest, where offsetFor
+    /// returns a null point.
+    ///
+    /// Silently does nothing for an invalid @p bounds, so callers can hand it
+    /// a boundsFor() result straight from an output with no pills.
+    void damageScrollTabBand(KWin::LogicalOutput* out, const QRect& bounds) const;
     /// The engine retracted @p screenId's strips ("[]"): drop the payload,
     /// the index entries and the painter output, releasing a hover it held.
     void dropScrollTabScreen(const QString& screenId);
@@ -1584,6 +1617,7 @@ private:
     /// claiming axis events, so a partial notch cannot outlive the gesture
     /// that produced it.
     void resetWheelAccumulators();
+    void resetTabWheelAccumulators();
     /// Pause the effect's own focus-follows-mouse after an ENGINE-driven
     /// strip movement on a scrolling screen (tile batch or activation).
     /// Scrolling slides other columns under a stationary pointer, and the
@@ -1665,7 +1699,7 @@ private:
     int m_scrollFocusScrollBlockedFetchRetriesLeft = 0;
     quint64 m_scrollFocusScrollBlockedQueryGeneration = 0;
     /// The two tab-indicator bring-up fetches carry the same bounded retry
-    /// and per-dispatch generation guard as their three siblings. The guard
+    /// and per-dispatch generation guard as their four siblings. The guard
     /// matters across a daemon restart: two loadSettings runs put two Gets in
     /// flight, and a late reply from the DEAD session would otherwise
     /// re-install a payload for a screen the new daemon never names and
@@ -2109,6 +2143,30 @@ private:
     // that crosses first wins and zeroes the other.
     qreal m_wheelAccumVertical = 0.0;
     qreal m_wheelAccumHorizontal = 0.0;
+    // The tab wheel banks separately from the chords above. Sharing one pair
+    // would let a chord gesture's residue spend the tab wheel's first step
+    // (and the reverse), and the two gestures are distinguishable only by
+    // modifier and cursor position — nothing stops a user from going straight
+    // from one to the other.
+    qreal m_tabWheelAccumVertical = 0.0;
+    qreal m_tabWheelAccumHorizontal = 0.0;
+    // The tab the live tab-wheel gesture last asked for. The walk anchors on
+    // this rather than on the model's `active` flag because that flag only
+    // catches up once the daemon relays the focus back, and the next notch
+    // routinely arrives first. Cleared with the accumulators, so it lives
+    // exactly as long as the gesture that set it.
+    QString m_tabWheelAnchor;
+    // Every tab this gesture has asked for, the anchor included. The
+    // retirement guard needs it: during a fast gesture a relay for an EARLIER
+    // step arrives while the anchor already names a later one, and without
+    // this that mismatch reads as a foreign focus change and retires an
+    // anchor the gesture is still walking. A plain "a step is in flight"
+    // boolean cannot do the job, because a step whose relay never comes (the
+    // window closed, the activation was refused, the mode changed) would
+    // leave it set forever and disable the guard for good. Membership answers
+    // the real question instead: did WE ask for the tab the model is now
+    // showing?
+    QSet<QString> m_tabWheelWalked;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

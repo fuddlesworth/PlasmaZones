@@ -1,0 +1,61 @@
+{
+    "id": "afterglow",
+    "name": "Afterglow",
+    "description": "The pointer leaves a glow on the screen that fades where it was, the way a phosphor screen keeps a faint image of what was just drawn. Wherever the pointer passes the glow is refreshed, and everywhere else it dims a little each frame until it is gone. The glow is kept on its own canvas from one frame to the next, so a long stroke fades along its whole length rather than being cut off behind the pointer.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Trail",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reach": 96,
+    "trailSeconds": 1.0,
+    "trailWindowSeconds": 0.1,
+    "multipass": true,
+    "bufferShaders": ["buffer.frag"],
+    "bufferFeedback": true,
+    "bufferScale": 0.5,
+    "parameters": [
+        {
+            "id": "persistence",
+            "name": "Persistence",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.5,
+            "max": 0.82,
+            "step": 0.01,
+            "description": "How much of the glow survives from one frame to the next. Higher values fade more slowly"
+        },
+        {
+            "id": "radius",
+            "name": "Brush radius",
+            "type": "float",
+            "default": 12.0,
+            "min": 4.0,
+            "max": 48.0,
+            "description": "Radius of the glow the pointer lays down as it moves (px)"
+        },
+        {
+            "id": "intensity",
+            "name": "Intensity",
+            "type": "float",
+            "default": 0.9,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Brightness of the glow where it is freshest"
+        },
+        {
+            "id": "color",
+            "name": "Fresh colour",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Colour of the glow where the pointer has just been"
+        },
+        {
+            "id": "colorFaded",
+            "name": "Faded colour",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Colour the glow shifts toward as it dims"
+        }
+    ]
+}

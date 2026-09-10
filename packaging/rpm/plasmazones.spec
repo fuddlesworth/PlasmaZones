@@ -36,7 +36,7 @@ Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 # libPhosphorFsLoader. Keep both versions in sync with
 # PHOSPHORSCRIPTING_LUAU_VERSION in libs/phosphor-scripting/CMakeLists.txt and
 # PHOSPHORFSLOADER_VALIJSON_VERSION in libs/phosphor-fsloader/CMakeLists.txt.
-Provides:       bundled(luau) = 0.730
+Provides:       bundled(luau) = 0.737
 Provides:       bundled(valijson) = 1.1.3
 
 # Plasma 6 / Wayland only

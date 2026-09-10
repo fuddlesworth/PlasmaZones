@@ -428,6 +428,7 @@ private Q_SLOTS:
             QStringLiteral("scrollingTemplate"),
             QStringLiteral("animationEvent"),
             QStringLiteral("shaderEffect"),
+            QStringLiteral("overlayLayout"),
             QStringLiteral("overlayShader"),
             QStringLiteral("zoneOrdinals"),
             QStringLiteral("zoneNames"),

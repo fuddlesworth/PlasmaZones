@@ -33,6 +33,8 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
     include/PhosphorEngine/GapResolution.h
+    include/PhosphorEngine/HandoffIntent.h
+    include/PhosphorEngine/IOverviewModelSource.h
     include/PhosphorEngine/LayerFocusSwitch.h
     include/PhosphorEngine/PerScreenStates.h
     include/PhosphorEngine/ScreenContextTracker.h

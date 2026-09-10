@@ -7,6 +7,8 @@
 #include "surface_fold.h"
 #include "types.h"
 #include "window_query.h"
+#include "compositor/effectlogging.h"
+#include "transitions/transitionpasshelpers.h"
 
 #include <core/region.h>
 #include <core/rendertarget.h>
@@ -21,6 +23,9 @@
 #include <QVector4D>
 
 #include <epoxy/gl.h>
+
+#include <algorithm>
+#include <utility>
 
 // Backdrop capture for the surface decoration fold, split out of
 // surfacelayers.cpp (which owns the fold itself).
@@ -112,6 +117,15 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropFbo.reset();
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
+            // The pane is simply absent (uHasBackdrop 0) and the allocation
+            // is retried on the next paint, which is the wanted behaviour
+            // for a transient failure. Say so once, or a VRAM-starved
+            // session shows frost vanishing with nothing in the journal.
+            if (!m_backdropAllocWarned) {
+                m_backdropAllocWarned = true;
+                qCWarning(lcEffect) << "Backdrop texture allocation failed for" << textureSize
+                                    << "(frost/glass panes draw without their backdrop until it succeeds)";
+            }
             state.backdropSize = QSize();
             return;
         }
@@ -130,6 +144,11 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         // Wrap the texture once, here — the per-frame capture blit below reuses it.
         state.backdropFbo = std::make_unique<KWin::GLFramebuffer>(state.backdropTex.get());
         if (!state.backdropFbo->valid()) {
+            if (!m_backdropAllocWarned) {
+                m_backdropAllocWarned = true;
+                qCWarning(lcEffect) << "Backdrop framebuffer is incomplete for" << textureSize
+                                    << "(frost/glass panes draw without their backdrop until it succeeds)";
+            }
             state.backdropFbo.reset();
             state.backdropTex.reset();
             state.backdropSize = QSize();
@@ -217,7 +236,13 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // repaints — so contraction still lands within a frame or two of the
     // window moving.
     const QRectF outputRect = viewport.renderRect();
-    const bool restartGeneration = fullSlice && state.backdropGenerationOutputs.contains(outputRect);
+    const auto generationMember = [&state](const QRectF& rect) {
+        return std::find_if(state.backdropGenerationOutputs.begin(), state.backdropGenerationOutputs.end(),
+                            [&rect](const BackdropGenerationMember& m) {
+                                return m.outputRect == rect;
+                            });
+    };
+    const bool restartGeneration = fullSlice && generationMember(outputRect) != state.backdropGenerationOutputs.end();
     // The generation-set mutation is deferred to AFTER a successful blit,
     // below: clearing it here would leave the set emptied on the no-blit
     // early return, and the next frame would union with a stale rect it
@@ -290,13 +315,40 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         // failed blit means THIS slice is missing, not that the others are invalid.
         return;
     }
+    // The backdrop is OPAQUE by construction — it is the scene painted below
+    // this window, and the desktop window at the bottom of every stack is
+    // opaque — but the framebuffer it was just blitted from does not always
+    // say so. The strip pass (StripTransitionManager) uses its capture's
+    // alpha as a side channel: it zeroes it at the strip band's bottom edge
+    // so that, once the columns have painted, alpha is the strip layer's
+    // coverage. A column's backdrop captured inside that walk therefore
+    // arrives with alpha 0 under wallpaper-coloured texels, and the blur
+    // pack builds its frost's alpha from the blurred backdrop's, so the pane
+    // vanished for the length of every scroll leg. Stamp alpha to 1 across
+    // the texture: the written slices are opaque scene, and the never-written
+    // margin is never sampled (backdropTexel clamps into backdropRect), so
+    // the blanket fill is exact where it matters and harmless where it does
+    // not. Colour is untouched.
+    //
+    // Deliberately UNCONDITIONAL rather than gated on the strip latch. The
+    // strip capture is the only alpha-0 source today, but the on-screen
+    // target this reads from outside the walk can be an XRGB or 2-bit-alpha
+    // buffer whose alpha semantics through a blit nobody has probed on
+    // every driver, and the stamp is one alpha-only clear of a canvas-sized
+    // texture per capture. Paying it always is what makes "uBackdrop is
+    // opaque" a contract a pack can rely on rather than a property of the
+    // frame it was captured in.
+    KWin::GLFramebuffer::pushFramebuffer(&fbo);
+    TransitionPass::clearAlpha(1.0f);
+    KWin::GLFramebuffer::popFramebuffer();
     // Valid sub-rect in TEXTURE PIXELS first, normalized at the end — matches
     // backdropTexel's clamp space. Non-restart captures UNION with the slices
     // already accumulated (sibling outputs tiling the canvas, earlier damage
     // slices from this one). A bounding-box union can span texels no slice
     // ever covered, and on a freshly-cleared texture those still hold the
-    // transparent allocation clear — which a pack clamping into the rect WOULD
-    // sample, as black patches in the frost. So the published rect must pass
+    // allocation clear (opaque black after the alpha stamp above) — which a
+    // pack clamping into the rect WOULD sample, as black patches in the
+    // frost. So the published rect must pass
     // the written-coverage check: fall back from the union to this frame's
     // union, then to the largest single blitted slice (fully written by
     // construction). After the first full-canvas capture the coverage region
@@ -304,7 +356,26 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // behaves exactly as it always has; gap texels then hold the PREVIOUS
     // capture of the same scene spot, which is fine.
     QRectF validPx = destUnion;
-    if (!restartGeneration && backdropUsable(state)) {
+    if (restartGeneration) {
+        // A restart contracts the rect to what THIS output captured, plus
+        // the last full slice of every OTHER member of the generation it
+        // closes. Those members' halves of the texture are still valid
+        // (they blitted them this generation); dropping them collapsed the
+        // rect to one output's half between that output's capture and its
+        // neighbour's on every frame, so a blur kernel near the monitor seam
+        // clamped at the seam instead of reading the neighbour's texels. A
+        // member that has LEFT the canvas is carried for exactly one more
+        // restart: it never blits again, the next restart clears the set
+        // without it, and its stale slice drops out then. The coverage check
+        // below still guards the carried rect. No intersection with the
+        // previous published rect: a coverage fallback may have shrunk that
+        // below a sibling's legitimately blitted slice.
+        for (const BackdropGenerationMember& m : std::as_const(state.backdropGenerationOutputs)) {
+            if (m.outputRect != outputRect && !m.lastFullDest.isEmpty()) {
+                validPx = validPx.united(m.lastFullDest);
+            }
+        }
+    } else if (backdropUsable(state)) {
         validPx = validPx.united(QRectF(state.backdropRect.x() * texW, state.backdropRect.y() * texH,
                                         state.backdropRect.z() * texW, state.backdropRect.w() * texH));
     }
@@ -327,8 +398,15 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     if (restartGeneration) {
         state.backdropGenerationOutputs.clear();
     }
-    if (fullSlice && !state.backdropGenerationOutputs.contains(outputRect)) {
-        state.backdropGenerationOutputs.append(outputRect);
+    if (fullSlice) {
+        // Record this output's full slice (texture px) so a restart by a
+        // sibling can carry it; an existing member just updates its rect.
+        const auto member = generationMember(outputRect);
+        if (member != state.backdropGenerationOutputs.end()) {
+            member->lastFullDest = destUnion;
+        } else {
+            state.backdropGenerationOutputs.append({outputRect, destUnion});
+        }
     }
 }
 

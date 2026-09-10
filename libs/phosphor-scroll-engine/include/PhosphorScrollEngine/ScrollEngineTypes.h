@@ -19,6 +19,7 @@
 // model's enum. Not re-declared here — a second spelling of the four edges
 // is exactly the kind of parallel vocabulary the split above exists to avoid.
 #include <PhosphorScrollEngine/ScrollTypes.h>
+#include <PhosphorScrollEngine/StripAxis.h>
 
 #include <QRect>
 #include <QRectF>
@@ -59,6 +60,12 @@ struct ScrollOpenParams
     /// insert itself; the engine's FLOAT exits ignore it (a floated open
     /// keeps the compositor's own focus verdict).
     std::optional<bool> focused;
+    /// Named tab group (openTabGroup rule), trimmed and non-empty when
+    /// engaged. The open joins, as a tab, a column holding a window whose own
+    /// resolved params carry the same name; an engaged name outranks the
+    /// app-keyed IScrollSettings::scrollingGroupSameAppAsTabs default and
+    /// never falls back to it. A consume open outranks both.
+    std::optional<QString> tabGroup;
 };
 
 /// One visible tile of a strip: the unit of the scroll "zone number" space.
@@ -158,6 +165,17 @@ struct ScrollStripSnapshotTile
     /// was resolved while it was hidden; tab renderers draw segments from
     /// the flag, not the rect).
     QRectF relRect;
+    /// The tile's resolved rect in the engine's own ABSOLUTE coordinate
+    /// space, filled ONLY by the key-taking ScrollEngine::stripSnapshot
+    /// overload (the workspace overview's read). The screenId overload
+    /// leaves it null, since its consumers draw off relRect. Where filled,
+    /// it is the relayout's rect verbatim: a hidden tab shares its column's
+    /// active tile rect (ResolvedTile::rect), a minimized tile stays null,
+    /// and a parked column's tiles land OUTSIDE the work area, which is
+    /// their visual position on the strip. Unlike relRect it is never
+    /// blanked for a hidden tab, because the overview wants a rect for every
+    /// window it can draw.
+    QRect absRect;
     bool minimized = false;
     /// Non-active tab of a tabbed column. The shipped renderer branches on
     /// the column's tabbed flag instead; carried for direct consumers.
@@ -181,6 +199,11 @@ struct ScrollStripSnapshotColumn
     /// clamped to (0, 1]. 0 when the column resolves no rect (fully
     /// minimized) — renderers fall back to a full-extent preview there.
     qreal widthFraction = 0.0;
+    /// The column's resolved bounding rect (ResolvedColumn::rect) in the
+    /// engine's absolute coordinate space. Same fill rule as the tile field:
+    /// only the key overload sets it, and a fully minimized column (no
+    /// resolved entry) leaves it null.
+    QRect absRect;
     /// MODEL tile order, minimized tiles included.
     QVector<ScrollStripSnapshotTile> tiles;
 };
@@ -208,11 +231,79 @@ struct ScrollStripSnapshot
     /// its place (the right neighbour, or the new last column), matching the
     /// real detach; -1 only when the snapshot ends up with no columns.
     int activeColumnIndex = -1;
+    /// The viewport's leading edge in strip coordinates
+    /// (ResolvedStrip::viewOffset), filled only by the key-taking overload
+    /// alongside the absRects; the screenId overload leaves it 0. A column's
+    /// on-screen main-axis position is already folded into its absRect, so
+    /// this is for a consumer that wants the strip-space position back
+    /// (absRect main position plus viewX).
+    int viewX = 0;
     /// False when the screen has no strip state or no valid work area —
     /// distinct from a valid, empty strip (zero columns). A test /
     /// introspection seam: the daemon's serializer collapses both states to
     /// an empty card list, which the popup renders identically on purpose.
     bool valid = false;
+};
+
+/// One tile of a strip MODEL (see ScrollStripModel). Unlike the visible-tile
+/// walk this keeps every tile the strip holds, minimized and hidden ones
+/// included, because a map of the whole strip has to draw the columns the
+/// viewport does not show.
+struct ScrollStripModelTile
+{
+    QString windowId;
+    /// The tile's resolved extent ACROSS the strip, in pixels: its height on
+    /// a horizontal strip, its width on a vertical one. 0 for a minimized
+    /// tile, which the relayout drops entirely and so resolves no rect. A
+    /// hidden tab of a tabbed column carries the shown tab's extent, since
+    /// every tab is committed at the column's one rect.
+    int crossPx = 0;
+    bool minimized = false;
+};
+
+/// One column of a strip model, in strip order.
+struct ScrollStripModelColumn
+{
+    /// Strip index, which is also the index focusColumnAtIndex takes.
+    int index = -1;
+    /// The column's LEADING edge in strip coordinates (the first column's
+    /// leading edge is 0), the same coordinate viewOffsetPx is measured in.
+    int stripPosPx = 0;
+    /// The column's resolved extent ALONG the strip, in pixels. 0 for a
+    /// fully minimized column, which occupies no strip position.
+    int extentPx = 0;
+    ColumnDisplay display = ColumnDisplay::Normal;
+    /// Index into @c tiles of the column's active tile (the shown tab of a
+    /// tabbed column).
+    int activeTile = 0;
+    /// Column::maximizedToEdges, the declared state the compositor mirrors
+    /// onto the maximize bit. The width-only maximize (toggleMaximizeColumn)
+    /// is not a flag on the model at all and is not reported here.
+    bool maximized = false;
+    QVector<ScrollStripModelTile> tiles;
+};
+
+/// The whole strip of one screen as a renderer of a strip MAP needs it: every
+/// column with its strip position and extent, the viewport's offset and size
+/// on the same axis, and the active column. Pixels along the strip's own
+/// axis throughout, so a consumer reads @c axis once and lays the rest out
+/// along it. Built by ScrollStrip::stripModel from ONE relayout pass; the
+/// engine's stripModelForScreen resolves the screen's params once and hands
+/// them down, the same cost discipline visibleTilesWithRects follows.
+struct ScrollStripModel
+{
+    StripAxis axis = StripAxis::horizontal();
+    /// The viewport's leading edge in strip coordinates. Can be negative or
+    /// past the strip's end: the centering policy deliberately stores an
+    /// anchor whose derived offset overhangs when a short strip is centred.
+    int viewOffsetPx = 0;
+    /// The viewport's extent along the strip (the work area's main extent).
+    int viewportPx = 0;
+    /// Total strip extent: every non-minimized column plus the gaps between.
+    int stripExtentPx = 0;
+    /// Strip index of the active column, -1 on an empty strip.
+    int activeColumn = -1;
+    QVector<ScrollStripModelColumn> columns;
 };
 
 } // namespace PhosphorScrollEngine

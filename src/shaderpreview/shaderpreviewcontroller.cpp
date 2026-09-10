@@ -3,6 +3,9 @@
 
 #include "shaderpreviewcontroller.h"
 
+#include <QQuickItem>
+#include <QQuickWindow>
+
 #include "daemon/rendering/zonelabeltexturebuilder.h"
 #include "phosphor_i18n.h"
 
@@ -32,6 +35,13 @@ Q_LOGGING_CATEGORY(lcShaderPreview, "plasmazones.shaderpreview")
 
 using ShaderInfo = PhosphorShaders::ShaderRegistry::ShaderInfo;
 using ParameterInfo = PhosphorShaders::ShaderRegistry::ParameterInfo;
+
+// Shader preset FILE format keys. These used to alias ZoneJsonKeys::ShaderId/
+// ShaderParams; those layout keys are gone (assignments live in the config
+// OverlayShaderTree now), but existing preset files on disk keep this shape,
+// so the spelling is pinned here.
+constexpr QLatin1String PresetShaderId{"shaderId"};
+constexpr QLatin1String PresetShaderParams{"shaderParams"};
 
 // Mirror ZoneManager::isFixedMode without depending on the editor service: a
 // zone is fixed-geometry when its GeometryMode key equals ZoneGeometryMode::Fixed.
@@ -306,17 +316,33 @@ QString ShaderPreviewController::shaderParamPreamble(const QString& shaderId) co
     return PhosphorShaders::ShaderRegistry::paramPreamble(si);
 }
 
-QImage ShaderPreviewController::buildLabelsTexture(const QVariantList& zones, int width, int height) const
+QImage ShaderPreviewController::buildLabelsTexture(const QVariantList& zones, QQuickItem* target) const
 {
-    if (zones.isEmpty() || width <= 0 || height <= 0) {
+    if (zones.isEmpty() || !target) {
         return QImage();
     }
-    return ZoneLabelTextureBuilder::build(zones, QSize(width, height), Qt::white, true).toImage();
+    const QSize size(qMax(1, qRound(target->width())), qMax(1, qRound(target->height())));
+    if (target->width() <= 0.0 || target->height() <= 0.0) {
+        return QImage();
+    }
+    // The ratio the preview's shader pass samples this at. Window-derived, not
+    // screen-derived: on Wayland QScreen::devicePixelRatio is the wl_output
+    // integer buffer scale (2 on a 1.15 output), while the shader's
+    // iResolution comes from QQuickWindow::effectiveDevicePixelRatio.
+    const qreal dpr = target->window() ? target->window()->effectiveDevicePixelRatio() : 1.0;
+    return ZoneLabelTextureBuilder::build(zones, size, dpr, Qt::white, true).toImage();
 }
 
 QImage ShaderPreviewController::loadWallpaperTexture() const
 {
     return PhosphorShaders::ShaderRegistry::loadWallpaperImage();
+}
+
+QString ShaderPreviewController::wallpaperPath() const
+{
+    // The same resolver the decoration preview uses, so the two previews agree
+    // on what "the desktop" is.
+    return PhosphorShaders::ShaderRegistry::wallpaperPath();
 }
 
 QVariant ShaderPreviewController::audioSpectrumVariant() const
@@ -381,8 +407,8 @@ bool ShaderPreviewController::saveShaderPreset(const QString& filePath, const QS
 
     QJsonObject obj;
     obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = name;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(shaderParams);
+    obj[QLatin1String(PresetShaderId)] = shaderId;
+    obj[QLatin1String(PresetShaderParams)] = QJsonObject::fromVariantMap(shaderParams);
 
     QFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -434,7 +460,7 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
     }
 
     const QJsonObject obj = doc.object();
-    const QString shaderId = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();
+    const QString shaderId = obj[QLatin1String(PresetShaderId)].toString();
     if (shaderId.isEmpty()) {
         Q_EMIT shaderPresetLoadFailed(PhosphorI18n::tr("Preset file missing shader ID", "@info"));
         return result;
@@ -451,8 +477,8 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
     }
 
     QVariantMap shaderParams;
-    if (obj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
-        const QJsonValue paramsValue = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)];
+    if (obj.contains(QLatin1String(PresetShaderParams))) {
+        const QJsonValue paramsValue = obj[QLatin1String(PresetShaderParams)];
         // A present-but-non-object params field is a corrupt/hand-edited file —
         // fail loudly rather than silently dropping the user's saved values.
         if (!paramsValue.isObject()) {
@@ -463,11 +489,9 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
         // A preset file is a system boundary: its keys are whatever was in the
         // JSON, and nothing downstream checks a parameter id against what the
         // shader declares. Keep only the declared ids, so a hand-edited or
-        // stale preset cannot push unknown keys into the live param map. Same
-        // id-filtering EditorController::stripStaleShaderParams does against
-        // its cached parameter list; that method is not reachable from here
-        // (it is an editor member reading m_cachedShaderParameters), so the
-        // logic is mirrored against this shader's own metadata instead.
+        // stale preset cannot push unknown keys into the live param map. The
+        // filter runs against this shader's own declared metadata, which is
+        // the only description of the valid ids available here.
         const QVariantList declared = info.value(QStringLiteral("parameters")).toList();
         QSet<QString> validIds;
         for (const QVariant& paramVar : declared) {
@@ -491,8 +515,8 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
 
     result[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
         obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = shaderParams;
+    result[QLatin1String(PresetShaderId)] = shaderId;
+    result[QLatin1String(PresetShaderParams)] = shaderParams;
     return result;
 }
 

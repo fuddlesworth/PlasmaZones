@@ -142,7 +142,8 @@ Item {
     /// zone/overlay preview has always had.
     property bool animationsPaused: false
 
-    /// Route EVERY stage through a layer texture, not just the multipass ones.
+    /// Route the LAST stage, the one that reaches the screen, through a layer
+    /// texture.
     ///
     /// Mandatory for a host that applies a transform to this component or
     /// relies on an ancestor's `clip`. A SurfaceShaderItem stage is a
@@ -151,20 +152,23 @@ Item {
     /// viewport from `item->width() * devicePixelRatio` and the item's mapped
     /// ORIGIN — so a scaled ancestor moves the stage but does not resize it,
     /// and the node overwrites the scissor Qt set for the clip. A scaled host
-    /// therefore gets full-size stages drawn at scaled positions, spilling
-    /// over whatever is beside them.
+    /// therefore gets a full-size stage drawn at a scaled position, spilling
+    /// over whatever is beside it.
     ///
     /// Layering removes the problem rather than working around it: the node
     /// renders into an FBO sized to its own item (which is what it thinks it
     /// is drawing at anyway), and the scene graph composites THAT texture with
-    /// the full transform and clip, like any other textured node. Multipass
-    /// stages already take this path for their own reasons, which is why the
-    /// blur family survived a scaled host while every single-pass pack escaped
-    /// its bounds.
+    /// the full transform and clip, like any other textured node. Only the
+    /// last stage needs it: every intermediate stage already renders into the
+    /// next stage's `tap` FBO and never reaches the screen directly, and
+    /// layering one would draw its opaque layer sibling under the composite
+    /// (see the stage's layer.enabled below for why a captured stage must
+    /// never be layered).
     ///
     /// False by default: the daemon's overlay surfaces are drawn untransformed
-    /// at 1:1, and a layer per stage there would be a canvas-sized FBO for
-    /// nothing.
+    /// at 1:1, and a layer there would be a canvas-sized FBO for nothing, and
+    /// the animator captures the last stage for the show / hide legs, which a
+    /// layer would break.
     property bool layeredStages: false
 
     /// Drives `uSurfaceFocused` on every stage. A pack that distinguishes an
@@ -192,9 +196,29 @@ Item {
     // non-finite value would take the entire placement set with it.
     readonly property real outerPad: isFinite(decorationOuterPadding) ? Math.max(0, decorationOuterPadding) : 0
 
-    /// Logical→device scale for the decorated surface. The OSD shell tracks the
-    /// active output's devicePixelRatio; Screen.devicePixelRatio is the live
-    /// value for the window this item lives in.
+    /// Logical→device scale for the decorated surface, and the unit of the
+    /// pixel space every surface pack works in.
+    ///
+    /// NOT the window's real device-pixel ratio on Wayland, despite the name:
+    /// QML's `Screen.devicePixelRatio` is QScreen's, which is the wl_output
+    /// INTEGER buffer scale a compositor advertises for clients that cannot
+    /// scale fractionally. KWin says 2 for a 1.15 output. The per-surface
+    /// value lives on QQuickWindow, whose `devicePixelRatio` property is Qt
+    /// 6.11 and so out of reach at this project's 6.10 floor.
+    ///
+    /// That is survivable here, and deliberately left alone, because the value
+    /// CANCELS. It sets `uSurfaceSize` (which `surfacePixel` multiplies uv by,
+    /// defining the px space) and `uSurfaceScale` (which packs multiply their
+    /// logical-px widths and radii by), so every geometric ratio a pack
+    /// computes is scale-free — the border lands in the same place at any
+    /// value. Only the AA feather, held in "device px" on purpose so it stays
+    /// constant across scales, is off by the ratio between this and the true
+    /// one: about 0.4 real device px instead of 0.7 at scale 1.15, which is
+    /// a marginally crisper edge and nothing more.
+    ///
+    /// So do not "fix" this to a real per-surface ratio in isolation. Both
+    /// uniforms have to move together or the packs' geometry breaks, and the
+    /// only thing gained is a sub-pixel feather width.
     readonly property real surfaceScale: Screen.devicePixelRatio
 
     /// The area the bound `backdropTexture` covers, in this item's coordinates.
@@ -715,17 +739,38 @@ Item {
                 // precision, so opting out is the deliberate act.
                 halfFloatBuffers: stage.stageData.halfFloatBuffers !== false
 
-                // Multipass REQUIRES a private layer FBO: the render node
-                // drives its own buffer passes, and without an isolated target
-                // the scene graph's batch renderer desynchronizes its internal
-                // pass tracking (the rationale ZoneShaderRenderer.qml documents
-                // for the overlay path — same render node, same constraint).
-                // Gated on the stage actually being multipass so a plain border
-                // or glow stage pays no extra canvas-sized FBO. The intermediate
-                // taps below still capture a layered stage: layer.enabled
-                // changes where the item renders, not whether it renders, so
-                // the hide-source fold is unaffected.
-                layer.enabled: (stage.stageData.multipass === true || root.layeredStages) && root.decorationActive
+                // NEVER layer a stage that a hide-source capture folds — which
+                // is every stage here: the intermediate ones are captured by
+                // the next stage's `tap`, and the last one by SurfaceAnimator
+                // for the show / hide legs. A Qt item layer draws the item
+                // through its OWN ShaderEffectSource, a sibling Qt parents next
+                // to the item at the item's rect, and `hideSource` on the item
+                // hides the item's scene-graph subtree only. The layer sibling
+                // keeps compositing the stage on screen, opaque and unanimated,
+                // under whatever the capture consumer draws. That is exactly
+                // what made every multipass pack (the glass and blur family)
+                // stick through the OSD fade: the fade shader faded the
+                // captured composite while the layer sibling of the glass
+                // stage sat behind it at full opacity until the slot hid.
+                //
+                // Multipass used to be layered here on the theory that the
+                // render node's buffer passes need an isolated target. They do
+                // not: ShaderNodeRhi issues them from prepare(), before the
+                // scene graph begins its own pass, which is where Qt puts
+                // offscreen passes, and an intermediate stage already renders
+                // into the tap's layer FBO regardless. Verified live in a
+                // nested session with ink-glass first and last in the chain:
+                // unlayered, both orders render upright and both legs fade.
+                //
+                // The preview host's LAST stage is the one exception. It
+                // composes at one size and displays the result scaled
+                // (layeredStages), so the composited output is layered for the
+                // mip chain below, and that host never hands its stages to the
+                // animator. Its intermediate stages stay unlayered for the
+                // same reason as everywhere else: a layered intermediate stage
+                // would draw its opaque layer sibling under a translucent
+                // final composite.
+                layer.enabled: root.layeredStages && stage.isLast && root.decorationActive
                 // Qt's DEFAULT mirroring (MirrorVertically), which differs from
                 // the NoMirroring ZoneShaderRenderer.qml sets. That difference
                 // is NOT a designed distinction between the two hosts: the zone
@@ -759,10 +804,10 @@ Item {
                 // sampled and building them is pure cost, which is what the
                 // daemon's overlay surfaces would be paying.
                 //
-                // And only on the LAST stage. An intermediate stage's layer
-                // texture is never composited by the scene graph — the next
-                // stage's `tap` captures it instead — so its mip chain would be
-                // rebuilt every frame for a texture nothing samples through it.
+                // And only on the LAST stage, which is the only stage that is
+                // ever layered (see layer.enabled above); an intermediate
+                // stage is captured by the next stage's `tap` and has no layer
+                // for a mip chain to belong to.
                 layer.mipmap: root.layeredStages && stage.isLast
                 layer.smooth: root.layeredStages && stage.isLast
                 // iTime driver: only a stage whose pack declares "animated"

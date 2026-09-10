@@ -5,6 +5,8 @@
 
 #include "settings/stores/shadersetstore.h"
 
+#include <QList>
+#include <QPair>
 #include <QString>
 #include <QVariantMap>
 
@@ -14,27 +16,87 @@ namespace PlasmaZones::motionset {
 
 /// Build the motion-set domain configuration for a ShaderSetStore.
 ///
-/// Motion sets snapshot the per-event override FILES in the profiles
-/// directory (one JSON per event path). The domain never reaches across the
-/// controller boundary itself: writes go through @p writeOverride (wired to
-/// `AnimationsPageController::setOverride`, preserving snapshot / pending
-/// semantics) and pre-write captures go through @p fileSnapshot.
+/// A motion set captures the WHOLE per-event unit, which is two stores: the
+/// timing override (curve / duration / ...) in the config-backed
+/// `Animations.MotionProfileTree`, and the event's animation SHADER assignment
+/// in `Animations.ShaderProfileTree`. Both halves are set on the same card in the
+/// Animations UI, so a set that carried only one of them captured half of what
+/// the user sees as one thing — and left the decoration domain, whose single
+/// tree carries pack ids and parameters together, doing strictly more.
 ///
-/// @param profilesDir     Absolute path of the per-event override directory.
+/// On-disk shape per entry, format 2:
+/// ```
+/// { "path": "window.appearance.open",
+///   "profile": { "curve": …, "duration": …,
+///                "shader": { "effectId": …, "parameters": { … } } } }
+/// ```
+/// The timing fields stay at the top of `profile` exactly where format 1 put
+/// them, and the shader half is one new nested key. A format-1 set therefore
+/// still reads correctly and simply assigns no shader. The version was bumped
+/// anyway because the reverse direction matters more: a format-2 set opened by
+/// an older build would drop the shader half on parse and silently apply a
+/// half-set, which is the exact failure the store's version gate exists to
+/// turn into a clean refusal.
+///
+/// The domain never reaches across the controller boundary itself: timing
+/// writes go through @p writeOverride (wired to
+/// `AnimationsPageController::setOverride`) and shader writes through
+/// @p writeShader. Both halves land in config, which is why this signature
+/// carries no file-staging hooks — the same shape the decoration domain has
+/// always had.
+///
+/// @param readTimings     The stored per-event TIMING tree
+///                        (`ISettings::motionProfileTree`), read once per
+///                        snapshot.
 /// @param setsDir         Absolute path of the motion-sets directory.
-/// @param writeOverride   Commits one entry as a per-path override file.
-/// @param fileSnapshot    Captures a file's pre-edit content for Discard.
-///                        False = the capture failed, and the store then
-///                        refuses the write rather than losing the content.
-/// @param snapshotRollback Drops a fileSnapshot capture again when the write it
-///                        was taken for failed, so the page does not report an
-///                        unsaved change to a file nothing touched.
-/// @param mutationGuard   Empty when writes are allowed, else the refusal
-///                        reason (the controller blocks writes mid-discard).
+/// @param writeOverrides  Commits EVERY entry's TIMING half into
+///                        `Animations/MotionProfileTree` in ONE write. One
+///                        write per path was observable half-applied: each
+///                        `setMotionProfileTree` emits `motionProfileTreeChanged`
+///                        synchronously, so every card re-evaluated and the
+///                        whole set-row active sweep re-ran once per path, with
+///                        the tree in an intermediate state each time. Batched,
+///                        the tree moves from "before" to "after" in one step.
+/// @param readShaders     Every direct shader override, keyed by event path
+///                        (`AnimationsPageController::allRawShaderProfiles`).
+///                        One call per snapshot, not one per path.
+/// @param writeShader     Commits one entry's SHADER half, receiving it in the
+///                        same map shape `rawShaderProfile()` returns. The
+///                        closure owns the three-state dispatch (assigned pack
+///                        / engaged-empty "no pack" / parameters-only over an
+///                        inherited pack), because each state needs a different
+///                        controller API.
+/// @param resolvedShaderIds What every shader-supported path renders with,
+///                         keyed by path, ancestor chain and built-in default
+///                         included
+///                         (`resolveShaderWithDefault(...).effectiveEffectId()`).
+///                         The self-containment sweep needs the RESOLVED id
+///                         rather than the built-in default: a leaf whose pack
+///                         comes from a category ancestor would otherwise be
+///                         captured as something the sender is not using, and —
+///                         because the live snapshot it is compared against
+///                         shares the same mistake — the set would still read
+///                         as active while describing a different look.
+///
+///                         Answered for every path in ONE call, like
+///                         @p readShaders and for the same reason: resolving a
+///                         path rebuilds the whole ShaderProfileTree from the
+///                         store, and the sweep runs on the GUI thread on every
+///                         setsChanged.
+/// @param knowsEffectId   Whether this build has the named pack installed.
+///                        Validation refuses a set naming a pack the recipient
+///                        does not have, rather than letting the write refuse
+///                        it mid-batch after earlier entries already landed —
+///                        the same whole-set promise the shader-leg gate keeps.
+///                        Must answer true for an empty id (the "no pack"
+///                        sentinel) and true while the registry is still
+///                        unscanned, so an early call cannot reject everything.
 ShaderSetStore::Config
-makeConfig(std::function<QString()> profilesDir, std::function<QString()> setsDir,
-           std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
-           std::function<bool(const QString& /*filePath*/)> fileSnapshot,
-           std::function<void(const QString& /*filePath*/)> snapshotRollback, std::function<QString()> mutationGuard);
+makeConfig(std::function<QVariantMap()> readTimings, std::function<QString()> setsDir,
+           std::function<bool(const QList<QPair<QString, QVariantMap>>& /*edits*/)> writeOverrides,
+           std::function<QVariantMap()> readShaders,
+           std::function<bool(const QString& /*path*/, const QVariantMap& /*shader*/)> writeShader,
+           std::function<QVariantMap()> resolvedShaderIds,
+           std::function<bool(const QString& /*effectId*/)> knowsEffectId);
 
 } // namespace PlasmaZones::motionset

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 
 /**
  * @brief Geometry synchronization handler for zones
@@ -58,8 +59,8 @@ Item {
                 x = Math.max(0, x);
                 y = Math.max(0, y);
                 // Convert pixel coords to canvas coords using screen dimensions
-                var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : 1920;
-                var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : 1080;
+                var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : Screen.width;
+                var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : Screen.height;
                 var newVisualX = (x / sw) * zoneRoot.canvasWidth;
                 var newVisualY = (y / sh) * zoneRoot.canvasHeight;
                 var newVisualWidth = (w / sw) * zoneRoot.canvasWidth;
@@ -212,8 +213,8 @@ Item {
                         var fy = (updatedZone.fixedY !== undefined && updatedZone.fixedY !== null) ? updatedZone.fixedY : 0;
                         var fw = (updatedZone.fixedWidth !== undefined && updatedZone.fixedWidth !== null && updatedZone.fixedWidth > 0) ? updatedZone.fixedWidth : 100;
                         var fh = (updatedZone.fixedHeight !== undefined && updatedZone.fixedHeight !== null && updatedZone.fixedHeight > 0) ? updatedZone.fixedHeight : 100;
-                        var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : 1920;
-                        var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : 1080;
+                        var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : Screen.width;
+                        var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : Screen.height;
                         newVisualX = (fx / sw) * canvasW;
                         newVisualY = (fy / sh) * canvasH;
                         newVisualW = (fw / sw) * canvasW;

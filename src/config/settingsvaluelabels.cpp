@@ -279,6 +279,10 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         // bar renders it as a percentage for the same reason.
         t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalXKey()), number(pct, 100.0));
         t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalYKey()), number(pct, 100.0));
+        // The overview zoom is the fraction of the screen each workspace is
+        // drawn at (0.1-0.75); the Overview page's slider shows it as a
+        // percentage.
+        t.insert(pairKey(CD::workspacesOverviewGroup(), CD::overviewZoomKey()), number(pct, 100.0));
 
         // ── Pixel quantities ────────────────────────────────────────────────
         t.insert(pairKey(CD::snappingZonesBorderGroup(), CD::widthKey()), number(px));
@@ -398,6 +402,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::tilingBehaviorGroup(), CD::lockedScreensKey()), idKind(ValueKind::ScreenId));
         t.insert(pairKey(CD::animationsGroup(), CD::shaderProfileTreeKey()), idKind(ValueKind::ShaderPack));
         t.insert(pairKey(CD::decorationsGroup(), CD::decorationProfileTreeKey()), idKind(ValueKind::DecorationPack));
+        t.insert(pairKey(CD::overlaysGroup(), CD::overlayShaderTreeKey()), idKind(ValueKind::OverlayShader));
 
         // ── Triggers ────────────────────────────────────────────────────────
         // the tiling drag-insert triggers are a leaf of Tiling.Behavior, not a sub-group of their own —

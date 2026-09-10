@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Shared helpers for the shader-pack validators (plasmazones-shader-validate).
-// The per-mode validators (packvalidator_overlay/_animation/_surface.cpp) and
+// The per-mode validators (packvalidator_overlay/_animation/_surface/_pointer.cpp) and
 // the CLI entry point (main.cpp) live in separate translation units to keep
 // each file focused;
 // this header exposes the pieces the validators share: the pack-path confine
@@ -11,6 +11,7 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -28,18 +29,19 @@ namespace PlasmaZones::ShaderValidate {
 
 // ── authoring-model detection ──────────────────────────────────────────────
 
-/// The three authoring models a pack can belong to.
+/// The four authoring models a pack can belong to.
 enum class PackModel {
     Overlay,
     Animation,
-    Surface
+    Surface,
+    Pointer
 };
 
 /// Which authoring model @p packDir belongs to, or nullopt when the directory
 /// carries no marker.
 ///
 /// Detected from the pack's SIBLING `shared/` directory rather than from
-/// metadata.json, because the three schemas are not distinguishable: all three
+/// metadata.json, because the three schemas are not distinguishable: all four
 /// carry id / name / fragmentShader, and the only animation-exclusive field
 /// (`appliesTo`) is optional, so a universal animation pack that omits it looks
 /// exactly like an overlay pack. The shared directory is unambiguous, since
@@ -58,16 +60,45 @@ enum class PackModel {
 /// validator logic, and only the flag-override policy on top of it is CLI.
 std::optional<PackModel> detectPackModel(const QString& packDir);
 
+/// The `shared/` include roots for @p packDir, in resolution order.
+///
+/// A pack in the INSTALLED layout, `<data root>/plasmazones/<family>/<id>`,
+/// gets its sibling `shared/` first (always listed, whether or not it exists)
+/// and then the XDG data chain for its family. That is what lets the tool
+/// work on an installed pack: one in `~/.local/share/plasmazones/<family>/<id>`
+/// usually has no sibling `shared/` at all, since the helpers ship once into
+/// the system prefix, and when it has one it may be a partial user override of
+/// a header or two beside the system copy. The widened list is the same SET of
+/// roots the runtime registries resolve includes against. The ORDER differs
+/// for an installed pack: the runtime walks its search paths user-first, while
+/// this list puts the sibling first and then `QStandardPaths::locateAll`,
+/// which is also user-first, so a user override of a shared header shadows the
+/// system copy in both. Only a pack that sits in the system prefix itself and
+/// has a user override of the same header sees a different winner here (the
+/// sibling, i.e. the system copy) than at runtime (the user copy).
+///
+/// Every other layout (the source tree's `data/<family>/<id>`, a scratchpad
+/// laid out like it, a vendored pack set) is self-contained and resolves
+/// against its sibling `shared/` and NOTHING else, so an installed copy of the
+/// helpers can never satisfy an include the tree itself lacks: a header
+/// missing from `data/<family>/shared` fails here the way it fails in CI,
+/// rather than resolving from a stale `/usr/share` copy on a developer machine.
+QStringList packSharedRoots(const QString& packDir);
+
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
-// path, or nullopt when the path is empty or escapes the pack dir. See the
-// definition for the canonical-vs-lexical domain rules and why this gate is
-// deliberately stricter than the runtime.
+// path, or nullopt when the path is empty or escapes the pack dir. The
+// definition explains the canonical-vs-lexical comparison.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel);
+
+// The report column for a stage label: labels shorter than the column are
+// padded to it, longer ones (`effect.frag (Qt-RHI preview)`) get one space so
+// the OK/ERROR word never runs into the label.
+QString padLabel(const QString& label);
 
 // In-place confinement: rewrites @p path to its confined absolute form and
 // returns true, or returns false when the path escapes the pack dir. An EMPTY
-// path is left as-is and accepted (that stage is simply absent). All three
-// validators gate every user-editable metadata path through this before
+// path is left as-is and accepted (that stage is simply absent). Every
+// validator gates every user-editable metadata path through this before
 // opening it.
 bool confinePackPathInPlace(const QString& packDir, QString& path);
 
@@ -80,7 +111,7 @@ QString poolName(const QString& type);
 
 // Report a compiled stage's outcome ("OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line plus the did-you-mean hint).
-// Returns 1 on failure, 0 on success. Shared by all three validators.
+// Returns 1 on failure, 0 on success. Shared by all the validators.
 int reportCompile(QTextStream& out, const QString& label, const PhosphorRendering::ShaderCompiler::Result& result,
                   const QStringList& declared);
 
@@ -88,6 +119,7 @@ int reportCompile(QTextStream& out, const QString& label, const PhosphorRenderin
 QStringList declaredParamNames(const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& params);
+QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& params);
 
 // ── compositor (KWin classic-GL) bake ──────────────────────────────────────
 // Packs whose appliesTo makes them compositor-only are never loaded by the

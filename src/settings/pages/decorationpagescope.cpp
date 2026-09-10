@@ -16,6 +16,7 @@ QString decorationSurfaceRoot(const QString& page)
         {QStringLiteral("decorations-osds"), QStringLiteral("osd")},
         {QStringLiteral("decorations-popups"), QStringLiteral("popup")},
         {QStringLiteral("decorations-shell"), QStringLiteral("shell")},
+        {QStringLiteral("decorations-pointer"), QStringLiteral("pointer")},
     };
     return roots.value(page);
 }
@@ -29,17 +30,23 @@ bool decorationRootDiffers(const PhosphorSurfaceShaders::DecorationProfileTree& 
                            const PhosphorSurfaceShaders::DecorationProfileTree& baseline, const QString& root)
 {
     QSet<QString> paths;
-    for (const QString& p : current.overriddenPaths())
-        if (decorationPathInRoot(p, root))
+    for (const QString& p : current.overriddenPaths()) {
+        if (decorationPathInRoot(p, root)) {
             paths.insert(p);
-    for (const QString& p : baseline.overriddenPaths())
-        if (decorationPathInRoot(p, root))
+        }
+    }
+    for (const QString& p : baseline.overriddenPaths()) {
+        if (decorationPathInRoot(p, root)) {
             paths.insert(p);
+        }
+    }
     for (const QString& p : paths) {
-        if (current.hasOverride(p) != baseline.hasOverride(p))
+        if (current.hasOverride(p) != baseline.hasOverride(p)) {
             return true;
-        if (current.directOverride(p) != baseline.directOverride(p))
+        }
+        if (current.directOverride(p) != baseline.directOverride(p)) {
             return true;
+        }
     }
     return false;
 }

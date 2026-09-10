@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IOverviewModelSource.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <phosphorengine_export.h>
 
@@ -29,11 +30,20 @@ struct LayerSwitchResult;
 /// stores drifted and leaked the zone/tile rect into float restores.
 ///
 /// Engines subclass this and implement the placement-specific hooks.
-class PHOSPHORENGINE_EXPORT PlacementEngineBase : public QObject, public IPlacementEngine
+class PHOSPHORENGINE_EXPORT PlacementEngineBase : public QObject, public IPlacementEngine, public IOverviewModelSource
 {
     Q_OBJECT
 
 public:
+    /// IOverviewModelSource default: no per-key read surface. Every shipped
+    /// engine overrides this; the default exists so the test doubles deriving
+    /// from this base keep compiling and answer "no state" honestly.
+    std::optional<QList<OverviewWindowEntry>> overviewWindowsFor(const PlacementStateKey& key) const override
+    {
+        Q_UNUSED(key)
+        return std::nullopt;
+    }
+
     /// Drop any per-engine bookkeeping for windows not in @p aliveWindowIds.
     /// The base keeps no per-window state of its own now, so it returns 0;
     /// engines override and add their own pruning (then call the base).

@@ -8,10 +8,10 @@ import org.plasmazones.common as PZCommon
 /**
  * @brief The stand-in card run through the real decoration chain host.
  *
- * The rendering core shared by both decoration previews: the browser card's
- * inline thumbnail and the detail dialog's large pane. Neither reimplements
- * the composition, so a card and the dialog it opens can never disagree about
- * what a pack looks like.
+ * The rendering core, kept separate from the pane that hosts it so a second
+ * host shows the same composition rather than reimplementing it. The detail
+ * dialog's pane is its only consumer today: the browser card carries no
+ * inline thumbnail, whatever this comment claimed before.
  *
  * Everything here is the production path. The chain comes from
  * DecorationPreviewController (which composes stages through the same builder

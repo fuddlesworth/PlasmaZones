@@ -357,6 +357,24 @@ public:
     }
 
     void windowClosed(const QString& windowId) override;
+
+    /// The (screen, desktop, activity) key of the store that genuinely holds
+    /// @p windowId, in ANY context. Membership-grade like isWindowTracked, and
+    /// deliberately NOT scoped to the screen's current desktop: this answers
+    /// the daemon's desktop-membership reconcile, which asks precisely because
+    /// the holding store is usually a BACKGROUND one by the time it asks.
+    ///
+    /// The globals holder is excluded — it has no desktop identity, so a
+    /// window living only there has no membership to reconcile.
+    std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
+
+    /// Drop @p windowId's zone assignment, floating bit and screen record from
+    /// the store at @p key. The reconcile's release for snapping: a window that
+    /// left this desktop must stop being an occupant of the zone it was in,
+    /// because zone occupancy is queried across EVERY store rather than the one
+    /// in view, so a stale entry is a live navigation target that yanks the
+    /// user to another desktop when it is picked.
+    void releaseFromContext(const PhosphorEngine::PlacementStateKey& key, const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
     void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) override;
@@ -548,6 +566,14 @@ public:
     /// enumerations (occupied zones, snapped/floating windows, flat-map views).
     QList<SnapState*> allSnapStates() const;
 
+    /// IOverviewModelSource: the windows the per-key store at @p key holds for
+    /// (key.screenId, key.desktop), each with its zone frame (the union of its
+    /// zones' geometries) or its float bit. Reads ONLY the per-key store: a key
+    /// with no store, and the global holder's empty-screen sentinel key, answer
+    /// std::nullopt. Never creates state, never mutates, never emits.
+    std::optional<QList<PhosphorEngine::OverviewWindowEntry>>
+    overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key) const override;
+
     /// Resolve-or-register the owning state for @p windowId placed/acting on
     /// @p screenId, and return it. On first placement it derives the key from the
     /// screen, lazily creates the state, and records the reverse-map entry; an
@@ -604,6 +630,7 @@ public:
     // screenRemoved signals, mirroring AutotileEngine.
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
+    void renumberDesktopsAfterRemoval(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
     void reapDesktopState(int desktop) override;
     void renumberDesktopState(const QHash<int, int>& oldToNew) override;

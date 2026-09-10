@@ -12,6 +12,7 @@
 #include "plasmazones_export.h"
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorEngine/HandoffIntent.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
@@ -24,6 +25,7 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QSet>
 #include <QVariantMap>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -605,6 +607,80 @@ public Q_SLOTS:
      */
     PhosphorProtocol::WindowStateList getAllWindowStates();
 
+    // ── Phosphor shell surface (placement map click/drag verbs). All four
+    // read the WindowRegistry, so "tracked" here means the compositor has
+    // registered the window through setWindowMetadata, which it does for
+    // every window ahead of any other per-window report. Bodies in
+    // shellsurface.cpp. ──
+
+    /**
+     * @brief Ask the compositor to activate (focus) a tracked window.
+     *
+     * Emits activateWindowRequested for @p windowId, the same signal the
+     * daemon-driven focus verbs use and the effect turns into KWin's
+     * activateWindow. A window the registry does not know is a silent
+     * no-op: the id came from a stale model, not a user intent the daemon
+     * should second-guess.
+     */
+    void activateWindow(const QString& windowId);
+
+    /**
+     * @brief A tracked window's identity as the compositor last reported it.
+     *
+     * Returns the app id, with @p title and @p desktopFile as the further
+     * out-arguments. Every field is empty for an unknown window, and title
+     * or desktopFile are empty when the compositor reported them so.
+     */
+    QString getWindowMetadata(const QString& windowId, QString& title, QString& desktopFile);
+
+    /**
+     * @brief Ask the compositor to move a tracked window to virtual desktop
+     *        @p desktop (1-based).
+     *
+     * Emits windowDesktopMoveRequested, which the effect already consumes
+     * for the cross-desktop directional move (windowToDesktops). Silent for
+     * an unknown window or a desktop below 1; the compositor ignores a
+     * desktop past its last one.
+     */
+    void moveWindowToDesktop(const QString& windowId, int desktop);
+
+    /**
+     * @brief Every tracked window currently demanding attention.
+     *
+     * The daemon keeps this set from the isDemandingAttention field of the
+     * compositor's metadata pushes, which the KWin effect re-sends on every
+     * demandsAttentionChanged edge, and drops a window on close.
+     */
+    QStringList getUrgentWindows();
+
+    // ── Phosphor shell surface, per-desktop reads (shellsurface_desktop.cpp).
+    // Both answer from the desktop / pid ledger the registry mirror keeps
+    // beside the urgent set: one row per registered window, refreshed on
+    // every metadata push and dropped on close. ──
+
+    /**
+     * @brief getAllWindowStates, filtered to one screen and desktop.
+     *
+     * @p virtualDesktop is 1-based; 0 means the screen's current desktop.
+     * A window is on a desktop when its last metadata push said so
+     * (virtualDesktop, or any entry of the spanned list), or when it is
+     * sticky (isSticky, or virtualDesktop 0 meaning "all"), which lands it
+     * on every desktop. An empty @p screenId means any screen. Windows the
+     * registry does not know are left out: without a push there is no
+     * desktop to compare against.
+     */
+    PhosphorProtocol::WindowStateList getWindowStatesForDesktop(const QString& screenId, int virtualDesktop);
+
+    /**
+     * @brief The tracked window whose metadata pid is @p pid.
+     *
+     * The most recent metadata push wins when several windows share the
+     * pid (a multi-window app), so the polkit prompt attaches to the
+     * window the compositor touched last. Empty when no window matches
+     * or @p pid is not positive.
+     */
+    QString findWindowByPid(int pid);
+
     /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
@@ -780,6 +856,22 @@ public:
     void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString(),
                                 bool fromStateChange = false);
 
+    /// Announce that @p windowId no longer occupies a zone in the context it
+    /// was released from, as an "unsnapped" windowStateChanged entry.
+    ///
+    /// For releases that do NOT run through SnapEngine::uncommitSnap — today
+    /// that is TilingAdaptor::reconcileWindowMembership dropping a window from
+    /// a context it has left. Those go through IPlacementEngine::
+    /// releaseFromContext, which deliberately emits no windowSnapStateChanged:
+    /// that signal also clears the tiling engines' float markers, and those
+    /// sets are per-window rather than per-context, so it would pull a window
+    /// legitimately floating on the desktop it moved TO back into the layout.
+    /// The two consumers that ARE right for a context release are driven
+    /// individually instead: captureWindowPlacement above, and this, which
+    /// clears the effect's per-window zone cache so the IsSnapped / Zone rule
+    /// fields stop matching against a zone the window has left.
+    void relayWindowReleasedFromContext(const QString& windowId, const QString& screenId);
+
     /// Re-capture EVERY open window's live placement into the unified store
     /// at save time — engine-agnostic, not floating-only: floated windows
     /// contribute their live geometry (no per-move hook fires for drags),
@@ -908,11 +1000,12 @@ public:
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
     /// openWindowHeight / openTabbed / openColumnPlacement / openMaximized /
-    /// openFocused), returned as a loose map so the header stays free of
-    /// scroll-engine types. Keys, present only when the slot matched, and
-    /// spelled by the ScrollOpenKeys namespace in internal.h rather than
-    /// literals: widthFraction (double), heightFraction (double), tabbed
-    /// (bool), consume (bool), maximized (bool), focused (bool).
+    /// openFocused / openTabGroup), returned as a loose map so the header
+    /// stays free of scroll-engine types. Keys, present only when the slot
+    /// matched, and spelled by the ScrollOpenKeys namespace in internal.h
+    /// rather than literals: widthFraction (double), heightFraction (double),
+    /// tabbed (bool), consume (bool), maximized (bool), focused (bool),
+    /// tabGroup (trimmed non-empty string).
     /// Resolves UNCACHED, like shouldFloatByRule and unlike the
     /// Restore predicates: the query carries ScreenId and Mode stamps, and the
     /// evaluator cache is keyed on windowId and rule revision alone, so a hit
@@ -1443,6 +1536,16 @@ Q_SIGNALS:
     /// windowToScreen. No-op when the window already sits on the target.
     void windowOutputMoveRequested(const QString& windowId, const QString& targetScreenId);
 
+    /// A tracked window's app id or title changed (or the window was just
+    /// registered). The Phosphor shell relabels its map cell from this
+    /// rather than polling getWindowMetadata.
+    void windowMetadataChanged(const QString& windowId, const QString& appId, const QString& title);
+
+    /// A tracked window started (@p urgent true) or stopped demanding
+    /// attention, or closed while urgent (reported as false). Emitted once
+    /// per edge, never for a push that repeats the current state.
+    void windowUrgencyChanged(const QString& windowId, bool urgent);
+
     /// Daemon-initiated cross-output move: the daemon has migrated its own
     /// tiling state for @p windowId onto @p targetScreenId and scheduled both
     /// reflows. The window's resulting outputChanged is expected; the effect
@@ -1569,7 +1672,16 @@ private:
     /// position and can be renumbered out from under the request in flight.
     void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
                            const QString& targetScreenId, int targetDesktop, const QString& direction,
-                           bool allowSameEngine = false, const QString& targetDesktopId = QString());
+                           bool allowSameEngine = false, const QString& targetDesktopId = QString(),
+                           const std::optional<PhosphorEngine::HandoffIntent>& intent = std::nullopt);
+    /// The overview drop's landing slot on an autotile / snap target: fills
+    /// the intent's insertIndex (autotile) or the landing zone (snap) from
+    /// its drop point. Scrolling intents arrive pre-resolved by the overview
+    /// controller, which holds the strip model.
+    QStringList resolveDropLanding(PhosphorZones::AssignmentEntry::Mode targetMode,
+                                   PhosphorEngine::PlacementEngineBase* targetEngine, const QString& targetScreenId,
+                                   int targetDesktop, const QString& activity,
+                                   PhosphorEngine::HandoffIntent& intent) const;
 
 public:
     /**
@@ -1600,6 +1712,12 @@ public:
      */
     void moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
                                    const QString& targetDesktopId, const QString& direction, bool moveOutput = true);
+    /// The workspace overview's window move: moveWindowToWorkspaceVerb with a
+    /// drop intent (a drop point and / or a resolved slot) that the target
+    /// engine places by instead of the direction-derived entry. Always moves
+    /// the output leg; the direction is "down" for the entry-edge fallbacks.
+    void moveWindowToWorkspaceWithIntent(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
+                                         const QString& targetDesktopId, const PhosphorEngine::HandoffIntent& intent);
 
 private:
     /**
@@ -1709,6 +1827,44 @@ private:
      * @return true if windowId is valid, false if empty
      */
     bool validateWindowId(const QString& windowId, const QString& operation) const;
+
+    // ── Shell-surface registry mirror (shellsurface.cpp) ──
+    /// True when the registry holds a record for @p windowId's instance.
+    bool isRegistryTracked(const QString& windowId) const;
+    /// The id the shell surface speaks: the registry's canonical composite
+    /// for @p instanceId, the same id the engines key their models on.
+    QString shellWindowIdFor(const QString& instanceId) const;
+    /// Registry subscriber: refreshes the urgent set and announces
+    /// identity changes. @p previous is null on first registration.
+    void onShellRegistryMetadata(const QString& instanceId, const PhosphorEngine::WindowMetadata* previous,
+                                 const PhosphorEngine::WindowMetadata& current);
+    /// Registry subscriber for a closed window: retires its urgency.
+    void onShellRegistryWindowGone(const QString& instanceId);
+    /// Windows currently demanding attention, keyed by shell window id.
+    QSet<QString> m_urgentWindowIds;
+
+    // ── Shell-surface desktop / pid ledger (shellsurface_desktop.cpp) ──
+    /// What the last metadata push said about a window's desktop and
+    /// process, keyed by shell window id. `seq` orders the pushes so a pid
+    /// shared by several windows resolves to the one pushed most recently.
+    struct ShellWindowFacts
+    {
+        int pid = 0;
+        int virtualDesktop = 0;
+        QList<int> virtualDesktops;
+        bool sticky = false;
+        quint64 seq = 0;
+    };
+    /// Registry subscriber, called from onShellRegistryMetadata: records the
+    /// push. `previous` unused; every push refreshes the row.
+    void recordShellWindowFacts(const QString& windowId, const PhosphorEngine::WindowMetadata& current);
+    /// Subscriptions to the current WindowRegistry, severed on a swap.
+    QList<QMetaObject::Connection> m_registryConnections;
+
+    /// True when the ledger row puts the window on @p desktop (1-based).
+    static bool factsOnDesktop(const ShellWindowFacts& facts, int desktop);
+    QHash<QString, ShellWindowFacts> m_shellWindowFacts;
+    quint64 m_shellWindowFactsSeq = 0;
 
     /**
      * @brief Detect which screen a zone is on by finding where its center falls

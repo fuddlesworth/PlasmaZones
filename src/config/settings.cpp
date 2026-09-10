@@ -179,6 +179,12 @@ void Settings::load()
     // ordering constraint, so a reload whose only delta is a chord still fires
     // the family signals — ShortcutManager's rebind rides settingsChanged.
     const QVector<QString> workspaceSnapshot = snapshotWorkspaceKeyFamilies();
+    // The animation Profile blob is not a Q_PROPERTY either, and unlike the
+    // per-mode lists below it is not merely a stale-reader problem: the daemon
+    // picks the registry layer for the global profile from its explicit-ness,
+    // so a reload that changes it without saying so leaves the layer wrong for
+    // the life of the process. See animationProfileState.
+    const AnimationProfileState animProfileSnapshot = animationProfileState();
 
     // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
     // argument, which Q_PROPERTY can't express). Snapshot them explicitly
@@ -277,6 +283,7 @@ void Settings::load()
     // bindings would never see reloaded values after discard / reset.
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
     const bool anyWorkspaceChanged = emitChangedWorkspaceKeyFamilies(workspaceSnapshot);
+    emitAnimationProfileChangeIfMoved(animProfileSnapshot);
 
     // Per-mode disable lists: emit one signal per Mode whose list changed.
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
@@ -367,9 +374,25 @@ QStringList Settings::managedGroupNames()
                                            // Workspaces.Slots
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups
+        ConfigDefaults::overlaysGroup(), // "Overlays" — per-layout zone-overlay shader tree (OverlayShaderTree blob)
     };
 }
 
+// Delete every per-screen override group, plus the container they nest
+// under. Three things are swept:
+//   1. Whatever PerScreenPathResolver::isPerScreenPrefix claims. The
+//      prefixes are NOT re-spelled here — the resolver's mapping table is
+//      the one list, so a prefix added there is swept by reset() without
+//      touching this function. Today that covers ZoneSelector:*,
+//      AutotileScreen:*, ScrollingScreen:*, ScrollingZoneSelector:*, and
+//      the legacy SnappingScreen:*
+//      which is no longer written but is still swept to scrub any file an
+//      older build left behind.
+//   2. VirtualScreen:* groups, which are per-screen in the same sense but
+//      resolve through their own group accessor rather than the resolver.
+//   3. The resolver's reserved "PerScreen" container key, which groupList()
+//      hides and which can survive as an empty husk once every descendant
+//      is gone.
 void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
@@ -761,8 +784,22 @@ bool Settings::isKeyModified(const QString& group, const QString& key) const
     return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
 }
 
+Settings::AnimationProfileState Settings::animationProfileState() const
+{
+    return {m_store->readVariant(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey()),
+            hasExplicitAnimationProfile()};
+}
+
+void Settings::emitAnimationProfileChangeIfMoved(const AnimationProfileState& before)
+{
+    if (animationProfileState() != before) {
+        Q_EMIT animationProfileChanged();
+    }
+}
+
 void Settings::discardKeys(const ConfigKeyList& keys)
 {
+    const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
     const QVector<QString> workspaceBefore = snapshotWorkspaceKeyFamilies();
     for (const ConfigKey& gk : keys) {
@@ -783,6 +820,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
             m_store->write(gk.first, gk.second, *keyIt);
     }
     normalizeScrollingColumnWidthValue();
+    emitAnimationProfileChangeIfMoved(animProfileBefore);
     // Both halves must run before the aggregate decision — || would
     // short-circuit the second and swallow its signals.
     const bool propsChanged = emitChangedNotifyProperties(before);
@@ -793,12 +831,14 @@ void Settings::discardKeys(const ConfigKeyList& keys)
 
 void Settings::resetKeys(const ConfigKeyList& keys)
 {
+    const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
     const QVector<QString> workspaceBefore = snapshotWorkspaceKeyFamilies();
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
     }
     normalizeScrollingColumnWidthValue();
+    emitAnimationProfileChangeIfMoved(animProfileBefore);
     const bool propsChanged = emitChangedNotifyProperties(before);
     const bool workspacesChanged = emitChangedWorkspaceKeyFamilies(workspaceBefore);
     if (propsChanged || workspacesChanged)

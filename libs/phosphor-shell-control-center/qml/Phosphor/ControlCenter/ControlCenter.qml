@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.ControlCenter.ControlCenter, the control-tile surface.
 //
-// A grid of control tiles (network, bluetooth, audio, brightness, ...)
-// with a slide-over detail panel for the tile the user drills into.
+// A vertical list of control RAILS (network, bluetooth, audio,
+// brightness, ...), each a 52 px row whose 2 px underline is the control
+// (A3 §2b), with a slide-over detail panel for the rail the user drills
+// into. No header, no tile grid, no filled buttons.
 //
 // Like OSDHost and ToastHost, this renders into whatever item it is
 // parented to. It owns no surface of its own, so the shell decides how it
-// is presented: composed into the bar's BarCanvas socket so it grows out
-// of the bar as one continuous painted shape (the connected-corner
-// design), or parented into a standalone layer-shell popout opened
-// through PopoutController. Neither choice reaches into this file.
+// is presented: hung from the bar as a tethered pane, or parented into a
+// standalone layer-shell popout opened through PopoutController. Neither
+// choice reaches into this file.
 //
 // Tiles come from a `provider` exposing
 //   createTile(id, parent) -> Item
@@ -33,10 +34,6 @@ Item {
     // the registry (and, later, from the user's tile arrangement); a test
     // passes a literal list.
     property list<string> tileIds: []
-    // Tiles per row. The grid reflows rather than scrolling: a control
-    // surface that scrolls hides controls behind a gesture, and the
-    // catalog is small enough not to need it.
-    property int columns: 2
     // Detail view currently open, or "" for the grid. Read-only for
     // consumers; drive it through openDetail() / closeDetail().
     readonly property alias detailTileId: priv.detailTileId
@@ -55,12 +52,12 @@ Item {
     signal detailOpened(string tileId)
     signal detailClosed(string tileId)
 
-    implicitWidth: grid.implicitWidth + 2 * Tokens.spacing_l
+    implicitWidth: grid.implicitWidth + 2 * Tokens.spacing_m
     // The taller of the two views, not just the grid. A host that sizes
     // itself to this would otherwise clip a detail view taller than the
     // grid behind it, and neither view scrolls or clips, so the overflow
     // would simply be cut off.
-    implicitHeight: Math.max(grid.implicitHeight, detail.implicitHeight) + 2 * Tokens.spacing_l
+    implicitHeight: Math.max(grid.implicitHeight, detail.implicitHeight) + 2 * Tokens.spacing_m
 
     QtObject {
         id: priv
@@ -156,11 +153,12 @@ Item {
             if (item) {
                 built[id] = item;
                 // Layout is the host's job, not the tile's: a tile would
-                // otherwise have to know the column count to span a row.
-                // It declares the intent via `spansRow` and this applies it.
-                item.Layout.fillWidth = true;
-                if (item.spansRow)
-                    item.Layout.columnSpan = root.columns;
+                // otherwise have to know the pane's width to span it. It
+                // declares the intent via `spansRow` and this applies it.
+                // Tiles come from a provider, so a third-party one may
+                // legitimately not span; a tile that declares nothing gets
+                // the rail default, which is to span.
+                item.Layout.fillWidth = item.spansRow === undefined || item.spansRow;
                 // The tile chrome carries no id of its own; bind the
                 // detail request here so Tile.qml stays a pure view.
                 if (item.detailRequested !== undefined)
@@ -184,40 +182,22 @@ Item {
         if (priv.completed)
             root.rebuild();
     }
-    // columnSpan is written imperatively in rebuild(), so it does not track
-    // `columns` on its own. The GridLayout below reflows live, which without
-    // this would leave every spanning tile pinned to the old span: a slider
-    // built at two columns spanning two of three. Re-apply the spans rather
-    // than rebuilding, so live service tiles are not torn down and rebuilt
-    // just because the grid got wider.
-    onColumnsChanged: {
-        if (!priv.completed)
-            return;
-        for (const id in priv.tiles) {
-            const tile = priv.tiles[id];
-            if (tile && tile.spansRow)
-                tile.Layout.columnSpan = root.columns;
-        }
-    }
     Component.onCompleted: {
         priv.completed = true;
         root.rebuild();
     }
 
-    GridLayout {
+    ColumnLayout {
         id: grid
 
         // Anchored to the top three edges rather than filling: a host that
-        // gives the surface more height than the tiles need would otherwise
-        // have GridLayout spread the rows down the whole surface, leaving
-        // the grid floating in its own gaps.
+        // gives the surface more height than the rails need would
+        // otherwise spread the rows down the whole surface.
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: Tokens.spacing_l
-        columns: root.columns
-        columnSpacing: Tokens.spacing_m
-        rowSpacing: Tokens.spacing_m
+        anchors.margins: Tokens.spacing_m
+        spacing: 0
         // Hidden, not merely covered, while a detail view is open. The
         // detail panel is a sibling rather than a child, so leaving the grid
         // visible underneath would keep every tile in the accessibility tree
@@ -231,7 +211,7 @@ Item {
         id: detail
 
         anchors.fill: parent
-        anchors.margins: Tokens.spacing_l
+        anchors.margins: Tokens.spacing_m
         tileId: priv.detailTileId
         open: priv.detailTileId !== ""
         // Fed from the tile being drilled into. Without these the panel

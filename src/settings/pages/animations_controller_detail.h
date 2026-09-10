@@ -7,8 +7,8 @@
 // files (animationspagecontroller.cpp and its _overrides / _shaders / _paths /
 // _groupwrites siblings). Covers the shader-effect / parameter / shader-profile conversions
 // those TUs hand to QML, the override-file read and normalisation
-// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, kMaxProfileReadBytes,
-// readProfileJson, sanitizedProfileMap, profileToVariantMap,
+// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey,
+// sanitizedProfileMap, profileToVariantMap,
 // mergeMissingFields, fillLibraryDefaults), the Q_INVOKABLE-boundary bound on
 // what a caller's map may carry to disk (kMaxWrittenMap*, boundedWrittenMap),
 // and the two path helpers
@@ -248,14 +248,126 @@ inline QString humanizeSegment(const QString& segment)
     return out;
 }
 
-// ProfileLoader's envelope helper reads the top-level `name` field to
-// assign the registry path (and strips it from the returned root). We
-// add it on write so the file is recognised. JSON keys are
-// QLatin1String per the project's Qt6 string-literal rule. `inline`
+// The per-event override FILES that predate schema v8 carried a top-level
+// `name` field naming their path. An entry in the timing tree is named by its
+// own key, so the field is stripped on write rather than added — this constant
+// is what strips it. JSON keys are QLatin1String per the project's Qt6
+// string-literal rule. `inline`
 // (external linkage, one definition) so the sibling TUs that consume
 // these helpers (animationspagecontroller{,_overrides,_shaders}.cpp)
 // all share one definition without relying on unity-build TU merging.
 inline constexpr QLatin1String JsonNameKey{"name"};
+
+// ── The serialized `PhosphorAnimation::ProfileTree` shape ────────────────────
+// Handled as a raw map rather than through the class. Parsing one needs a
+// CurveRegistry, and a Profile stores its curve RESOLVED — so a parse against
+// a registry missing the user's curve packs, followed by a re-serialize, drops
+// the `curve` key and silently retimes the event. Reading or rewriting one
+// path's fields never needs a curve at all, so this layer does not parse.
+inline constexpr QLatin1String TreeOverridesKey{"overrides"};
+inline constexpr QLatin1String TreePathKey{"path"};
+inline constexpr QLatin1String TreeProfileKey{"profile"};
+/// `ProfileTree::toJson` always emits this alongside `overrides`, and the v8
+/// migration stamps an empty one, so a stored tree can carry it even though
+/// nothing on this page ever writes one. Named here so the normalisation below
+/// can tell an empty baseline (droppable) from real content (kept).
+inline constexpr QLatin1String TreeBaselineKey{"baseline"};
+
+/// The stored profile object for @p path, or an empty object when @p tree
+/// carries no override there.
+inline QJsonObject treeProfileForPath(const QVariantMap& tree, const QString& path)
+{
+    const QVariantList overrides = tree.value(TreeOverridesKey).toList();
+    for (const QVariant& entry : overrides) {
+        const QVariantMap map = entry.toMap();
+        if (map.value(TreePathKey).toString() == path) {
+            return QJsonObject::fromVariantMap(map.value(TreeProfileKey).toMap());
+        }
+    }
+    return {};
+}
+
+/// Every path @p tree carries an entry for, in stored order.
+inline QStringList treeOverriddenPaths(const QVariantMap& tree)
+{
+    QStringList out;
+    const QVariantList overrides = tree.value(TreeOverridesKey).toList();
+    out.reserve(overrides.size());
+    for (const QVariant& entry : overrides) {
+        const QString path = entry.toMap().value(TreePathKey).toString();
+        if (!path.isEmpty() && !out.contains(path))
+            out.append(path);
+    }
+    return out;
+}
+
+inline bool treeHasOverrideForPath(const QVariantMap& tree, const QString& path)
+{
+    const QVariantList overrides = tree.value(TreeOverridesKey).toList();
+    for (const QVariant& entry : overrides) {
+        if (entry.toMap().value(TreePathKey).toString() == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @p tree with @p path's override replaced by @p profile, or removed when
+/// @p profile is empty. A replaced entry keeps its position rather than moving
+/// to the end, so rewriting one field does not reshuffle the stored key.
+/// A tree carrying no overrides IS the schema default (an empty map).
+///
+/// Emitting `{"overrides": []}` for it instead leaves the stored key
+/// permanently unequal to the baseline, because `Settings::isKeyModified` is a
+/// raw QVariant compare. The page then reports unsaved changes forever with
+/// nothing actually different, and — since the key now differs from the
+/// defaults blob — it joins every settings-profile delta captured afterwards,
+/// where activation replaces the recipient's whole timing tree.
+inline QVariantMap normalizedMotionTree(QVariantMap tree)
+{
+    if (!tree.value(TreeOverridesKey).toList().isEmpty()) {
+        return tree;
+    }
+    tree.remove(TreeOverridesKey);
+    // A non-empty baseline is real content and stays. Nothing writes one
+    // today, but silently erasing a future one would be worse than keeping it.
+    if (tree.value(TreeBaselineKey).toMap().isEmpty()) {
+        tree.remove(TreeBaselineKey);
+    }
+    return tree;
+}
+
+inline QVariantMap treeWithOverrideForPath(const QVariantMap& tree, const QString& path, const QJsonObject& profile)
+{
+    QVariantMap out = tree;
+    QVariantList overrides = out.value(TreeOverridesKey).toList();
+    for (int i = 0; i < overrides.size(); ++i) {
+        if (overrides.at(i).toMap().value(TreePathKey).toString() != path) {
+            continue;
+        }
+        if (profile.isEmpty()) {
+            overrides.removeAt(i);
+        } else {
+            QVariantMap entry;
+            entry.insert(TreePathKey, path);
+            entry.insert(TreeProfileKey, profile.toVariantMap());
+            overrides[i] = entry;
+        }
+        out.insert(TreeOverridesKey, overrides);
+        return normalizedMotionTree(out);
+    }
+    if (profile.isEmpty()) {
+        // Nothing to remove — but the tree may have arrived already carrying
+        // the residue from a config written before this normalisation.
+        return normalizedMotionTree(out);
+    }
+    QVariantMap entry;
+    entry.insert(TreePathKey, path);
+    entry.insert(TreeProfileKey, profile.toVariantMap());
+    overrides.append(entry);
+    out.insert(TreeOverridesKey, overrides);
+    return out;
+}
 
 /// Convert a `Profile` value to its `toJson()` shape as a QVariantMap.
 /// Sparse — only engaged fields appear, matching the wire format.
@@ -263,10 +375,6 @@ inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile
 {
     return profile.toJson().toVariantMap();
 }
-
-/// Ceiling on one profile file read. Derived from the shared cap so it
-/// cannot drift from the snapshot, preset, and set-file readers.
-constexpr qint64 kMaxProfileReadBytes = animfileutil::kMaxJsonFileBytes;
 
 /// Caps on a QVariantMap arriving from QML at a Q_INVOKABLE boundary.
 ///
@@ -287,11 +395,11 @@ constexpr int kMaxWrittenMapStringChars = 1024;
 /// in — so an over-long value written once stays on disk until some later write
 /// happens to rewrite the object.
 ///
-/// It is not merely untidy. A profile file pushed past `kMaxProfileReadBytes`
-/// is skipped WHOLE by `readProfileJson`, so `rawProfile` answers empty and the
-/// card renders every field as inherited while `hasOverride` still reports
-/// true. The next write repairs it, but the state in between is a card
-/// asserting something untrue about itself.
+/// It is not merely untidy. Every event's override now shares ONE config key,
+/// so an unbounded value is not confined to the path that wrote it: it inflates
+/// the blob that every read of the tree copies, on a path that runs per card
+/// rebind. There is no per-path skip to contain it and nothing prunes it, so it
+/// stays until some later write to that same entry happens to replace it.
 ///
 /// Drops rather than refuses, matching the merged writer's treatment of an
 /// unknown field: the rest of the map is still what the user asked for.
@@ -317,39 +425,6 @@ inline QVariantMap boundedWrittenMap(const QVariantMap& in, QLatin1String contex
         out.insert(it.key(), it.value());
     }
     return out;
-}
-
-/// Read the JSON object at @p path. Returns an empty object on missing
-/// file / parse error / non-object root. The `name` field is stripped so
-/// the returned map matches the QML-facing Profile shape. Parse errors
-/// are logged so silent corruption surfaces in journalctl.
-inline QJsonObject readProfileJson(const QString& path)
-{
-    const QFileInfo info(path);
-    if (!info.exists())
-        return {};
-    // A regular file under the cap, or nothing: this runs per card rebind on the
-    // GUI thread, and the directory is a filesystem boundary a user can
-    // hand-place anything at.
-    if (!info.isFile() || info.size() > kMaxProfileReadBytes) {
-        qCWarning(lcConfig) << "AnimationsPageController: skipping" << path
-                            << "— not a regular file, or over the size cap";
-        return {};
-    }
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcConfig) << "AnimationsPageController: cannot open profile" << path;
-        return {};
-    }
-    QJsonParseError err{};
-    const auto doc = QJsonDocument::fromJson(file.readAll(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qCWarning(lcConfig) << "AnimationsPageController: failed to parse" << path << ":" << err.errorString();
-        return {};
-    }
-    QJsonObject obj = doc.object();
-    obj.remove(JsonNameKey);
-    return obj;
 }
 
 /// Normalise a user-authored profile object the way `Profile::fromJson` would,

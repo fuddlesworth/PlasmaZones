@@ -622,6 +622,51 @@ public:
     virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
     virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
 
+    /// Per-event animation TIMING overrides, as the serialized
+    /// `PhosphorAnimation::ProfileTree` shape
+    /// (`{baseline, overrides: [{path, profile}]}`).
+    ///
+    /// Carried as a raw map rather than a parsed `ProfileTree` because parsing
+    /// one needs a `CurveRegistry`, which the settings layer has no business
+    /// owning. Each consumer parses with the registry it already has: the KWin
+    /// effect with its own, the daemon with the animator's. Callers that only
+    /// read or rewrite one path's fields (the animations page, the motion-set
+    /// domain) work on the map directly and never need a curve at all.
+    ///
+    /// This is the timing sibling of `shaderProfileTree()`, and together the
+    /// two hold everything one animation event owns. Before schema v8 the
+    /// timing half lived in loose per-event files under the user's data
+    /// directory, which is what made a settings profile capture an event's
+    /// pack but not its timing, and made the motion-set domain carry a whole
+    /// file-staging layer the decoration domain never needed.
+    virtual QVariantMap motionProfileTree() const = 0;
+    virtual void setMotionProfileTree(const QVariantMap& tree) = 0;
+
+    /// Whether the user has ever explicitly stored a global animation profile.
+    ///
+    /// A STORAGE fact, not a value comparison: `animationProfile()` substitutes
+    /// the shipped default blob for an absent key, so every field reads as
+    /// engaged whether or not the user has touched the page. Callers ranking
+    /// the global profile as user INTENT rather than as a shipped default need
+    /// this, and it is what gates the L2 seed layer against L3.
+    ///
+    /// Defaults to false, which is the right answer for a stub with no notion
+    /// of storage: nothing was explicitly set. Declared here so a test double
+    /// can drive the precedence gate at all, which it could not while this
+    /// lived only on the concrete Settings.
+    virtual bool hasExplicitAnimationProfile() const
+    {
+        return false;
+    }
+
+    /// The committed-baseline motion tree, for the same dirty-check role
+    /// `committedShaderProfileTree()` plays. The default returns the live tree,
+    /// so a stub with no baseline notion reports "never diverged".
+    virtual QVariantMap committedMotionProfileTree() const
+    {
+        return motionProfileTree();
+    }
+
     /// The committed-baseline shader tree — the last-persisted value the
     /// per-surface animation dirty check and per-page Discard compare the live
     /// tree against. The default returns the live tree, so a stub with no
@@ -650,6 +695,64 @@ public:
     virtual void setAnimationMinimumWindowWidth(int width) = 0;
     virtual int animationMinimumWindowHeight() const = 0;
     virtual void setAnimationMinimumWindowHeight(int height) = 0;
+};
+
+/**
+ * @brief The workspace overview's look and input (Workspaces.Overview).
+ *
+ * Every accessor is defaulted rather than pure: the D-Bus settings registry
+ * publishes these five keys through the interface and the overview KWin
+ * effect reads them back over that wire, so a non-Settings backend must still
+ * answer them (the scrollingTabIndicatorEnabled pattern on ISettings). The
+ * literals are pinned against their ConfigDefaults twins by static_asserts in
+ * settings/workspaces.cpp and by test_configdefaults, since this header does
+ * not see the config layer.
+ *
+ * NOTE: the matching NOTIFY signals live on ISettings, the QObject that mixes
+ * this interface in.
+ */
+class PLASMAZONES_EXPORT IOverviewSettings
+{
+public:
+    virtual ~IOverviewSettings() = default;
+
+    /// Fully open zoom, 0.1 to 0.75.
+    virtual qreal overviewZoom() const
+    {
+        return 0.5;
+    }
+    virtual void setOverviewZoom(qreal /*zoom*/)
+    {
+    }
+    /// Concrete colour string behind the zoomed-out workspaces.
+    virtual QString overviewBackdropColor() const
+    {
+        return QStringLiteral("#262626");
+    }
+    virtual void setOverviewBackdropColor(const QString& /*color*/)
+    {
+    }
+    virtual bool overviewGestureEnabled() const
+    {
+        return true;
+    }
+    virtual void setOverviewGestureEnabled(bool /*enabled*/)
+    {
+    }
+    virtual bool overviewWheelSwitchesWorkspaces() const
+    {
+        return true;
+    }
+    virtual void setOverviewWheelSwitchesWorkspaces(bool /*enabled*/)
+    {
+    }
+    virtual bool overviewShowWorkspaceNames() const
+    {
+        return true;
+    }
+    virtual void setOverviewShowWorkspaceNames(bool /*enabled*/)
+    {
+    }
 };
 
 /**
@@ -727,6 +830,62 @@ inline bool pruneDisabledDesktopEntries(QStringList& entries, int maxDesktop)
         return !ok || d > maxDesktop;
     });
     return entries.size() != before;
+}
+
+/**
+ * @brief Re-key disabled-desktop entries for the removal of @p removedDesktop.
+ * @return true if any entry was dropped or renumbered.
+ *
+ * The compositor renumbers on a mid-list removal (delete desktop 2 of 4 and
+ * 3→2, 4→3), and these entries store the NUMBER. Left alone, a gate written
+ * for desktop 4 goes on gating whatever desktop lands on 4 afterwards, which
+ * is a different desktop than the user disabled. Prunes cannot see this: after
+ * the shift every surviving number is still within the count, so there is
+ * nothing out of range to remove. Only the removal position identifies it,
+ * which is what VirtualDesktopManager::desktopRemovedAt carries.
+ *
+ * Entries AT the removed desktop are dropped (that desktop is gone), entries
+ * above it come down one, entries below are untouched. Same rule the engines'
+ * renumberDesktopsAfterRemoval applies to their per-desktop state, so the
+ * settings gates and the live state stay on one numbering.
+ *
+ * Composite key format: "screenId/desktopNumber". Malformed entries are left
+ * alone here — pruneDisabledDesktopEntries is what removes those.
+ */
+inline bool renumberDisabledDesktopEntries(QStringList& entries, int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return false;
+    }
+    bool changed = false;
+    QStringList rekeyed;
+    rekeyed.reserve(entries.size());
+    for (const QString& entry : std::as_const(entries)) {
+        const int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
+        if (slashIdx < 0) {
+            rekeyed.append(entry);
+            continue;
+        }
+        bool ok = false;
+        const int desktop = entry.mid(slashIdx + 1).toInt(&ok);
+        if (!ok || desktop < removedDesktop) {
+            rekeyed.append(entry);
+            continue;
+        }
+        if (desktop == removedDesktop) {
+            // The desktop the gate named no longer exists. Dropping beats
+            // shifting it onto the neighbour that moves into its number: the
+            // user disabled THIS desktop, not whichever one replaces it.
+            changed = true;
+            continue;
+        }
+        rekeyed.append(entry.left(slashIdx + 1) + QString::number(desktop - 1));
+        changed = true;
+    }
+    if (changed) {
+        entries = rekeyed;
+    }
+    return changed;
 }
 
 /**

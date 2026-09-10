@@ -36,47 +36,26 @@ QRectF relRectInColumn(const QRect& tile, const QRect& column, StripAxis axis)
                   static_cast<qreal>(axis.crossSize(tile)) / axis.crossSize(column));
 }
 
-} // namespace
-
-ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const QString& excludeWindowId) const
+/// The one snapshot walk both ScrollEngine::stripSnapshot overloads share.
+/// @p excluded is the already-canonicalized window to emulate detached
+/// (empty for none). @p fillAbsolute additionally records every resolved
+/// rect and the view offset, which only the key overload's consumer (the
+/// workspace overview) reads. Everything here is a const read of @p strip:
+/// relayout is a pure function of the model, and nothing below touches
+/// focus, anchor or view.
+ScrollStripSnapshot buildSnapshot(const ScrollStrip& strip, const ScrollLayoutParams& params, const QString& excluded,
+                                  bool fillAbsolute)
 {
     ScrollStripSnapshot snap;
-    // Preview-owned screens resolve against the preview's CAPTURED key for
-    // the same reason computeDragInsertTargetAtPoint does: a desktop or
-    // activity switch mid-drag must not swap the strip under indices a
-    // commit will apply to the captured one.
-    const bool previewOwnsScreen = m_dragInsertPreview
-        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
-    const ScrollState* state = previewOwnsScreen ? m_states.stateForKey(m_dragInsertPreview->targetKey)
-                                                 : m_states.stateForKey(currentKeyForScreen(screenId));
-    if (!state) {
-        return snap;
-    }
-    const ScrollLayoutParams params =
-        layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
     if (!params.workArea.isValid()) {
         return snap;
     }
     snap.valid = true;
-    if (state->strip().isEmpty()) {
+    if (strip.isEmpty()) {
         return snap;
     }
 
-    // Exclusion only matters while the drag window is still ATTACHED (no
-    // live preview). Once a preview detached it, the strip resolved below no
-    // longer contains it and a second removal would be a no-op by id anyway;
-    // skipping the canonicalization keeps the common per-show path cheap.
-    // PRECONDITION this rests on: callers pass only the window the live
-    // preview detached (the daemon passes its active-drag id) — the drop is
-    // unconditional on WHICH id arrives while a preview owns the screen.
-    // TEST SEAM NOTE: the snapshot suite's fixtures run with a null window
-    // registry, where canonicalizeForLookup returns its argument verbatim,
-    // so the canonicalization itself is exercised only by the daemon's real
-    // ids, not by these tests.
-    const QString excluded =
-        (!previewOwnsScreen && !excludeWindowId.isEmpty()) ? canonicalizeForLookup(excludeWindowId) : QString();
-
-    const ResolvedStrip resolved = state->strip().relayout(params);
+    const ResolvedStrip resolved = strip.relayout(params);
     // Resolved columns keyed by model index: fully-minimized columns resolve
     // no entry, and the model walk below must not skew when one is absent.
     QHash<int, const ResolvedColumn*> resolvedByIndex;
@@ -85,7 +64,7 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
         resolvedByIndex.insert(column.columnIndex, &column);
     }
 
-    const QVector<Column>& modelColumns = state->strip().columns();
+    const QVector<Column>& modelColumns = strip.columns();
     snap.columns.reserve(modelColumns.size());
     int activeColumnDroppedAt = -1;
     for (int ci = 0; ci < modelColumns.size(); ++ci) {
@@ -95,6 +74,9 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
 
         const ResolvedColumn* resolvedColumn = resolvedByIndex.value(ci, nullptr);
         const QRect columnRect = resolvedColumn ? resolvedColumn->rect : QRect();
+        if (fillAbsolute) {
+            outColumn.absRect = columnRect;
+        }
         // Real on-screen share ALONG THE STRIP, driving the variable-extent
         // card that IS its column at preview scale. A column longer than the
         // work area (over-wide preset) clamps to 1 — the preview shows the
@@ -127,14 +109,22 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
             outTile.minimized = modelTile.minimized;
             outTile.activeTab = ti == modelColumn.activeTileIdx;
             outTile.hidden = outColumn.tabbed && !modelTile.minimized && !outTile.activeTab;
-            // A rect only for tiles a renderer stacks: not minimized (none
-            // resolves), not a hidden tab (drawn as a tab, and its resolved
-            // rect is just the active tile's — see ResolvedTile::rect).
-            if (!outTile.minimized && !outTile.hidden && resolvedColumn && !columnRect.isEmpty()) {
+            // A rel rect only for tiles a renderer stacks: not minimized
+            // (none resolves), not a hidden tab (drawn as a tab, and its
+            // resolved rect is just the active tile's — see
+            // ResolvedTile::rect). The absolute rect, when asked for, is
+            // recorded for hidden tabs too: the overview draws every window
+            // it has a rect for, and the shared rect is the honest answer.
+            if (!outTile.minimized && resolvedColumn && !columnRect.isEmpty()) {
                 for (const ResolvedTile& resolvedTile : resolvedColumn->tiles) {
                     if (resolvedTile.windowId == modelTile.windowId) {
                         const QRect& r = resolvedTile.rect;
-                        outTile.relRect = relRectInColumn(r, columnRect, params.axis);
+                        if (fillAbsolute) {
+                            outTile.absRect = r;
+                        }
+                        if (!outTile.hidden) {
+                            outTile.relRect = relRectInColumn(r, columnRect, params.axis);
+                        }
                         break;
                     }
                 }
@@ -153,7 +143,7 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
         // shows no active-column highlight for the common drag-a-solo-window
         // case until the trigger is held.
         if (outColumn.tiles.isEmpty()) {
-            if (ci == state->strip().activeColumnIndex()) {
+            if (ci == strip.activeColumnIndex()) {
                 activeColumnDroppedAt = snap.columns.size();
             }
             continue;
@@ -207,7 +197,7 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
                 }
             }
         }
-        if (ci == state->strip().activeColumnIndex()) {
+        if (ci == strip.activeColumnIndex()) {
             snap.activeColumnIndex = snap.columns.size();
         }
         snap.columns.append(outColumn);
@@ -217,7 +207,65 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
     if (activeColumnDroppedAt >= 0 && !snap.columns.isEmpty()) {
         snap.activeColumnIndex = qMin(activeColumnDroppedAt, static_cast<int>(snap.columns.size()) - 1);
     }
+    if (fillAbsolute) {
+        snap.viewX = resolved.viewOffset;
+    }
     return snap;
+}
+
+} // namespace
+
+ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const QString& excludeWindowId) const
+{
+    // Preview-owned screens resolve against the preview's CAPTURED key for
+    // the same reason computeDragInsertTargetAtPoint does: a desktop or
+    // activity switch mid-drag must not swap the strip under indices a
+    // commit will apply to the captured one.
+    const bool previewOwnsScreen = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
+    const ScrollState* state = previewOwnsScreen ? m_states.stateForKey(m_dragInsertPreview->targetKey)
+                                                 : m_states.stateForKey(currentKeyForScreen(screenId));
+    if (!state) {
+        return ScrollStripSnapshot();
+    }
+    const ScrollLayoutParams params =
+        layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
+
+    // Exclusion only matters while the drag window is still ATTACHED (no
+    // live preview). Once a preview detached it, the strip resolved below no
+    // longer contains it and a second removal would be a no-op by id anyway;
+    // skipping the canonicalization keeps the common per-show path cheap.
+    // PRECONDITION this rests on: callers pass only the window the live
+    // preview detached (the daemon passes its active-drag id) — the drop is
+    // unconditional on WHICH id arrives while a preview owns the screen.
+    // TEST SEAM NOTE: the snapshot suite's fixtures run with a null window
+    // registry, where canonicalizeForLookup returns its argument verbatim,
+    // so the canonicalization itself is exercised only by the daemon's real
+    // ids, not by these tests.
+    const QString excluded =
+        (!previewOwnsScreen && !excludeWindowId.isEmpty()) ? canonicalizeForLookup(excludeWindowId) : QString();
+    return buildSnapshot(state->strip(), params, excluded, /*fillAbsolute=*/false);
+}
+
+ScrollStripSnapshot ScrollEngine::stripSnapshot(const PhosphorEngine::PlacementStateKey& key) const
+{
+    // Straight to the keyed state, never created and never redirected: the
+    // overview asks about contexts that are not on screen, and a live
+    // drag-preview's captured key is a fact about the current context's
+    // popup, not about the key asked for here.
+    const ScrollState* state = m_states.stateForKey(key);
+    if (!state) {
+        return ScrollStripSnapshot();
+    }
+    // layoutParamsForScreen resolves the context gap overrides for the
+    // screen's CURRENT context (overridesForScreen keys on
+    // currentKeyForScreen), so a non-current key is laid out with the
+    // current context's gaps. Accepted: the overview draws thumbnails, a
+    // per-context gap difference is a few pixels at that scale, and a
+    // key-taking params resolver would need a second override path through
+    // every gap reader to remove it.
+    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+    return buildSnapshot(state->strip(), params, QString(), /*fillAbsolute=*/true);
 }
 
 } // namespace PhosphorScrollEngine

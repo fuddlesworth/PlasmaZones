@@ -1,0 +1,85 @@
+{
+    "id": "arc",
+    "name": "Arc",
+    "description": "Short lightning arcs snap between points the pointer has just passed through. Each arc is a crooked line with a hot white centre and a coloured glow around it, and the whole set is re-rolled many times a second so it crackles. Moving fast lights more arcs and brightens them. Slow down and one dim arc is left, and stopping puts it out. Clicking throws a fan of extra arcs out from the press point.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Electric",
+    "fragmentShader": "effect.frag",
+    "layer": "below",
+    "reachParam": "reach",
+    "trailSeconds": 0.6,
+    "trailWindowSeconds": 0.5,
+    "parameters": [
+        {
+            "id": "arcs",
+            "name": "Arc count",
+            "type": "int",
+            "default": 5,
+            "min": 1,
+            "max": 8,
+            "description": "How many arcs a fast-moving pointer lights at once"
+        },
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 90.0,
+            "min": 16.0,
+            "max": 256.0,
+            "description": "How far an arc may stretch from where it starts (px)"
+        },
+        {
+            "id": "jaggedness",
+            "name": "Jaggedness",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How far each arc kinks away from a straight line, 0 for straight bolts"
+        },
+        {
+            "id": "crackleRate",
+            "name": "Crackle rate",
+            "type": "float",
+            "default": 20.0,
+            "min": 1.0,
+            "max": 30.0,
+            "description": "How many times a second the arcs are re-rolled to new points"
+        },
+        {
+            "id": "intensity",
+            "name": "Intensity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Overall brightness of the arcs"
+        },
+        {
+            "id": "clickBurst",
+            "name": "Click burst",
+            "type": "int",
+            "default": 6,
+            "min": 0,
+            "max": 8,
+            "description": "How many extra arcs a click throws out from the press point, 0 to disable"
+        },
+        {
+            "id": "activationSpeed",
+            "name": "Activation speed",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2000.0,
+            "description": "Pointer speed below which no arcs are drawn (px per second), 0 to always draw them"
+        },
+        {
+            "id": "color",
+            "name": "Arc colour",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "Colour of the glow around each arc"
+        }
+    ]
+}
