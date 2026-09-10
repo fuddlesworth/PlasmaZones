@@ -20,6 +20,7 @@
 #include <QVariantList>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace PlasmaZones {
@@ -153,6 +154,7 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     state.nowMs = 0;
     state.pressed = false;
     state.hasLastDevicePos = false;
+    state.lastDpr = 1.0;
     state.history.setTrailSeconds(effect.samplesTrail ? effect.trailSeconds : 0.0);
     updatePreviewParams(item, packId, friendlyParams);
     return true;
@@ -243,7 +245,7 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
     // A DPR change (the window moved to an output with another scale) leaves
     // the stored position in the OLD device scale, and interpolating from it
     // would lay a straight line the pointer never took across the new canvas.
-    if (st.hasLastDevicePos && !qFuzzyCompare(dpr, st.lastDpr)) {
+    if (st.hasLastDevicePos && std::abs(dpr - st.lastDpr) > 1e-9) {
         st.hasLastDevicePos = false;
     }
     st.lastDpr = dpr;
@@ -302,6 +304,7 @@ void PointerPreviewController::resetPointer(QQuickItem* item)
         // Or the first tick after a restart would fill in a path from wherever
         // the previous loop left the pointer to wherever the new one starts.
         it->hasLastDevicePos = false;
+        it->lastDpr = 1.0;
     }
 }
 

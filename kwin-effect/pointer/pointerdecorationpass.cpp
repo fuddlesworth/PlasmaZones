@@ -567,8 +567,11 @@ void PointerDecorationPass::outputGeometryChanged()
     // built from the output's NEW scale and origin while the pixels it is
     // meant to damage were painted in the old canvas, so it would ask for the
     // wrong band: on a layout move the origin has already shifted, and on a
-    // scale change the size is wrong too. The geometry change is itself what
-    // re-renders the output, so the band is covered without us guessing at it.
+    // scale change the size is wrong too. There is no correct rect to ask for
+    // here: the one that describes those pixels was measured in a canvas that
+    // no longer exists. Asking for the wrong band is worse than asking for
+    // nothing, so this path damages nothing and leaves the output change to
+    // whatever repaint it carries.
     resetHistory();
     m_lastSpriteCanvasRect = QRectF();
     m_hasTimeOrigin = false;

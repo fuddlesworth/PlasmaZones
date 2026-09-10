@@ -420,6 +420,27 @@ private Q_SLOTS:
             const PackResult o = validatePointer(tmp, QStringLiteral("pt-trail-overstated"), silent, body);
             QVERIFY2(o.report.contains(QStringLiteral("declare `samplesTrail: false`")), qPrintable(o.report));
 
+            // A stage carrying an #include suppresses the "declare false"
+            // arm. The scan reads sources as WRITTEN, so a pack whose trail
+            // walk lives in a file it includes reads as touching no trail
+            // here; advising that author to declare false would take a pack
+            // that really does read the ring out of the spacing decision.
+            // Six of the thirteen bundled packs carry an include, and every
+            // other fixture in this file is include-free, so without this
+            // case the suppression has no coverage at all.
+            QJsonObject included = pointerPack(
+                QStringLiteral("pt-trail-included"),
+                QJsonArray{pointerParam(QStringLiteral("activationSpeed"), QStringLiteral("float"), 0.0, 0.0, 2000.0)});
+            included.remove(QStringLiteral("samplesTrail"));
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-trail-included"), QStringLiteral("local_helper.glsl"),
+                                       QStringLiteral("const float kLocal = 1.0;\n")));
+            const PackResult inc = validatePointer(tmp, QStringLiteral("pt-trail-included"), included,
+                                                   QStringLiteral("#include \"local_helper.glsl\"\n"
+                                                                  "vec4 pPointer(vec2 uv) {\n"
+                                                                  "    return vec4(kLocal * p_activationSpeed);\n"
+                                                                  "}\n"));
+            QVERIFY2(!inc.report.contains(QStringLiteral("declare `samplesTrail: false`")), qPrintable(inc.report));
+
             // The honest declaration draws neither lint.
             QJsonObject honest = pointerPackWithGate(QStringLiteral("pt-trail-honest"), 0.0);
             const PackResult h = validatePointer(tmp, QStringLiteral("pt-trail-honest"), honest, body);

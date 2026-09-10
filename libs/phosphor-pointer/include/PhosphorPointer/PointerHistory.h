@@ -65,9 +65,13 @@ namespace PhosphorPointerShaders {
 /// re-anchors the pairing. Carrying it as a shared tick would leave the
 /// pairing frozen, so no event for the length of the step would be accepted
 /// and the idle clock would stand still while the pointer was plainly
-/// moving. Both shipped hosts feed a monotonic clock and cannot reach this. A gap of `kVelocityHoldMs` or more (the
-/// pointer was parked) records speed 0, starts the pairing fresh rather than averaging the move over the idle time, and
-/// marks the sample as the START OF A STROKE. The frame state also carries `filteredSpeed`, the same exponential filter
+/// moving. Both shipped hosts feed a monotonic clock and cannot reach this.
+///
+/// A gap of `kVelocityHoldMs` or more (the pointer was parked) records speed 0,
+/// starts the pairing fresh rather than averaging the move over the idle time,
+/// and marks the sample as the START OF A STROKE.
+///
+/// The frame state also carries `filteredSpeed`, the same exponential filter
 /// the shared shader library used to walk per fragment, computed here once per frame over the current stroke: the
 /// motion samples back from the head to the nearest stroke start. Marking the start at the event, from the event gap,
 /// is what makes this independent of how far apart the ring's slots are: a shader-side walk over sample ages had to
@@ -166,14 +170,17 @@ public:
     /// to fill.
     ///
     /// Every slot the ring holds is emitted, INCLUDING entries older than the
-    /// trail window, and — after a clock step — entries stamped in the FUTURE.
-    /// Those report age 0 (the age is floored) until they rotate out over one
-    /// ring's worth of appends, so they read as newer than the head. Only a
-    /// caller feeding a non-monotonic clock can produce them; `damageRect`
-    /// counts them, which over-repaints rather than under-repaints. `damageRect` counts only the ones inside it, so a
-    /// pack that draws every entry without gating on `.z` paints outside the rect the host asked to repaint, and the
-    /// surplus is never cleaned up. Events arriving slower than the sample interval are the ordinary way the ring comes
-    /// to span longer than its window. Gate on age.
+    /// trail window, while `damageRect` counts only the ones inside it. So a
+    /// pack that draws every entry without gating on `.z` paints outside the
+    /// rect the host asked to repaint, and the surplus is never cleaned up.
+    /// Events arriving slower than the sample interval are the ordinary way
+    /// the ring comes to span longer than its window. Gate on age.
+    ///
+    /// A caller feeding a non-monotonic clock can also leave entries stamped
+    /// in the FUTURE after a step. Those report age 0, because the age is
+    /// floored, until they rotate out over one ring's worth of appends, so
+    /// they read as newer than the head. `damageRect` counts those too, which
+    /// over-repaints rather than under-repaints.
     [[nodiscard]] PointerFrameState frameState(qint64 nowMs, double scale) const;
 
     /// True while a motion or button event is younger than @p trailSeconds.

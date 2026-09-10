@@ -83,7 +83,7 @@ vec4 pPointer(vec2 uv) {
     // the tail the user sized: gating it on `live` would retire it as soon as
     // the idle time passed `length`, so at the shortest length it vanished a
     // tenth of a second after the pointer stopped while idleFade below was
-    // still saying it should be at full strength for another half second.
+    // still at full strength, and would not be out for another six tenths.
     float idleFade = 1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle);
     float headFade = count >= 1 ? idleFade * gate : 0.0;
     float dHead = length(px - headPos);

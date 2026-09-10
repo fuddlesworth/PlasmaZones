@@ -673,8 +673,8 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         static const QRegularExpression kMirror(
             QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*|#\\s*define\\s+kTrailSeconds\\s+)"
                            "([0-9]+\\.?[0-9]*(?:[eE][-+]?[0-9]+)?|\\.[0-9]+(?:[eE][-+]?[0-9]+)?)"));
-        // A declaration the value pattern cannot capture (an expression, a
-        // named constant, an exponent form) would otherwise slip through with
+        // A declaration the value pattern cannot capture (an expression, or a
+        // named constant) would otherwise slip through with
         // no diagnostic at all, which is worse than a mismatch: the author
         // believes the mirror is being checked. Count the declarations and the
         // captures separately, and report the shortfall.
