@@ -103,16 +103,30 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
     const bool hasPrev = m_hasMotion;
     const QPointF prevPos = m_lastEventPos;
     const qint64 prevMs = m_lastEventMs;
-    const double speed = hasPrev ? speedOver(prevPos, prevMs, devicePx, nowMs) : 0.0;
+    // An event in the same millisecond as the previous accepted one has no
+    // dt to divide over. It carries that event's speed and does NOT become
+    // the pairing: the next event then pairs across both moves and reads the
+    // true speed, where scoring it here would have left a zero on the head
+    // for every event that shared a millisecond (see the header comment).
+    const bool sameTick = hasPrev && nowMs - prevMs <= 0;
+    const double speed = !hasPrev ? 0.0 : sameTick ? m_lastEventSpeed : speedOver(prevPos, prevMs, devicePx, nowMs);
+    const auto accept = [&] {
+        if (sameTick) {
+            m_lastMotionMs = nowMs;
+            return;
+        }
+        acceptEvent(devicePx, nowMs, speed, hasPrev, prevPos, prevMs);
+    };
     if (m_count > 0) {
         Sample& newest = m_ring[static_cast<size_t>(m_head)];
+        const bool moved = QLineF(newest.pos, devicePx).length() >= kMinSampleDistancePx;
         // Measured from the append, not the last refresh, or a continuously
         // moving pointer would refresh forever and never fill the ring. A
         // gap of zero or less is inside the interval too: the compositor's
         // clock is whole milliseconds and a fast mouse lands several events
         // in the append's own millisecond, so letting those append would
         // hand each one a slot and fill the ring the interval exists to
-        // spread. The refresh records them at speed 0 (see speedOver).
+        // spread.
         const qint64 gapMs = nowMs - newest.anchorMs;
         if (gapMs < m_sampleIntervalMs) {
             // Inside the sample interval. The slot is not appended to, or the
@@ -120,7 +134,7 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
             // reach the window; but the pointer has still moved, so the head
             // follows it in place. Its speed is re-read against the sample
             // behind it, the pairing a fresh append would have used.
-            if (QLineF(newest.pos, devicePx).length() < kMinSampleDistancePx) {
+            if (!moved) {
                 // A sub-pixel drift is not motion: it neither moves the head
                 // nor becomes the pairing for the next event.
                 return;
@@ -128,26 +142,64 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
             newest.pos = devicePx;
             newest.timeMs = nowMs;
             newest.speed = speed;
-            acceptEvent(devicePx, nowMs, hasPrev, prevPos, prevMs);
+            accept();
+            return;
+        }
+        if (!moved) {
+            // The interval has passed with the pointer still. The slot lands
+            // (the ring's minimum sampling rate is what gives a slow drag a
+            // line to draw from) but it is not motion: the idle clock keeps
+            // running and the pairing stays put, so a resting pointer idles
+            // on the preview, which feeds every tick, exactly as on the
+            // compositor, which feeds nothing.
+            m_head = (m_head + 1) % kCapacity;
+            m_ring[static_cast<size_t>(m_head)] = Sample{devicePx, nowMs, nowMs, 0.0};
+            m_count = std::min(m_count + 1, kCapacity);
             return;
         }
     }
     m_head = m_count > 0 ? (m_head + 1) % kCapacity : 0;
     m_ring[static_cast<size_t>(m_head)] = Sample{devicePx, nowMs, nowMs, speed};
     m_count = std::min(m_count + 1, kCapacity);
-    acceptEvent(devicePx, nowMs, hasPrev, prevPos, prevMs);
+    accept();
 }
 
-void PointerHistory::acceptEvent(const QPointF& devicePx, qint64 nowMs, bool hasPrev, const QPointF& prevPos,
-                                 qint64 prevMs)
+void PointerHistory::acceptEvent(const QPointF& devicePx, qint64 nowMs, double speed, bool hasPrev,
+                                 const QPointF& prevPos, qint64 prevMs)
 {
     m_hasPrevEvent = hasPrev;
     m_prevEventPos = prevPos;
     m_prevEventMs = prevMs;
     m_lastEventPos = devicePx;
     m_lastEventMs = nowMs;
+    m_lastEventSpeed = speed;
     m_lastMotionMs = nowMs;
     m_hasMotion = true;
+}
+
+double PointerHistory::filteredSpeed() const
+{
+    if (m_count < 1) {
+        return 0.0;
+    }
+    // The current stroke: back from the head until a gap of the hold or more
+    // between neighbouring samples, which is a pause (on the compositor a
+    // resting pointer sends nothing, so the gap is the idle time itself).
+    int oldest = 0;
+    for (int i = 1; i < m_count; ++i) {
+        if (sampleAt(i - 1).timeMs - sampleAt(i).timeMs >= kVelocityHoldMs) {
+            break;
+        }
+        oldest = i;
+    }
+    // The same exponential filter the upstream windtrail effect runs on its
+    // own sampler (a = 0.46), seeded from the stroke's oldest sample rather
+    // than 0 so a short stroke is not biased toward standing still.
+    double filtered = sampleAt(oldest).speed;
+    for (int i = oldest - 1; i >= 0; --i) {
+        filtered = filtered * 0.54 + sampleAt(i).speed * 0.46;
+    }
+    return std::max(filtered, 0.0);
 }
 
 void PointerHistory::noteButtons(Qt::MouseButtons now, Qt::MouseButtons before, const QPointF& devicePx, qint64 nowMs)
@@ -174,6 +226,7 @@ PointerFrameState PointerHistory::frameState(qint64 nowMs, double scale) const
     PointerFrameState s;
     s.scale = scale;
     s.buttons = m_buttonsMask;
+    s.filteredSpeed = filteredSpeed();
 
     // Strict `<` on the hold, like every other window here (see the header's
     // sampling contract). Read over the last two accepted events, the pairing

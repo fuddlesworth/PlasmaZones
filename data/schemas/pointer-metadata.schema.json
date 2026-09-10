@@ -33,7 +33,8 @@
         },
         "trailSeconds": {
             "type": "number",
-            "minimum": 0,
+            "exclusiveMinimum": 0,
+            "maximum": 60,
             "description": "How long (seconds, default 1.0) after the last motion or button event the pack still needs frames. The host keeps repainting for that long, then stops until the next event."
         },
         "needsCursor": {

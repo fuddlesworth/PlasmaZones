@@ -203,53 +203,26 @@ vec4 premul(vec3 rgb, float a) {
 // and the pack flickers on and off, which is exactly how the windtrail pack
 // first shipped.
 //
-// This walks the current STROKE oldest to newest with the same exponential
-// filter the upstream windtrail effect uses on its own sampler
-// (`filtered = filtered * (1 - a) + raw * a`, a = 0.46), so one loud sample
-// moves the answer a little rather than deciding it. Use this for anything a
-// user would notice switching, above all pointerSpeedGate(). Per-sample `.w`
-// is still the right input for something drawn AT that sample, such as how
-// wide the ribbon was where the pointer actually was.
-//
-// Only the current stroke: the ring is never purged while the pointer rests,
-// and on the compositor a resting pointer sends no events, so after a fast
-// stroke and a pause the older slots still carry the old speeds. Seeding the
-// filter from those would open every speed gate for a few samples on the
-// first slow move after the pause. A gap of kPointerParkSeconds or more
-// between two neighbouring samples is the sampler's own "parked" threshold
-// (kVelocityHoldMs, past which it scores the next move from zero), so the
-// walk starts at the newest sample on the far side of such a gap.
-const float kPointerParkSeconds = 0.1;
+// The host's sampler computes this once per frame (PointerHistory::
+// filteredSpeed): the exponential filter the upstream windtrail effect runs
+// on its own sampler (a = 0.46), walked over the CURRENT STROKE only, so one
+// loud sample moves the answer a little rather than deciding it, and the
+// speeds of a stroke before a pause never seed the gate of the next one.
+// The sampler knows the event times, so it can tell a pause from a long
+// sample interval where a shader-side walk over sample ages could not. It
+// arrives in uPointerVelocity.w. Use this for anything a user would notice
+// switching, above all pointerSpeedGate(). Per-sample `.w` is still the
+// right input for something drawn AT that sample, such as how wide the
+// ribbon was where the pointer actually was.
 float pointerFilteredSpeed() {
-    int count = pointerTrailCount();
-    if (count < 1) {
-        return 0.0;
-    }
-    // The oldest sample of the current stroke: the last one reached from the
-    // head without crossing a park gap. Never past the filled window, so the
-    // zero entries beyond it are not walked.
-    int oldest = 0;
-    for (int i = 1; i < kPointerTrailCapacity; ++i) {
-        if (i >= count || pointerTrailAt(i).z - pointerTrailAt(i - 1).z >= kPointerParkSeconds) {
-            break;
-        }
-        oldest = i;
-    }
-    // Seeded from that oldest sample rather than 0, or a short stroke would
-    // always report a speed biased down toward standing still.
-    float filtered = pointerTrailAt(oldest).w;
-    for (int i = oldest - 1; i >= 0; --i) {
-        filtered = filtered * 0.54 + pointerTrailAt(i).w * 0.46;
-    }
-    return max(filtered, 0.0);
+    return max(uPointerVelocity.w, 0.0);
 }
 
-// Speed gate for a pack whose `activationSpeed` parameter defaults to 0: the
-// filtered walk above is up to 31 dependent trail reads per fragment, and at
-// 0 pointerSpeedGate() returns 1 without looking at the speed, so the walk
-// is skipped there rather than paid for and thrown away.
+// Speed gate on the filtered speed for a pack's `activationSpeed` parameter.
+// The one place a pack should gate from, so every pack in a chain opens and
+// closes on the same figure.
 float pointerActivationGate(float activationSpeed) {
-    return activationSpeed > 0.0 ? pointerSpeedGate(pointerFilteredSpeed(), activationSpeed) : 1.0;
+    return pointerSpeedGate(pointerFilteredSpeed(), activationSpeed);
 }
 
 // The per-button colour a click pack paints with: left, right, middle by the

@@ -34,17 +34,29 @@ namespace PhosphorPointerShaders {
 /// sample in place, so index 0 is always exactly where the pointer is, and a
 /// sub-pixel drift inside the gap is dropped. Without the interval a 1000 Hz
 /// mouse filled all 32 slots in 32 ms, and a pack's tail could never be
-/// longer than that however long its `length` parameter asked for. Ages are
-/// computed at `frameState` time. Velocity is the finite difference over the
-/// last two ACCEPTED events (appended or folded into the head alike) with a
-/// floor of `kVelocityMinDtSeconds` on dt, and the head sample's speed is
-/// scored over the same pairing so the two agree. An event whose gap to the
-/// previous accepted one is not a usable pairing records speed 0 instead of
-/// dividing: a timestamp at or before the previous event
-/// (a clock that did not advance, or went backwards), and a gap of
-/// `kVelocityHoldMs` or more (the pointer was parked, so the first move
-/// after it starts the pairing fresh rather than being averaged over the
-/// idle time). Every recency window in this class is a strict `<`: velocity
+/// longer than that however long its `length` parameter asked for. A sample
+/// appended once the interval has passed WITHOUT the pointer having moved a
+/// pixel (the preview feeds a resting pointer every tick) keeps the ring's
+/// minimum sampling rate but is not motion: it neither resets the idle clock
+/// nor becomes a velocity pairing, so a resting pointer idles the same way
+/// on both hosts. Ages are computed at `frameState` time. Velocity is the
+/// finite difference over the last two ACCEPTED events (appended or folded
+/// into the head alike) with a floor of `kVelocityMinDtSeconds` on dt, and
+/// the head sample's speed is scored over the same pairing so the two agree.
+/// An event in the same millisecond as the previous accepted one is not a
+/// usable pairing (nothing can be divided over it), so it carries the
+/// previous event's speed and leaves the pairing where it was, and the next
+/// event pairs across both moves; a multi-kHz mouse then reads its true speed
+/// instead of a zero for every event that shared a millisecond. A gap of
+/// `kVelocityHoldMs` or more (the pointer was parked) records speed 0 and
+/// starts the pairing fresh rather than averaging the move over the idle
+/// time, as does a clock that stepped backwards. The frame state also
+/// carries `filteredSpeed`, the same exponential filter the shared shader
+/// library used to walk per fragment, computed here once per frame over the
+/// current stroke: the run of samples back from the head with no gap of
+/// `kVelocityHoldMs` or more between neighbours, so a pause ends the stroke
+/// and the previous stroke's speeds never seed the next one's gate.
+/// Every recency window in this class is a strict `<`: velocity
 /// is reported while the newest sample is younger than `kVelocityHoldMs`,
 /// the chain is live while an event is younger than `trailSeconds`, and the
 /// damage rect includes a point while it is younger than `trailSeconds`. At
@@ -142,8 +154,13 @@ private:
     /// the pair is not a usable pairing (see the header comment).
     static double speedOver(const QPointF& earlierPos, qint64 earlierMs, const QPointF& devicePx, qint64 nowMs);
     /// Record @p devicePx at @p nowMs as the newest accepted motion event,
-    /// with the previous one (if @p hasPrev) as its velocity pairing.
-    void acceptEvent(const QPointF& devicePx, qint64 nowMs, bool hasPrev, const QPointF& prevPos, qint64 prevMs);
+    /// with the previous one (if @p hasPrev) as its velocity pairing and
+    /// @p speed as the speed scored over that pairing.
+    void acceptEvent(const QPointF& devicePx, qint64 nowMs, double speed, bool hasPrev, const QPointF& prevPos,
+                     qint64 prevMs);
+    /// The exponentially filtered speed over the current stroke (see the
+    /// header comment), in device px/s.
+    [[nodiscard]] double filteredSpeed() const;
 
     double m_trailSeconds = 0.0;
     qint64 m_sampleIntervalMs = kMinSampleGapMs;
@@ -160,6 +177,7 @@ private:
     /// interval folds into the head slot rather than taking one of its own.
     QPointF m_lastEventPos;
     qint64 m_lastEventMs = 0;
+    double m_lastEventSpeed = 0.0;
     QPointF m_prevEventPos;
     qint64 m_prevEventMs = 0;
     bool m_hasPrevEvent = false;

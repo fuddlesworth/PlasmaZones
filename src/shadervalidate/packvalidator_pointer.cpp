@@ -160,6 +160,12 @@ QStringList speedGateParamNames(const QString& strippedSource)
     for (const Callee& callee : kCallees) {
         int at = 0;
         while ((at = source.indexOf(callee.name, at)) >= 0) {
+            // Identifier-bounded on the left, like mentionsToken: a pack
+            // helper named e.g. myPointerSpeedGate is not the shared gate.
+            if (at > 0 && (source[at - 1].isLetterOrNumber() || source[at - 1] == QLatin1Char('_'))) {
+                at += callee.name.size();
+                continue;
+            }
             int i = at + callee.name.size();
             while (i < source.size() && source[i].isSpace()) {
                 ++i;
@@ -517,6 +523,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             // read its budget so the two cannot drift. A pack that reads it
             // only that way has a live control, not a dead one.
             if (!eff.reachParam.isEmpty() && p.id == eff.reachParam) {
+                if (!mentionsToken(allStages, QStringLiteral("pointerReach")) && !mentionsParam(allStages, p.id)) {
+                    lints << QStringLiteral(
+                                 "reachParam '%1' sizes the damage rect but no stage reads "
+                                 "pointerReach() or p_%1, so the shader cannot be bounding itself "
+                                 "to the reach it declares")
+                                 .arg(p.id);
+                }
                 continue;
             }
             const bool bySlot = p.type == QLatin1String("color") ? bufferReadsColors : bufferReadsScalars;
@@ -551,8 +564,9 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                                                });
             if (declared == eff.parameters.cend()) {
                 lints << QStringLiteral(
-                             "pointerSpeedGate() is passed p_%1, which is no declared parameter (it "
-                             "expands to an unwritten slot, so the gate reads whatever is in it)")
+                             "a speed gate (pointerSpeedGate or pointerActivationGate) is passed p_%1, which "
+                             "is no declared parameter (it expands to an unwritten slot, so the gate reads "
+                             "whatever is in it)")
                              .arg(gateId);
                 continue;
             }

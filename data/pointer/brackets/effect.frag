@@ -6,9 +6,13 @@
 // the velocity, so the pack paints exactly nothing while the pointer is merely
 // moving: every contribution is gated on uPointerPress / uPointerRelease.
 //
-// All lengths derive from p_spread, which is the pack's reachParam, and each
-// event is additionally clipped to a box of half-extent `spread` around its
-// own origin, so the pack cannot paint outside the damage rect the host buys.
+// Every length except the line thickness derives from p_spread, which is
+// the pack's reachParam, and each event is additionally clipped to a box of
+// half-extent `spread` around its own origin, so the pack cannot paint
+// outside the damage rect the host buys. The starting corner offset is held
+// far enough inside that box for the turned corner, its half thickness and
+// the antialias feather to fit, or at the smallest spread the outermost
+// bracket edge was clipped square.
 
 // The longest response the pack can produce is kDurationMax + kHoldMax, since
 // the hold is added on top of the duration rather than carved out of it. The
@@ -62,7 +66,10 @@ float response(vec2 px, vec2 origin, float since, float duration, float hold, fl
     float k = clamp(since / max(converge, 1e-4), 0.0, 1.0);
     float ease = 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k);
 
-    float start = spread * kCornerFraction;
+    // A corner turned by up to 12 degrees reaches cos + sin, about 1.19, of
+    // its offset along an axis; the line's half thickness and feather sit
+    // beyond that (see the header).
+    float start = min(spread * kCornerFraction, spread / 1.19 - half_ - 0.75);
     float rest = start * clamp(p_rest, 0.0, 1.0);
     float d = mix(start, rest, ease);
     // Capped at the corner's distance from the press point: the arms run from

@@ -57,9 +57,10 @@ void PointerUniformExtension::setVec4Locked(float (&dst)[4], float x, float y, f
     m_dirty.store(true, std::memory_order_release);
 }
 
-void PointerUniformExtension::setVelocityLocked(const QVector2D& velocity)
+void PointerUniformExtension::setVelocityLocked(const QVector2D& velocity, double filteredSpeed)
 {
-    setVec4Locked(m_data.uPointerVelocity, velocity.x(), velocity.y(), velocity.length(), 0.0f);
+    setVec4Locked(m_data.uPointerVelocity, velocity.x(), velocity.y(), velocity.length(),
+                  static_cast<float>(filteredSpeed));
 }
 
 void PointerUniformExtension::setPressLocked(const QPointF& pos, double secondsSince, int button)
@@ -120,10 +121,10 @@ void PointerUniformExtension::setTrailLocked(std::span<const QVector4D> trail)
     }
 }
 
-void PointerUniformExtension::setVelocity(const QVector2D& velocity)
+void PointerUniformExtension::setVelocity(const QVector2D& velocity, double filteredSpeed)
 {
     QMutexLocker lock(&m_mutex);
-    setVelocityLocked(velocity);
+    setVelocityLocked(velocity, filteredSpeed);
 }
 
 void PointerUniformExtension::setPress(const QPointF& pos, double secondsSince, int button)
@@ -180,7 +181,7 @@ void PointerUniformExtension::apply(const PointerFrameState& state)
     // render thread can never copy a tail with this frame's velocity and the
     // previous frame's trail: the frame lands atomically or not at all.
     QMutexLocker lock(&m_mutex);
-    setVelocityLocked(state.velocity);
+    setVelocityLocked(state.velocity, state.filteredSpeed);
     setPressLocked(state.pressPos, state.pressSecondsSince, state.pressButton);
     setReleaseLocked(state.releasePos, state.releaseSecondsSince, state.releaseButton);
     setStateLocked(state.buttons, state.idleSeconds, state.scale);

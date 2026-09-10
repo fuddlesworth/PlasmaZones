@@ -21,10 +21,10 @@
 // reach and reads as the stroke itself lighting up.
 //
 // `activationSpeed` gates the whole tube once through the shared
-// pointerSpeedGate() on pointerFilteredSpeed(), and `smoothing` goes through
-// pointerSmoothedAt(), so this pack, Comet, Sparks and WindTrail all gate on
-// the same filtered figure and trace the same curve. Both default to 0,
-// which is the no-threshold, raw-path behaviour.
+// pointerActivationGate(), and `smoothing` goes through pointerSmoothedAt(),
+// so this pack, Comet, Sparks and WindTrail all gate on the same filtered
+// figure and trace the same curve. Both default to 0, which is the
+// no-threshold, raw-path behaviour.
 
 const float kFlareSeconds = 0.4;
 

@@ -31,10 +31,10 @@ float cometWindow(float d, float reach) {
 }
 
 vec4 pPointer(vec2 uv) {
+    // No early return on an empty trail: a click before any motion this
+    // session still bursts (the burst answers a resting pointer by design),
+    // and every trail read below is guarded on `count`.
     int count = pointerTrailCount();
-    if (count < 1) {
-        return vec4(0.0);
-    }
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
@@ -65,11 +65,17 @@ vec4 pPointer(vec2 uv) {
     // headlight behind.
     vec2 headPos = pointerSmoothedAt(0, count, p_smoothing);
     float idle = pointerIdleSeconds();
-    float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, kTrailSeconds, idle)) * gate;
+    // Out at 0.9 of the window rather than exactly at it: liveness is a
+    // strict `<`, so the last painted frame at a low refresh rate lands just
+    // inside the window and nothing repaints after it. Ending the fade
+    // early keeps that frame clear instead of leaving a faint dot frozen at
+    // the head (the same margin Halo and Afterglow keep).
+    float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle)) * gate;
     float dHead = length(px - headPos);
     // The head's disc, shared with the click lift below so the two cannot
-    // disagree about where the head ends.
-    float headDisc = 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead);
+    // disagree about where the head ends. Nothing with no trail: the zero
+    // entry would put a head at the canvas origin.
+    float headDisc = count >= 1 ? 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead) : 0.0;
     float headCore = headDisc * headFade;
     float headGlow =
         exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade * cometWindow(dHead, reach);

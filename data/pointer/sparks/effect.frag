@@ -23,9 +23,9 @@
 // sitting still.
 //
 // `activationSpeed` gates the whole pack once through the shared
-// pointerSpeedGate() on pointerFilteredSpeed(), and `smoothing` goes through
-// pointerSmoothedAt(), the same two the other trail packs use, so every pack
-// in a chain gates on the same filtered figure and smooths identically. The
+// pointerActivationGate(), and `smoothing` goes through pointerSmoothedAt(),
+// the same two the other trail packs use, so every pack in a chain gates on
+// the same filtered figure and smooths identically. The
 // per-sample speed still decides how MANY sparks a sample sheds, since that
 // is a property of the path at that point. Both default to 0, which is the
 // no-threshold, raw-path behaviour the pack shipped with.
@@ -98,15 +98,23 @@ vec4 pPointer(vec2 uv) {
         // of the sample's POSITION, the same key its sparks are seeded from:
         // a sample's ring index advances by one on every append, so choosing
         // by index parity drew and skipped the same sparks on alternate
-        // appends and the outer tail strobed at the sample rate.
-        vec2 seed = floor(s.xy * 0.5);
-        if (i >= 8 && hash13(seed + 57.0) < 0.5) {
+        // appends and the outer tail strobed at the sample rate. A thinned
+        // sample fades out over indices 5 to 8 rather than being cut at 8,
+        // or its whole spark set would vanish mid-flight at about 40 percent
+        // brightness the frame it reached the eighth slot.
+        //
+        // The seed cell is one device pixel: with a coarser cell two slow
+        // consecutive samples landed in the same cell, rolled identical
+        // sparks and read as beads along one arc.
+        vec2 seed = floor(s.xy);
+        float thin = hash13(seed + 57.0) < 0.5 ? 1.0 - smoothstep(5.0, 8.0, float(i)) : 1.0;
+        if (thin <= 0.0) {
             continue;
         }
         // Spark budget for this sample scales with its speed. The shed
         // decision comes before the distance test so a sample that sheds
         // nothing costs nothing, whichever order the two would have rejected.
-        float shed = budget * clamp(s.w / kFullSpeed, 0.0, 1.0) * gate;
+        float shed = budget * clamp(s.w / kFullSpeed, 0.0, 1.0) * gate * thin;
         int sparks = int(ceil(shed));
         if (sparks < 1) {
             continue;

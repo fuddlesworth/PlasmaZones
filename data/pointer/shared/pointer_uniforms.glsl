@@ -89,7 +89,9 @@ uniform vec4 iTextureResolution[4];
 
 // ── Pointer tail ────────────────────────────────────────────────────────────
 
-// .xy pointer velocity in device px/s, .z speed (length of .xy), .w unused.
+// .xy pointer velocity in device px/s, .z speed (length of .xy), .w the
+// filtered speed over the current stroke (read it through
+// pointerFilteredSpeed()).
 uniform vec4 uPointerVelocity;
 
 // Last button PRESS: .xy canvas px, .z seconds since it (1e6 when there has
@@ -160,7 +162,7 @@ layout(std140, binding = 0) uniform PointerUniforms {
     // implicit 8-byte std140 pad here — base region ends at 672.
 
     // ── pointer tail (PointerUniformsTail, 608 bytes) ──
-    vec4 uPointerVelocity;       // offset 672 (16)  — .xy device px/s, .z speed, .w unused
+    vec4 uPointerVelocity;       // offset 672 (16)  — .xy device px/s, .z speed, .w filtered speed
     vec4 uPointerPress;          // offset 688 (16)  — .xy canvas px, .z seconds since (1e6 = none), .w button
     vec4 uPointerRelease;        // offset 704 (16)  — same shape as uPointerPress
     vec4 uPointerState;          // offset 720 (16)  — .x buttons mask, .y idle s, .z scale, .w trail count

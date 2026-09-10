@@ -134,7 +134,8 @@ void PointerDecorationPass::pushFrameUniforms(KWin::GLShader* shader, const Poin
     }
     if (loc.uPointerVelocity >= 0) {
         shader->setUniform(loc.uPointerVelocity,
-                           QVector4D(state.velocity.x(), state.velocity.y(), state.velocity.length(), 0.0f));
+                           QVector4D(state.velocity.x(), state.velocity.y(), state.velocity.length(),
+                                     static_cast<float>(state.filteredSpeed)));
     }
     if (loc.uPointerPress >= 0) {
         shader->setUniform(loc.uPointerPress,

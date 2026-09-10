@@ -76,13 +76,17 @@ vec2 orbitCentre(int count, float lag) {
 // eased stand-in for a smoothed speed the contract gives no state to keep.
 // Ages are monotonic in the index, so the walk ends at the first old sample.
 //
-// Age-WEIGHTED, not a flat mean: on the compositor a resting pointer sends
-// no events, so the in-window set empties from its oldest end until only the
-// head is left, and a flat mean would hold the final stroke speed until the
-// head crossed the window edge and then drop to zero in one frame, popping
-// the ring inward while it is still fully live. With a weight that reaches
-// zero at the edge each sample fades out of the average as it ages, so the
-// draw-back is the ease the header promises on both runtimes.
+// The draw-back after a stop is an ENVELOPE on the head's age, not the mean
+// itself: on the compositor a resting pointer sends no events, so the
+// in-window set empties from its oldest end until only the head is left,
+// and any average of the remaining samples (weighted or not) still reads
+// the final stroke speed until the head crosses the window edge and then
+// drops to zero in one frame, popping the ring inward while it is still
+// fully live. The head's age is under one sample interval while the pointer
+// moves, so the envelope is 1 there, and it eases the mean to zero across
+// the second half of the window once the pointer rests. The preview appends
+// speed-0 rest samples every interval, which decay the mean on their own,
+// and the envelope agrees with that on both runtimes.
 float orbitMeanSpeed(int count) {
     float sum = 0.0;
     float n = 0.0;
@@ -94,11 +98,11 @@ float orbitMeanSpeed(int count) {
         if (s.z >= kSpeedWindowSeconds) {
             break;
         }
-        float w = 1.0 - s.z / kSpeedWindowSeconds;
-        sum += s.w * w;
-        n += w;
+        sum += s.w;
+        n += 1.0;
     }
-    return n > 0.0 ? sum / n : 0.0;
+    float ease = 1.0 - smoothstep(0.5 * kSpeedWindowSeconds, kSpeedWindowSeconds, pointerTrailAt(0).z);
+    return n > 0.0 ? (sum / n) * ease : 0.0;
 }
 
 vec4 pPointer(vec2 uv) {
@@ -158,7 +162,9 @@ vec4 pPointer(vec2 uv) {
     // always keeps some radius to orbit on.
     float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
     float stretch = 1.0 + smear * 2.0;
-    float dotPx = min(max(p_dotSize, 0.25) * scale, reachPx * 0.6 / (3.0 * stretch));
+    // Floored so the divides below can never see a zero dot even if a host
+    // handed a zero reach.
+    float dotPx = max(min(max(p_dotSize, 0.25) * scale, reachPx * 0.6 / (3.0 * stretch)), 0.25 * scale);
     radius = clamp(radius, 0.0, reachPx - 3.0 * dotPx * stretch);
 
     vec2 drift = uPointerVelocity.xy;

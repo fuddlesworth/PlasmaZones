@@ -17,7 +17,7 @@
             "default": 44.0,
             "min": 16.0,
             "max": 300.0,
-            "description": "How far out the brackets start, measured from the click (px). Every other length is a share of this."
+            "description": "Size of the box the brackets start on, measured from the click (px). Every other length except the line thickness is a share of this."
         },
         {
             "id": "rest",

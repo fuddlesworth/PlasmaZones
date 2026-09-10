@@ -33,8 +33,16 @@
 // window of the whole chain, so after a pause, or beside a longer-lived pack,
 // most of its slots hold positions the pointer left seconds ago. An arc
 // hashed onto one of those would strike along a path the user has moved on
-// from, or be cut off at the edge of the damage rect, which only covers the
-// samples inside this pack's own window.
+// from, or, in a chain of this pack alone, be cut off at the edge of the
+// damage rect, which covers only the samples inside the chain's longest
+// window.
+//
+// REACH. Every arc's whole excursion, the segment plus its jag amplitude
+// plus three glow sigmas of halo, is held inside the reach so nothing meets
+// the damage rect's edge at a visible level. The budget the excursion is
+// fitted to is floored at 35 percent of the reach, as Burst floors its
+// travel: at the smallest reach the halo alone is wider than the reach, and
+// without the floor every strike would collapse onto its origin.
 
 #include <pointer_noise.glsl>
 
@@ -103,6 +111,8 @@ vec4 pPointer(vec2 uv) {
 
     float core = 1.1 * scale;
     float glow = 5.5 * scale;
+    // The budget an arc's excursion is fitted to (see REACH in the header).
+    float strikeReach = max(reachPx - glow * 3.0, reachPx * 0.35);
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -136,11 +146,13 @@ vec4 pPointer(vec2 uv) {
             vec2 b = pointerTrailAt(i1).xy;
             vec2 d = b - a;
             float len = length(d);
-            if (len > reachPx) {
-                b = a + d * (reachPx / len);
-                len = reachPx;
+            // The segment and its jag together must fit the budget.
+            float lenMax = strikeReach / (1.0 + 0.22 * jag);
+            if (len > lenMax) {
+                b = a + d * (lenMax / len);
+                len = lenMax;
             }
-            if (len < 1.0) {
+            if (len < scale) {
                 // A stationary pair has no arc to draw; stretching it into one
                 // would leave a stub sitting under a parked pointer.
                 continue;
@@ -174,11 +186,9 @@ vec4 pPointer(vec2 uv) {
         vec2 origin = uPointerPress.xy;
         float k = sincePress / kBurstLife;
         float remain = 1.0 - k;
-        // The strike reaches out over the burst's life and dims as it goes.
-        // The halo's own extent (three glow sigmas, the reject box below) is
-        // taken off the reach first, so a full-length strike's glow ends
-        // inside the damage rect instead of being cut flat at its edge.
-        float len = max(reachPx - glow * 3.0, 0.0) * (0.35 + 0.65 * k);
+        // The strike reaches out over the burst's life and dims as it goes,
+        // fitted to the same budget as the trail arcs.
+        float len = strikeReach * (0.35 + 0.65 * k);
         float burstAlpha = remain * remain * intensity;
         for (int j = 0; j < kMaxArcs; ++j) {
             if (j >= burst) {
@@ -192,7 +202,7 @@ vec4 pPointer(vec2 uv) {
             // together are held inside the reach, or the kinks of a full-length
             // strike would hang outside the damage rect.
             float tipLen = length(tip - origin);
-            float amp = min(jag * 0.22 * tipLen, max(reachPx - glow * 3.0 - tipLen, 0.0));
+            float amp = min(jag * 0.22 * tipLen, max(strikeReach - tipLen, 0.0));
             vec2 lo = min(origin, tip) - vec2(amp + glow * 3.0);
             vec2 hi = max(origin, tip) + vec2(amp + glow * 3.0);
             if (any(lessThan(px, lo)) || any(greaterThan(px, hi))) {

@@ -863,6 +863,35 @@ private Q_SLOTS:
                                 QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(pointerReach() * 0.0); }\n"));
             QVERIFY2(!r.report.contains(QStringLiteral("parameter 'radius' is declared but no stage reads")),
                      qPrintable(r.report));
+            QVERIFY2(!r.report.contains(QStringLiteral("sizes the damage rect but no stage reads")),
+                     qPrintable(r.report));
+        }
+        {
+            // The exemption is not blanket: a reachParam the shader reads
+            // neither by name nor through pointerReach() is almost certainly
+            // mirroring the reach by hand, the drift the helper exists to
+            // prevent, and the author is told so.
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-reach-unread"),
+                QJsonArray{pointerParam(QStringLiteral("radius"), QStringLiteral("float"), 64.0, 4.0, 256.0)});
+            obj.insert(QStringLiteral("reachParam"), QStringLiteral("radius"));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-reach-unread"), obj,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(0.0); }\n"));
+            QVERIFY2(r.report.contains(QStringLiteral(
+                         "reachParam 'radius' sizes the damage rect but no stage reads pointerReach() or p_radius")),
+                     qPrintable(r.report));
+        }
+        {
+            // A pack helper whose name merely ends in the shared gate's name
+            // is not the shared gate; the scan is identifier-bounded.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-gate-lookalike"), 900.0);
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-gate-lookalike"), obj,
+                                QStringLiteral("float myPointerSpeedGate(float s, float a) { return s * a; }\n"
+                                               "vec4 pPointer(vec2 uv) {\n"
+                                               "    return vec4(myPointerSpeedGate(0.0, p_activationSpeed));\n"
+                                               "}\n"));
+            QVERIFY2(!r.report.contains(QStringLiteral("previews as an empty stage")), qPrintable(r.report));
         }
     }
 

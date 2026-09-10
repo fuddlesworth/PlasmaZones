@@ -41,6 +41,8 @@ private Q_SLOTS:
     void testVelocityDecaysWhenPointerStops();
     void testBackwardsTimestampReportsZeroSpeed();
     void testSameMillisecondBurstDoesNotFillTheRing();
+    void testFilteredSpeedFollowsTheCurrentStrokeOnly();
+    void testStationaryAppendsAreNotMotion();
     void testFirstMoveAfterParkingStartsFresh();
     void testSpeedIsNotUnderReportedAtRealSamplingRates();
     void testDamageRectCoversTrailInflatedByReach();
@@ -269,6 +271,69 @@ void TestPointerHistory::testSameMillisecondBurstDoesNotFillTheRing()
         state.trailAt(PointerHistory::kCapacity - 1).z() >= 0.8f,
         qPrintable(
             QStringLiteral("oldest sample is only %1 s old").arg(state.trailAt(PointerHistory::kCapacity - 1).z())));
+    // The eight events in one millisecond cover 16 px, so the true speed is
+    // 16000 px/s. An event in the same millisecond as the previous one has
+    // no dt to divide over; it carries the previous speed and leaves the
+    // pairing where it was, so the next millisecond's first event pairs
+    // across the whole 16 px and reads the true figure, where scoring each
+    // same-millisecond event as 0 left a zero on the head most of the time.
+    QVERIFY2(std::abs(state.newestTrail().w() - 16000.0f) < 100.0f,
+             qPrintable(QStringLiteral("head speed %1").arg(state.newestTrail().w())));
+    QVERIFY2(std::abs(state.velocity.x() - 16000.0f) < 100.0f,
+             qPrintable(QStringLiteral("velocity %1").arg(state.velocity.x())));
+    QVERIFY2(std::abs(state.filteredSpeed - 16000.0) < 100.0,
+             qPrintable(QStringLiteral("filtered %1").arg(state.filteredSpeed)));
+}
+
+void TestPointerHistory::testFilteredSpeedFollowsTheCurrentStrokeOnly()
+{
+    // A fast stroke, a pause, then a slow nudge. The ring is never purged on
+    // rest, so the fast stroke's samples are still in it; the filter must
+    // not seed from them, or a speed-gated pack opens on the nudge as if the
+    // pointer were still flying.
+    PointerHistory history;
+    history.setTrailSeconds(0.8);
+    qint64 t = 0;
+    for (; t <= 500; t += 10) {
+        history.notePointer(QPointF(t * 2.0, 0.0), t); // 2000 px/s
+    }
+    const PointerFrameState flying = history.frameState(t - 10, 1.0);
+    QVERIFY2(std::abs(flying.filteredSpeed - 2000.0) < 50.0,
+             qPrintable(QStringLiteral("filtered while flying %1").arg(flying.filteredSpeed)));
+
+    // Parked past the hold, then one slow move: 5 px over 50 ms is 100 px/s
+    // on the second event; the first move after a park scores 0.
+    t += 3000;
+    history.notePointer(QPointF(1005.0, 0.0), t);
+    history.notePointer(QPointF(1010.0, 0.0), t + 50);
+    const PointerFrameState nudged = history.frameState(t + 50, 1.0);
+    QVERIFY2(nudged.filteredSpeed < 100.0 + 1.0,
+             qPrintable(QStringLiteral("filtered after a park %1 (stale stroke seeded it)").arg(nudged.filteredSpeed)));
+    QVERIFY(nudged.filteredSpeed > 0.0);
+}
+
+void TestPointerHistory::testStationaryAppendsAreNotMotion()
+{
+    // The preview feeds the sampler every tick even while its pointer rests,
+    // so a same-position sample lands whenever the interval has passed (the
+    // ring's minimum sampling rate). It is not motion: the idle clock keeps
+    // running and the velocity pairing stays put, so a resting pointer idles
+    // in the preview exactly as on the compositor, which sends nothing.
+    PointerHistory history;
+    history.setTrailSeconds(0.5);
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(100.0, 0.0), 50);
+    for (qint64 t = 66; t <= 1050; t += 16) {
+        history.notePointer(QPointF(100.0, 0.0), t);
+    }
+    const PointerFrameState resting = history.frameState(1050, 1.0);
+    QVERIFY2(resting.trailSize() > 2, "the stationary samples still land in the ring");
+    QVERIFY2(resting.idleSeconds >= 1.0, qPrintable(QStringLiteral("idle %1").arg(resting.idleSeconds)));
+    QVERIFY(!history.isLive(1050, 0.5));
+    QCOMPARE(resting.velocity.x(), 0.0f);
+    // The filter's exponential tail of the one real move is what is left, a
+    // fraction of a px/s after thirty stationary samples.
+    QVERIFY2(resting.filteredSpeed < 1.0, qPrintable(QStringLiteral("filtered %1").arg(resting.filteredSpeed)));
 }
 
 void TestPointerHistory::testFirstMoveAfterParkingStartsFresh()

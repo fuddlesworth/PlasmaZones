@@ -37,16 +37,15 @@
 
 #include <pointer_lib.glsl>
 #include <pointer_multipass.glsl>
+#include "afterglow_common.glsl"
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 const float kFreshSeconds = 0.05;
-const float kIdleCutStart = 0.6;
-const float kIdleCutSeconds = 0.9;
 
 void main() {
-    float persistence = clamp(customParams[0].x, 0.0, 0.97);
+    float persistence = clamp(customParams[0].x, 0.0, kMaxPersistence);
     float radius = max(customParams[0].y, 1.0) * pointerScale();
 
     float idleCut = 1.0 - smoothstep(kIdleCutStart, kIdleCutSeconds, pointerIdleSeconds());

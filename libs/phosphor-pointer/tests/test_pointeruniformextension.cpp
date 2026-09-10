@@ -25,6 +25,7 @@ PointerFrameState fullFrame()
 {
     PointerFrameState state;
     state.velocity = QVector2D(3.0f, 4.0f);
+    state.filteredSpeed = 4.5;
     state.pressPos = QPointF(100.0, 200.0);
     state.pressSecondsSince = 0.25;
     state.pressButton = 2;
@@ -102,7 +103,7 @@ void TestPointerUniformExtension::testWriteLandsAtTheDeclaredTailOffset()
     QCOMPARE(ext.extensionSize(), static_cast<int>(sizeof(PointerUniformsTail)));
 
     std::vector<char> buffer(1280, char{0x7f});
-    ext.setVelocity(QVector2D(12.0f, -5.0f));
+    ext.setVelocity(QVector2D(12.0f, -5.0f), 7.5);
     ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
 
     // Everything before the tail belongs to BaseUniforms and must be
@@ -116,6 +117,9 @@ void TestPointerUniformExtension::testWriteLandsAtTheDeclaredTailOffset()
     QCOMPARE(velocity[1], -5.0f);
     // .z carries the scalar speed so a pack can read magnitude without a sqrt.
     QCOMPARE(velocity[2], 13.0f);
+    // .w carries the sampler's filtered speed, what pointerFilteredSpeed()
+    // reads, so a gate costs one uniform read rather than a walk per fragment.
+    QCOMPARE(velocity[3], 7.5f);
 }
 
 void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
@@ -129,6 +133,12 @@ void TestPointerUniformExtension::testApplyPopulatesEveryDeclaredField()
 
     std::vector<char> buffer(1280, char{0});
     ext.write(buffer.data(), static_cast<int>(kPointerTailOffset));
+
+    const auto velocity = vec4At(buffer, offsetof(PointerUniformsTail, uPointerVelocity));
+    QCOMPARE(velocity[0], 3.0f);
+    QCOMPARE(velocity[1], 4.0f);
+    QCOMPARE(velocity[2], 5.0f);
+    QCOMPARE(velocity[3], 4.5f); // the sampler's filtered speed
 
     const auto press = vec4At(buffer, offsetof(PointerUniformsTail, uPointerPress));
     QCOMPARE(press[0], 100.0f);

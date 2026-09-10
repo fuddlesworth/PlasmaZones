@@ -79,7 +79,9 @@ inline constexpr const char* kITextureResolution = "iTextureResolution";
 // ── Pointer tail (UBO offsets 672..1279, see PointerShaderUniforms.h) ────
 
 /// `vec4 uPointerVelocity` — `.xy` device px/s, `.z` speed (length), `.w`
-/// unused. UBO offset 672.
+/// the filtered speed over the current stroke
+/// (`PointerFrameState::filteredSpeed`, read by `pointerFilteredSpeed()`).
+/// UBO offset 672.
 inline constexpr const char* kUPointerVelocity = "uPointerVelocity";
 
 /// `vec4 uPointerPress` — `.xy` canvas px of the last button press, `.z`
