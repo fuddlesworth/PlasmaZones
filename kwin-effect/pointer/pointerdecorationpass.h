@@ -51,6 +51,13 @@ namespace PlasmaZones {
 /// timer and no spring: the only wake-ups are slotMouseChanged (notePointer)
 /// and, while live, the pass's own per-frame repaint request.
 ///
+/// A burst also ends early when the sprite it decorates goes away, whoever
+/// took it (cursorHiddenElsewhere). The trail is then DROPPED rather than
+/// merely left unpainted: dropTrail damages the band the last frame covered
+/// and empties the history, and it is the emptied history — not the hide —
+/// that ends liveness, so the pass is still in the paint chain for the cycle
+/// that performs the erase.
+///
 /// COST RULE. A chain with no live layer must cost nothing per frame. Every
 /// entry point early-returns on `m_engaged`, a cached verdict rebuilt only
 /// when the enable flag, the profile or the registry changes: with the
@@ -187,7 +194,11 @@ public:
     /// pointer's output per frame. Called from postPaintScreen. When the
     /// chain has just gone quiet this is also where a cursor hide taken by an
     /// `above` layer is released, covering the case where the pointer's
-    /// output stopped painting entirely.
+    /// output stopped painting entirely. It is likewise the only per-cycle
+    /// hook the pass has, so it is where a sprite hidden by someone else
+    /// drops the trail — the case notePointer cannot cover, because a client
+    /// that hides the cursor on an idle timeout does so precisely when no
+    /// pointer event is coming.
     void scheduleRepaints();
 
     /// Give the cursor back because ANOTHER pass is taking @p screen's frame

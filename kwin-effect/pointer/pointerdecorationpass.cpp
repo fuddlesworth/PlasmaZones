@@ -342,10 +342,19 @@ bool PointerDecorationPass::isLive() const
 {
     // Suppressed counts as not live, so the effect is not held in the paint
     // chain on our account while the pointer sits over a fullscreen window.
-    // A sprite hidden by someone else reads the same way: nothing to decorate
-    // is nothing to paint. Both leave holdsCursorHide() to keep the effect in
-    // the chain long enough to hand a hide of our own back.
-    if (!m_engaged || suppressedOn(m_output) || cursorHiddenElsewhere()) {
+    // It leaves holdsCursorHide() to keep the effect in the chain long enough
+    // to hand a hide of our own back.
+    //
+    // A sprite hidden by someone else deliberately does NOT read that way.
+    // This verdict is what isActive() puts the effect in the chain on, and an
+    // effect dropped from the chain gets neither paintOutput nor
+    // scheduleRepaints — so answering false the moment the sprite goes would
+    // retire the pass BEFORE anything damaged the trail it left on screen,
+    // freezing the last frame there. setSuppressedOutputs has a signal to do
+    // that tidy-up on; a hide has none, so the pass stays live until the
+    // scheduleRepaints that drops the trail, and the emptied history is what
+    // ends liveness one cycle later.
+    if (!m_engaged || suppressedOn(m_output)) {
         return false;
     }
     return m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
@@ -435,10 +444,8 @@ QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen) cons
 
 void PointerDecorationPass::scheduleRepaints()
 {
-    if (!m_engaged || !m_output || suppressedOn(m_output) || cursorHiddenElsewhere() || !KWin::effects) {
-        // Nothing engaged, the fullscreen gate covers the pointer's output, or
-        // the sprite is hidden by someone else and there is no pointer to
-        // decorate:
+    if (!m_engaged || !m_output || suppressedOn(m_output) || !KWin::effects) {
+        // Nothing engaged, or the fullscreen gate covers the pointer's output:
         // no repaint, no clock read, no allocation. Requesting a frame and
         // drawing nothing is the one thing suppression must NOT do, since the
         // per-frame wake-up is the cost the setting exists to remove. The
@@ -451,6 +458,20 @@ void PointerDecorationPass::scheduleRepaints()
         return;
     }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (cursorHiddenElsewhere()) {
+        // The sprite went while the pointer sat still, so no pointer event is
+        // coming to notice it — a client that hides the cursor after an idle
+        // timeout is the ordinary case, and it hides precisely because motion
+        // stopped. This is the only per-cycle hook the pass has, so the drop
+        // happens here: damage the band the last frame painted and empty the
+        // history. The emptied history is what makes isLive() false on the
+        // next cycle, so the pass retires AFTER the erase rather than before
+        // it, and this costs one cycle rather than one per frame. Idempotent
+        // once the history is empty, so a pass held in the chain by a cursor
+        // hide of its own repeats it for free.
+        dropTrail(m_output, nowMs);
+        return;
+    }
     if (!m_history.isLive(nowMs, m_maxTrailSeconds)) {
         // Gone quiet. Drop the iTime origin so the next burst starts at zero,
         // and hand the cursor back — this is the path that covers a pointer
@@ -482,10 +503,13 @@ bool PointerDecorationPass::cursorHiddenElsewhere() const
     if (!KWin::effects) {
         return false;
     }
-    // Ordered so the null-image test runs first: it is the one mechanism this
-    // pass can still read while holding a hide of its own, and it is what a
-    // client-installed blank cursor looks like. The hide-counter test can only
-    // speak for an owner that is not us.
+    // Two independent mechanisms, either of which counts, so the order below
+    // decides nothing but which read is skipped when the first already
+    // answered. A client-installed blank cursor empties the IMAGE and leaves
+    // the hide counter alone, which is why it is a test of its own rather
+    // than a fallback: it is the one signal still legible while this pass
+    // holds a hide, where the counter can only speak for an owner that is
+    // not us.
     if (KWin::effects->cursorImage().isNull()) {
         return true;
     }
