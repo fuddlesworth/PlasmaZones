@@ -428,11 +428,14 @@ void ScrollEngine::commitDragInsertPreview()
     }
     // The dropped window is the one the user is looking at.
     strip.focusWindow(p.windowId, params);
-    // Override the insert's own policy reanchor: land the dropped column at
-    // the position the indicator promised, moved only as far as full
-    // visibility requires. The policy verdict (OnOverflow centering an
-    // over-wide column) hid every neighbour after a drop; the minimal fit
-    // keeps the strip context the user dropped into on screen.
+    // Settle the view over the insert's own policy reanchor. Under every
+    // policy but Always (and the lone-column rule) that means landing the
+    // dropped column at the position the indicator promised, moved only as far
+    // as full visibility requires: the policy verdict (OnOverflow centering an
+    // over-wide column) hid every neighbour after a drop, and the minimal fit
+    // keeps the strip context the user dropped into on screen. Always is the
+    // user asking for the middle in so many words, so there the drop centers
+    // instead — see reanchorForDropCommit.
     strip.reanchorForDropCommit(preDropViewOffset, params);
     m_states.setKeyForWindow(p.windowId, p.targetKey);
 
