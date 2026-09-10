@@ -105,6 +105,9 @@ void PointerDecorationPass::rebuildChain()
     const QStringList chain = m_profile.enabledChain();
     if (chain.isEmpty()) {
         m_engaged = false;
+        // Kept in step with m_maxTrailSeconds on this path too, so the
+        // sampler never carries a window from a chain that no longer exists.
+        m_history.setTrailSeconds(m_maxTrailSeconds);
         return;
     }
     // Populating the search paths is what makes the registry scan the pack

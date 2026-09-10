@@ -60,7 +60,10 @@ vec4 pPointer(vec2 uv) {
     float idle = pointerIdleSeconds();
     float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, kTrailSeconds, idle)) * headGate;
     float dHead = length(px - headPos);
-    float headCore = (1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead)) * headFade;
+    // The head's disc, shared with the click lift below so the two cannot
+    // disagree about where the head ends.
+    float headDisc = 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead);
+    float headCore = headDisc * headFade;
     float headGlow =
         exp(-(dHead * dHead) / (2.0 * radius * radius * 2.25)) * 0.5 * headFade * cometWindow(dHead, reach);
 
@@ -142,7 +145,6 @@ vec4 pPointer(vec2 uv) {
         // is shaped by the head's own disc, not a flat constant: a constant
         // here paints every pixel of the pass quad and shows up as a filled
         // box the size of the damage rect on every click.
-        float headDisc = 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead);
         headCore = min(headCore + decay * 0.4 * p_clickBurst * headDisc, 1.0);
     }
 

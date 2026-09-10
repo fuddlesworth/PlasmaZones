@@ -95,9 +95,10 @@ public:
     /// @p pressed drives a synthetic
     /// left button, so a click pack's ring fires on the press edge and its
     /// release ring on the release edge, exactly as the compositor's
-    /// noteButtons produces them. Each canvas gets its own history, created on
-    /// its first frame, so a newly opened pack starts empty instead of
-    /// inheriting wherever another preview's pointer happened to be.
+    /// noteButtons produces them. Each canvas gets its own history, created
+    /// when the item is configured (or on its first frame, whichever comes
+    /// first), so a newly opened pack starts empty instead of inheriting
+    /// wherever another preview's pointer happened to be.
     Q_INVOKABLE void drivePointer(QQuickItem* item, qreal x, qreal y, qreal cursorW, qreal cursorH, qreal dtMs,
                                   bool pressed);
 
@@ -149,6 +150,11 @@ private:
         bool pressed = false;
     };
     QHash<QObject*, PointerState> m_states;
+
+    /// The state for @p item, created (and hooked to the item's destruction)
+    /// on first use. Both configurePreviewItem and drivePointer go through
+    /// this so an entry is only ever inserted, and only ever connected, once.
+    PointerState& stateFor(QObject* item);
 };
 
 } // namespace PlasmaZones

@@ -133,19 +133,28 @@ bool PointerPreviewController::configurePreviewItem(QQuickItem* item, const QStr
     shaderItem->setITime(0.0);
     // The same window the compositor gives its sampler for this pack, so the
     // preview's trail is spaced (and so is as long as) the one on screen.
-    // Created here rather than on the first drivePointer so the window is in
-    // place before the first sample lands; destroyed with the item like the
-    // drivePointer-created entry.
-    auto stateIt = m_states.find(shaderItem);
+    // The state is created here rather than on the first drivePointer so the
+    // window is in place before the first sample lands.
+    stateFor(shaderItem).history.setTrailSeconds(effect.trailSeconds);
+    updatePreviewParams(item, packId, friendlyParams);
+    return true;
+}
+
+PointerPreviewController::PointerState& PointerPreviewController::stateFor(QObject* item)
+{
+    // One sampler per canvas. The first call for an item default-constructs
+    // its state, which is what gives a newly opened pack a fresh ring rather
+    // than a trail streaking in from wherever another preview's pointer
+    // happened to be. Dropped again when the item goes away, and the
+    // destroyed hookup is made exactly once per entry.
+    auto stateIt = m_states.find(item);
     if (stateIt == m_states.end()) {
-        stateIt = m_states.insert(shaderItem, PointerState{});
-        connect(shaderItem, &QObject::destroyed, this, [this](QObject* gone) {
+        stateIt = m_states.insert(item, PointerState{});
+        connect(item, &QObject::destroyed, this, [this](QObject* gone) {
             m_states.remove(gone);
         });
     }
-    stateIt->history.setTrailSeconds(effect.trailSeconds);
-    updatePreviewParams(item, packId, friendlyParams);
-    return true;
+    return *stateIt;
 }
 
 void PointerPreviewController::updatePreviewParams(QQuickItem* item, const QString& packId,
@@ -184,18 +193,7 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
         return;
     }
 
-    // One sampler per canvas. A first frame for this item default-constructs
-    // its state, which is what gives a newly opened pack a fresh ring rather
-    // than a trail streaking in from wherever another preview's pointer
-    // happened to be. Dropped again when the item goes away.
-    auto stateIt = m_states.find(shaderItem);
-    if (stateIt == m_states.end()) {
-        stateIt = m_states.insert(shaderItem, PointerState{});
-        connect(shaderItem, &QObject::destroyed, this, [this](QObject* gone) {
-            m_states.remove(gone);
-        });
-    }
-    PointerState& st = *stateIt;
+    PointerState& st = stateFor(shaderItem);
     // Clamped so a paused-then-resumed pane (or a first frame with no previous
     // timestamp) cannot jump the clock far enough to age the whole ring out in
     // one step, and never runs backwards.

@@ -40,6 +40,7 @@ private Q_SLOTS:
     void testButtonEventKeepsPassLiveWithoutMotion();
     void testVelocityDecaysWhenPointerStops();
     void testBackwardsTimestampReportsZeroSpeed();
+    void testSameMillisecondBurstDoesNotFillTheRing();
     void testFirstMoveAfterParkingStartsFresh();
     void testSpeedIsNotUnderReportedAtRealSamplingRates();
     void testDamageRectCoversTrailInflatedByReach();
@@ -93,10 +94,11 @@ void TestPointerHistory::testRingHoldsAtMostCapacityAndIsNewestFirst()
 
 void TestPointerHistory::testStationarySamplesAreCoalesced()
 {
-    // A sample is kept when the pointer has moved far enough OR when the gap
-    // since the last one is long enough. Both floors have to be under the
-    // threshold for an event to be dropped, so a burst of identical positions
-    // inside one gap window collapses to the sample already held.
+    // A new slot is appended only once the sample interval (the 8 ms floor
+    // here, with no window set) has passed since the last append. Inside it
+    // an event that moved at least a pixel refreshes the head in place and a
+    // sub-pixel drift is dropped, so a burst of identical positions inside
+    // one interval collapses to the sample already held.
     PointerHistory history;
     history.notePointer(QPointF(100.0, 100.0), 0);
     for (qint64 t = 1; t < PointerHistory::kMinSampleGapMs; ++t) {
@@ -226,8 +228,10 @@ void TestPointerHistory::testBackwardsTimestampReportsZeroSpeed()
     history.notePointer(QPointF(5.0, 0.0), 990);
 
     const PointerFrameState state = history.frameState(1000, 1.0);
-    // The sample itself is kept (it moved), but with no speed.
-    QCOMPARE(state.trailSize(), 2);
+    // The move is kept (the head follows it, inside the interval), but with
+    // no speed.
+    QCOMPARE(state.trailSize(), 1);
+    QCOMPARE(state.newestTrail().x(), 5.0f);
     QCOMPARE(state.newestTrail().w(), 0.0f);
     QCOMPARE(state.velocity.x(), 0.0f);
     QCOMPARE(state.velocity.y(), 0.0f);
@@ -237,9 +241,34 @@ void TestPointerHistory::testBackwardsTimestampReportsZeroSpeed()
     same.notePointer(QPointF(0.0, 0.0), 1000);
     same.notePointer(QPointF(5.0, 0.0), 1000);
     const PointerFrameState sameState = same.frameState(1000, 1.0);
-    QCOMPARE(sameState.trailSize(), 2);
+    QCOMPARE(sameState.trailSize(), 1);
+    QCOMPARE(sameState.newestTrail().x(), 5.0f);
     QCOMPARE(sameState.newestTrail().w(), 0.0f);
     QCOMPARE(sameState.velocity.x(), 0.0f);
+}
+
+void TestPointerHistory::testSameMillisecondBurstDoesNotFillTheRing()
+{
+    // The compositor's clock is whole milliseconds and a multi-kHz mouse
+    // lands several events in one of them. With a zero gap treated as an
+    // append rather than a refresh, every event in the append's own
+    // millisecond took a slot, and an 8 kHz stream cut the ring's window to
+    // an eighth of what setTrailSeconds asked for.
+    PointerHistory history;
+    history.setTrailSeconds(0.8);
+    const qint64 endMs = 2000;
+    for (qint64 t = 0; t <= endMs; ++t) {
+        for (int sub = 0; sub < 8; ++sub) {
+            history.notePointer(QPointF(t * 16.0 + sub * 2.0, 0.0), t);
+        }
+    }
+    const PointerFrameState state = history.frameState(endMs, 1.0);
+    QCOMPARE(state.trailSize(), PointerHistory::kCapacity);
+    QCOMPARE(state.newestTrail().x(), static_cast<float>(endMs * 16.0 + 14.0));
+    QVERIFY2(
+        state.trailAt(PointerHistory::kCapacity - 1).z() >= 0.8f,
+        qPrintable(
+            QStringLiteral("oldest sample is only %1 s old").arg(state.trailAt(PointerHistory::kCapacity - 1).z())));
 }
 
 void TestPointerHistory::testFirstMoveAfterParkingStartsFresh()

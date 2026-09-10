@@ -36,9 +36,11 @@ namespace PhosphorPointerShaders {
 /// mouse filled all 32 slots in 32 ms, and a pack's tail could never be
 /// longer than that however long its `length` parameter asked for. Ages are
 /// computed at `frameState` time. Velocity is the finite difference over the
-/// newest two samples with a floor of `kVelocityMinDtSeconds` on dt. A
-/// sample whose gap to the previous one is not a usable pairing records
-/// speed 0 instead of dividing: a timestamp at or before the newest sample
+/// last two ACCEPTED events (appended or folded into the head alike) with a
+/// floor of `kVelocityMinDtSeconds` on dt, and the head sample's speed is
+/// scored over the same pairing so the two agree. An event whose gap to the
+/// previous accepted one is not a usable pairing records speed 0 instead of
+/// dividing: a timestamp at or before the previous event
 /// (a clock that did not advance, or went backwards), and a gap of
 /// `kVelocityHoldMs` or more (the pointer was parked, so the first move
 /// after it starts the pairing fresh rather than being averaged over the

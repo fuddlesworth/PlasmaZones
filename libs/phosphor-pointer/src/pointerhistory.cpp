@@ -108,10 +108,13 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
         Sample& newest = m_ring[static_cast<size_t>(m_head)];
         // Measured from the append, not the last refresh, or a continuously
         // moving pointer would refresh forever and never fill the ring. A
-        // clock that did not advance appends (speed 0, see speedOver) rather
-        // than refreshing, so a stepped clock is recorded as it happened.
+        // gap of zero or less is inside the interval too: the compositor's
+        // clock is whole milliseconds and a fast mouse lands several events
+        // in the append's own millisecond, so letting those append would
+        // hand each one a slot and fill the ring the interval exists to
+        // spread. The refresh records them at speed 0 (see speedOver).
         const qint64 gapMs = nowMs - newest.anchorMs;
-        if (gapMs > 0 && gapMs < m_sampleIntervalMs) {
+        if (gapMs < m_sampleIntervalMs) {
             // Inside the sample interval. The slot is not appended to, or the
             // ring would fill with a few ms of motion and the tail could never
             // reach the window; but the pointer has still moved, so the head
