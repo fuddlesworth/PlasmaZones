@@ -168,7 +168,9 @@ QStringList speedGateParamNames(const QString& strippedSource)
         int at = 0;
         while ((at = source.indexOf(callee.name, at)) >= 0) {
             // Identifier-bounded on the left, like mentionsToken: a pack
-            // helper named e.g. myPointerSpeedGate is not the shared gate.
+            // helper named e.g. my_pointerSpeedGate is not the shared gate.
+            // The match is case-sensitive, so a name that also changes the
+            // case (myPointerSpeedGate) never reaches this check at all.
             if (at > 0 && (source[at - 1].isLetterOrNumber() || source[at - 1] == QLatin1Char('_'))) {
                 at += callee.name.size();
                 continue;

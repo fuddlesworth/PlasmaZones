@@ -65,6 +65,30 @@ inline bool linkSharedIncludes(const QTemporaryDir& tmp)
     return QFile::link(target, link);
 }
 
+/// The pointer twin of `linkSharedIncludes`. The pointer entry prologue always
+/// emits `#include <pointer_lib.glsl>`, and `includePathsFor` searches the
+/// pack's PARENT directory and its `shared/` sibling before falling back to the
+/// INSTALLED tree under the XDG data dirs. A temp packs-root has neither, so
+/// without this every pointer fixture silently resolved the helpers from
+/// whatever version happened to be installed on the machine — which meant the
+/// suite baked against a different `shared/` than the one in the working tree,
+/// and passed while the branch's own helper changes went unexercised.
+///
+/// Returns false when the source tree is not available, which is the caller's
+/// cue to skip rather than fail.
+inline bool linkPointerSharedIncludes(const QTemporaryDir& tmp)
+{
+    const QString target = QStringLiteral(P_SOURCE_DIR "/data/pointer/shared");
+    if (!QDir(target).exists()) {
+        return false;
+    }
+    const QString link = tmp.filePath(QStringLiteral("shared"));
+    if (QFileInfo::exists(link)) {
+        return true;
+    }
+    return QFile::link(target, link);
+}
+
 /// Write @p body to @p file inside the pack directory @p dir. Returns false
 /// when the write fails or is short, for the caller to QVERIFY: a QVERIFY
 /// inside a lambda only returns from the lambda, so a failed fixture write
@@ -150,4 +174,20 @@ inline QJsonArray toArray(const QStringList& values)
     }                                                                                                                  \
     if (!PackValidatorTest::linkSharedIncludes(tmp)) {                                                                 \
         QSKIP("data/animations/shared not found — running outside source tree");                                       \
+    }
+
+/// The pointer twin of `REQUIRE_ANIMATION_FIXTURE`, and it exists for a sharper
+/// reason than symmetry. The pointer validator bakes every stage through
+/// glslang twice, and the entry prologue's `#include <pointer_lib.glsl>`
+/// resolves from the INSTALLED tree when the temp root has no `shared/`. A slot
+/// without this therefore tested whatever helpers were installed rather than
+/// the ones in the working tree, and a machine with no install failed on the
+/// include instead of on the lint under test.
+#define REQUIRE_POINTER_FIXTURE(tmp)                                                                                   \
+    QVERIFY((tmp).isValid());                                                                                          \
+    if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {                                               \
+        QSKIP("glslangValidator not on PATH");                                                                         \
+    }                                                                                                                  \
+    if (!PackValidatorTest::linkPointerSharedIncludes(tmp)) {                                                          \
+        QSKIP("data/pointer/shared not found — running outside source tree");                                          \
     }

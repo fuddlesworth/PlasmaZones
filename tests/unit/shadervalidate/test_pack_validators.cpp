@@ -73,12 +73,16 @@ PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const 
     return result;
 }
 
-/// The pointer twin of `validate`. The fragment defines its own
-/// pointerSpeedGate rather than including pointer_lib.glsl, because a fixture
-/// in a QTemporaryDir has no `shared/` sibling for the include to resolve
-/// against and a failed include would bury the lint under a compile error.
-/// The stub's own signature is not a call, so the scan under test ignores it,
-/// which is itself worth having exercised.
+/// The pointer twin of `validate`. Fixtures call the REAL `pointerSpeedGate`
+/// out of pointer_lib.glsl, which REQUIRE_POINTER_FIXTURE links in from the
+/// working tree: the entry prologue includes the helpers unconditionally, so a
+/// fixture that defined its own stub collided with the real body the moment
+/// the include actually resolved. That collision is why the stub existed at
+/// all, and why the pointer slots were silently baking against whatever
+/// helpers happened to be installed instead of the branch's.
+///
+/// The scan's definition-versus-call distinction is exercised by the
+/// `pt-gate-lookalike` case rather than by a stub here.
 PackResult validatePointer(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata,
                            const QString& body)
 {
@@ -86,11 +90,7 @@ PackResult validatePointer(const QTemporaryDir& tmp, const QString& name, const 
     if (!writePackFile(dir, QStringLiteral("metadata.json"), QJsonDocument(metadata).toJson())) {
         return fixtureFailure(QStringLiteral("failed to write metadata.json under ") + dir);
     }
-    const QByteArray frag = QByteArray(
-                                "float pointerSpeedGate(float speed, float activationSpeed) {\n"
-                                "    return smoothstep(activationSpeed, activationSpeed * 2.0, speed);\n"
-                                "}\n")
-        + body.toUtf8();
+    const QByteArray frag = body.toUtf8();
     if (!writePackFile(dir, QStringLiteral("effect.frag"), frag)) {
         return fixtureFailure(QStringLiteral("failed to write effect.frag under ") + dir);
     }
@@ -682,7 +682,7 @@ private Q_SLOTS:
     void speedGateDefaultAbovePreviewPeakIsLinted()
     {
         QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
+        REQUIRE_POINTER_FIXTURE(tmp);
 
         const QString body = QStringLiteral(
             "vec4 pPointer(vec2 uv) {\n"
@@ -765,7 +765,7 @@ private Q_SLOTS:
     void pointerMetadataLintsCatchEachSilentlyRepairedField()
     {
         QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
+        REQUIRE_POINTER_FIXTURE(tmp);
 
         const QString body = pointerBodyReadingScalars({QStringLiteral("activationSpeed")});
         {
@@ -898,6 +898,12 @@ private Q_SLOTS:
             QVERIFY2(r.errors > 0, qPrintable(r.report));
             QVERIFY2(r.report.contains(QStringLiteral("include expansion failed the way the compositor expands it")),
                      qPrintable(r.report));
+            // Pinned to the pack's OWN include. The validator emits one message
+            // for every expansion failure, so without naming the file this
+            // passes on any unresolved include — including the prologue's
+            // pointer_lib.glsl, which is exactly how this case stayed green on
+            // a machine whose shared/ helpers were never linked in.
+            QVERIFY2(r.report.contains(QStringLiteral("local_helper.glsl")), qPrintable(r.report));
 
             // The quoted form is the pack-local form and passes both bakes.
             QJsonObject quoted = pointerPackWithGate(QStringLiteral("pt-quoted-local"), 0.0);
@@ -909,6 +915,13 @@ private Q_SLOTS:
                                                                 "    return vec4(kLocal * p_activationSpeed);\n"
                                                                 "}\n"));
             QVERIFY2(!q.report.contains(QStringLiteral("include expansion failed")), qPrintable(q.report));
+            // The whole-report assertion the pointer arm was missing. Every
+            // other pointer case asserts only that some phrase is ABSENT,
+            // which stays green however badly the pack failed for unrelated
+            // reasons — so a fixture that stopped resolving its helpers, or a
+            // new lint firing on every pack, showed up nowhere. This is the
+            // canary for both.
+            QVERIFY2(q.errors == 0, qPrintable(q.report));
         }
         {
             // A literal reach under the floor the reachParam arm enforces
@@ -992,14 +1005,31 @@ private Q_SLOTS:
         {
             // A pack helper whose name merely ends in the shared gate's name
             // is not the shared gate; the scan is identifier-bounded.
+            //
+            // The lookalike has to keep the gate's name in its EXACT case, or
+            // the case-sensitive indexOf never finds the substring and the
+            // left-boundary guard under test is never reached — an assertion
+            // that then passes with the guard deleted. `my_` is the boundary
+            // character that does the suppressing here.
             QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-gate-lookalike"), 900.0);
             const PackResult r =
                 validatePointer(tmp, QStringLiteral("pt-gate-lookalike"), obj,
-                                QStringLiteral("float myPointerSpeedGate(float s, float a) { return s * a; }\n"
+                                QStringLiteral("float my_pointerSpeedGate(float s, float a) { return s * a; }\n"
                                                "vec4 pPointer(vec2 uv) {\n"
-                                               "    return vec4(myPointerSpeedGate(0.0, p_activationSpeed));\n"
+                                               "    return vec4(my_pointerSpeedGate(0.0, p_activationSpeed));\n"
                                                "}\n"));
             QVERIFY2(!r.report.contains(QStringLiteral("previews as an empty stage")), qPrintable(r.report));
+
+            // The positive control for the same scan: an unprefixed call at
+            // the same default IS linted, so the case above is demonstrably
+            // the guard suppressing it rather than the lint being inert.
+            QJsonObject bare = pointerPackWithGate(QStringLiteral("pt-gate-bare"), 900.0);
+            const PackResult n = validatePointer(tmp, QStringLiteral("pt-gate-bare"), bare,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) {\n"
+                                                                "    return vec4(pointerSpeedGate(uPointerVelocity.z, "
+                                                                "p_activationSpeed));\n"
+                                                                "}\n"));
+            QVERIFY2(n.report.contains(QStringLiteral("previews as an empty stage")), qPrintable(n.report));
         }
     }
 
@@ -1011,7 +1041,7 @@ private Q_SLOTS:
     void pointerMultipassAndTextureLintsMatchTheSiblingArms()
     {
         QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
+        REQUIRE_POINTER_FIXTURE(tmp);
         const QString body = pointerBodyReadingScalars({QStringLiteral("activationSpeed")});
 
         {
