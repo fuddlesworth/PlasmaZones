@@ -197,11 +197,11 @@ vec4 pPointer(vec2 uv) {
         if (all(greaterThanEqual(local, vec2(0.0))) && all(lessThanEqual(local, vec2(1.0)))) {
             if (hasSprite) {
                 // Implicit-LOD fetch inside divergent flow is undefined in
-            // general; it is well defined here only because the sprite is
-            // uploaded with no mipmaps and GL_LINEAR filtering, so no
-            // derivative-driven level is ever selected. Adding mipmaps to the
-            // upload would make this a real bug.
-            vec4 texel = texture(uCursorSprite, local);
+                // general. It is well defined here only because the sprite is
+                // uploaded with no mipmaps and GL_LINEAR filtering, so no
+                // derivative-driven level is ever selected. Adding mipmaps to
+                // the upload would make this a real bug.
+                vec4 texel = texture(uCursorSprite, local);
                 // The sprite arrives premultiplied; the straight colour is
                 // what the tint mixes against, and a fully transparent texel
                 // has no colour to recover.

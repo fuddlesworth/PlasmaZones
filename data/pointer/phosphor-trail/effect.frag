@@ -40,6 +40,10 @@
 // behaviour.
 
 const float kFlareSeconds = 0.4;
+// The metadata trailSeconds. `lifetime` is this pack's trailWindowParam, so the
+// host spaces the ring over it and inflates the damage rect for it; a value
+// past this would walk samples the host has already stopped repainting.
+const float kTrailSeconds = 2.0;
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -57,9 +61,10 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    // Floored against an UNSET uniform reading 0, not against a user value:
-    // the metadata min is 0.2, so no setting can reach this.
-    float lifetime = max(p_lifetime, 0.05);
+    // Floored against an UNSET uniform reading 0 rather than against a user
+    // value (the metadata min is 0.2, so no setting reaches the floor), and
+    // capped at the window the host actually spaced the ring over.
+    float lifetime = clamp(p_lifetime, 0.05, kTrailSeconds);
     float halfWidth = 0.5 * max(p_width, 0.5) * scale;
     float sigma = halfWidth * 2.2 + 1.5 * scale;
     // The hot centre of the core. Narrow enough that the core's own edge stays

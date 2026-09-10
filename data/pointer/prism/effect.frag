@@ -102,9 +102,12 @@ vec4 pPointer(vec2 uv) {
         flare = (1.0 - ct) * (1.0 - ct) * p_clickFlare;
     }
 
-    // The dispersion actually applied. A floor of 0.06 keeps a trace of colour
-    // at the edges even at rest, so the stroke does not read as a plain white
-    // line on a slow drag; the parameter at 0 still removes it entirely.
+    // The dispersion actually applied. The 0.06 floor keeps the ramp from
+    // collapsing exactly onto its own middle at a standstill, which would
+    // leave the side coordinate meaningless. It no longer shows as colour at
+    // the edges: the same factor now drives the white collapse further down,
+    // so a slow drag reads as the white filament the description promises.
+    // The parameter at 0 still removes the split entirely.
     float disp = clamp(p_dispersion, 0.0, 1.0) * clamp(0.06 + 0.94 * activity + 0.5 * flare, 0.0, 1.0);
 
     float core = 0.0;
@@ -163,12 +166,6 @@ vec4 pPointer(vec2 uv) {
         }
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
-        // Which side of the stroke the fragment sits on, measured against the
-        // CURVE's local direction rather than the chord's: on a rounded corner
-        // the two disagree by the whole turn angle, and the spectrum would
-        // twist through the bend. The tangent is taken as a short forward
-        // difference along the span, which is the same construction the
-        // distance walk uses and costs one extra curve evaluation.
         // The span's control points are kept while the window advances, so
         // the cull below can come FIRST. Most fragments inside a reject box
         // are still outside the tube, and the side costs a second curve
@@ -184,6 +181,11 @@ vec4 pPointer(vec2 uv) {
         if (d > limit) {
             continue;
         }
+        // Which side of the stroke the fragment sits on, measured against the
+        // CURVE's local direction rather than the chord's. On a rounded corner
+        // the two disagree by the whole turn angle, and the spectrum would
+        // twist through the bend. The tangent is a short forward difference
+        // along the span, the same construction the distance walk uses.
         vec2 here = pointerCurvePoint(s0, s1, s2, s3, t);
         vec2 ahead = pointerCurvePoint(s0, s1, s2, s3, min(t + 0.05, 1.0));
         vec2 seg = ahead - here;

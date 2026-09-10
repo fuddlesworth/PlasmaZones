@@ -46,15 +46,40 @@
 // gate the stop branch is taken on every frame of every movement, the band
 // sits at age zero welded under the cursor, and the pack has no event at all.
 //
+// It narrows rather than closes. Accepted events need one device px of
+// travel, so a crawl under about ten px per second lands one less often than
+// kSettleSeconds and `idle` crosses the gate each time, starting a discharge
+// that the next event aborts. No threshold closes that: raising it only moves
+// the flicker to a slower crawl, and latching the pulse needs state a
+// fragment shader does not have. The filtered speed is NOT the way out --
+// it deliberately holds its value across a rest rather than decaying
+// (PointerHistory::filteredSpeed skips non-motion samples), so gating on it
+// would stop the discharge ever firing after a real stroke. Left as it is
+// because the host already agrees: at that crawl its own sampler scores the
+// samples at speed zero and marks a stroke start, so it considers the hand
+// parked too.
+//
 // WHAT IS SPENT STAYS SPENT. `spent` is tracked separately from the band's
 // position and does not reset when the band reaches the tail, or the stroke
 // would snap from thin-and-quiet back to fully swelled in one frame at the
 // end of every discharge -- the charge is re-derived from a ring that still
-// holds the fast samples. After a stop it stays spent while the pointer is
-// parked (and the ring is filling with speed-zero rest slots anyway, so the
-// bank is empty by the time the hand moves again); after a click it eases
-// back over kRecoverSeconds, because the hand is still moving and genuinely
-// still charging.
+// holds the fast samples. After a stop it stays spent for as long as the
+// pointer is parked; after a click it eases back over kRecoverSeconds,
+// because the hand is still moving and genuinely still charging.
+//
+// THE ONE STEP THAT REMAINS, and why. Resuming from a stop takes `spent` back
+// to 0 in a frame, so the stroke re-energises at once instead of building.
+// The bank behind it is genuinely stale: the ring does NOT drain while the
+// pointer is parked, because on the compositor notePointer() is driven by
+// mouseChanged and a still pointer sends nothing at all, so the fast samples
+// sit there until they age out of `lifetime`. Easing this out the way the
+// click arm does needs a clock that keeps running after a stop, and the
+// pointer contract carries no such lane -- pointerIdleSeconds() resets on the
+// first accepted motion, which is the very moment in question. The step is
+// bounded: it can only appear for a park shorter than `lifetime`, and a park
+// past that empties the live run and starts the stroke from nothing anyway.
+// Do not paper over it by decaying the charge with idle time; that reads as
+// the stroke dimming while it is parked, which is the discharge's job.
 //
 // REACH. The bloom is cut off at four sigma and clamped to the reach, and
 // the swell is inside the width the sigma is derived from, so a fully

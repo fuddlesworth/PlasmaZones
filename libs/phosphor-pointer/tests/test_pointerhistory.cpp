@@ -5,10 +5,8 @@
 #include <PhosphorPointer/PointerHistory.h>
 #include <PhosphorPointer/PointerShaderContract.h>
 
-#include <QLineF>
 #include <QtTest/QtTest>
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -64,6 +62,7 @@ private Q_SLOTS:
     void testSimultaneousPressReportsTheDocumentedPrecedence();
     void testFrameStateCarriesTheCanvasScale();
     void testDamageRectDropsAPressOlderThanTheWindow();
+    void testDamageRectAllowsForTheCurveOvershoot();
     void testDamageRectSurvivesANegativeReach();
 };
 
@@ -870,18 +869,56 @@ void TestPointerHistory::testDamageRectDropsAPressOlderThanTheWindow()
     QVERIFY(damage.contains(QPointF(140.0, 100.0)));
 }
 
+void TestPointerHistory::testDamageRectAllowsForTheCurveOvershoot()
+{
+    // The packs stroke a curve through the smoothed samples, which is allowed
+    // to leave the straight path between the raw ones, so the rect has to cover
+    // more than the reach around the sample box. Without the allowance a fast
+    // curved sweep is cut flat at the damage edge, and the packs whose paint
+    // limit IS their reach have no slack of their own to hide it.
+    PointerHistory history;
+    history.setTrailSeconds(0.9);
+    // A right-angle corner, the shape with the most overshoot to cover.
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(0.0, 120.0), 30);
+    history.notePointer(QPointF(120.0, 120.0), 60);
+    history.notePointer(QPointF(240.0, 120.0), 90);
+
+    const double reach = 10.0;
+    const QRectF damage = history.damageRect(reach, 90, 0.9);
+    QVERIFY(!damage.isEmpty());
+
+    // The raw sample box is 240 x 120, so reach alone would give 260 x 140.
+    const QRectF bare = QRectF(QPointF(0.0, 0.0), QPointF(240.0, 120.0)).adjusted(-reach, -reach, reach, reach);
+    QVERIFY2(damage.width() > bare.width() + 1.0,
+             qPrintable(QStringLiteral("width %1, reach alone gives %2").arg(damage.width()).arg(bare.width())));
+    QVERIFY(damage.contains(bare));
+
+    // And it is an allowance, not a blanket: a run with no gaps to curve
+    // through gets the reach and nothing more.
+    PointerHistory still;
+    still.setTrailSeconds(0.9);
+    still.notePointer(QPointF(50.0, 50.0), 0);
+    const QRectF parked = still.damageRect(reach, 0, 0.9);
+    QCOMPARE(parked.width(), 2.0 * reach);
+}
+
 void TestPointerHistory::testDamageRectSurvivesANegativeReach()
 {
     // A negative reach would invert the rect through adjusted(), and QRectF
     // does not normalise, so isEmpty() would report true and the pass would
     // silently stop repainting.
+    // The run has area of its own, so this measures the clamp rather than
+    // whatever else happens to inflate the rect: two collinear samples give a
+    // zero-height box that any inflation at all would rescue.
     PointerHistory history;
     history.setTrailSeconds(1.0);
     history.notePointer(QPointF(100.0, 100.0), 0);
-    history.notePointer(QPointF(160.0, 100.0), 40);
+    history.notePointer(QPointF(160.0, 150.0), 40);
     const QRectF damage = history.damageRect(-5.0, 40, 1.0);
     QVERIFY(!damage.isEmpty());
-    QVERIFY(damage.width() >= 60.0);
+    QVERIFY2(damage.width() >= 60.0 && damage.height() >= 50.0,
+             qPrintable(QStringLiteral("%1 x %2").arg(damage.width()).arg(damage.height())));
 }
 
 QTEST_MAIN(TestPointerHistory)

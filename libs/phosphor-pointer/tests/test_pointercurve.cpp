@@ -289,8 +289,12 @@ void TestPointerCurve::testCurveConstantsMatchTheShippedShader()
              "the smoothing kernel no longer weights the previous neighbour by the FORWARD gap");
     QVERIFY2(source.contains(QLatin1String("next.xy * dtPrev")),
              "the smoothing kernel no longer weights the next neighbour by the BACKWARD gap");
-    // Both gap floors the arithmetic above depends on.
-    QCOMPARE(source.count(QLatin1String("+ 1e-4")), 2);
+    // Both gap floors the arithmetic above depends on. Matched as the two
+    // specific expressions rather than counted across the file, so an
+    // unrelated epsilon elsewhere in the shared helper cannot fail this with a
+    // message that blames the smoothing kernel.
+    QVERIFY2(source.contains(QLatin1String("max(here.z - prev.z, 0.0) + 1e-4")), "the backward gap lost its floor");
+    QVERIFY2(source.contains(QLatin1String("max(next.z - here.z, 0.0) + 1e-4")), "the forward gap lost its floor");
 }
 
 QTEST_MAIN(TestPointerCurve)
