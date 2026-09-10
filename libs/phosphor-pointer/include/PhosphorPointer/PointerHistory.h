@@ -43,19 +43,32 @@ namespace PhosphorPointerShaders {
 /// finite difference over the last two ACCEPTED events (appended or folded
 /// into the head alike) with a floor of `kVelocityMinDtSeconds` on dt, and
 /// the head sample's speed is scored over the same pairing so the two agree.
-/// An event in the same millisecond as the previous accepted one is not a
-/// usable pairing (nothing can be divided over it), so it carries the
-/// previous event's speed and leaves the pairing where it was, and the next
-/// event pairs across both moves; a multi-kHz mouse then reads its true speed
-/// instead of a zero for every event that shared a millisecond. A gap of
-/// `kVelocityHoldMs` or more (the pointer was parked) records speed 0 and
-/// starts the pairing fresh rather than averaging the move over the idle
-/// time, as does a clock that stepped backwards. The frame state also
-/// carries `filteredSpeed`, the same exponential filter the shared shader
-/// library used to walk per fragment, computed here once per frame over the
-/// current stroke: the run of samples back from the head with no gap of
-/// `kVelocityHoldMs` or more between neighbours, so a pause ends the stroke
-/// and the previous stroke's speeds never seed the next one's gate.
+/// An event stamped at or before the previous accepted one (the same
+/// millisecond, or a clock that stepped backwards) is not a usable pairing
+/// (nothing can be divided over it), so it carries the previous event's
+/// speed and leaves the pairing where it was, and the next event pairs
+/// across both moves; a multi-kHz mouse then reads its true speed instead of
+/// a zero for every event that shared a millisecond. Both real clocks are
+/// monotonic, so the backwards case is the same-millisecond case in
+/// practice. A gap of `kVelocityHoldMs` or more (the pointer was parked)
+/// records speed 0, starts the pairing fresh rather than averaging the move
+/// over the idle time, and marks the sample as the START OF A STROKE. The
+/// frame state also carries `filteredSpeed`, the same exponential filter the
+/// shared shader library used to walk per fragment, computed here once per
+/// frame over the current stroke: the motion samples back from the head to
+/// the nearest stroke start. Marking the start at the event, from the event
+/// gap, is what makes this independent of how far apart the ring's slots
+/// are: a shader-side walk over sample ages had to guess a pause from a
+/// gap, and at a long window every slot gap looked like one. Samples
+/// appended while the pointer rested are not motion and are skipped, so the
+/// preview (which feeds a resting pointer every tick) holds the filtered
+/// speed across a rest exactly as the compositor does; the packs' own idle
+/// fades end the drawing, not the gate.
+///
+/// The interval is one per chain, from its LONGEST `trailSeconds`, so a
+/// chain that mixes a short pack with a long one samples at the long pack's
+/// spacing and the short pack draws its tail from a few slots plus the
+/// refreshed head. A per-layer spread would need a ring per layer.
 /// Every recency window in this class is a strict `<`: velocity
 /// is reported while the newest sample is younger than `kVelocityHoldMs`,
 /// the chain is live while an event is younger than `trailSeconds`, and the
@@ -78,8 +91,8 @@ public:
     /// 125 Hz mouse a quarter of it, so `activationSpeed` and every other
     /// px-per-second parameter meant nothing like px per second. 1 ms clears
     /// a 1000 Hz mouse. Noise in the resulting figure is the exponential
-    /// filter's job (pointerFilteredSpeed in pointer_lib.glsl), not this
-    /// floor's.
+    /// filter's job (`filteredSpeed()`, which the shader library reads as
+    /// pointerFilteredSpeed()), not this floor's.
     static constexpr double kVelocityMinDtSeconds = 0.001;
     /// How long after the newest sample the velocity is still reported, and
     /// the longest gap between two samples that still forms a speed pairing.
@@ -146,6 +159,14 @@ private:
         /// keeps filling while the pointer moves.
         qint64 anchorMs = 0;
         double speed = 0.0;
+        /// False for a slot appended while the pointer rested (the interval
+        /// passed with no movement of a pixel): it holds the ring's minimum
+        /// sampling rate but is not motion, so the filter skips it.
+        bool motion = true;
+        /// True when the event that appended or refreshed this slot came
+        /// after a park (`kVelocityHoldMs` or more since the previous
+        /// accepted event): the stroke the filter walks begins here.
+        bool strokeStart = false;
     };
 
     const Sample& sampleAt(int newestFirstIndex) const;

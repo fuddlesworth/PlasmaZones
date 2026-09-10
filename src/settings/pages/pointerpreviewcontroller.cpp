@@ -222,12 +222,14 @@ void PointerPreviewController::drivePointer(QQuickItem* item, qreal x, qreal y, 
     // arrow, hotspot at the tip, so the rect starts at the pointer position
     // and spans the arrow's drawn size, in device px like every other canvas
     // position. A needsCursor pack sizes its work from this rect the way it
-    // does from KWin's cursor rect on screen, and reads hasSprite the same
-    // way. No sprite texture is bound in the preview; the rect is what packs
-    // size from.
+    // does from KWin's cursor rect on screen. hasSprite stays FALSE: the
+    // contract says uPointerFlags.x is 1 only when uCursorSprite is bound,
+    // and the preview binds nothing there (the stand-in arrow is a QML item,
+    // not a texture on the sampler), so a pack that samples the sprite must
+    // read the rect and skip the sample here, as the contract tells it to.
     PhosphorPointerShaders::PointerFrameState state = st.history.frameState(st.nowMs, dpr);
     state.cursorRect = QRectF(x * dpr, y * dpr, cursorW * dpr, cursorH * dpr);
-    state.hasSprite = true;
+    state.hasSprite = false;
     ext->apply(state);
     shaderItem->setIMouse(QPointF(x, y));
 }

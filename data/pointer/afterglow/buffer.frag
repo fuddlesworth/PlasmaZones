@@ -51,8 +51,10 @@ void main() {
     float idleCut = 1.0 - smoothstep(kIdleCutStart, kIdleCutSeconds, pointerIdleSeconds());
     float energy = texture(iChannel0, vTexCoord).r * persistence * idleCut;
     // Below one 8-bit step the canvas is empty in every way that matters, so
-    // snap it to zero rather than let the decay asymptote leave a faint
-    // residue that never clears.
+    // snap it to zero. This only completes the idle cut: while the pointer
+    // moves, 8-bit rounding stalls the decay well above one step (see
+    // afterglow_common.glsl), and it is the main pass's coverage floor that
+    // hides that residue, not this snap.
     if (energy < 1.0 / 255.0) {
         energy = 0.0;
     }

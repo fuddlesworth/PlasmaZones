@@ -69,12 +69,13 @@ vec4 pPointer(vec2 uv) {
     // strict `<`, so the last painted frame at a low refresh rate lands just
     // inside the window and nothing repaints after it. Ending the fade
     // early keeps that frame clear instead of leaving a faint dot frozen at
-    // the head (the same margin Halo and Afterglow keep).
-    float headFade = (1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle)) * gate;
+    // the head (Halo and Afterglow keep a similar margin). Nothing with no
+    // trail: the zero entry would put a head at the canvas origin, so both
+    // head terms are gated here.
+    float headFade = count >= 1 ? (1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle)) * gate : 0.0;
     float dHead = length(px - headPos);
     // The head's disc, shared with the click lift below so the two cannot
-    // disagree about where the head ends. Nothing with no trail: the zero
-    // entry would put a head at the canvas origin.
+    // disagree about where the head ends.
     float headDisc = count >= 1 ? 1.0 - smoothstep(radius - 0.75, radius + 0.75, dHead) : 0.0;
     float headCore = headDisc * headFade;
     float headGlow =

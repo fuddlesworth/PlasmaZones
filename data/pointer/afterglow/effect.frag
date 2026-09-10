@@ -34,7 +34,7 @@
 
 vec4 pPointer(vec2 uv) {
     float energy = texture(iChannel0, uv).r;
-    float cover = smoothstep(0.02, 0.6, energy) * max(p_intensity, 0.0);
+    float cover = smoothstep(kCoverageFloor, 0.6, energy) * max(p_intensity, 0.0);
     cover *= 1.0 - smoothstep(kIdleCutStart, kIdleCutSeconds, pointerIdleSeconds());
     if (cover <= 0.0) {
         return vec4(0.0);

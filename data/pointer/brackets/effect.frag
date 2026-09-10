@@ -20,7 +20,7 @@
 const float kDurationMax = 1.2;
 const float kHoldMax = 0.5;
 const float kConvergeFraction = 0.42; // share of `duration` spent closing in
-const float kCornerFraction = 0.70;   // starting corner offset, as a share of spread
+const float kCornerFraction = 0.70;   // cap on the starting corner offset, as a share of spread; see response()
 const float kArmMax = 0.9;            // arm length cap, as a share of the corner offset
 
 vec4 buttonColour(float button) {

@@ -882,6 +882,35 @@ private Q_SLOTS:
                      qPrintable(r.report));
         }
         {
+            // An ANGLE include of a pack-local file resolves in the preview
+            // (whose expansion looks beside the including file for both
+            // forms) and fails on the compositor (registry roots only). The
+            // compositor bake expands includes the compositor's way, so the
+            // pack is caught here rather than shipping a disabled layer.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-angle-local"), 0.0);
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-angle-local"), QStringLiteral("local_helper.glsl"),
+                                       QStringLiteral("const float kLocal = 1.0;\n")));
+            const PackResult r = validatePointer(tmp, QStringLiteral("pt-angle-local"), obj,
+                                                 QStringLiteral("#include <local_helper.glsl>\n"
+                                                                "vec4 pPointer(vec2 uv) {\n"
+                                                                "    return vec4(kLocal * p_activationSpeed);\n"
+                                                                "}\n"));
+            QVERIFY2(r.errors > 0, qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("include expansion failed the way the compositor expands it")),
+                     qPrintable(r.report));
+
+            // The quoted form is the pack-local form and passes both bakes.
+            QJsonObject quoted = pointerPackWithGate(QStringLiteral("pt-quoted-local"), 0.0);
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-quoted-local"), QStringLiteral("local_helper.glsl"),
+                                       QStringLiteral("const float kLocal = 1.0;\n")));
+            const PackResult q = validatePointer(tmp, QStringLiteral("pt-quoted-local"), quoted,
+                                                 QStringLiteral("#include \"local_helper.glsl\"\n"
+                                                                "vec4 pPointer(vec2 uv) {\n"
+                                                                "    return vec4(kLocal * p_activationSpeed);\n"
+                                                                "}\n"));
+            QVERIFY2(!q.report.contains(QStringLiteral("include expansion failed")), qPrintable(q.report));
+        }
+        {
             // A pack helper whose name merely ends in the shared gate's name
             // is not the shared gate; the scan is identifier-bounded.
             QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-gate-lookalike"), 900.0);

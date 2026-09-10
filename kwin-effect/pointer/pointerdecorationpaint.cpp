@@ -350,9 +350,15 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
 
         KWin::ShaderBinder binder(stage.shader.get());
         stage.shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, identity);
-        // iResolution describes the space the stage's uv arithmetic runs in,
-        // which is its own (possibly downscaled) target, NOT the output.
-        pushFrameUniforms(stage.shader.get(), stage.loc, pack, state, wantSize, cursorRect, timeSeconds,
+        // iResolution is the OUTPUT size for a buffer stage too, not its own
+        // (possibly downscaled) target: every position uniform is in output
+        // device px and pointerPixel(uv) multiplies the normalised uv by
+        // iResolution to reach them, so a stage handed its target size would
+        // put its stamps at bufferScale times the pointer's position. The
+        // preview shares one UBO across its passes and so already hands the
+        // buffer pass the item size; this keeps the two hosts on one rule.
+        // The target's own size is what iChannelResolution carries.
+        pushFrameUniforms(stage.shader.get(), stage.loc, pack, state, deviceSize, cursorRect, timeSeconds,
                           /*hasCursorSprite=*/false, float(layer.reachLogical * state.scale));
         int unit = bindPackTextures(stage.shader.get(), stage.loc, pack, 0);
         for (size_t ch = 0; ch < passCount && ch < 4; ++ch) {

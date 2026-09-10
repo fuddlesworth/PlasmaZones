@@ -179,6 +179,7 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
         // would keep the pass in the frame loop.
         m_output = screen;
         m_history.reset();
+        m_lastSpriteCanvasRect = QRectF();
         m_hasTimeOrigin = false;
         return;
     }

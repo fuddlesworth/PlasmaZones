@@ -50,8 +50,9 @@ const int kMaxArcs = 8;
 const int kSegments = 8;
 const float kQuietSeconds = 0.5;
 const float kBurstLife = 0.34;
-// Speed (device px/s) at which the pack is fully awake. Deliberately low: the
-// settings preview's simulated pointer peaks near 324 px/s.
+// Speed (logical px/s, scaled at use) at which the pack is fully awake.
+// Deliberately low: the settings preview's simulated pointer peaks near
+// 324 px/s.
 const float kFullSpeed = 200.0;
 
 // Nearest distance from p to the jagged polyline a..b. `seed` fixes the jag
@@ -80,10 +81,10 @@ float arcDistance(vec2 p, vec2 a, vec2 b, vec2 seed, float amp) {
 }
 
 vec4 pPointer(vec2 uv) {
+    // No early return on an empty trail: a click before any motion this
+    // session still bursts (the burst answers a parked pointer by design),
+    // and the trail block needs two live samples before it draws anything.
     int count = pointerTrailCount();
-    if (count < 1) {
-        return vec4(0.0);
-    }
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
@@ -101,8 +102,8 @@ vec4 pPointer(vec2 uv) {
     // velocity is one event pair and reads 0 whenever two events share a
     // millisecond, which would blink the gate and the arc count.
     float speed = pointerFilteredSpeed();
-    float activity = clamp(speed / kFullSpeed, 0.0, 1.0);
-    float gate = pointerSpeedGate(speed, p_activationSpeed);
+    float activity = clamp(speed / (kFullSpeed * scale), 0.0, 1.0);
+    float gate = pointerActivationGate(p_activationSpeed);
 
     float roll = floor(iTime * rate);
     float phase = fract(iTime * rate);

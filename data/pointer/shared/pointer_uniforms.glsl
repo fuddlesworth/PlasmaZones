@@ -27,8 +27,11 @@
 //
 // CANVAS: the whole output in DEVICE px, top-down, origin at the output's
 // top-left. Every position uniform below is in that space and iResolution.xy
-// is the output size in device px. Lengths a pack declares as parameters are
-// LOGICAL px; multiply by pointerScale() (uPointerState.z) to reach device px.
+// is the output size in device px, in a BUFFER PASS as well as the main one
+// (a downscaled buffer target's own size is iChannelResolution[N].xy), so
+// pointerPixel(uv) reaches the position uniforms from every stage. Lengths a
+// pack declares as parameters are LOGICAL px; multiply by pointerScale()
+// (uPointerState.z) to reach device px.
 //
 // OUTPUT: packs return PREMULTIPLIED rgba composited source-over the scene
 // (`glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)` on both runtimes). Return

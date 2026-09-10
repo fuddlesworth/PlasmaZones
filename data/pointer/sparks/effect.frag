@@ -33,8 +33,9 @@
 #include <pointer_noise.glsl>
 
 const int kMaxSparks = 48;
-// Speed (device px/s) at which a sample sheds its full budget. Deliberately
-// low: the settings preview's simulated pointer peaks near 324 px/s.
+// Speed (logical px/s, scaled at use) at which a sample sheds its full
+// budget. Deliberately low: the settings preview's simulated pointer peaks
+// near 324 px/s.
 const float kFullSpeed = 220.0;
 
 vec4 pPointer(vec2 uv) {
@@ -79,8 +80,9 @@ vec4 pPointer(vec2 uv) {
     launch *= shrink;
     gravity *= shrink;
 
-    // Furthest a spark can travel in its life: launch plus the fall.
-    float reach = launch * life + 0.5 * gravity * life * life + size * 3.0;
+    // Furthest a spark can travel in its life: launch plus the fall, plus the
+    // three radii a spark's compact window extends to.
+    float extent = launch * life + 0.5 * gravity * life * life + size * 3.0;
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -92,16 +94,17 @@ vec4 pPointer(vec2 uv) {
         if (s.z >= life) {
             break;
         }
-        // From the eighth sample on, only half the samples shed. The inner
-        // loop below is the pack's whole cost, so thinning the older part of
-        // the tail nearly halves the worst case. The half is chosen by a hash
-        // of the sample's POSITION, the same key its sparks are seeded from:
-        // a sample's ring index advances by one on every append, so choosing
-        // by index parity drew and skipped the same sparks on alternate
-        // appends and the outer tail strobed at the sample rate. A thinned
-        // sample fades out over indices 5 to 8 rather than being cut at 8,
-        // or its whole spark set would vanish mid-flight at about 40 percent
-        // brightness the frame it reached the eighth slot.
+        // From index 8 on (the ninth sample), only half the samples shed.
+        // The inner loop below is the pack's whole cost, so thinning the
+        // older part of the tail nearly halves the worst case. The half is
+        // chosen by a hash of the sample's POSITION, the same key its sparks
+        // are seeded from: a sample's ring index advances by one on every
+        // append, so choosing by index parity drew and skipped the same
+        // sparks on alternate appends and the outer tail strobed at the
+        // sample rate. A thinned sample's sparks fade out in BRIGHTNESS over
+        // indices 5 to 8 rather than being cut at 8: fading the budget
+        // instead dropped whole groups of sparks at each append, since a
+        // spark past the budget goes from full share to none.
         //
         // The seed cell is one device pixel: with a coarser cell two slow
         // consecutive samples landed in the same cell, rolled identical
@@ -114,7 +117,7 @@ vec4 pPointer(vec2 uv) {
         // Spark budget for this sample scales with its speed. The shed
         // decision comes before the distance test so a sample that sheds
         // nothing costs nothing, whichever order the two would have rejected.
-        float shed = budget * clamp(s.w / kFullSpeed, 0.0, 1.0) * gate * thin;
+        float shed = budget * clamp(s.w / (kFullSpeed * scale), 0.0, 1.0) * gate;
         int sparks = int(ceil(shed));
         if (sparks < 1) {
             continue;
@@ -125,7 +128,7 @@ vec4 pPointer(vec2 uv) {
         // window slides over it.
         vec2 origin = pointerSmoothedAt(i, count, p_smoothing);
         vec2 rel = px - origin;
-        if (abs(rel.x) > reach || abs(rel.y) > reach) {
+        if (abs(rel.x) > extent || abs(rel.y) > extent) {
             continue;
         }
         for (int k = 0; k < kMaxSparks; ++k) {
@@ -143,8 +146,11 @@ vec4 pPointer(vec2 uv) {
             float remain = 1.0 - lifeT;
             float r = size * (0.5 + 0.5 * h.z) * (0.4 + 0.6 * remain);
             float d = length(rel - pos);
-            float body = exp(-(d * d) / (2.0 * r * r));
-            float fade = remain * remain * share;
+            // Compact support at three radii, the extent the reach budget
+            // reserves, so a spark reaches zero where the box ends rather
+            // than being cut there at a faint level.
+            float body = exp(-(d * d) / (2.0 * r * r)) * (1.0 - smoothstep(2.0 * r, 3.0 * r, d));
+            float fade = remain * remain * share * thin;
             vec3 c = mix(p_colorA.rgb, p_colorB.rgb, lifeT);
             float ca = mix(p_colorA.a, p_colorB.a, lifeT);
             float a = body * fade * ca;
@@ -158,7 +164,7 @@ vec4 pPointer(vec2 uv) {
     if (burst > 0 && uPointerPress.w > 0.5 && sincePress < life) {
         vec2 origin = uPointerPress.xy;
         vec2 rel = px - origin;
-        if (abs(rel.x) <= reach && abs(rel.y) <= reach) {
+        if (abs(rel.x) <= extent && abs(rel.y) <= extent) {
             vec2 seed = floor(origin * 0.5) + 91.0;
             float age = sincePress;
             float lifeT = age / life;
@@ -175,7 +181,7 @@ vec4 pPointer(vec2 uv) {
                 vec2 pos = vec2(cos(angle), sin(angle)) * speed * age + vec2(0.0, 0.5 * gravity * age * age);
                 float r = size * (0.5 + 0.5 * h.z) * (0.4 + 0.6 * remain);
                 float d = length(rel - pos);
-                float body = exp(-(d * d) / (2.0 * r * r));
+                float body = exp(-(d * d) / (2.0 * r * r)) * (1.0 - smoothstep(2.0 * r, 3.0 * r, d));
                 float fade = remain * remain;
                 vec3 c = mix(p_colorA.rgb, p_colorB.rgb, lifeT);
                 float ca = mix(p_colorA.a, p_colorB.a, lifeT);

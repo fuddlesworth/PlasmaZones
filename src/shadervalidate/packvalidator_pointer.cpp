@@ -32,6 +32,7 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QDir>
@@ -238,9 +239,19 @@ QString readStage(const QString& path)
 // COVERAGE BOUNDARY, the same one the animation arm records: the source is
 // handed to glslang with the pack's `#version 450` intact, while KWin
 // recompiles at the GL context's core version. A construct legal at 450 and
-// illegal there still passes here. What this does cover is every identifier
-// the two dialects disagree on, which is the class that shipped uncaught
-// while only the preview branch was baked.
+// illegal there still passes here. The compositor also splices KWin's own
+// colour-management block ahead of the source, which is not reproduced
+// here, so an identifier colliding with that block passes here and fails
+// live. What this does cover is every identifier the two dialects disagree
+// on, which is the class that shipped uncaught while only the preview
+// branch was baked.
+//
+// INCLUDES are expanded the way the compositor expands them, through the
+// resolver with the registry roots alone: the angle form searches only those
+// roots, and only the quoted form looks beside the including file. The
+// preview bake (ShaderCompiler::expandSource) is more forgiving and lets an
+// angle include find a pack-local file, so a pack written that way baked
+// clean everywhere and then failed include expansion where it ships.
 int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const QString& path, const QString& label,
                         const QString& stage, const QStringList& includePaths, bool scaffold)
 {
@@ -274,9 +285,12 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
                                               PointerShaderRegistry::pointerEntryCandidates())
         : raw;
     QString err;
-    QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
+    QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
+                                                                         includePaths, &err);
     if (src.isEmpty()) {
-        out << "  " << padLabel(label) << "ERROR\n    include expansion failed: " << err << "\n";
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
+            << "expands it (an angle include of a pack-local file resolves only in the preview; use the quoted "
+            << "form): " << err << "\n";
         return 1;
     }
     if (scaffold) {

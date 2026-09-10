@@ -34,8 +34,9 @@ const int kMaxDots = 6;
 const float kFadeStart = 1.0;
 const float kQuietSeconds = 1.8;
 const float kClickLife = 0.55;
-// Speed (device px/s) at which the orbit is fully grown. Deliberately low:
-// the settings preview's simulated pointer peaks near 324 px/s.
+// Speed (logical px/s, scaled at use) at which the orbit is fully grown.
+// Deliberately low: the settings preview's simulated pointer peaks near
+// 324 px/s.
 const float kFullSpeed = 220.0;
 // Age window the radius's averaged speed is read over. The ring is never
 // purged while the pointer rests and a park appends only one speed-0 sample
@@ -46,7 +47,8 @@ const float kSpeedWindowSeconds = 0.6;
 
 // The orbit centre: the pointer position `lag` seconds ago, interpolated
 // between the trail samples on either side of that age. Falls back to the
-// newest sample when the trail does not reach that far back yet. Stops at
+// oldest sample when the trail does not reach that far back yet, so the lag
+// is clamped to the history available. Stops at
 // the first sample past the lag, which at the default lag is the second or
 // third slot, so a fragment the reject box below throws out pays for almost
 // none of the walk.
@@ -138,7 +140,7 @@ vec4 pPointer(vec2 uv) {
         return vec4(0.0);
     }
 
-    float speedNorm = clamp(orbitMeanSpeed(count) / kFullSpeed, 0.0, 1.0);
+    float speedNorm = clamp(orbitMeanSpeed(count) / (kFullSpeed * scale), 0.0, 1.0);
     float grow = clamp(p_speedGrowth, 0.0, 1.0);
     float baseFrac = mix(1.0, 0.35, grow);
     float radius = reachPx * (baseFrac + (1.0 - baseFrac) * speedNorm);
@@ -163,9 +165,10 @@ vec4 pPointer(vec2 uv) {
     float smear = clamp(p_smear, 0.0, 1.0) * speedNorm;
     float stretch = 1.0 + smear * 2.0;
     // Floored so the divides below can never see a zero dot even if a host
-    // handed a zero reach.
+    // handed a zero reach; the clamp's upper bound is floored at zero for
+    // the same case, so its bounds cannot cross.
     float dotPx = max(min(max(p_dotSize, 0.25) * scale, reachPx * 0.6 / (3.0 * stretch)), 0.25 * scale);
-    radius = clamp(radius, 0.0, reachPx - 3.0 * dotPx * stretch);
+    radius = clamp(radius, 0.0, max(reachPx - 3.0 * dotPx * stretch, 0.0));
 
     vec2 drift = uPointerVelocity.xy;
     // The spin rate is nudged onto a divisor of the iTime wrap so the ring

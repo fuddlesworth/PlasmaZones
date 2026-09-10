@@ -24,12 +24,20 @@
 // path pack, so two packs in one chain trace the same curve from the same
 // pointer. It defaults to 0.5, the value the pack used to hardcode.
 
-// Speed at which the stroke reaches its thinnest, in px/s.
+// Speed at which the stroke reaches its thinnest, in logical px/s (scaled at
+// use).
 const float kThinSpeed = 1200.0;
 // The metadata trailSeconds. The host does not clamp parameters to their
 // declared range, so a hand-edited lifetime past this would outlive the
 // window and freeze its last frame on screen.
 const float kLifetimeMax = 2.5;
+
+// Wet ink spreads a little into the paper for the first part of its life,
+// then stops. It never spreads again once dry. Shared by the stroke and the
+// blot so the two swell on one curve.
+float inkWet(float remain) {
+    return 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
+}
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -53,7 +61,11 @@ vec4 pPointer(vec2 uv) {
             }
             vec4 a = pointerTrailAt(i);
             vec4 b = pointerTrailAt(i + 1);
-            if (a.z >= lifetime) {
+            // Both ends inside the window. At a lifetime equal to the
+            // metadata trailSeconds a segment whose far end has aged out is
+            // partly outside the damage rect, which covers only live samples,
+            // and its last sliver would freeze there on the compositor.
+            if (b.z >= lifetime) {
                 break;
             }
 
@@ -85,12 +97,10 @@ vec4 pPointer(vec2 uv) {
 
             // The brush curve: broad where the hand was slow, thin where it
             // was quick.
-            float speedNorm = clamp(mix(a.w, b.w, t) / kThinSpeed, 0.0, 1.0);
+            float speedNorm = clamp(mix(a.w, b.w, t) / (kThinSpeed * scale), 0.0, 1.0);
             float w = halfWidth * mix(1.0, 0.30, sqrt(speedNorm));
 
-            // Wet ink spreads a little into the paper for the first part of
-            // its life, then stops. It never spreads again once dry.
-            float wet = 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
+            float wet = inkWet(remain);
             w *= 1.0 + 0.18 * bleed * wet;
             w = max(w, 0.4 * scale);
 
@@ -112,7 +122,7 @@ vec4 pPointer(vec2 uv) {
     float since = pointerSincePress();
     if (blot > 0.0 && uPointerPress.w > 0.5 && since < lifetime) {
         float remain = 1.0 - since / lifetime;
-        float wet = 1.0 - smoothstep(0.0, 0.35, 1.0 - remain);
+        float wet = inkWet(remain);
         // Widest while WET and drawing back in as it dries, the same shape and
         // the same direction as the stroke's own width term. Gated on Bleed for
         // the same reason, so setting Bleed to zero really does keep one width

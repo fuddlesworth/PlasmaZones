@@ -18,11 +18,22 @@
 const float kIdleCutStart = 0.6;
 const float kIdleCutSeconds = 0.9;
 
-// The most of the canvas that may survive one frame. Decay is per frame
-// while the damage rect behind the pointer is wall-clock (trailSeconds), so
-// at a low refresh rate a slower decay leaves the stroke's far end visible
-// where the rect ends and it is cut flat: at 30 Hz, 0.9 over the 30 frames
-// of one window is under the coverage floor, 0.95 was not.
-const float kMaxPersistence = 0.9;
+// The coverage floor and the persistence cap are one decision, not two.
+//
+// The canvas is an 8-bit target and its decay is per frame, so the energy
+// stalls wherever v * persistence rounds back to v, which is at every level
+// under 0.5 / (1 - persistence) LSB: 4/255 at 0.87. That residue never
+// clears on its own while the pointer moves, so the main pass must cut
+// coverage to zero at a floor ABOVE the stall level, and the persistence
+// must stay low enough that the stall level is under the floor: 0.87 stalls
+// at 0.0157 against a floor of 0.02, while 0.92 would stall at 6/255 =
+// 0.0235 and leave a permanent smear.
+//
+// The cap also keeps the far end of a moving stroke under the floor by the
+// time the damage rect ends behind the pointer (the rect covers one
+// trailSeconds of samples): at 30 Hz that is 30 frames, and 0.87^30 = 0.015
+// is under the floor where 0.9^30 = 0.042 was not.
+const float kCoverageFloor = 0.02;
+const float kMaxPersistence = 0.87;
 
 #endif // PLASMAZONES_AFTERGLOW_COMMON_GLSL

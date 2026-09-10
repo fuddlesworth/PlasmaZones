@@ -100,16 +100,9 @@ vec4 pPointer(vec2 uv) {
             break;
         }
         vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
-        // Reject box from the RAW samples i-1..i+2, before the distance
-        // maths: a smoothed sample is a convex blend of its raw neighbours
-        // (clamped into the filled window, as pointerSmoothedAt clamps them),
-        // so the smoothed segment lies inside the box of those four, inflated
-        // by the bloom's limit. Exact, never clips.
-        vec2 rawPrev = pointerTrailAt(max(i - 1, 0)).xy;
-        vec2 rawNext = pointerTrailAt(min(i + 2, count - 1)).xy;
-        vec2 rawLo = min(min(a.xy, b.xy), min(rawPrev, rawNext)) - limit;
-        vec2 rawHi = max(max(a.xy, b.xy), max(rawPrev, rawNext)) + limit;
-        if (any(lessThan(px, rawLo)) || any(greaterThan(px, rawHi))) {
+        // Reject on the raw-sample box (see pointerSegmentOutside) before the
+        // distance maths.
+        if (pointerSegmentOutside(px, i, count, a, b, limit)) {
             pa = pb;
             continue;
         }

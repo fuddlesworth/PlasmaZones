@@ -108,17 +108,35 @@ float pointerWrapSafeRate(float rate) {
     return max(round(rate * kPointerTimeWrap), 1.0) / kPointerTimeWrap;
 }
 
-// Speed gate for a path sample: 0 below `activationSpeed`, easing to 1 as the
-// sample reaches twice it, so a pack fades in as the pointer accelerates and
-// retreats as it slows. `speed` is device px/s, from uPointerVelocity.z or a
-// sample's uPointerTrail[].w. An activationSpeed of 0 or less means no
-// threshold at all and always returns 1, which is what a pack shipping the
-// parameter at 0 relies on to keep its old behaviour.
+// Speed gate: 0 below `activationSpeed`, easing to 1 as the speed reaches
+// twice it, so a pack fades in as the pointer accelerates and retreats as it
+// slows. Both arguments are in the SAME unit; packs gate through
+// pointerActivationGate(), which hands in the filtered speed and the
+// parameter scaled to device px. Per-sample uPointerTrail[].w is the input
+// only for something drawn AT that sample. An activationSpeed of 0 or less
+// means no threshold at all and always returns 1, which is what a pack
+// shipping the parameter at 0 relies on to keep its old behaviour.
 float pointerSpeedGate(float speed, float activationSpeed) {
     if (activationSpeed <= 0.0) {
         return 1.0;
     }
     return smoothstep(activationSpeed, activationSpeed * 2.0, speed);
+}
+
+// Whether the smoothed trail segment i..i+1 can be skipped for the fragment
+// at `px`: true when `px` lies outside the box of the RAW samples i-1..i+2
+// (clamped into the filled window, as pointerSmoothedAt clamps them)
+// inflated by `inflate`. A smoothed sample is a convex blend of its raw
+// neighbours, so the smoothed segment lies inside that box; the test is
+// exact and never clips, and it costs four raw reads where the smoothing
+// lookup would cost six. `a` and `b` are the raw samples i and i+1 the
+// caller already holds.
+bool pointerSegmentOutside(vec2 px, int i, int count, vec4 a, vec4 b, float inflate) {
+    vec2 rawPrev = pointerTrailAt(max(i - 1, 0)).xy;
+    vec2 rawNext = pointerTrailAt(min(i + 2, count - 1)).xy;
+    vec2 lo = min(min(a.xy, b.xy), min(rawPrev, rawNext)) - inflate;
+    vec2 hi = max(max(a.xy, b.xy), max(rawPrev, rawNext)) + inflate;
+    return any(lessThan(px, lo)) || any(greaterThan(px, hi));
 }
 
 // Trail sample i's position with its two neighbours blended in, by
@@ -220,9 +238,14 @@ float pointerFilteredSpeed() {
 
 // Speed gate on the filtered speed for a pack's `activationSpeed` parameter.
 // The one place a pack should gate from, so every pack in a chain opens and
-// closes on the same figure.
+// closes on the same figure. The parameter is LOGICAL px per second, as its
+// metadata says, and the filtered speed is device px/s, so the threshold is
+// scaled here: the same hand motion opens the gate at the same setting on a
+// 1x and a 2x display. A pack's own speed constants (the speed at which it
+// is fully grown, fully wide, thinnest) are logical too and scale the same
+// way at their use.
 float pointerActivationGate(float activationSpeed) {
-    return pointerSpeedGate(pointerFilteredSpeed(), activationSpeed);
+    return pointerSpeedGate(pointerFilteredSpeed(), activationSpeed * pointerScale());
 }
 
 // The per-button colour a click pack paints with: left, right, middle by the

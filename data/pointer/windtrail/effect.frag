@@ -30,8 +30,9 @@
 //
 // Coverage is the max over segments so a folded path does not stack.
 
-// Speed at which the ribbon reaches full width, in px/s. The sqrt response is
-// normalised against this so `thickness` means the same width on any machine.
+// Speed at which the ribbon reaches full width, in logical px/s (scaled at
+// use). The sqrt response is normalised against this so `thickness` means
+// the same width on any machine.
 const float kFullWidthSpeed = 900.0;
 
 // Stop fade, as a share of `duration`: the seconds of stillness over which
@@ -93,21 +94,15 @@ vec4 pPointer(vec2 uv) {
             break;
         }
 
-        // Reject box from the RAW samples i-1..i+2, before the smoothing
-        // reads: a smoothed sample is a convex blend of its raw neighbours
-        // (clamped into the filled window, as pointerSmoothedAt clamps them),
-        // so the smoothed segment lies inside the box of those four, inflated
-        // by the reach. Exact, never clips, and a rejected fragment skips the
-        // smoothing lookup as well as the distance maths.
-        vec2 rawPrev = pointerTrailAt(max(i - 1, 0)).xy;
-        vec2 rawNext = pointerTrailAt(min(i + 2, count - 1)).xy;
-        vec2 rawLo = min(min(a.xy, b.xy), min(rawPrev, rawNext)) - reach;
-        vec2 rawHi = max(max(a.xy, b.xy), max(rawPrev, rawNext)) + reach;
-        if (any(lessThan(px, rawLo)) || any(greaterThan(px, rawHi))) {
-            pa = pointerSmoothedAt(i + 1, count, p_smoothing);
+        // The far endpoint is needed either way (it is the next segment's
+        // near end), so it is looked up once; the reject box is built from
+        // the raw samples (see pointerSegmentOutside) so a rejected fragment
+        // still skips the distance maths.
+        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
+        if (pointerSegmentOutside(px, i, count, a, b, reach)) {
+            pa = pb;
             continue;
         }
-        vec2 pb = pointerSmoothedAt(i + 1, count, p_smoothing);
         if (distance(pa, pb) < 1e-4) {
             // A stationary pair has no ribbon to draw. The preview appends
             // one every interval while its pointer rests, and drawing those
@@ -124,7 +119,7 @@ vec4 pPointer(vec2 uv) {
         // because it describes how fast the pointer was AT this point of the
         // path, which is a property of the path and not of the frame clock.
         float segSpeed = mix(a.w, b.w, t);
-        float speedNorm = clamp(segSpeed / kFullWidthSpeed, 0.0, 1.0);
+        float speedNorm = clamp(segSpeed / (kFullWidthSpeed * scale), 0.0, 1.0);
         float responsive = sqrt(speedNorm);
 
         // Lifetime answers to speed, floored at 53% of duration as upstream

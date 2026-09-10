@@ -43,6 +43,7 @@ private Q_SLOTS:
     void testSameMillisecondBurstDoesNotFillTheRing();
     void testFilteredSpeedFollowsTheCurrentStrokeOnly();
     void testStationaryAppendsAreNotMotion();
+    void testStrokeBoundaryIsIndependentOfTheSampleInterval();
     void testFirstMoveAfterParkingStartsFresh();
     void testSpeedIsNotUnderReportedAtRealSamplingRates();
     void testDamageRectCoversTrailInflatedByReach();
@@ -247,6 +248,19 @@ void TestPointerHistory::testBackwardsTimestampReportsZeroSpeed()
     QCOMPARE(sameState.newestTrail().x(), 5.0f);
     QCOMPARE(sameState.newestTrail().w(), 0.0f);
     QCOMPARE(sameState.velocity.x(), 0.0f);
+
+    // With a real speed on the previous event the stamp CARRIES it and
+    // leaves the pairing where it was (a stepped-back stamp is the same case
+    // as a shared millisecond; both real clocks are monotonic). A reset to
+    // zero here would pass the two cases above by coincidence.
+    PointerHistory carried;
+    carried.notePointer(QPointF(0.0, 0.0), 0);
+    carried.notePointer(QPointF(100.0, 0.0), 50); // 2000 px/s
+    carried.notePointer(QPointF(105.0, 0.0), 40); // stepped back
+    const PointerFrameState carriedState = carried.frameState(50, 1.0);
+    QCOMPARE(carriedState.newestTrail().x(), 105.0f);
+    QCOMPARE(qRound(carriedState.newestTrail().w()), 2000);
+    QCOMPARE(qRound(carriedState.velocity.x()), 2000);
 }
 
 void TestPointerHistory::testSameMillisecondBurstDoesNotFillTheRing()
@@ -326,14 +340,52 @@ void TestPointerHistory::testStationaryAppendsAreNotMotion()
     for (qint64 t = 66; t <= 1050; t += 16) {
         history.notePointer(QPointF(100.0, 0.0), t);
     }
+    const PointerFrameState moving = history.frameState(50, 1.0);
     const PointerFrameState resting = history.frameState(1050, 1.0);
     QVERIFY2(resting.trailSize() > 2, "the stationary samples still land in the ring");
     QVERIFY2(resting.idleSeconds >= 1.0, qPrintable(QStringLiteral("idle %1").arg(resting.idleSeconds)));
     QVERIFY(!history.isLive(1050, 0.5));
     QCOMPARE(resting.velocity.x(), 0.0f);
-    // The filter's exponential tail of the one real move is what is left, a
-    // fraction of a px/s after thirty stationary samples.
-    QVERIFY2(resting.filteredSpeed < 1.0, qPrintable(QStringLiteral("filtered %1").arg(resting.filteredSpeed)));
+    // The stationary samples are skipped by the filter, so the figure HOLDS
+    // across the rest, as it does on the compositor where no sample lands at
+    // all; the packs' idle fades end the drawing, not a decaying gate.
+    QCOMPARE(resting.filteredSpeed, moving.filteredSpeed);
+    QVERIFY(resting.filteredSpeed > 0.0);
+
+    // The pairing stayed put too: the next real move pairs with the 50 ms
+    // event, a gap past the hold, so it scores 0 and starts a stroke. Had a
+    // stationary append become the pairing, this would read about 600 px/s.
+    history.notePointer(QPointF(110.0, 0.0), 1066);
+    const PointerFrameState moved = history.frameState(1066, 1.0);
+    QCOMPARE(moved.newestTrail().w(), 0.0f);
+    QCOMPARE(moved.velocity.x(), 0.0f);
+    QCOMPARE(moved.filteredSpeed, 0.0);
+}
+
+void TestPointerHistory::testStrokeBoundaryIsIndependentOfTheSampleInterval()
+{
+    // A long window spaces the ring's slots past the velocity hold (4 s is
+    // ceil(4000 / 31) = 130 ms between appends), so a stroke boundary read
+    // from the gap between SLOTS would end the stroke at every slot and the
+    // filter would collapse to the raw head speed. The boundary is marked at
+    // the EVENT that follows a park instead, so a steady stroke of
+    // alternating speeds filters over its whole run.
+    PointerHistory history;
+    history.setTrailSeconds(4.0);
+    QVERIFY(history.sampleIntervalMs() >= PointerHistory::kVelocityHoldMs);
+    qint64 t = 0;
+    double x = 0.0;
+    for (int i = 0; i < 400; ++i, t += 10) {
+        // 2 px then 30 px every 10 ms: 200 and 3000 px/s alternating.
+        x += (i % 2 == 0) ? 2.0 : 30.0;
+        history.notePointer(QPointF(x, 0.0), t);
+    }
+    const PointerFrameState state = history.frameState(t - 10, 1.0);
+    const double head = state.newestTrail().w();
+    QVERIFY2(std::abs(state.filteredSpeed - head) > 300.0,
+             qPrintable(QStringLiteral("filtered %1 collapsed to the head's %2").arg(state.filteredSpeed).arg(head)));
+    QVERIFY2(state.filteredSpeed > 200.0 && state.filteredSpeed < 3000.0,
+             qPrintable(QStringLiteral("filtered %1 outside the stroke's speeds").arg(state.filteredSpeed)));
 }
 
 void TestPointerHistory::testFirstMoveAfterParkingStartsFresh()

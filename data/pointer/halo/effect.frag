@@ -33,8 +33,9 @@ const float kIdleSeconds = 0.85;
 // breath does not jump when iTime wraps.
 const float kBreathRate = 7.4;
 const float kSwellSeconds = 0.55;
-// Speed (device px/s) at which speedGain is fully applied. Deliberately low:
-// the settings preview's simulated pointer peaks near 324 px/s.
+// Speed (logical px/s, scaled at use) at which speedGain is fully applied.
+// Deliberately low: the settings preview's simulated pointer peaks near
+// 324 px/s.
 const float kFullSpeed = 200.0;
 
 vec4 pPointer(vec2 uv) {
@@ -58,8 +59,8 @@ vec4 pPointer(vec2 uv) {
         // whenever two events share a millisecond and would blink both the
         // gate and the gain.
         float speed = pointerFilteredSpeed();
-        float gain = 1.0 + p_speedGain * clamp(speed / kFullSpeed, 0.0, 1.0);
-        float gate = pointerSpeedGate(speed, p_activationSpeed);
+        float gain = 1.0 + p_speedGain * clamp(speed / (kFullSpeed * scale), 0.0, 1.0);
+        float gate = pointerActivationGate(p_activationSpeed);
 
         // Idle envelope: settle to idleDim over the first third of the window
         // while breathing, then fade out over the rest.
