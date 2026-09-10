@@ -17,7 +17,9 @@ namespace PhosphorPointerShaders {
 
 /// The ring-buffer pointer sampler both hosts feed: the compositor from
 /// `slotMouseChanged`, the preview from its figure-eight driver. It keeps the
-/// last `kMaxTrailPoints` motion samples plus the last press and release, and
+/// last `kMaxTrailPoints` position samples plus the last press and release
+/// (positions, because the ring also carries the slots a resting pointer and
+/// a bare seed leave, which the `motion` flag tells apart), and
 /// answers the per-frame questions the contract needs (`frameState`), whether
 /// a chain still needs frames (`isLive`) and where it may paint
 /// (`damageRect`).
@@ -42,7 +44,8 @@ namespace PhosphorPointerShaders {
 /// mouse filled all 32 slots in 32 ms, and a pack's tail could never be
 /// longer than that however long its `length` parameter asked for. A sample
 /// appended once the interval has passed WITHOUT the pointer having moved a
-/// pixel (the preview feeds a resting pointer every tick) keeps the ring's
+/// pixel (any host that keeps feeding while the pointer is still, or a drift
+/// slower than a pixel per interval) keeps the ring's
 /// minimum sampling rate but is not motion: it neither resets the idle clock
 /// nor becomes a velocity pairing, so a resting pointer idles the same way
 /// on both hosts. Ages are computed at `frameState` time. Velocity is the
@@ -66,10 +69,12 @@ namespace PhosphorPointerShaders {
 /// gap, is what makes this independent of how far apart the ring's slots
 /// are: a shader-side walk over sample ages had to guess a pause from a
 /// gap, and at a long window every slot gap looked like one. Samples
-/// appended while the pointer rested are not motion and are skipped, so the
-/// preview (which feeds a resting pointer every tick) holds the filtered
-/// speed across a rest exactly as the compositor does; the packs' own idle
-/// fades end the drawing, not the gate.
+/// appended while the pointer rested are not motion and are skipped, so a
+/// host that keeps feeding through a rest holds the filtered speed across it
+/// the way the compositor does, for as long as the chain is live. Rest long
+/// enough and the rest slots rotate the last motion sample out of the ring
+/// and the figure reads zero, which is well past the point where any pack is
+/// still drawing. The packs' own idle fades end the drawing, not the gate.
 ///
 /// The interval is one per chain, from its LONGEST `trailSeconds`, so a
 /// chain that mixes a short pack with a long one samples at the long pack's
@@ -86,6 +91,14 @@ public:
     static constexpr int kCapacity = PointerShaderContract::kMaxTrailPoints;
     static constexpr double kMinSampleDistancePx = 1.0;
     static constexpr qint64 kMinSampleGapMs = 8;
+    // kCapacity is an alias for a contract constant that lives in another
+    // header, and setTrailSeconds divides by kCapacity - 1.
+    static_assert(kCapacity > 1, "the sample interval divides by kCapacity - 1");
+    /// Upper bound on the accepted trail window. Not a policy limit — the
+    /// pack schema caps `trailSeconds` far below it — but the value that keeps
+    /// the interval arithmetic in `setTrailSeconds` defined for any caller of
+    /// this exported class.
+    static constexpr double kMaxTrailSeconds = 3600.0;
     /// Floor on the dt a speed is divided by, guarding against a zero or
     /// denormal gap between two events that arrive in the same millisecond.
     ///
@@ -143,6 +156,13 @@ public:
     /// The contract tail for a frame at @p nowMs with canvas scale @p scale.
     /// `cursorRect` and `hasSprite` are left at their defaults for the host
     /// to fill.
+    ///
+    /// Every slot the ring holds is emitted, INCLUDING entries older than the
+    /// trail window. `damageRect` counts only the ones inside it, so a pack
+    /// that draws every entry without gating on `.z` paints outside the rect
+    /// the host asked to repaint, and the surplus is never cleaned up. Events
+    /// arriving slower than the sample interval are the ordinary way the ring
+    /// comes to span longer than its window. Gate on age.
     [[nodiscard]] PointerFrameState frameState(qint64 nowMs, double scale) const;
 
     /// True while a motion or button event is younger than @p trailSeconds.

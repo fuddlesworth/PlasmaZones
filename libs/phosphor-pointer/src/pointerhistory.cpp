@@ -70,7 +70,13 @@ const PointerHistory::Sample& PointerHistory::sampleAt(int newestFirstIndex) con
 
 void PointerHistory::setTrailSeconds(double seconds)
 {
-    m_trailSeconds = std::max(0.0, seconds);
+    // Both ends, and non-finite rejected outright. This is exported API, and
+    // the cast below is undefined for an infinity, a NaN or anything past
+    // qint64's range — the JSON boundary happens to clamp every value that
+    // reaches it today, but that is the caller's discipline, not this
+    // function's. kMaxTrailSeconds is far past any useful window and exists
+    // only to keep the arithmetic defined.
+    m_trailSeconds = std::isfinite(seconds) ? std::clamp(seconds, 0.0, kMaxTrailSeconds) : 0.0;
     // kCapacity samples span kCapacity - 1 gaps. Rounded up so the ring
     // covers at least the window rather than falling one sample short of it.
     const auto spread = static_cast<qint64>(std::ceil(m_trailSeconds * 1000.0 / (kCapacity - 1)));
@@ -109,13 +115,30 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
     // pairing: the next event then pairs across both moves and reads the
     // true speed, where scoring it here would have left a zero on the head
     // for every event that shared a millisecond (see the header comment).
-    const bool sameTick = hasPrev && nowMs - prevMs <= 0;
-    // A park (the hold or more since the previous event) starts a stroke.
-    const bool strokeStart = !hasPrev || (!sameTick && nowMs - prevMs >= kVelocityHoldMs);
+    //
+    // A stamp behind the previous one by more than the hold is a different
+    // thing entirely: a clock that stepped, not two events inside one
+    // millisecond. It has to be ACCEPTED, because sameTick deliberately does
+    // not advance the pairing — so treating a step as sameTick would leave
+    // every event for the length of the step measured against the same frozen
+    // stamp, accepting none of them, freezing the idle clock and letting the
+    // trail expire under a pointer that is still moving. Re-anchoring adopts
+    // the new timeline and starts a stroke, which is what a discontinuity is.
+    const qint64 dtMs = hasPrev ? nowMs - prevMs : 0;
+    const bool clockStepped = hasPrev && dtMs < -kVelocityHoldMs;
+    const bool sameTick = hasPrev && dtMs <= 0 && !clockStepped;
+    // A park (the hold or more since the previous event) starts a stroke, and
+    // so does a clock step.
+    const bool strokeStart = !hasPrev || clockStepped || (!sameTick && dtMs >= kVelocityHoldMs);
     // The speed is only needed on the paths that accept the event, so the
     // sqrt is not paid for a sub-pixel drop or a stationary append.
     const auto scoreSpeed = [&] {
-        return !hasPrev ? 0.0 : sameTick ? m_lastEventSpeed : speedOver(prevPos, prevMs, devicePx, nowMs);
+        // A clock step has no dt to divide over and no meaningful pairing
+        // across it, so the stroke restarts at rest rather than reporting a
+        // speed computed from a negative interval.
+        return !hasPrev || clockStepped ? 0.0
+            : sameTick                  ? m_lastEventSpeed
+                                        : speedOver(prevPos, prevMs, devicePx, nowMs);
     };
     const auto accept = [&](double speed) {
         if (sameTick) {
@@ -143,7 +166,13 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
         // hand each one a slot and fill the ring the interval exists to
         // spread.
         const qint64 gapMs = nowMs - newest.anchorMs;
-        if (gapMs < m_sampleIntervalMs) {
+        // A clock step leaves the head's anchor on the OLD timeline, so the
+        // gap reads negative and every following event looks like it landed
+        // inside the interval — the head would refresh forever and the ring
+        // would never advance again. The discontinuity forces the append, and
+        // the new slot re-anchors the ring the way accepting the event
+        // re-anchors the pairing.
+        if (!clockStepped && gapMs < m_sampleIntervalMs) {
             // Inside the sample interval. The slot is not appended to, or the
             // ring would fill with a few ms of motion and the tail could never
             // reach the window; but the pointer has still moved, so the head
@@ -156,7 +185,11 @@ void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
             }
             const double speed = scoreSpeed();
             newest.pos = devicePx;
-            newest.timeMs = nowMs;
+            // Never backwards, for the same reason accept() guards the idle
+            // clock: a stepped-back stamp must not put the head's age behind
+            // the slot after it and invert the newest-first age ordering the
+            // contract promises.
+            newest.timeMs = std::max(newest.timeMs, nowMs);
             newest.speed = speed;
             newest.motion = true;
             // A stroke can begin on a refresh too: a park shorter than the

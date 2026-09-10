@@ -239,14 +239,14 @@ void TestPointerUniformExtension::testDirtyFlagTracksRealChangesOnly()
     ext.clearDirty();
     QVERIFY(!ext.isDirty());
 
-    ext.setVelocity(QVector2D(1.0f, 0.0f));
+    ext.setVelocity(QVector2D(1.0f, 0.0f), 0.0);
     QVERIFY(ext.isDirty());
 
     ext.clearDirty();
-    ext.setVelocity(QVector2D(1.0f, 0.0f));
+    ext.setVelocity(QVector2D(1.0f, 0.0f), 0.0);
     QVERIFY(!ext.isDirty());
 
-    ext.setVelocity(QVector2D(2.0f, 0.0f));
+    ext.setVelocity(QVector2D(2.0f, 0.0f), 0.0);
     QVERIFY(ext.isDirty());
 }
 

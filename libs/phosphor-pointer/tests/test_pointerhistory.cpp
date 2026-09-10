@@ -53,6 +53,10 @@ private Q_SLOTS:
     void testDamageRectIsEmptyWhenNotLive();
     void testPressAndReleaseAreReportedSeparately();
     void testResetClearsEverything();
+    void testTrailWindowChangeMidStreamRespacesTheRing();
+    void testTrailWindowEdgeValuesFallBackToTheFloor();
+    void testClockStepDoesNotLatchAcrossFollowingEvents();
+    void testRestingPointerEventuallyEvictsEveryMotionSample();
 };
 
 void TestPointerHistory::testFreshHistoryIsNotLive()
@@ -655,6 +659,124 @@ void TestPointerHistory::testResetClearsEverything()
     QVERIFY(state.trailIsEmpty());
     QCOMPARE(state.buttons, 0);
     QCOMPARE(state.pressSecondsSince, PointerShaderContract::kNeverSeconds);
+}
+
+void TestPointerHistory::testTrailWindowChangeMidStreamRespacesTheRing()
+{
+    // rebuildChain sets the window on any profile or registry change WITHOUT
+    // resetting, so a populated ring really does carry slots anchored under
+    // the old interval into the new one. Nothing covered that.
+    PointerHistory history;
+    history.setTrailSeconds(0.8);
+    QCOMPARE(history.sampleIntervalMs(), qint64(26)); // ceil(800 / 31)
+
+    qint64 t = 0;
+    for (int i = 0; i < 40; ++i) {
+        t += 30;
+        history.notePointer(QPointF(double(i) * 20.0, 0.0), t);
+    }
+    QCOMPARE(history.frameState(t, 0.8).trailSize(), PointerShaderContract::kMaxTrailPoints);
+
+    // Grow the window. The interval widens, and the slots already in the ring
+    // keep their absolute anchors, so the next append simply waits longer.
+    history.setTrailSeconds(4.0);
+    QCOMPARE(history.sampleIntervalMs(), qint64(130)); // ceil(4000 / 31)
+
+    const int before = history.frameState(t, 4.0).trailSize();
+    t += 40; // inside the new interval, past the old one
+    history.notePointer(QPointF(2000.0, 0.0), t);
+    QCOMPARE(history.frameState(t, 4.0).trailSize(), before);
+    // The head still follows the pointer exactly, which is the invariant the
+    // in-place refresh exists to keep.
+    QCOMPARE(history.frameState(t, 4.0).newestTrail().x(), 2000.0f);
+
+    // And once a full new interval has passed it appends again.
+    t += 130;
+    history.notePointer(QPointF(2200.0, 0.0), t);
+    const PointerFrameState grown = history.frameState(t, 4.0);
+    QCOMPARE(grown.newestTrail().x(), 2200.0f);
+    QVERIFY(grown.trailAt(1).x() == 2000.0f);
+}
+
+void TestPointerHistory::testTrailWindowEdgeValuesFallBackToTheFloor()
+{
+    PointerHistory history;
+    // The empty-chain path passes exactly this.
+    history.setTrailSeconds(0.0);
+    QCOMPARE(history.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
+
+    history.setTrailSeconds(-5.0);
+    QCOMPARE(history.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
+
+    // Exported API, so the cast in setTrailSeconds has to stay defined for a
+    // caller that is not the JSON boundary.
+    history.setTrailSeconds(std::numeric_limits<double>::quiet_NaN());
+    QCOMPARE(history.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
+
+    history.setTrailSeconds(std::numeric_limits<double>::infinity());
+    QVERIFY(history.sampleIntervalMs() >= PointerHistory::kMinSampleGapMs);
+
+    // A window whose interval would fall under the floor still gets the floor.
+    history.setTrailSeconds(0.05);
+    QCOMPARE(history.sampleIntervalMs(), PointerHistory::kMinSampleGapMs);
+}
+
+void TestPointerHistory::testClockStepDoesNotLatchAcrossFollowingEvents()
+{
+    // A stamp a little behind the last one is two events sharing a tick and
+    // deliberately does NOT advance the pairing. A stamp far behind it is a
+    // clock discontinuity, and treating that the same way latched: the pairing
+    // never moved, so EVERY event for the length of the step kept measuring
+    // against the same frozen stamp, none was accepted, the idle clock stood
+    // still and the trail expired under a moving pointer.
+    //
+    // The single-event case cannot show this. It needs the repeat.
+    PointerHistory history;
+    history.setTrailSeconds(1.0);
+    history.notePointer(QPointF(0.0, 0.0), 10000);
+    history.notePointer(QPointF(100.0, 0.0), 10050);
+    QVERIFY(history.isLive(10050, 1.0));
+
+    // The clock steps back a full second, then the pointer keeps moving.
+    qint64 t = 9000;
+    for (int i = 1; i <= 20; ++i) {
+        t += 40;
+        history.notePointer(QPointF(double(i) * 30.0, 0.0), t);
+    }
+    // On the new timeline the pointer has been moving continuously, so the
+    // pass must still be live. Before the re-anchor this read as idle since
+    // 10050 and went dark.
+    QVERIFY2(history.isLive(t, 1.0), "trail expired under a moving pointer after a clock step");
+    const PointerFrameState state = history.frameState(t, 1.0);
+    QCOMPARE(state.idleSeconds, 0.0);
+    QCOMPARE(state.newestTrail().x(), 600.0f);
+    // The events after the step were accepted, so the ring grew past the two
+    // it held when the clock jumped.
+    QVERIFY(state.trailSize() > 2);
+}
+
+void TestPointerHistory::testRestingPointerEventuallyEvictsEveryMotionSample()
+{
+    // The rest slots are appended one per interval, so a long enough rest
+    // rotates every motion sample out of a fixed-size ring and the filtered
+    // speed has nothing left to report. This pins that boundary rather than
+    // stopping one slot short of it, which is where the neighbouring test
+    // deliberately sits.
+    PointerHistory history;
+    history.setTrailSeconds(0.5);
+    const qint64 interval = history.sampleIntervalMs();
+
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(100.0, 0.0), 50);
+    QVERIFY(history.frameState(50, 0.5).filteredSpeed > 0.0);
+
+    // Rest for more than a ring's worth of intervals.
+    qint64 t = 50;
+    for (int i = 0; i < PointerShaderContract::kMaxTrailPoints + 2; ++i) {
+        t += interval;
+        history.notePointer(QPointF(100.0, 0.0), t);
+    }
+    QCOMPARE(history.frameState(t, 0.5).filteredSpeed, 0.0);
 }
 
 QTEST_MAIN(TestPointerHistory)

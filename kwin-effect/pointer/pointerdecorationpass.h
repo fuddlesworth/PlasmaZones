@@ -57,7 +57,10 @@ namespace PlasmaZones {
 /// feature off, an empty chain, or a chain whose every layer is disabled or
 /// unresolvable, notePointer writes no history, isLive() is false so the
 /// effect is not held in the paint chain by us, scheduleRepaints requests
-/// nothing and paintOutput allocates and draws nothing.
+/// nothing and paintOutput allocates and draws nothing. The rule is per
+/// FRAME: a suppressed output still reads the clock once per pointer event,
+/// and an event that crosses outputs still computes the departing output's
+/// damage once, neither of which scales with frames drawn.
 ///
 /// COORDINATE SPACE. The contract's canvas is ONE output in device px,
 /// top-down, origin at that output's top-left (pointer_uniforms.glsl). So the
@@ -95,10 +98,12 @@ namespace PlasmaZones {
 /// pass, which hides the cursor for the same reason:
 ///   • hideCursorForPass() refuses when KWin already reports the cursor
 ///     hidden, so whoever asked first keeps it and draws it.
-///   • releaseCursorHideForForeignPaint() hands it back when a desktop
-///     transition or a strip leg is about to take this output's frame. Those
+///   • releaseCursorHide() hands it back when a desktop
+///     transition or a strip leg is about to take this output's frame, and
+///     when this pass finished its own chain having drawn nothing. Those
 ///     passes replace the whole paint, this pass never reaches paintOutput
-///     for that output, and nothing would draw the cursor otherwise. The
+///     for that output, and nothing would draw the cursor otherwise; a chain
+///     that drew nothing leaves the same hole. The
 ///     effect's paintScreen calls it BEFORE those passes run, so the strip
 ///     pass's own hide can then succeed.
 /// A `layer: below` chain never touches cursor visibility at all: it paints
@@ -155,7 +160,6 @@ public:
     void notePointer(const QPointF& pos, const QPointF& oldPos, Qt::MouseButtons buttons, Qt::MouseButtons oldButtons);
     /// Ask the pointer's current output to repaint the trail it still shows,
     /// before the history is reset because the pointer is moving to @p next.
-    void repaintStaleTrail(KWin::LogicalOutput* next, qint64 nowMs);
 
     /// True while the chain is engaged AND the history is inside the longest
     /// `trailSeconds` of it. ORed into PlasmaZonesEffect::isActive(): without
@@ -190,7 +194,7 @@ public:
 
     /// Give the cursor back because ANOTHER pass is taking @p screen's frame
     /// (a desktop transition, a strip leg). See the class note.
-    void releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen);
+    void releaseCursorHide(KWin::LogicalOutput* screen);
 
     /// Drop every compiled pack so the next live frame recompiles against
     /// freshly reloaded source. Called from the registry's `effectsChanged`
@@ -414,6 +418,9 @@ private:
     QRectF damageLogicalRect(KWin::LogicalOutput* screen, qint64 nowMs, bool ignoreSuppression = false);
     /// The rect the trail currently on screen occupies, for a caller about to
     /// drop it. Must be taken BEFORE the state that describes it is torn down.
+    /// Damage the trail the pointer is leaving on @p next's predecessor. Takes
+    /// a clock stamp because the sampling path already has one.
+    void repaintStaleTrail(KWin::LogicalOutput* next, qint64 nowMs);
     QRectF staleTrailRect();
     /// Drop the sampled history AND mark the multipass feedback canvas stale.
     /// The two belong together: a feedback pack's buffer holds the burst the

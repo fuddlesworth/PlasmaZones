@@ -40,7 +40,12 @@ public:
 
     /// `uPointerVelocity`: .xy = @p velocity in device px/s, .z its length,
     /// .w = @p filteredSpeed (`PointerFrameState::filteredSpeed`).
-    void setVelocity(const QVector2D& velocity, double filteredSpeed = 0.0);
+    ///
+    /// filteredSpeed is required rather than defaulted. It is the lane
+    /// `pointerFilteredSpeed()` reads, and every speed gate in the pack family
+    /// is built on it, so a caller that omitted it would silently gate every
+    /// pack shut instead of failing to compile.
+    void setVelocity(const QVector2D& velocity, double filteredSpeed);
 
     /// `uPointerPress`: canvas px, seconds since the press, button code.
     void setPress(const QPointF& pos, double secondsSince, int button);

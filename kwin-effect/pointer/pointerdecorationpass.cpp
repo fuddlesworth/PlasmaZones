@@ -452,11 +452,14 @@ void PointerDecorationPass::updateCursorHiding()
     m_cursorHidden = false;
 }
 
-void PointerDecorationPass::releaseCursorHideForForeignPaint(KWin::LogicalOutput* screen)
+void PointerDecorationPass::releaseCursorHide(KWin::LogicalOutput* screen)
 {
     // Unconditional for THIS output, unlike updateCursorHiding: a live chain
-    // on it does not keep the hide, because the caller is about to paint the
-    // output through another pass and nothing else would draw the cursor.
+    // on it does not keep the hide. Two callers need that. Another pass is
+    // about to take the output's frame and nothing else would draw the
+    // cursor; or this pass reached the end of its own chain having drawn
+    // nothing, which leaves the same hole. In both the hide has outlived
+    // whatever was going to replace the sprite.
     if (!m_cursorHidden || !cursorOnOutput(screen)) {
         return;
     }
