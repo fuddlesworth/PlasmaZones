@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "compositor/effectlogging.h"
 
 #include <core/renderviewport.h>
@@ -465,9 +466,17 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     }
 }
 
-void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                   KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                                   KWin::WindowPaintData& data)
+KWinCompat::PaintResult PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget,
+                                                      const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                                                      int mask, const KWin::Region& deviceRegion,
+                                                      KWin::WindowPaintData& data)
+{
+    return KWinCompat::paintResult(drawWindowImpl(renderTarget, viewport, w, mask, deviceRegion, data));
+}
+
+bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data)
 {
     // EVERY decorated window presents through the composite: paintWindow ran
     // the full chain fold (renderSurfaceChainComposite) for it this frame, and
@@ -647,7 +656,11 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             reboundSnapshotUnit = true;
         }
     }
-    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, drawRegion, data);
+    // Result carried to the end rather than returned here: the texture-unbind
+    // hygiene below is what keeps a stray bind out of the next window's draw,
+    // and a failed draw is exactly when leaving one behind would be worst. The
+    // unbinds touch no window content, so they are safe to issue either way.
+    const bool drawn = PLASMAZONES_OFFSCREEN_DRAW_WINDOW(renderTarget, viewport, w, mask, drawRegion, data);
 
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak
@@ -675,6 +688,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     if (boundChannels > 0 || reboundLayerUnit || reboundSnapshotUnit) {
         glActiveTexture(GL_TEXTURE0);
     }
+    return drawn;
 }
 
 } // namespace PlasmaZones

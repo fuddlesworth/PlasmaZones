@@ -13,6 +13,7 @@
 //                           draw chain) and the reason the capture cache exists.
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -229,6 +230,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     auto resetCapture = qScopeGuard([this] {
         m_capturingSnapshot = false;
     });
+    bool drawn = false;
     {
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, captureScale, renderTarget, QPoint());
@@ -244,11 +246,20 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         // else would apply the window's resolved opacity. See the call site.
         captureData.setOpacity(captureOpacity);
         const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
-        KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
+        drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w, captureMask, KWin::Region::infinite(),
+                                              captureData);
         KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
+    if (!drawn) {
+        // The draw failed (KWin 6.8 reports it). captureValid is exactly the
+        // flag that says the texture may be reused, so leaving it false is the
+        // whole fix: the fold retakes the capture on a later frame instead of
+        // folding and presenting a cleared one. Every other field below
+        // describes a capture that now does not exist, so none of them is set.
+        return;
+    }
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
     // The frame-relative offset the shell content scan must measure against

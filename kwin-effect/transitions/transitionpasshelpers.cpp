@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 
 #include <core/rendertarget.h>
@@ -109,8 +110,13 @@ const char* outputQuadVertexSource()
     return kOutputQuadVertexSource;
 }
 
-void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport)
+void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                     KWin::RenderDevice* device)
 {
+    // NOT gated on @p device: on 6.7 there is no RenderDevice at all and it is
+    // always null, so bailing here would stop drawing the cursor entirely on that
+    // version. Whether the device is usable is sceneRenderer's business — it
+    // returns null only when a device is genuinely required and missing.
     if (!KWin::effects) {
         return;
     }
@@ -134,9 +140,17 @@ void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderV
     // hide landed. Track the live pointer the way that slot does (the item's
     // own hotspot offset lives in its child, so the position IS the pointer).
     scene->cursorItem()->setPosition(KWin::effects->cursorPos());
+    // @p device is the device of the output pass this call sits inside, which the
+    // caller reads from that pass's RenderView — NOT the compositor's primary
+    // device, which on 6.8 is a different renderer for any output that renders on
+    // a secondary GPU. 6.7 has a single renderer and ignores it (see kwincompat.h).
+    KWin::ItemRenderer* const renderer = KWinCompat::sceneRenderer(scene, device);
+    if (!renderer) {
+        return;
+    }
     const ShaderInternal::ScopedGlState glStateGuard;
-    scene->renderer()->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
-                                  KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
+    renderer->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
+                         KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
 }
 
 void translatePackParams(

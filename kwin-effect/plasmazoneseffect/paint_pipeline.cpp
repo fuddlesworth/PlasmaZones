@@ -10,6 +10,7 @@
 // defend. Over the 1150 ceiling before PR #891 and accepted as such.
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "compositor/compositorclock.h"
 #include "handlers/navigationhandler.h"
 #include "tilinghandler/tilinghandler.h"
@@ -32,6 +33,7 @@
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 #include <scene/item.h>
+#include <scene/scene.h> // RenderView::renderDevice(), for currentPassRenderDevice()
 #include <scene/windowitem.h>
 
 #include <QDate>
@@ -140,6 +142,11 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     return m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 
+KWin::RenderDevice* PlasmaZonesEffect::currentPassRenderDevice() const
+{
+    return KWinCompat::renderDeviceOf(m_currentPassView);
+}
+
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
     // KWin 6.7 no longer passes a presentTime; sample the steady clock
@@ -166,6 +173,9 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // steady_clock) so rebinds between per-output and fallback remain
     // compatible.
     m_currentPassOutput = data.screen;
+    // Latched with the output, cleared with it: the view is this pass's route to
+    // the RenderDevice its ItemRenderer belongs to (see m_currentPassView).
+    m_currentPassView = data.view;
     // New pass, new scroll-managed answers: the memo is only valid while the
     // strip state cannot change under it, which one output pass guarantees.
     m_scrollManagedCache.clear();
@@ -520,8 +530,15 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     KWin::effects->prePaintScreen(data);
 }
 
-void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                    int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
+KWinCompat::PaintResult PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget,
+                                                       const KWin::RenderViewport& viewport, int mask,
+                                                       const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
+{
+    return KWinCompat::paintResult(paintScreenImpl(renderTarget, viewport, mask, deviceRegion, screen));
+}
+
+bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
     // GL-current point reached on every pass the effect takes part in,
     // including the transition-owned ones below: textures retired by a strip
@@ -551,8 +568,10 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
         // The pointer pass's hide is normally already back by now (above), but
         // a switch that became live inside paintOutput itself has not passed
         // that gate, so release again — it is idempotent.
+        // The switch painted this output's frame in full. That is a successful
+        // paint, not a failure — the normal scene walk is skipped on purpose.
         m_pointerPass.releaseCursorHide(screen);
-        return;
+        return true;
     }
     // A strip leg is about to take this output's frame. Hand the pointer
     // pass's cursor hide back BEFORE that pass runs, not after: the strip
@@ -572,13 +591,21 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // scene, runs the pack, returns true) the normal scene paint is skipped
     // the same way.
     if (m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
-        return;
+        // As above: the strip pass took the frame and painted it, so this is a
+        // success even though the normal scene walk never ran.
+        return true;
     }
     // The scene walk's own damage region is the clip for the pill blit, for
     // the whole walk (see m_scrollTabWalkRegion): every trigger inside
     // paintWindow reads it, and so does the fallback below.
     const ScrollTabWalkScope walkScope(*this, deviceRegion, /*resetPaintedLatch=*/false);
-    KWin::effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+    if (!KWinCompat::paintScreenChecked(renderTarget, viewport, mask, deviceRegion, screen)) {
+        // The scene walk failed (a GPU reset, per KWin's contract). Everything
+        // below issues raw GL — the pill blit and the pointer chain both draw
+        // directly — so bail instead, and report the failure up so the
+        // compositor can stop the frame.
+        return false;
+    }
     // Post-walk fallback: the pills' damage touched neither a strip window
     // nor anything stacked above the strip, so no paintWindow trigger fired
     // and the pass would otherwise have repainted the band from underneath
@@ -601,8 +628,9 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // drawWindow and never nest a screen pass today, so the latch is always
     // false here.
     if (!m_capturingSnapshot) {
-        m_pointerPass.paintOutput(renderTarget, viewport, screen);
+        m_pointerPass.paintOutput(renderTarget, viewport, screen, currentPassRenderDevice());
     }
+    return true;
 }
 
 void PlasmaZonesEffect::postPaintScreen()
@@ -629,6 +657,7 @@ void PlasmaZonesEffect::postPaintScreen()
         m_scrollTabPainter->notePassOutcome(m_currentPassOutput, m_scrollTabBlitIssued);
     }
     m_currentPassOutput = nullptr;
+    m_currentPassView = nullptr;
     // The re-slotting state holds raw EffectWindow pointers, and between
     // passes a window can die; the next prePaintScreen recomputes them, but
     // clearing here means no dangling pointer ever survives the bracket.
@@ -1430,9 +1459,17 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
 // scrollManagedOutputFor / scrollClipGeometryFor live in scroll_clip.cpp —
 // the clip predicate is its own concern; this file consumes it.
 
-void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                    KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                                    KWin::WindowPaintData& data)
+KWinCompat::PaintResult PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget,
+                                                       const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                                                       int mask, const KWin::Region& deviceRegion,
+                                                       KWin::WindowPaintData& data)
+{
+    return KWinCompat::paintResult(paintWindowImpl(renderTarget, viewport, w, mask, deviceRegion, data));
+}
+
+bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                        KWin::WindowPaintData& data)
 {
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
@@ -1486,7 +1523,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // for the same reason.
         if (const KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr;
             managed && managed != m_currentPassOutput) {
-            return;
+            // Culled, not failed: there is nothing to paint for this window in
+            // this pass. Every cull in this function returns true for that
+            // reason.
+            return true;
         }
         // Off-viewport park cull: the paintWindow site of scrollParkedOffscreen's
         // contract. The authoritative list of enforcement sites lives on that
@@ -1503,7 +1543,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // design; the predicate's own cheap gates keep the common case at one
         // empty-map probe, unless the strip diagnostic category is enabled.
         if (w && scrollParkedOffscreen(w, getWindowId(w))) {
-            return;
+            return true;
         }
     }
 
@@ -1576,7 +1616,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!m_stripCaptureSkippedWindows.contains(w)) {
                 m_stripCaptureSkippedWindows.append(w);
             }
-            return;
+            return true;
         }
         stripBandWindow = !m_stripCaptureBelowStrip.contains(w);
         // The walk paints in stacking order, so the first window here that
@@ -1932,7 +1972,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             st->lastPaintTimeMs = -1;
         }
         if (frameNowMs < supIt->deadlineMs) {
-            return;
+            return true;
         }
         // Release in-place: erase the entry so the rest of paintWindow
         // proceeds normally. Calling endRestoreSuppression here would
@@ -1959,8 +1999,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // calls effects->paintWindow, which nothing in KWin forbids. If it ever
     // runs, continue the chain plainly with no transform or morph processing.
     if (m_capturingSnapshot) {
-        KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
-        return;
+        return KWinCompat::drawWindowChecked(renderTarget, viewport, w, mask, deviceRegion, data);
     }
 
     // Apply the C++ translate+scale geometry morph — UNLESS a shader
@@ -2022,8 +2061,16 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     auto* st = m_shaderManager.findTransition(w);
     if (st && st->cached && st->cached->shader) {
         const PaintWindowContext ctx{renderTarget, viewport, w, chainMask, deviceRegion, data, frameNowMs};
-        if (paintShaderTransitionWindow(ctx, st) == ShaderBranchOutcome::Handled) {
-            return;
+        switch (paintShaderTransitionWindow(ctx, st)) {
+        case ShaderBranchOutcome::Handled:
+            return true;
+        case ShaderBranchOutcome::Failed:
+            // The branch drew and the draw failed. Report it out rather than
+            // falling through to the chain below, which would draw the window a
+            // second time against a context that is already gone.
+            return false;
+        case ShaderBranchOutcome::Continue:
+            break;
         }
     }
 
@@ -2069,8 +2116,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // window, which is the accepted trade at both sites rather than an
     // oversight — see the chain-continuation note below for what that costs.
     if (m_directPaintCapture) {
-        KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
-        return;
+        return KWinCompat::drawWindowChecked(renderTarget, viewport, w, mask, deviceRegion, data);
     }
 
     // Continue the PAINT chain, never a jump to the draw chain. Our chain
@@ -2091,7 +2137,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // through our drawWindow override from inside that chain. This path also
     // covers redirected windows in their post-transition expiry frame, which
     // are still offscreen-backed.
-    KWin::effects->paintWindow(renderTarget, viewport, w, chainMask, deviceRegion, data);
+    return KWinCompat::paintWindowChecked(renderTarget, viewport, w, chainMask, deviceRegion, data);
 }
 
 void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& renderTarget,

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7). Builds against 6.7 and 6.8.
 
 pkgname=plasmazones
 # pkgver/pkgrel are placeholders; CI rewrites them against the release tag

@@ -426,7 +426,7 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
 // ── The pass ────────────────────────────────────────────────────────────────
 
 void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                        KWin::LogicalOutput* screen)
+                                        KWin::LogicalOutput* screen, KWin::RenderDevice* device)
 {
     // Cost rule: an unengaged chain, the wrong output, or an output the
     // fullscreen gate covers costs one pointer comparison per output per frame
@@ -631,7 +631,7 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         if (m_cursorHidden && !newlyTaken) {
             // Last draw of the pass: the cursor, above everything, where
             // KWin's overlay item would have put it.
-            TransitionPass::drawSceneCursor(renderTarget, viewport);
+            TransitionPass::drawSceneCursor(renderTarget, viewport, device);
         }
     }
 }

@@ -31,6 +31,7 @@ class GLFramebuffer;
 class GLShader;
 class GLTexture;
 class LogicalOutput;
+class RenderDevice;
 class RenderTarget;
 class RenderViewport;
 }
@@ -180,8 +181,12 @@ public:
     /// the normal path only (a desktop transition or a strip leg replaces the
     /// output's paint and returns before this). A no-op for every output but
     /// the pointer's, and for a chain that is not live.
+    /// @p device is the render device of the pass being painted, needed only by
+    /// the `above`-layer cursor re-draw at the tail (KWin 6.8 keys ItemRenderers
+    /// by device). Passed in rather than looked up because this class holds no
+    /// back-pointer to the effect, per the note on the constructor above.
     void paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::LogicalOutput* screen);
+                     KWin::LogicalOutput* screen, KWin::RenderDevice* device);
 
     /// Keep a live chain ticking: one repaint of the damage rect on the
     /// pointer's output per frame. Called from postPaintScreen. When the

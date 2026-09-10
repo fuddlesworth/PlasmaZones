@@ -40,6 +40,7 @@
 // this block sits with the other project includes rather than after the Qt /
 // KDE ones (own header → project → KDE → Qt).
 #include "effect_state.h"
+#include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
 #include "types.h"
 
@@ -82,6 +83,7 @@
 namespace KWin {
 class SurfaceItem;
 class LogicalOutput;
+class RenderDevice;
 struct PointerMotionEvent;
 struct PointerButtonEvent;
 }
@@ -196,19 +198,47 @@ public:
     // a desktop blend replaces the scene wholesale, so a strip pass under it
     // would decorate a frame nobody sees. Otherwise this chains straight
     // through.
-    void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
-                     const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
-    void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                     KWin::WindowPaintData& data) override;
+    //
+    // KWin 6.8 turned the three paint hooks into bool: false means the paint
+    // FAILED (a GPU reset, typically) and upstream's contract is that the effect
+    // stops rendering immediately. 6.7 returns void and cannot report failure.
+    //
+    // So the overrides are ADAPTERS of KWinCompat::PaintResult (bool or void),
+    // and all the logic lives in the *Impl methods below, which always return
+    // bool and are compiled once for both versions. Each Impl returns the result
+    // of the call it chains into, and a false from that chain skips whatever this
+    // effect would otherwise have drawn afterwards — every one of those trailing
+    // steps issues raw GL against a context that may already be gone. A frame
+    // this effect deliberately replaces (a desktop or strip transition) is a
+    // SUCCESS and returns true. On 6.7 the chained calls always report success,
+    // so the failure arms are simply never taken there.
+    KWinCompat::PaintResult paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        int mask, const KWin::Region& deviceRegion,
+                                        KWin::LogicalOutput* screen) override;
+    KWinCompat::PaintResult paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                        KWin::WindowPaintData& data) override;
     // Border render path (implemented in decorations.cpp). A static bordered window
     // is rendered through the offscreen border shader PASSIVELY here: we bind the
     // border shader + push its uniforms, then let OffscreenEffect::drawWindow
     // re-blit the redirected FBO through it on EVERY composite (idle included),
     // with no FBO re-render and no forced per-frame repaints — the
     // KDE-Rounded-Corners model. paintWindow no longer touches the border.
-    void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
-                    int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
+    KWinCompat::PaintResult drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data) override;
+
+    /// The three paint hooks' actual bodies, version-independent: true when the
+    /// paint succeeded (or was deliberately skipped), false when the chained call
+    /// reported failure. See the override declarations above.
+    [[nodiscard]] bool paintScreenImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen);
+    [[nodiscard]] bool paintWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data);
+    [[nodiscard]] bool drawWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                      KWin::WindowPaintData& data);
     void grabbedKeyboardEvent(QKeyEvent* e) override;
     /// Pointer events delivered while this effect holds the mouse
     /// interception — which it does for exactly the span the pointer is over
@@ -274,6 +304,12 @@ protected:
     enum class ShaderBranchOutcome {
         Handled,
         Continue,
+        /// The branch's own present draw FAILED (KWin 6.8 onwards reports it; a
+        /// GPU reset in practice). Distinct from Handled because the caller must
+        /// report the failure out of paintWindow rather than treat the window as
+        /// painted, and distinct from Continue because the chain must not be
+        /// entered a second time after a failed draw.
+        Failed,
     };
 
     /// The shader-transition branch of paintWindow, extracted verbatim
@@ -1041,6 +1077,16 @@ private:
      */
     void paintScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                   const KWin::Region& deviceRegion);
+
+    /// The render device of the output pass currently executing, for the callers
+    /// that hand a scene item to an ItemRenderer themselves (KWin 6.8 keys those
+    /// renderers by device). Never guess one instead: guessing means the primary
+    /// GPU, which is the wrong renderer for an output rendering on a secondary one.
+    ///
+    /// Null both outside a pass bracket AND always on 6.7, which has no
+    /// render-device concept — so null does NOT mean "cannot draw"; pass it to
+    /// KWinCompat::sceneRenderer and let that decide. See m_currentPassView.
+    KWin::RenderDevice* currentPassRenderDevice() const;
 
     TilingHandler* tilingHandler() const
     {
@@ -2499,6 +2545,16 @@ private:
     /// m_capturingSnapshot instead. With the latch null the suppression does
     /// not engage (fails open).
     KWin::LogicalOutput* m_currentPassOutput = nullptr;
+    /// The RenderView of the pass named by m_currentPassOutput, latched and
+    /// cleared in the same two places for the same bracket. KWin 6.8 keeps one
+    /// ItemRenderer per RenderDevice rather than one per scene, and the view is
+    /// the only per-output route to that device — so anything drawing a scene
+    /// item by hand (currently just the cursor sprite) has to ask this pass's
+    /// view which device it is rendering on. Reading the compositor's PRIMARY
+    /// device instead would be wrong on a multi-GPU desktop, where an output can
+    /// render on a secondary one. Null under exactly the conditions
+    /// m_currentPassOutput is null.
+    KWin::RenderView* m_currentPassView = nullptr;
     /// Per-pass memo for scrollManagedOutputFor: prePaintWindow and
     /// paintWindow each probe the predicate for every window, and its chain
     /// (id lookup, tiled-bucket scan, float check, output resolve) is not

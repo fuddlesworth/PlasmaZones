@@ -5,6 +5,7 @@
 
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 #include "shadertransitionmanager.h"
 #include "transitionpasshelpers.h"
@@ -512,7 +513,19 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             const KWin::Region walkRegion(KWin::Rect(QPoint(), captureViewport.deviceSize()));
             const PlasmaZonesEffect::ScrollTabWalkScope walkScope(*m_effect, walkRegion,
                                                                   /*resetPaintedLatch=*/false);
-            KWin::effects->paintScreen(captureTarget, captureViewport, mask, walkRegion, screen);
+            // A failed walk (KWin 6.8 reports it) leaves the capture unusable,
+            // and this capture IS the presented frame. Give the frame up rather
+            // than decorating a cleared texture: returning false sends
+            // PlasmaZonesEffect::paintScreen down its normal fall-through, whose
+            // own effects->paintScreen result is checked there — so the failure
+            // still reaches KWin, without this internal bool having to carry a
+            // third state. The three scope guards above unwind the framebuffer
+            // push and both latches on the way out; the cursor hide is released
+            // the same way the re-seat failure below does it.
+            if (!KWinCompat::paintScreenChecked(captureTarget, captureViewport, mask, walkRegion, screen)) {
+                updateCursorHiding();
+                return false;
+            }
         }
         // No band window reached paintWindow's trigger (every column culled
         // as parked or foreign): the capture holds below-strip content only.
@@ -727,7 +740,9 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // Shared with the pointer decoration pass, which hides and re-draws the
     // cursor for the same reason, so the two renderItem calls cannot drift.
     if (m_cursorHidden && cursorOnOutput(screen)) {
-        TransitionPass::drawSceneCursor(renderTarget, viewport);
+        // This pass's own render device, read through the effect the same way
+        // m_currentPassOutput is above — we are inside that pass bracket here.
+        TransitionPass::drawSceneCursor(renderTarget, viewport, m_effect->currentPassRenderDevice());
     }
     return true;
 }

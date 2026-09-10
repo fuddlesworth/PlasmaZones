@@ -4,6 +4,18 @@
 # PlasmaZones KWin Effect (C++ Plugin) — requires KWin from Plasma 6.7+
 # (prePaintWindow(RenderView*,...), paintWindow(Region), no postPaintWindow).
 #
+# Builds against Plasma 6.7 AND 6.8. The two differ in the effect API at four
+# seams, all of them isolated in kwincompat.h and selected by the
+# PLASMAZONES_KWIN_PAINT_RETURNS_BOOL definition set below; no function body in
+# this tree is version-conditional. Both versions are supported because the
+# distro channels reach 6.8 weeks apart, and a source tree that only built
+# against 6.8 would leave every lagging channel with no package at all.
+# The 6.7 half comes OUT once every channel has shipped 6.8. What answers that is
+# .github/workflows/kwin-rebuild-watch.yml, which already queries each channel's
+# current KWin on a schedule (arch, debian-unstable, fedora-<N>,
+# opensuse-tumbleweed): when none of them still reports 6.7, delete kwincompat.h,
+# fold the *Impl bodies back into the overrides, and raise the floor to 6.7.90.
+#
 # Only included via add_subdirectory() from the top-level project; the
 # parent provides cmake_minimum_required, project(), ECM, and Qt. Calling
 # project() here would re-run compiler detection and double-include
@@ -46,7 +58,25 @@ if(KWin_FOUND AND KWin_DIR)
     string(REGEX MATCH "set\\(PACKAGE_VERSION \"([0-9.]+)\"\\)" _ "${_kwin_version_file}")
     if(CMAKE_MATCH_1)
         message(STATUS "PlasmaZones KWin effect: building against KWin ${CMAKE_MATCH_1} (plugin IID locked; rebuild when KWin updates)")
+        set(_pz_kwin_version "${CMAKE_MATCH_1}")
     endif()
+endif()
+
+# Which side of the paint-hook API change this KWin is on. 6.7.90 is Plasma 6.8
+# Beta 1, where paintScreen/paintWindow/drawWindow began returning bool to report
+# a failed paint instead of void, and Scene::renderer() began taking the
+# RenderDevice its ItemRenderer belongs to. kwincompat.h is the only place that
+# reads this; see the header of this file for when the 6.7 side is removed.
+#
+# An UNDETECTABLE version (no KWinConfigVersion.cmake, or a format change in it)
+# falls to the 6.7 signatures and fails loudly at compile time on a 6.8 tree,
+# rather than being silently assumed either way.
+set(PZ_KWIN_PAINT_RETURNS_BOOL 0)
+if(_pz_kwin_version AND _pz_kwin_version VERSION_GREATER_EQUAL 6.7.90)
+    set(PZ_KWIN_PAINT_RETURNS_BOOL 1)
+    message(STATUS "PlasmaZones KWin effect: Plasma 6.8 paint API (bool paint hooks, per-device ItemRenderer)")
+else()
+    message(STATUS "PlasmaZones KWin effect: Plasma 6.7 paint API (void paint hooks, single ItemRenderer)")
 endif()
 
 # Tell AutoMoc about KWin's effect factory macro (suppresses false positive warning)
@@ -167,6 +197,7 @@ set(plasmazones_effect_SRCS
     compositor/compositorbridge.cpp
     compositor/compositorbridge.h
     compositor/effectlogging.h
+    kwincompat.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro
@@ -175,6 +206,11 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
     SOURCES ${plasmazones_effect_SRCS}
     INSTALL_NAMESPACE "kwin/effects/plugins"
 )
+
+# Read only by kwincompat.h, which is where every 6.7-vs-6.8 API difference in
+# this tree lives. PRIVATE: nothing outside the plugin includes that header.
+target_compile_definitions(kwin_effect_plasmazones
+    PRIVATE PLASMAZONES_KWIN_PAINT_RETURNS_BOOL=${PZ_KWIN_PAINT_RETURNS_BOOL})
 
 # Keep the epoxy TU out of the Unity (jumbo) build (root sets CMAKE_UNITY_BUILD
 # ON). snapassistthumbnailcapture.cpp must include epoxy/gl.h before any other

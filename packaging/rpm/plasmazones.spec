@@ -2,7 +2,7 @@
 # Window snapping, tiling and scrolling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+). Builds against 6.7 and 6.8.
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-44-x86_64 plasmazones-3.3.0-1.fc44.src.rpm
@@ -102,7 +102,8 @@ BuildRequires:  kf6-kcolorscheme-devel >= 6.26.0
 BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
-# Plasma 6.7 / KWin 6.7 (effect API)
+# Plasma 6.7 / KWin 6.7 (effect API). 6.8 (KWin 6.7.90) builds too: the effect
+# adapts to either paint-hook signature at compile time, see kwin-effect/kwincompat.h.
 # The KWin effect plugin's IID embeds KWin's exact upstream version
 # (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
 # to load any effect whose IID doesn't match its own version string — even

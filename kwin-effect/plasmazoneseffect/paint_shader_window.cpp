@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "compositor/compositorclock.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -969,7 +970,10 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // window is bound to this effect via `redirect()`/`setShader()`,
         // so the chain still reaches our OffscreenEffect::drawWindow
         // override — just once, with the iterator correct.
-        KWin::effects->drawWindow(renderTarget, viewport, w, mask, drawRegion, data);
+        // Result carried past the unbind hygiene below rather than returned
+        // here: a failed draw is exactly when leaving our textures bound on
+        // TEXTURE1+ would be worst for the next effect in the chain.
+        const bool drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w, mask, drawRegion, data);
         // Hygiene: unbind our user textures from TEXTURE1+. Each
         // effect in the chain assumes TEXTURE0 is the only active
         // unit; leaving stale binds risks the next effect inheriting
@@ -1013,7 +1017,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         glActiveTexture(GL_TEXTURE0);
-        return ShaderBranchOutcome::Handled;
+        return drawn ? ShaderBranchOutcome::Handled : ShaderBranchOutcome::Failed;
     }
     // Expiry fall-through: the transition is past its duration but
     // still installed. Tearing it down synchronously here would

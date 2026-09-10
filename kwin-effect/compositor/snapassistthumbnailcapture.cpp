@@ -3,6 +3,7 @@
 
 #include "snapassistthumbnailcapture.h"
 
+#include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -422,21 +423,31 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                 // PlasmaZonesEffect::drawWindow, which strips decorations — a
                 // thumbnail wants them (see desktoptransitioncapture.cpp for the
                 // history of getting this wrong in both directions).
-                KWin::effects->drawWindow(renderTarget, viewport, w,
-                                          KWin::Effect::PAINT_WINDOW_TRANSFORMED
-                                              | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
-                                          KWin::Region::infinite(), data);
+                const bool drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w,
+                                                                 KWin::Effect::PAINT_WINDOW_TRANSFORMED
+                                                                     | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
+                                                                 KWin::Region::infinite(), data);
                 KWin::GLFramebuffer::popFramebuffer();
                 if (trace) {
                     trace->renderUs = stage.nsecsElapsed() / 1000;
                     stage.start();
                 }
 
-                // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
-                // origin is bottom-left, so flip to a top-down QImage.
-                result = texture->toImage().flipped(Qt::Vertical);
-                if (trace) {
-                    trace->readbackUs = stage.nsecsElapsed() / 1000;
+                // KWin 6.8 reports a failed draw (a GPU reset, typically) instead
+                // of leaving it to be inferred. Skipping the readback leaves
+                // `result` null, which the isNull() check below already treats as
+                // a capture failure — the same route fbo.valid() takes above. This
+                // is the one case isFullyTransparent could not separate: a reset
+                // reads back as a valid, fully transparent image, indistinguishable
+                // from "no renderable frame yet" and so retried forever. Now it is
+                // a failure outright.
+                if (drawn) {
+                    // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
+                    // origin is bottom-left, so flip to a top-down QImage.
+                    result = texture->toImage().flipped(Qt::Vertical);
+                    if (trace) {
+                        trace->readbackUs = stage.nsecsElapsed() / 1000;
+                    }
                 }
             }
         }
@@ -566,11 +577,20 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     KWin::WindowPaintData data;
     QElapsedTimer stage;
     stage.start();
-    KWin::effects->drawWindow(renderTarget, viewport, w,
-                              KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
-                              KWin::Region::infinite(), data);
+    const bool drawn = KWinCompat::drawWindowChecked(
+        renderTarget, viewport, w, KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
+        KWin::Region::infinite(), data);
 
     KWin::GLFramebuffer::popFramebuffer();
+
+    // Failed draw (KWin 6.8 onwards reports it): bail the same way an incomplete
+    // FBO does above, and for the same reason — the blit below would ship a
+    // cleared or uninitialised buffer to the daemon as a thumbnail. Popped first,
+    // so the framebuffer stack is balanced on this path too.
+    if (!drawn) {
+        qCDebug(lcSnapAssistCapture) << "renderWindowToExportTexture: draw failed, discarding capture";
+        return nullptr;
+    }
 
     // Clear the export texture BEFORE the blit: allocate() leaves its content
     // undefined, and exporting a texture the blit failed to write would ship

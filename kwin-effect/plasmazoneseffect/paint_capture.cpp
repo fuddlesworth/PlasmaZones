@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "compositor/compositorclock.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -379,6 +380,7 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     auto resetCapture = qScopeGuard([this] {
         m_capturingSnapshot = false;
     });
+    bool drawn = false;
     {
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
@@ -397,13 +399,24 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         // KWin's draw-chain iterator is advanced correctly — same rationale as
         // the on-screen draw paths. The re-entrant paintWindow short-circuits on
         // m_capturingSnapshot and draws the window plainly into this FBO.
-        KWin::effects->drawWindow(renderTarget, viewport, src, captureMask, KWin::Region::infinite(), captureData);
+        drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, src, captureMask, KWin::Region::infinite(),
+                                              captureData);
         KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
 
     setShader(src, srcShader);
+
+    // The capture draw failed (KWin 6.8 reports it). Leave transition.oldSnapshot
+    // null: a leg with no old snapshot is an already-supported state (every bind
+    // site tests it), whereas handing it a cleared texture would play the whole
+    // transition against a black source. Placed AFTER the shader restore above,
+    // which has to happen on this path too — the source's slot was cleared for
+    // the capture and nothing else puts it back.
+    if (!drawn) {
+        return;
+    }
 
     if (foreignSrc) {
         // The raw draw ran at setOpacity(1.0), so nothing is baked in: record

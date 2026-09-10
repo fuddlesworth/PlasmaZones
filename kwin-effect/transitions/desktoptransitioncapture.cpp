@@ -5,6 +5,7 @@
 
 #include "compositor/scrolltabindicatorpainter.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 #include "transitionpasshelpers.h"
 
@@ -288,7 +289,15 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
         {
             const KWin::Region walkRegion(KWin::Rect(QPoint(), viewport.deviceSize()));
             const PlasmaZonesEffect::ScrollTabWalkScope walkScope(*m_effect, walkRegion, /*resetPaintedLatch=*/true);
-            KWin::effects->paintScreen(renderTarget, viewport, mask, walkRegion, screen);
+            // A failed scene paint (KWin 6.8 reports it; a GPU reset in
+            // practice) leaves the FBO cleared or half-written, and this
+            // texture is one endpoint of a blend the switch plays for its whole
+            // duration — so abandon the capture the same way an unusable FBO
+            // does above, rather than animating to a black desktop. The scope
+            // guard pops the framebuffer on the way out.
+            if (!KWinCompat::paintScreenChecked(renderTarget, viewport, mask, walkRegion, screen)) {
+                return nullptr;
+            }
         }
     }
     return tex;
@@ -387,7 +396,12 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
             // captureLiveScene.
             const KWin::Region walkRegion(KWin::Rect(QPoint(), viewport.deviceSize()));
             const PlasmaZonesEffect::ScrollTabWalkScope walkScope(*m_effect, walkRegion, /*resetPaintedLatch=*/true);
-            KWin::effects->paintScreen(renderTarget, viewport, mask, walkRegion, screen);
+            // Abandon the capture on a failed paint, as captureLiveScene does
+            // and for the same reason: this texture is a peek endpoint held for
+            // the length of the animation.
+            if (!KWinCompat::paintScreenChecked(renderTarget, viewport, mask, walkRegion, screen)) {
+                return nullptr;
+            }
         }
 
         // Layer 2: the hidden windows, bottom-to-top in stacking order through
