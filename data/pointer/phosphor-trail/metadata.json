@@ -7,7 +7,7 @@
     "category": "Trail",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 96,
+    "reachParam": "reach",
     "trailSeconds": 2.0,
     "trailWindowParam": "lifetime",
     "parameters": [
@@ -37,6 +37,15 @@
             "min": 0.0,
             "max": 3.0,
             "description": "Strength of the soft bloom around the core, 0 to leave only the core"
+        },
+        {
+            "id": "reach",
+            "name": "Reach",
+            "type": "float",
+            "default": 96.0,
+            "min": 16.0,
+            "max": 256.0,
+            "description": "How far the glow may paint from the path (px). Lower it to shrink the area redrawn each frame, raise it if a wide stroke's bloom looks cut off"
         },
         {
             "id": "colorCycle",

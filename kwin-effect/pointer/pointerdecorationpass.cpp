@@ -176,6 +176,16 @@ void PointerDecorationPass::rebuildChain()
         // Resolved against THIS layer's parameter overrides, so shortening a
         // tail in the settings app buys a finer stroke for it rather than
         // leaving the slots spread across a length nobody asked for.
+        //
+        // Only in a chain of one, though. The ring is shared and there is one
+        // spacing for all of it, so this max() means the LONGEST window in the
+        // chain sets the spacing every pack lives with: shortening a tail buys
+        // that pack nothing while a longer-window pack is present, and a pack
+        // whose own window is much shorter than the chain's longest is left
+        // with only a handful of live samples. The settings preview runs each
+        // pack on its own history, so it never shows that. Packs are expected
+        // to derive what they can from TIME rather than from a slot count for
+        // this reason -- see the charge pack's header.
         m_sampleWindowSeconds = std::max(m_sampleWindowSeconds, eff.resolvedTrailWindow(parameters));
         if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
             m_anyAboveLayer = true;

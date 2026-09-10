@@ -9,7 +9,7 @@
     "layer": "below",
     "reachParam": "reach",
     "trailSeconds": 0.8,
-    "trailWindowParam": "length",
+    "trailWindowParam": "lifetime",
     "parameters": [
         {
             "id": "width",
@@ -30,8 +30,8 @@
             "description": "How far the glow around the head and tail may extend from the path, and how far a click burst is thrown (px)"
         },
         {
-            "id": "length",
-            "name": "Tail length",
+            "id": "lifetime",
+            "name": "Lifetime",
             "type": "float",
             "default": 0.5,
             "min": 0.1,

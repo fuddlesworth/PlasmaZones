@@ -68,7 +68,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float life = clamp(p_life, 0.15, 0.9);
+    float lifetime = clamp(p_lifetime, 0.15, 0.9);
     float radius = max(p_size, 0.5) * scale;
     // The reach the host resolved from the `reach` parameter, in device px,
     // read from the uniform so the damage rect and the shader cannot drift.
@@ -77,7 +77,7 @@ vec4 pPointer(vec2 uv) {
     // Ballistic envelope, then the shrink factor that keeps it inside reach.
     float speed = max(p_speed, 0.0) * scale;
     float gravity = max(p_gravity, 0.0) * scale;
-    float travel = speed * life + 0.5 * gravity * life * life;
+    float travel = speed * lifetime + 0.5 * gravity * lifetime * lifetime;
     // The bit's own drawn extent comes out of the budget, floored at a share
     // of the reach: at the smallest reach and the largest bit the bare
     // subtraction left two pixels of travel, which froze the spray on the
@@ -92,7 +92,7 @@ vec4 pPointer(vec2 uv) {
     float alpha = 0.0;
 
     float sincePress = pointerSincePress();
-    if (uPointerPress.w > 0.5 && sincePress < life) {
+    if (uPointerPress.w > 0.5 && sincePress < lifetime) {
         vec2 rel = px - uPointerPress.xy;
         if (abs(rel.x) <= reach && abs(rel.y) <= reach) {
             vec2 seed = floor(uPointerPress.xy * 0.5);
@@ -102,17 +102,17 @@ vec4 pPointer(vec2 uv) {
                     break;
                 }
                 vec3 h = hash23(seed + vec2(float(i) * 5.77, float(i) * 2.19));
-                float a = bitCoverage(rel, h, i, count, speed, gravity, sincePress, life, radius) * c.a;
+                float a = bitCoverage(rel, h, i, count, speed, gravity, sincePress, lifetime, radius) * c.a;
                 rgb += c.rgb * a;
                 alpha += a;
             }
         }
     }
 
-    // The release spray: fewer bits, six tenths of the life, slower off the
+    // The release spray: fewer bits, six tenths of the lifetime, slower off the
     // mark, so it reads as an echo of the press rather than a second event.
     float release = clamp(p_releaseSpray, 0.0, 1.0);
-    float releaseLife = life * 0.6;
+    float releaseLife = lifetime * 0.6;
     int releaseCount = int(float(count) * 0.5 * release + 0.5);
     float sinceRelease = pointerSinceRelease();
     if (releaseCount > 0 && uPointerRelease.w > 0.5 && sinceRelease < releaseLife) {

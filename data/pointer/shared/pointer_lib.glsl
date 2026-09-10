@@ -49,10 +49,10 @@ float pointerReach() {
 }
 
 // The standard falloff across a pack's reach: 1 at the sample, 0 at the edge,
-// with the last fifth of the radius as the feather. Four packs had this
-// spelled out inline; keeping it here is what makes the reach contract one
-// rule rather than four copies, and gives the edge-case floor above a single
-// place to matter.
+// with the last fifth of the radius as the feather. The packs that measure
+// against the reach had this spelled out inline. Keeping it here is what makes
+// the reach contract one rule rather than a copy per pack, and gives the
+// edge-case floor above a single place to matter.
 float pointerReachWindow(float d, float reach) {
     return 1.0 - smoothstep(reach * 0.8, reach, d);
 }
@@ -143,10 +143,16 @@ float pointerSpeedGate(float speed, float activationSpeed) {
 // at `px`: true when `px` lies outside the box of the RAW samples i-1..i+2
 // (clamped into the filled window, as pointerSmoothedAt clamps them)
 // inflated by `inflate`. A smoothed sample is a convex blend of its raw
-// neighbours, so the smoothed segment lies inside that box; the test is
-// exact and never clips, and it costs four raw reads where the smoothing
-// lookup would cost six. `a` and `b` are the raw samples i and i+1 the
-// caller already holds.
+// neighbours, so the smoothed segment lies inside that box; for a STRAIGHT
+// segment the test is exact and never clips, and it costs four raw reads
+// where the smoothing lookup would cost six. `a` and `b` are the raw samples
+// i and i+1 the caller already holds.
+//
+// A CURVED span is NOT contained in this box. A caller tracing
+// pointerCurveDistanceFrom MUST add pointerCurveBulge(c0, c1, c2, c3) to
+// `inflate`, or the curve is culled where it genuinely covers the fragment
+// and the stroke is clipped on exactly the rounded corners the curve exists
+// to draw.
 bool pointerSegmentOutside(vec2 px, int i, int count, vec4 a, vec4 b, float inflate) {
     vec2 rawPrev = pointerTrailAt(max(i - 1, 0)).xy;
     vec2 rawNext = pointerTrailAt(min(i + 2, count - 1)).xy;
@@ -161,19 +167,48 @@ bool pointerSegmentOutside(vec2 px, int i, int count, vec4 a, vec4 b, float infl
 // filled window, so a sample at either end cannot pull an unfilled entry at
 // the canvas origin into the average.
 //
+// The neighbours are weighted by INVERSE TIME DISTANCE, not equally.
+//
+// The gaps either side of a sample are not the same size. The ring's spacing
+// is uniform in time, but the HEAD is refreshed in place between appends, so
+// the newest gap is whatever fraction of the interval has passed rather than a
+// whole one, and the run shortens at the tail as samples age out. An
+// equal-weight kernel drags a sample toward whichever neighbour is further
+// away in time, which is the one that says least about where the pointer
+// actually went.
+//
+// It matters most at the head, where the near gap can be a fraction of a
+// millisecond: index 0 is where the pointer IS, and equal weights dragged it a
+// quarter of the way toward the sample behind it, putting the stroke visibly
+// behind the cursor. Here a clamped end neighbour is the sample itself, so its
+// time distance is zero, it takes essentially all the weight, and the endpoint
+// is left alone.
+//
+// The strength is unchanged: the old kernel is exactly this one with both
+// weights equal, so `smoothing` means what it always meant, and on the evenly
+// spaced interior the two agree.
+//
 // Every pack that smooths a path MUST come through here rather than rolling
 // its own kernel: two packs in one chain tracing visibly different curves
 // from the same pointer would read as a bug.
 vec2 pointerSmoothedAt(int i, int count, float smoothing) {
     int last = max(clamp(count, 0, kPointerTrailCapacity) - 1, 0);
-    vec2 here = pointerTrailAt(clamp(i, 0, last)).xy;
+    vec4 here = pointerTrailAt(clamp(i, 0, last));
     float s = clamp(smoothing, 0.0, 1.0);
     if (s <= 0.0) {
-        return here;
+        return here.xy;
     }
-    vec2 prev = pointerTrailAt(clamp(i - 1, 0, last)).xy;
-    vec2 next = pointerTrailAt(clamp(i + 1, 0, last)).xy;
-    return mix(here, (prev + here * 2.0 + next) * 0.25, s);
+    vec4 prev = pointerTrailAt(clamp(i - 1, 0, last));
+    vec4 next = pointerTrailAt(clamp(i + 1, 0, last));
+    // Ages are seconds and run newest-first, so index i - 1 is the YOUNGER
+    // neighbour. Both gaps carry a small floor: a clamped end neighbour has a
+    // gap of exactly zero, and the weights divide by these.
+    float dtPrev = max(here.z - prev.z, 0.0) + 1e-4;
+    float dtNext = max(next.z - here.z, 0.0) + 1e-4;
+    // Weight w = 1/dt on each side, normalised. Written multiplied through by
+    // dtPrev * dtNext so it costs one divide rather than three.
+    vec2 mean = (prev.xy * dtNext + next.xy * dtPrev) / (dtPrev + dtNext);
+    return mix(here.xy, (here.xy + mean) * 0.5, s);
 }
 
 // pointerSegmentDistance over the smoothed path: distance from `p` to the
@@ -186,6 +221,152 @@ vec2 pointerSmoothedAt(int i, int count, float smoothing) {
 float pointerSmoothSegmentDistance(vec2 p, int i, int count, float smoothing, out float t) {
     return pointerSegmentDistanceFrom(p, pointerSmoothedAt(i, count, smoothing),
                                       pointerSmoothedAt(i + 1, count, smoothing), t);
+}
+
+// ── Curved path ─────────────────────────────────────────────────────────────
+//
+// WHY THIS EXISTS. The history is spaced by the pack's trail window over
+// kPointerTrailCapacity slots (PointerHistory::setTrailSeconds), so at the
+// usual 0.9 s window one sample lands every 30 ms (the spacing is a ceil of
+// window / 31, so 0.9 s rounds up from 29.03). Sweep the pointer at
+// 1500 px/s and consecutive samples are 45 px apart, and a pack that strokes
+// straight segments between them draws exactly that: a chain of long straight
+// chords meeting at angular corners. The faster the hand moves the more
+// obviously the stroke is a polygon, which is the one artefact every path
+// pack in this family shared.
+//
+// pointerSmoothedAt does not fix it and was never meant to. It MOVES the
+// vertices to denoise a shaky hand; it does not add any, so the path keeps
+// the same corner count and the corners stay corners.
+//
+// The curve is a Catmull-Rom spline through the smoothed samples, walked as
+// kPointerCurveSteps straight pieces. It INTERPOLATES the samples, so the
+// stroke still passes through where the pointer actually was — a B-spline
+// would have guaranteed hull containment for free but cuts corners visibly,
+// and a trail that does not go where the pointer went is a worse bug than a
+// faceted one.
+//
+// Every path pack MUST trace the path through here, for the reason
+// pointerSmoothedAt gives: two packs in one chain drawing visibly different
+// curves from the same pointer would read as a bug.
+
+// Straight pieces per span. Four is where the faceting stops being visible at
+// the spacing above; the cost is per span per fragment, behind the caller's
+// reject box, so this is not free and should not be raised casually. The
+// price is concrete: a span that survives the cull costs four
+// pointerSegmentDistanceFrom calls plus three pointerCurvePoint evaluations
+// where the straight-segment path this replaced cost one call, so roughly
+// four to five times the inner loop, on seven packs, per fragment, per frame.
+//
+// This is the one quantity in the curve path that does NOT scale, and the
+// spacing it was measured against is a SCALE-1 figure. Everything the curve is
+// judged against -- half width, sigma, the bulge, the reach -- is in device px
+// and grows with the display, while the chords the four pieces divide grow
+// too, so each piece covers twice the device px on a 2x output. The faceting
+// is therefore at its worst on HiDPI, which is the opposite of what the
+// paragraph above reads like. Deriving the count from the chord length would
+// fix that at the price of a non-constant loop bound on seven packs, so it is
+// left alone deliberately rather than by omission.
+const int kPointerCurveSteps = 4;
+// Catmull-Rom tension. The textbook value is 0.5; this is half of it, which
+// halves how far the curve can bulge outside the box of its four control
+// points (see pointerCurveBulge) while still visibly rounding the corners.
+// The overshoot is what the reject boxes and the reach budget have to pay
+// for, so it is bought deliberately and cheaply.
+const float kPointerCurveTension = 0.25;
+
+// The most the span c1..c2 can leave the box of its two ENDPOINTS c1 and c2,
+// in the same px the points are in. A Catmull-Rom span is a cubic whose
+// Hermite tangents are the tension times the neighbour chords, and the Bezier
+// control points it is equivalent to sit one third of a tangent off each
+// endpoint, so this bounds the hull the curve is guaranteed to stay inside.
+//
+// The two-endpoint reading is the load-bearing one, not a four-point one.
+// pointerSegmentOutside builds its box from the RAW samples i-1..i+2, which
+// contains c1 and c2 (each a convex blend of raw neighbours inside that
+// window) but NOT c0 and c3, whose blends reach raw i-2 and i+3. The
+// neighbours enter only through the tangent magnitudes, which is precisely
+// what this bound measures, so raw box + this value does contain the curve.
+// Read as a four-point guarantee the cull looks unsound and someone widens a
+// box that seven packs pay for per span per fragment. Hand it to
+// pointerSegmentOutside on top of the caller's own inflate, or a fragment the
+// curve genuinely covers can be culled and the stroke clipped.
+float pointerCurveBulge(vec2 c0, vec2 c1, vec2 c2, vec2 c3) {
+    // Component max, not length(). Every caller hands this to an AXIS-ALIGNED
+    // box, so the bound only has to cover each axis separately, and the
+    // excursion along an axis is at most a third of that axis's component of
+    // the longer tangent. That is both cheaper -- this is evaluated for every
+    // span for every fragment, ahead of the cull it feeds, so two sqrt here
+    // are two sqrt on the cheap path of seven packs -- and TIGHTER, because a
+    // vector's largest component never exceeds its length.
+    vec2 t1 = abs(c2 - c0);
+    vec2 t2 = abs(c3 - c1);
+    return kPointerCurveTension * (1.0 / 3.0) * max(max(t1.x, t1.y), max(t2.x, t2.y));
+}
+
+// Advance the four-point control window by one span.
+//
+// Every path pack walks its run with the same rolling window named c0..c3, and
+// has to shift it at EVERY exit from an iteration -- the cull's continue, the
+// stationary-pair continue, and the fall-through. That was twenty copies of
+// four assignments across seven packs, where dropping one line desynchronises
+// the window from the span with no compile error and no symptom beyond a
+// subtly wrong curve. One name, so a site is either right or absent.
+//
+// A macro rather than a function because the window lives in the caller's
+// locals. GLSL `inout` would work but would name the four points twice at
+// every site, which is the thing being removed.
+//
+// It expands to four statements, so it needs a braced body: never write it as
+// the whole of a brace-less `if`, or only the first assignment is conditional.
+#define pointerCurveAdvance(nextIndex, live, smoothing) \
+    c0 = c1;                                           \
+    c1 = c2;                                           \
+    c2 = c3;                                           \
+    c3 = pointerSmoothedAt((nextIndex), (live), (smoothing))
+
+// Point at `t` in 0..1 along the Catmull-Rom span between c1 and c2, with c0
+// and c3 the neighbours that set the tangents. A caller at either end of the
+// run passes the endpoint twice, which makes that end's tangent the chord
+// itself (m = tension * (c2 - c1), not zero), so the span leaves the endpoint
+// straight rather than curling back into a run that is not there.
+vec2 pointerCurvePoint(vec2 c0, vec2 c1, vec2 c2, vec2 c3, float t) {
+    vec2 m1 = kPointerCurveTension * (c2 - c0);
+    vec2 m2 = kPointerCurveTension * (c3 - c1);
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return (2.0 * t3 - 3.0 * t2 + 1.0) * c1 + (t3 - 2.0 * t2 + t) * m1
+           + (-2.0 * t3 + 3.0 * t2) * c2 + (t3 - t2) * m2;
+}
+
+// Nearest distance from `p` to the Catmull-Rom span between c1 and c2, with
+// `t` the normalised position along the WHOLE span (0 at c1, 1 at c2) of the
+// closest point found. The counterpart of pointerSegmentDistanceFrom, and a
+// drop-in for it in a pack that already carries its own endpoints: the
+// straight-segment call becomes this one with the two neighbours added.
+//
+// `t` is the piecewise-linear parameter, not arc length. Callers use it to
+// interpolate the endpoint AGES and per-sample SPEEDS across the span, where
+// the two differ by less than a frame. It is never a distance.
+float pointerCurveDistanceFrom(vec2 p, vec2 c0, vec2 c1, vec2 c2, vec2 c3, out float t) {
+    float best = 1e9;
+    t = 0.0;
+    vec2 prev = c1;
+    for (int k = 1; k <= kPointerCurveSteps; ++k) {
+        float tk = float(k) / float(kPointerCurveSteps);
+        // The last piece ends exactly on c2 rather than on the basis evaluated
+        // at 1, so consecutive spans cannot leave a hairline gap between them
+        // from floating-point drift at the join.
+        vec2 next = (k == kPointerCurveSteps) ? c2 : pointerCurvePoint(c0, c1, c2, c3, tk);
+        float sub;
+        float d = pointerSegmentDistanceFrom(p, prev, next, sub);
+        if (d < best) {
+            best = d;
+            t = (float(k - 1) + sub) / float(kPointerCurveSteps);
+        }
+        prev = next;
+    }
+    return best;
 }
 
 // Seconds since the pointer last moved.
@@ -258,7 +439,7 @@ vec4 premulAccumulated(vec3 rgb, float alpha) {
         return vec4(0.0);
     }
     float clamped = min(alpha, 1.0);
-    return vec4(rgb * (clamped / alpha), clamped);
+    return vec4(clamp(rgb * (clamped / alpha), 0.0, clamped), clamped);
 }
 
 // Pointer speed with the per-sample jitter filtered out, in px/s.

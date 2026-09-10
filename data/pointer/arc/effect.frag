@@ -7,6 +7,16 @@
 // the straight line by a hashed amount, so the arc reads as a crooked spark
 // rather than a curve.
 //
+// NOT ON THE SHARED CURVE, and deliberately. Every other pack that draws
+// along the path traces the Catmull-Rom curve in pointer_lib.glsl, because a
+// straight chord between two samples 45 px apart reads as a polygon. Arc is
+// exempt on both counts: a lightning bolt is not meant to be smooth, and an
+// arc spans a randomly chosen one to four samples rather than one, so the
+// per-span curve helper does not apply to it without restructuring the whole
+// walk. It also reads RAW samples rather than pointerSmoothedAt, and declares
+// no `smoothing` parameter, for the same reason. If this ever draws a smooth
+// stroke, it must come onto pointerCurveDistanceFrom with the rest.
+//
 // DETERMINISM: a trail arc's endpoints and its whole jag pattern come from a
 // hash of the ROLL INDEX, floor(iTime * rate), and the arc index. Every
 // frame inside one roll window therefore draws the identical arc and the
