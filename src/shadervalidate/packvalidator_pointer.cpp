@@ -318,9 +318,16 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
     QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
                                                                          includePaths, &err);
     if (src.isEmpty()) {
+        // The resolver returns empty for any failure — a missing file, an
+        // unreadable one, a malformed directive, a cycle. Naming the
+        // angle-versus-quoted case as THE cause sent an author with a simple
+        // typo off changing bracket style, so it is offered as the likely
+        // explanation rather than asserted, and the resolver's own message
+        // leads.
         out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
-            << "expands it (an angle include of a pack-local file resolves only in the preview; use the quoted "
-            << "form): " << err << "\n";
+            << "expands it: " << err
+            << "\n    (if the file sits beside this one, note that the compositor resolves an angle include only "
+            << "against the registry roots; the quoted form is the pack-local one)\n";
         return 1;
     }
     if (scaffold) {
@@ -662,17 +669,47 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         static const QRegularExpression kMirror(
             QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*|#\\s*define\\s+kTrailSeconds\\s+)"
                            "([0-9]+\\.?[0-9]*|\\.[0-9]+)"));
+        // A declaration the value pattern cannot capture (an expression, a
+        // named constant, an exponent form) would otherwise slip through with
+        // no diagnostic at all, which is worse than a mismatch: the author
+        // believes the mirror is being checked. Count the declarations and the
+        // captures separately, and report the shortfall.
+        static const QRegularExpression kMirrorToken(
+            QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=|#\\s*define\\s+kTrailSeconds\\b)"));
+        int declaredMirrors = 0;
+        auto tokens = kMirrorToken.globalMatch(allStages);
+        while (tokens.hasNext()) {
+            tokens.next();
+            ++declaredMirrors;
+        }
+        int capturedMirrors = 0;
         auto matches = kMirror.globalMatch(allStages);
         while (matches.hasNext()) {
             const QRegularExpressionMatch m = matches.next();
+            ++capturedMirrors;
             const double mirrored = m.captured(1).toDouble();
             if (std::abs(mirrored - eff.trailSeconds) > 1e-6) {
+                // eff.trailSeconds is the CLAMPED value, which is the right
+                // one to compare against because it is what the pack runs on.
+                // It is the wrong one to quote back when the two differ: an
+                // author who wrote 90 was being told their metadata said 60.
+                const double declared = root.value(QLatin1String("trailSeconds")).toDouble(eff.trailSeconds);
+                const QString metadataText = std::abs(declared - eff.trailSeconds) > 1e-6
+                    ? QStringLiteral("%1 in the metadata (clamped to %2 at load)").arg(declared).arg(eff.trailSeconds)
+                    : QStringLiteral("%1 in the metadata").arg(eff.trailSeconds);
                 lints << QStringLiteral(
-                             "kTrailSeconds is %1 in the shader but trailSeconds is %2 in the metadata "
+                             "kTrailSeconds is %1 in the shader but trailSeconds is %2 "
                              "(the pack fades against the wrong window)")
                              .arg(mirrored)
-                             .arg(eff.trailSeconds);
+                             .arg(metadataText);
             }
+        }
+        if (declaredMirrors > capturedMirrors) {
+            lints << QStringLiteral(
+                         "kTrailSeconds is declared %1 time(s) but only %2 could be read as a plain number, so "
+                         "the rest are NOT checked against the metadata (write the mirror as a decimal literal)")
+                         .arg(declaredMirrors)
+                         .arg(capturedMirrors);
         }
     }
 
@@ -805,6 +842,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // Raw again: fromJson caps the pass count, skips empty entries, clamps
     // bufferScale and fail-closes multipass entirely on a missing buffer.
     const bool declaredMultipass = root.value(QLatin1String("multipass")).toBool(false);
+    const bool declaredFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     const QJsonArray declaredBuffers = root.value(QLatin1String("bufferShaders")).toArray();
     if (declaredMultipass) {
         if (declaredBuffers.isEmpty()) {
@@ -866,7 +904,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                     "multipass is true but the main fragment never samples an iChannel (every buffer pass "
                     "is drawn and nothing reads it)");
             }
-            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && !readsAnyChannel(bufferText)) {
+            if (declaredFeedback && !readsAnyChannel(bufferText)) {
                 lints << QStringLiteral(
                     "bufferFeedback is true but no buffer pass samples an iChannel (its previous frame is "
                     "bound and never read, so nothing persists)");
@@ -875,14 +913,17 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             // cleared target per frame and keeps a feedback pair only for the
             // single-buffer path, so a two-pass feedback pack persists on the
             // compositor and starts from black in the browser every frame.
-            // Counted over the entries that survive the load: an empty entry
-            // is dropped there (and linted above), so it must not turn a
-            // single-pass pack into a two-pass one here.
-            const auto livePasses =
+            // Counted over the entries that survive the load, which means both
+            // filters fromJson applies: an empty entry is dropped there (and
+            // linted above), and everything past kMaxBufferPasses is dropped
+            // too. Without the cap a pack declaring three non-empty buffers
+            // was told it had three passes when only two ever run.
+            const auto nonEmpty =
                 std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
                     return !v.toString().isEmpty();
                 });
-            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && livePasses > 1) {
+            const auto livePasses = std::min<qsizetype>(nonEmpty, PointerShaderContract::kMaxBufferPasses);
+            if (declaredFeedback && livePasses > 1) {
                 lints << QStringLiteral(
                              "bufferFeedback with %1 buffer passes persists on the compositor only: the settings "
                              "preview keeps a previous frame for a single buffer pass, so the browser shows this "
@@ -896,7 +937,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         if (!declaredBuffers.isEmpty()) {
             lints << QStringLiteral("bufferShaders declared without `multipass: true` (ignored at load)");
         }
-        if (root.value(QLatin1String("bufferFeedback")).toBool(false)) {
+        if (declaredFeedback) {
             lints << QStringLiteral("bufferFeedback declared without `multipass: true` (ignored at load)");
         }
     }

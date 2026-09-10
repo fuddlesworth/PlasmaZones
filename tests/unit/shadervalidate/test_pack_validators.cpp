@@ -1181,6 +1181,106 @@ private Q_SLOTS:
             QVERIFY2(
                 r.report.contains(QStringLiteral("samples uCursorSprite but the pack does not declare `needsCursor`")),
                 qPrintable(r.report));
+
+            // The other direction had no fixture at all, so deleting its
+            // branch left the suite green.
+            QJsonObject unused = pointerPackWithGate(QStringLiteral("pt-cursor-unused"), 0.0);
+            unused.insert(QStringLiteral("needsCursor"), true);
+            const PackResult u = validatePointer(tmp, QStringLiteral("pt-cursor-unused"), unused, body);
+            QVERIFY2(u.report.contains(QStringLiteral("needsCursor is declared but no stage samples uCursorSprite")),
+                     qPrintable(u.report));
+        }
+        {
+            // The multipass and feedback channel rules: a pack that draws
+            // buffers nothing reads, and a feedback pack whose buffer never
+            // reads its own channel. Neither had a fixture, so both branches
+            // could be deleted with the suite staying green.
+            QJsonObject obj = pointerPack(
+                QStringLiteral("pt-mp-nochannel"),
+                QJsonArray{pointerParam(QStringLiteral("persistence"), QStringLiteral("float"), 0.9, 0.0, 1.0)});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            obj.insert(QStringLiteral("bufferFeedback"), true);
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-mp-nochannel"), QStringLiteral("buffer.frag"),
+                                       QStringLiteral("#version 450\n"
+                                                      "uniform vec4 customParams[8];\n"
+                                                      "layout(location = 0) in vec2 vTexCoord;\n"
+                                                      "layout(location = 0) out vec4 fragColor;\n"
+                                                      "void main() {\n"
+                                                      "    fragColor = vec4(customParams[0].x);\n"
+                                                      "}\n")));
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-mp-nochannel"), obj,
+                                QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(p_persistence); }\n"));
+            QVERIFY2(r.report.contains(QStringLiteral("multipass is true but the main fragment never samples an "
+                                                      "iChannel")),
+                     qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferFeedback is true but no buffer pass samples an "
+                                                      "iChannel")),
+                     qPrintable(r.report));
+        }
+        {
+            // bufferScale's two arms, and the pair of else-branch lints for a
+            // pack that set the buffer keys without the multipass switch.
+            QJsonObject text = pointerPackWithGate(QStringLiteral("pt-scale-text"), 0.0);
+            text.insert(QStringLiteral("multipass"), true);
+            text.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            text.insert(QStringLiteral("bufferScale"), QStringLiteral("0.5"));
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-scale-text"), QStringLiteral("buffer.frag"),
+                                       QStringLiteral("#version 450\n"
+                                                      "uniform sampler2D iChannel0;\n"
+                                                      "layout(location = 0) in vec2 vTexCoord;\n"
+                                                      "layout(location = 0) out vec4 fragColor;\n"
+                                                      "void main() { fragColor = texture(iChannel0, vTexCoord); }\n")));
+            const PackResult t = validatePointer(
+                tmp, QStringLiteral("pt-scale-text"), text,
+                QStringLiteral("uniform sampler2D iChannel0;\n"
+                               "vec4 pPointer(vec2 uv) { return texture(iChannel0, uv) * p_activationSpeed; }\n"));
+            QVERIFY2(t.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(t.report));
+
+            QJsonObject wide = pointerPackWithGate(QStringLiteral("pt-scale-range"), 0.0);
+            wide.insert(QStringLiteral("multipass"), true);
+            wide.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            wide.insert(QStringLiteral("bufferScale"), 8.0);
+            QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-scale-range"), QStringLiteral("buffer.frag"),
+                                       QStringLiteral("#version 450\n"
+                                                      "uniform sampler2D iChannel0;\n"
+                                                      "layout(location = 0) in vec2 vTexCoord;\n"
+                                                      "layout(location = 0) out vec4 fragColor;\n"
+                                                      "void main() { fragColor = texture(iChannel0, vTexCoord); }\n")));
+            const PackResult w = validatePointer(
+                tmp, QStringLiteral("pt-scale-range"), wide,
+                QStringLiteral("uniform sampler2D iChannel0;\n"
+                               "vec4 pPointer(vec2 uv) { return texture(iChannel0, uv) * p_activationSpeed; }\n"));
+            QVERIFY2(w.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(w.report));
+
+            QJsonObject off = pointerPackWithGate(QStringLiteral("pt-buffers-no-switch"), 0.0);
+            off.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            off.insert(QStringLiteral("bufferFeedback"), true);
+            const PackResult o = validatePointer(tmp, QStringLiteral("pt-buffers-no-switch"), off, body);
+            QVERIFY2(o.report.contains(QStringLiteral("bufferShaders declared without `multipass: true`")),
+                     qPrintable(o.report));
+            QVERIFY2(o.report.contains(QStringLiteral("bufferFeedback declared without `multipass: true`")),
+                     qPrintable(o.report));
+        }
+        {
+            // The parameter sweep: none of its arms was reachable from any
+            // pointer fixture, where the animation arm has covered its own
+            // budget check since it was written.
+            QJsonObject dup =
+                pointerPack(QStringLiteral("pt-param-dup"),
+                            QJsonArray{pointerParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0, 0.0, 2.0),
+                                       pointerParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0, 0.0, 2.0)});
+            const PackResult d = validatePointer(tmp, QStringLiteral("pt-param-dup"), dup,
+                                                 QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(p_speed); }\n"));
+            QVERIFY2(d.report.contains(QStringLiteral("duplicate parameter id")), qPrintable(d.report));
+
+            QJsonObject bad =
+                pointerPack(QStringLiteral("pt-param-type"),
+                            QJsonArray{pointerParam(QStringLiteral("speed"), QStringLiteral("vec9"), 1.0, 0.0, 2.0)});
+            const PackResult b2 = validatePointer(tmp, QStringLiteral("pt-param-type"), bad,
+                                                  QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(p_speed); }\n"));
+            QVERIFY2(b2.report.contains(QStringLiteral("unknown param type 'vec9'")), qPrintable(b2.report));
         }
         {
             // The shared pointer.vert is the preview's stage: a pack naming a
