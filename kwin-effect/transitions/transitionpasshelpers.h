@@ -19,6 +19,7 @@ class QSize;
 
 namespace KWin {
 class GLTexture;
+class RenderDevice;
 class RenderTarget;
 class RenderViewport;
 }
@@ -29,7 +30,7 @@ struct AnimationShaderEffect;
 
 namespace PlasmaZones {
 
-/// Helpers shared by the SCREEN-LEVEL transition passes — the desktop
+/// Helpers shared by the screen-level passes that composite over a finished frame — the desktop
 /// switch/peek blend (DesktopTransitionManager) and the scrolling strip pass
 /// (StripTransitionManager). Both capture per-output scenes into
 /// output-sized FBOs and draw one full-screen quad through a pack shader, so
@@ -133,11 +134,19 @@ const char* outputQuadVertexSource();
 /// Hands GL state back as found (ScopedGlState). A no-op when the scene or
 /// its cursor item cannot be reached.
 ///
+/// @p device is the RenderDevice of the output pass the call sits inside, since
+/// KWin 6.8 keys ItemRenderers by device. Pass the device of THIS pass, read from
+/// its RenderView (PlasmaZonesEffect::currentPassRenderDevice); the compositor's
+/// primary device is a different renderer for any output rendering on a secondary
+/// GPU. Null is NORMAL on 6.7, which has no render-device concept and one renderer
+/// per scene, so null is not treated as "cannot draw" — see kwincompat.h.
+///
 /// Shared by StripTransitionManager (which hides the cursor for the length of
 /// a strip leg on the pointer's output) and PointerDecorationPass (which
 /// hides it while a `layer: above` pointer pack is live), so the two never
 /// drift apart.
-void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
+void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                     KWin::RenderDevice* device);
 
 /// Resolve p_<name> parameter values into the customParams[] / customColors[]
 /// slot pools. translateAnimationParams fills the metadata defaults when the

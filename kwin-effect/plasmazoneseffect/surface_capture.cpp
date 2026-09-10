@@ -4,15 +4,22 @@
 // The composite fold's INPUT side, split out of surfacelayers.cpp (which owns the
 // fold itself).
 //
-// Two steps, in the order the fold runs them:
+// In the order the fold runs them:
+//   planSurfaceFold       — decide what this fold can REUSE before it does any
+//                           work: whether the chain may animate, what clock it
+//                           runs on, how much of its head is cacheable.
 //   ensureSurfaceTargets  — (re)allocate the per-window GL targets the fold draws
 //                           into, and invalidate exactly the caches an allocation
 //                           invalidates.
 //   captureWindowSurface  — the raw window capture, which is the single most
 //                           expensive step of the whole fold (it re-enters KWin's
 //                           draw chain) and the reason the capture cache exists.
+//   updateShellContentRect— shell surfaces only: bound the capture's VISIBLE body.
+//   chainBackdropScale    — how densely the backdrop must be captured for a
+//                           chain, or not at all.
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -216,7 +223,13 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
 // whole capture cache is for. @p intoCaptureTex is false only for the degenerate chain
 // where no pack compiled, which folds nothing and presents the capture directly out of
 // compositeTex[0].
-void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
+//
+// Returns whether the capture succeeded. False means the target holds nothing but the
+// clear below, so the caller must abandon the fold rather than run it over a
+// transparent texture — captureValid is left false for the retake, but the caller
+// cannot rely on reading that back, because the shell content scan and the composite
+// validity stamp both run before the next fold would consult it.
+bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
                                              const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
                                              qreal captureOpacity)
 {
@@ -229,6 +242,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     auto resetCapture = qScopeGuard([this] {
         m_capturingSnapshot = false;
     });
+    bool drawn = false;
     {
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, captureScale, renderTarget, QPoint());
@@ -244,11 +258,20 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         // else would apply the window's resolved opacity. See the call site.
         captureData.setOpacity(captureOpacity);
         const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
-        KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
+        drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w, captureMask, KWin::Region::infinite(),
+                                              captureData);
         KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
+    if (!drawn) {
+        // The draw failed (KWin 6.8 reports it). captureValid is exactly the
+        // flag that says the texture may be reused, so leaving it false is the
+        // whole fix: the fold retakes the capture on a later frame instead of
+        // folding and presenting a cleared one. Every other field below
+        // describes a capture that now does not exist, so none of them is set.
+        return false;
+    }
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
     // The frame-relative offset the shell content scan must measure against
@@ -258,6 +281,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     // move-invariant, because the canvas is derived from the window's own
     // geometry and moves with it.
     state.captureFrameOffset = w->frameGeometry().topLeft() - logicalGeometry.topLeft();
+    return true;
 }
 
 void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale)
@@ -737,6 +761,82 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     plan.lastStaticDraw = lastStaticDraw;
     plan.usePrefix = usePrefix;
     return plan;
+}
+
+// How densely the backdrop must be captured for @p deco's chain, or 0.0 when no
+// compiled pack in it reads the backdrop at all.
+//
+// Lives here rather than in paintWindow, where it began as a lambda: it resolves
+// the decoration profile, drives the lazy pack compile and maintains
+// m_packBufferScaleCache, none of which is paint-pipeline business — and every
+// one of its siblings (planSurfaceFold, ensureSurfaceTargets, compiledPack) is
+// already on this side.
+//
+// @p decoWindowId is the decoration map's own key, which is the same string as
+// the caller's windowId; @p w is passed so the profile resolve does not
+// re-derive the window it already holds.
+qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
+                                            KWin::EffectWindow* w)
+{
+    std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
+    qreal scale = 0.0;
+    for (const QString& packId : deco.chain) {
+        CompiledSurfacePack* pk = nullptr;
+        if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
+            pk = &cacheIt->second;
+        } else {
+            if (!profile) {
+                // Pass the window: the id-only overload re-derives through
+                // findWindowByIdExact, which is a wasted lookup when the
+                // caller already holds the very window it would find. Same
+                // form the surfacelayers.cpp sibling uses.
+                profile = m_decorationTree.resolve(resolveSurfacePathFor(decoWindowId, w));
+            }
+            pk = compiledPack(packId, *profile);
+        }
+        if (!pk || !pk->shader) {
+            continue;
+        }
+        if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
+            return 1.0; // a sharp main-pass read caps every other answer
+        }
+        for (const CompiledSurfaceBufferPass& bp : pk->bufferPasses) {
+            if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
+                // Same clamp ensureSurfaceTargets applies when sizing
+                // the buffer targets themselves, so capture density
+                // and sampler density agree by construction. The
+                // clamped value is cached per pack: bufferScale is
+                // pack METADATA (unlike the linked-uniform probes
+                // above, which are compile state and MUST resolve
+                // through the lazy compile — see the comment above
+                // this function), and the registry lookup copies a
+                // whole SurfaceShaderEffect by value, which this
+                // per-frame path must not pay per pack. The cached
+                // value is the multiplier-folded PRODUCT, so it has
+                // three invalidators: the two m_compiledPacks clears
+                // (a registry hot-reload can change the metadata) and
+                // the blur-scale-multiplier loader in
+                // daemon_settings.cpp.
+                qreal packScale = 0.0;
+                if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
+                    packScale = bsIt->second;
+                } else {
+                    packScale = clampedBufferScale(m_surfaceShaderRegistry.effect(packId).bufferScale);
+                    m_packBufferScaleCache.emplace(packId, packScale);
+                }
+                scale = qMax(scale, packScale);
+                break; // one linked buffer pass answers for the pack
+            }
+        }
+        // A buffer pass at the ceiling is already the maximum
+        // possible answer (the main-pass branch above returns the
+        // same value), so stop walking the chain — restores the
+        // short-circuit the pre-scale code had for every pack.
+        if (scale >= PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale) {
+            return PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale;
+        }
+    }
+    return scale;
 }
 
 } // namespace PlasmaZones

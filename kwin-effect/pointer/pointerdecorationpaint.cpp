@@ -426,7 +426,7 @@ bool PointerDecorationPass::runBufferPasses(CompiledPointerPack& pack, const Eng
 // ── The pass ────────────────────────────────────────────────────────────────
 
 void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                        KWin::LogicalOutput* screen)
+                                        KWin::LogicalOutput* screen, KWin::RenderDevice* device)
 {
     // Cost rule: an unengaged chain, the wrong output, or an output the
     // fullscreen gate covers costs one pointer comparison per output per frame
@@ -537,7 +537,9 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     for (const EngagedLayer& layer : m_engagedLayers) {
         CompiledPointerPack* const pack = compiledPack(layer);
         if (!pack || !pack->shader) {
-            continue; // unknown id, failed compile, or no context yet — latched, not retried per frame
+            // unknown id or failed compile (latched), or no context yet — that last
+            // case caches nothing on purpose, so it IS retried next frame.
+            continue;
         }
         // Buffer stages render into their own FBOs, so they run OUTSIDE the
         // on-screen bracket's viewport and blend state and restore both after.
@@ -557,7 +559,10 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         }
 
         KWin::GLTexture* sprite = nullptr;
-        if (layer.effect.needsCursor && pack->loc.uCursorSprite >= 0) {
+        // The location test alone is exact: cacheUniformLocations already forces
+        // uCursorSprite to -1 for a pack without needsCursor, so a surviving
+        // location implies the declaration.
+        if (pack->loc.uCursorSprite >= 0) {
             sprite = cursorSpriteTexture();
         }
 
@@ -617,7 +622,19 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     // After the whole chain, not inside runBufferPasses: that runs once per
     // pack, so clearing it there would leave every layer after the first
     // reading the stale canvas for this frame.
-    m_bufferFeedbackStale = false;
+    //
+    // Only when a buffer run actually happened, though. The flag means "the
+    // ping-pong pair holds a PREVIOUS burst's content, do not feed it back", and
+    // only runBufferPasses clears that content. A frame where every multipass pack
+    // was skipped — not compiled yet, or its targets failed to allocate — leaves
+    // the pair holding the old burst, so clearing here would let the next
+    // bufferFeedback pack read it back at pointerIdleSeconds ~0: the glow bleed
+    // across bursts this flag exists to prevent. A chain with no buffer stages at
+    // all leaves it set harmlessly, since nothing else reads it and a pack added
+    // later gets freshly cleared targets at allocation.
+    if (!ranBufferPasses.empty()) {
+        m_bufferFeedbackStale = false;
+    }
 
     if (!anyLayerDrawn) {
         // Every layer latched or was skipped. Give the cursor back rather than
@@ -642,7 +659,7 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         if (m_cursorHidden && !newlyTaken) {
             // Last draw of the pass: the cursor, above everything, where
             // KWin's overlay item would have put it.
-            TransitionPass::drawSceneCursor(renderTarget, viewport);
+            TransitionPass::drawSceneCursor(renderTarget, viewport, device);
         }
     }
 }

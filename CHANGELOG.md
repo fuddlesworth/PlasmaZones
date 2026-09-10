@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Ready for Plasma 6.8**: Plasma 6.8 changes the three drawing hooks a KWin effect provides, so the PlasmaZones effect had to be updated to match. It now builds against 6.7 and 6.8 from the same source, which matters because the distributions move to 6.8 at their own pace and your package has to keep building on whichever one you are running today. Nothing changes if you stay on 6.7. One thing worth knowing when you do update, and it is not new in this release: the effect is compiled against one exact KWin version and KWin refuses to load it against any other, so the drag overlay and the scrolling tab indicators go quiet after a KWin update until a rebuilt package reaches you. That rebuild is already automatic. A check runs every six hours, so a rebuilt package normally reaches you the same day. Window placement itself runs in the background service rather than the effect, so snapping, tiling and scrolling carry on working while you wait. Plasma 6.8 also tells an effect when a frame failed to draw, which no earlier version could, so a frame lost to a graphics driver reset is now treated as a failure instead of being kept as a blank window thumbnail. ([#1096](https://github.com/fuddlesworth/PlasmaZones/pull/1096))
 - **Four more pointer packs**: Prism reads the brand spectrum across the width of the stroke rather than along it. Move slowly and it is a single white filament, and as you speed up the filament spreads edge to edge into the full ramp, cyan along one side and rose along the other. Echo makes the brush the cursor itself, stamping your real pointer sprite along the path behind you with each copy tinted further down the spectrum as it ages. Charge treats speed as a budget the stroke banks and then spends. Sustained movement widens and whitens it and climbs it toward rose, and stopping or clicking spends it as a bright pulse that runs the length of the stroke and leaves a thin quiet line behind. Filament keeps Phosphor Trail's tube and puts current through it, with bright nodes travelling up the stroke toward your hand. Seventeen packs ship now. ([#1093](https://github.com/fuddlesworth/PlasmaZones/pull/1093))
 
 ### Changed
@@ -17,6 +18,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A pointer pack could sample the wrong thing**: a pack that reads one of the buffer channels without declaring a buffer pass for it had nothing bound to that channel, so it sampled whatever texture happened to be left over from earlier in the frame. On a pack with no textures of its own that could be part of a window. Those channels are now left unbound, and the pack is told so when it loads. Only packs written against channels they do not declare are affected, so no bundled pack changes. ([#1096](https://github.com/fuddlesworth/PlasmaZones/pull/1096))
+- **Snap assist could stop using the fast thumbnail path**: two capture failures in a row switched the session to the slower path and kept it there until the next login, on the assumption the graphics driver could not do the fast one. A frame lost to a driver reset was being counted as one of those failures, which it is not. Only a real capability problem counts now. ([#1096](https://github.com/fuddlesworth/PlasmaZones/pull/1096))
+- **The pointer could go missing during a scroll**: when a scrolling leg gave up on a frame, it hid the system cursor without drawing its own, so the pointer disappeared for the rest of the leg. It also stopped the settle animation from finishing, leaving the leg's textures in memory until something else happened to repaint. Both are handled. ([#1096](https://github.com/fuddlesworth/PlasmaZones/pull/1096))
 - **Pointer trails follow a curve instead of a polygon**: the trail history holds 32 samples spread over the window a pack asks for, so at the common settings one lands every 30 milliseconds. Sweep the pointer quickly and consecutive samples are 45 pixels apart, and every pack that draws along the path was joining them with straight lines. The trail read as a visible polygon, and the faster you moved the more obviously polygonal it got. All seven path packs now trace a smooth curve through the same samples, so a fast sweep draws a clean arc. Smoothing also weights each sample's neighbours by how far apart they are in time rather than treating them equally, which had been leaving the head of the stroke a little way behind the cursor. ([#1093](https://github.com/fuddlesworth/PlasmaZones/pull/1093))
 
 ## [3.4.16] - 2026-09-09
@@ -2444,7 +2448,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.15...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.16...HEAD
+[3.4.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.15...v3.4.16
 [3.4.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.14...v3.4.15
 [3.4.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.13...v3.4.14
 [3.4.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.12...v3.4.13

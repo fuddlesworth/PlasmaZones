@@ -21,8 +21,10 @@
 
   inputs = {
     # Tracks nixos-unstable for the most current KDE Frameworks and KWin
-    # packages. The kwin-effect requires the Plasma 6.7 effect API, which the
-    # channel has shipped since it advanced to KWin 6.7.
+    # packages. The kwin-effect requires the Plasma 6.7 or 6.8 effect API and
+    # adapts to whichever it is built against, so any channel from KWin 6.7
+    # onwards works. Nix builds from source against the channel's own KWin, so
+    # nothing here needs changing when the channel advances to 6.8.
     #
     # This input was briefly pinned to an explicit master rev while the channel
     # was still on KWin 6.6.5. Do not reach for that again without knowing the

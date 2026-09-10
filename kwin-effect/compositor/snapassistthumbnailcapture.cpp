@@ -3,6 +3,8 @@
 
 #include "snapassistthumbnailcapture.h"
 
+#include "compositor/snapassistcapturehelpers.h"
+#include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -27,7 +29,7 @@
 
 #include <algorithm>
 #include <cstring>
-#include <unistd.h>
+#include <vector>
 
 #include <QByteArray>
 #include <QDBusConnection>
@@ -51,85 +53,7 @@ Q_LOGGING_CATEGORY(lcSnapAssistTrace, "kwin.effect.plasmazones.snapassist.trace"
 
 namespace PlasmaZones {
 
-namespace {
-/// Settle delay before the first capture attempt for a candidate. A freshly
-/// mapped window may not have a renderable compositor frame the instant it is
-/// queued; one frame at 60Hz (~16ms) is reliably enough for drawWindow to read
-/// non-empty content, while not adding meaningful latency to the snap-assist UI
-/// (which already shows icons immediately and fades thumbs in asynchronously).
-constexpr int RENDER_SETTLE_MS = 16;
-/// Retry delay used when the first render produced an empty buffer. Four
-/// frames at 60Hz: long enough for a stalled compositor frame to clear,
-/// short enough that the user still sees the thumbnail before the eye
-/// notices the fallback icon.
-constexpr int RENDER_RETRY_MS = 64;
-/// Consecutive dma-buf capture failures (export failure or daemon import
-/// rejection) before the session permanently falls back to the raw-pixel path.
-/// >1 so a single transient bad frame doesn't disable the zero-copy path,
-/// while a genuine capability gap (every frame fails) trips it quickly.
-constexpr int DmabufFailureThreshold = 2;
-/// Smallest useful thumbnail axis. A fit below this (an extreme-aspect
-/// window rounding one axis toward 1px) produces a sliver that passes the
-/// daemon's `width > 0` validation and then latches into the dedup window
-/// as a useless thumbnail — treat it as a capture failure so the candidate
-/// falls back to its icon instead.
-constexpr int MinThumbnailAxisPx = 8;
-
-/// RAII holder for a raw fd. exportTextureToDmabuf juggles a dma-buf fd and
-/// a fence fd across six distinct early-return paths; a scoped owner makes
-/// "every path closes what it opened" structural instead of per-branch
-/// bookkeeping the next edit can silently break.
-struct ScopedFd
-{
-    int fd = -1;
-    ScopedFd() = default;
-    explicit ScopedFd(int f)
-        : fd(f)
-    {
-    }
-    ~ScopedFd()
-    {
-        if (fd >= 0) {
-            ::close(fd);
-        }
-    }
-    ScopedFd(const ScopedFd&) = delete;
-    ScopedFd& operator=(const ScopedFd&) = delete;
-    /// Transfer ownership out (the success path hands the fd to the caller).
-    int release()
-    {
-        const int f = fd;
-        fd = -1;
-        return f;
-    }
-    bool valid() const
-    {
-        return fd >= 0;
-    }
-};
-
-/// True when every pixel of an ARGB32 image has zero alpha. A cleared FBO
-/// whose drawWindow produced nothing reads back as a valid, fully transparent
-/// image — isNull() cannot distinguish that from a real capture, so the
-/// "window had no renderable frame yet" retry must test content, not
-/// nullness. 256² is 256 KiB; a linear byte scan at capture cadence is
-/// negligible next to the GPU readback that produced the image.
-bool isFullyTransparent(const QImage& image)
-{
-    if (image.isNull() || image.format() != QImage::Format_ARGB32) {
-        return false;
-    }
-    for (int y = 0; y < image.height(); ++y) {
-        const auto* line = reinterpret_cast<const quint32*>(image.constScanLine(y));
-        for (int x = 0; x < image.width(); ++x) {
-            if (line[x] & 0xff000000u) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-} // namespace
+using namespace PlasmaZones::SnapAssistCaptureHelpers;
 
 SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
     : QObject(parent)
@@ -267,11 +191,6 @@ void SnapAssistThumbnailCapture::rearmDmabufPath()
     }
     m_dmabufEnabled = true;
     m_dmabufConsecutiveFailures = 0;
-}
-
-static int boxMajorAxis(QSize box)
-{
-    return std::max(box.width(), box.height());
 }
 
 bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle, QSize box) const
@@ -422,21 +341,31 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                 // PlasmaZonesEffect::drawWindow, which strips decorations — a
                 // thumbnail wants them (see desktoptransitioncapture.cpp for the
                 // history of getting this wrong in both directions).
-                KWin::effects->drawWindow(renderTarget, viewport, w,
-                                          KWin::Effect::PAINT_WINDOW_TRANSFORMED
-                                              | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
-                                          KWin::Region::infinite(), data);
+                const bool drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w,
+                                                                 KWin::Effect::PAINT_WINDOW_TRANSFORMED
+                                                                     | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
+                                                                 KWin::Region::infinite(), data);
                 KWin::GLFramebuffer::popFramebuffer();
                 if (trace) {
                     trace->renderUs = stage.nsecsElapsed() / 1000;
                     stage.start();
                 }
 
-                // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
-                // origin is bottom-left, so flip to a top-down QImage.
-                result = texture->toImage().flipped(Qt::Vertical);
-                if (trace) {
-                    trace->readbackUs = stage.nsecsElapsed() / 1000;
+                // KWin 6.8 reports a failed draw (a GPU reset, typically) instead
+                // of leaving it to be inferred. Skipping the readback leaves
+                // `result` null, which the isNull() check below already treats as
+                // a capture failure — the same route fbo.valid() takes above, so
+                // the candidate goes through the ordinary empty-image handling:
+                // one retry, then dropped to its icon. Worth skipping rather than
+                // reading back, because a cleared FBO comes back as a VALID fully
+                // transparent image that only isFullyTransparent would catch.
+                if (drawn) {
+                    // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
+                    // origin is bottom-left, so flip to a top-down QImage.
+                    result = texture->toImage().flipped(Qt::Vertical);
+                    if (trace) {
+                        trace->readbackUs = stage.nsecsElapsed() / 1000;
+                    }
                 }
             }
         }
@@ -523,6 +452,23 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     // directly — without this flip every zero-copy thumbnail displays
     // upside down. The wire descriptor deliberately carries no orientation
     // field; the producer ships top-down, always.
+    // Reused only when the fit is the SAME size. fittedThumbnailSize preserves
+    // each window's aspect inside a square box, so a batch of differently-shaped
+    // windows reallocates this per candidate and the reuse never fires; a batch of
+    // similarly-shaped ones reuses it throughout.
+    //
+    // Deliberately NOT grown-and-shared, which is the obvious way to make the
+    // reuse unconditional. Two things block it, both verified rather than
+    // assumed: GLFramebuffer::bind() sets glViewport to the FBO's FULL size, and
+    // more importantly the RenderViewport's projection below is derived from the
+    // RenderTarget, so an oversized scratch changes the projection and the window
+    // renders at the wrong scale — a viewport call alone does not fix that. The
+    // blit would need reworking too, since blitFromFramebuffer reads its source
+    // rect against the source FBO's full height (srcY0 = height - (y + h)), so a
+    // sub-rect source lands in the wrong half. Every one of those failure modes is
+    // a silently wrong thumbnail rather than a visible error, and none of this
+    // path is test-covered. Not worth one texture allocation per candidate, off
+    // the paint path, on a timer.
     if (!m_flipScratch || m_flipScratch->size() != fbSize) {
         m_flipScratch = KWin::GLTexture::allocate(GL_RGBA8, fbSize);
     }
@@ -566,11 +512,32 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     KWin::WindowPaintData data;
     QElapsedTimer stage;
     stage.start();
-    KWin::effects->drawWindow(renderTarget, viewport, w,
-                              KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
-                              KWin::Region::infinite(), data);
+    const bool drawn = KWinCompat::drawWindowChecked(
+        renderTarget, viewport, w, KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
+        KWin::Region::infinite(), data);
 
     KWin::GLFramebuffer::popFramebuffer();
+
+    // Failed draw (KWin 6.8 onwards reports it): bail the same way an incomplete
+    // FBO does above, and for the same reason — the blit below would ship a
+    // cleared or uninitialised buffer to the daemon as a thumbnail. Popped first,
+    // so the framebuffer stack is balanced on this path too.
+    if (!drawn) {
+        // Flagged as a per-candidate miss rather than left to the caller's default
+        // bucket. That default counts the failure toward DmabufFailureThreshold,
+        // which is 2 — so two failed draws (one GPU reset spanning the batch and
+        // its retry) would permanently disable the zero-copy path for the session.
+        // A lost context says nothing whatever about whether the driver supports
+        // dma-buf export. The flag is not a perfect fit either (this is transient,
+        // not a property of the window), but it carries the one meaning that
+        // matters here: drop this candidate without counting it as a capability
+        // failure. Snap-assist shows the window's icon for this round.
+        if (candidateNotRenderable) {
+            *candidateNotRenderable = true;
+        }
+        qCDebug(lcSnapAssistCapture) << "renderWindowToExportTexture: draw failed, discarding capture";
+        return nullptr;
+    }
 
     // Clear the export texture BEFORE the blit: allocate() leaves its content
     // undefined, and exporting a texture the blit failed to write would ship
@@ -661,8 +628,17 @@ void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batc
             Pending p;
             DmabufExport exported;
             TraceSample trace;
+            // OWNS the two descriptors named in `exported`, which is only a
+            // non-owning view of them from here on. Exports accumulate across the
+            // whole batch before any of them is posted, so without an owner every
+            // early return added to this loop later is a descriptor leak, and the
+            // peak is two fds per candidate with nothing structural keeping them
+            // paired to a close. std::vector rather than QVector because these
+            // are move-only.
+            ScopedFd fdOwner;
+            ScopedFd fenceOwner;
         };
-        QVector<Ready> ready;
+        std::vector<Ready> ready;
         QVector<Pending> retry;
         const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         for (const Pending& p : batch) {
@@ -694,7 +670,7 @@ void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batc
                 }
             }
             if (exported.ok) {
-                ready.append({p, exported, trace});
+                ready.push_back(Ready{p, exported, trace, ScopedFd(exported.fd), ScopedFd(exported.fenceFd)});
                 continue;
             }
             if (retriesLeft > 0) {
@@ -728,8 +704,14 @@ void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batc
         }
         // Post after the context is released: the posts are async D-Bus calls
         // and need no GL.
-        for (const Ready& r : ready) {
+        for (Ready& r : ready) {
             postThumbnailDmabuf(r.p, r.exported, generation, r.trace);
+            // Closed here rather than at the vector's destruction: the post has
+            // queued the call, and QDBusUnixFileDescriptor already dup()ed both,
+            // so holding ours any longer only raises the peak descriptor count
+            // for the rest of the batch.
+            r.fdOwner.reset();
+            r.fenceOwner.reset();
         }
         if (!retry.isEmpty()) {
             // This retry batch is the chain's continuation; it kicks
@@ -781,6 +763,16 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
         // FBO, and the readback is a valid, fully transparent image. Posting
         // that would latch an invisible thumbnail into the dedup window —
         // strictly worse than the icon fallback.
+        //
+        // A window that is LEGITIMATELY fully transparent reads the same way and
+        // is treated the same way: rendered and scanned twice per snap-assist
+        // show, then dropped to its icon and never markRecentlyPosted, so the
+        // next show pays the pair again. That is the right answer — an invisible
+        // thumbnail is worse than an icon — and it is bounded by the per-show
+        // retry budget rather than looping. Note also that this gate is inert on
+        // the DEFAULT path: the dma-buf batch has no transparent-content test (it
+        // cannot read the buffer back), so this only runs with
+        // PLASMAZONES_DMABUF_THUMBNAILS=0 or after the session fallback trips.
         const bool empty = image.isNull() || isFullyTransparent(image);
         if (empty && retriesLeft > 0) {
             // The window's first compositor frame after mapping is occasionally
@@ -1027,8 +1019,9 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setWindowThumbnailDmabuf"));
-    // QDBusUnixFileDescriptor dup()s each fd in its constructor; we close our
-    // originals after queuing the call.
+    // QDBusUnixFileDescriptor dup()s each fd in its constructor, so the caller's
+    // originals can be closed as soon as the call is queued — which is what the
+    // ScopedFd pair owning them does, immediately after this returns.
     msg << compositorHandle << exported.width << exported.height << static_cast<uint>(exported.fourcc)
         << static_cast<qulonglong>(exported.modifier) << static_cast<uint>(exported.stride)
         << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd))
@@ -1038,8 +1031,9 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
 
     QDBusPendingCall pending =
         QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
-    ::close(exported.fd);
-    ::close(exported.fenceFd);
+    // The descriptors are NOT closed here: @p exported is a non-owning view and
+    // the caller's ScopedFd pair owns them, closing immediately after this
+    // returns. Single ownership, so no path can double-close or strand them.
 
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Same accepted-gated recently-posted contract as the raw-pixel path: only

@@ -2,7 +2,7 @@
 # Window snapping, tiling and scrolling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+). Builds against 6.7 and 6.8.
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-44-x86_64 plasmazones-3.3.0-1.fc44.src.rpm
@@ -102,7 +102,8 @@ BuildRequires:  kf6-kcolorscheme-devel >= 6.26.0
 BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
-# Plasma 6.7 / KWin 6.7 (effect API)
+# Plasma 6.7 / KWin 6.7 (effect API). 6.8 (KWin 6.7.90) builds too: the effect
+# adapts to either paint-hook signature at compile time, see kwin-effect/kwincompat.h.
 # The KWin effect plugin's IID embeds KWin's exact upstream version
 # (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
 # to load any effect whose IID doesn't match its own version string — even
@@ -111,7 +112,7 @@ BuildRequires:  kf6-kirigami-devel >= 6.26.0
 # block for why an exact pin breaks whole-desktop upgrades.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
-# find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
+# find_package(KWin) in kwin-effect/CMakeLists.txt pulls in KWinConfig.cmake,
 # which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
 # 6.7). openSUSE's kwin6-devel does not drag these into the build root itself,
 # so the KWin effect's CMake configure step fails without them. KF6Config /
@@ -219,6 +220,14 @@ Features:
 %autosetup -n PlasmaZones-%{version}
 
 %build
+# There is no %%check section, deliberately. Building the tests needs glslang on
+# PATH, because the shader-validate gates hard-fail when it is missing rather
+# than skipping, and the suite also needs a session D-Bus. Neither is a
+# reasonable BuildRequires for a distro package. Test evidence for this tree
+# comes from CI, which builds and runs the full suite on every push and pull
+# request, including one job against the next Plasma. Worth remembering when
+# changing the KWin floor: this is the path that compiles against Fedora's and
+# openSUSE's KWin, so it proves the build rather than the behaviour.
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF

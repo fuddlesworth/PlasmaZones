@@ -351,10 +351,13 @@ private:
     /// showing, and capturePeekWindowsScene passes it for the same reason:
     /// its bare-desktop base was captured with the columns hidden, so the
     /// pills can only enter the FROM endpoint with the hidden columns.
-    void compositeWindowsInto(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                              const QRectF& logicalGeometry,
-                              const std::function<bool(KWin::EffectWindow*)>& includeWindow,
-                              KWin::LogicalOutput* pillScreen = nullptr);
+    ///
+    /// Returns false when a window's paint reported failure (6.8 only), leaving a
+    /// PARTIAL composite the caller must not use as a transition endpoint.
+    [[nodiscard]] bool compositeWindowsInto(const KWin::RenderTarget& renderTarget,
+                                            const KWin::RenderViewport& viewport, const QRectF& logicalGeometry,
+                                            const std::function<bool(KWin::EffectWindow*)>& includeWindow,
+                                            KWin::LogicalOutput* pillScreen = nullptr);
 
     /// Shared resolve prologue of begin() and beginPeek(): validates the pack
     /// (installed + desktop-contract via shaderEffectAppliesToEventPath against

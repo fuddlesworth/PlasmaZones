@@ -610,7 +610,14 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             // — drawWindow on the current desktop's already-visible windows
             // renders black.
             tr.fromTex = captureDesktop(tr.from, screen, renderTarget, viewport);
-            tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
+            // Gated on the FROM endpoint, the same way the PeekHide arm below
+            // gates its second capture: a null fromTex abandons the transition
+            // 15 lines down, so rendering a full scene pass for the TO endpoint
+            // first is work thrown away. It matters more on 6.8, where the two
+            // captures can fail for the same underlying reason.
+            if (tr.fromTex) {
+                tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
+            }
             break;
         case Kind::PeekHide:
             // TO first: the live scene as-is, which with the windows hidden IS

@@ -7,7 +7,6 @@
 #include <PhosphorPointer/PointerShaderContract.h>
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorPointer/PointerShaderRegistry.h>
-#include <PhosphorPointer/PointerUniformExtension.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
 
@@ -31,6 +30,7 @@ class GLFramebuffer;
 class GLShader;
 class GLTexture;
 class LogicalOutput;
+class RenderDevice;
 class RenderTarget;
 class RenderViewport;
 }
@@ -187,8 +187,12 @@ public:
     /// the normal path only (a desktop transition or a strip leg replaces the
     /// output's paint and returns before this). A no-op for every output but
     /// the pointer's, and for a chain that is not live.
+    /// @p device is the render device of the pass being painted, needed only by
+    /// the `above`-layer cursor re-draw at the tail (KWin 6.8 keys ItemRenderers
+    /// by device). Passed in rather than looked up because this class holds no
+    /// back-pointer to the effect, per the note on the constructor above.
     void paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::LogicalOutput* screen);
+                     KWin::LogicalOutput* screen, KWin::RenderDevice* device);
 
     /// Keep a live chain ticking: one repaint of the damage rect on the
     /// pointer's output per frame. Called from postPaintScreen. When the
@@ -313,7 +317,7 @@ private:
             userTextures;
         std::vector<CompiledBufferPass> bufferPasses;
         /// Ping-pong buffer targets, one pair per compiled buffer stage. Slot
-        /// `bufferFront` holds the LAST frame's output (what `bufferFeedback`
+        /// While the run is in progress `bufferFront` holds the LAST frame's output (what `bufferFeedback`
         /// reads); the other is written this frame, and the two swap after the
         /// draw. Sized to the output's device size times the pack's clamped
         /// `bufferScale`, revalidated every frame and reallocated on a change.
@@ -404,7 +408,7 @@ private:
     KWin::GLTexture* cursorSpriteTexture();
 
     /// Is @p screen covered by the effect's fullscreen gate? Inline and header-
-    /// resident because all three TUs of this pass consult it: every liveness,
+    /// resident because both TUs that gate on suppression consult it: every liveness,
     /// damage and draw path funnels through this one expression, so no two of
     /// them can disagree about whether the pass is suppressed.
     bool suppressedOn(KWin::LogicalOutput* screen) const

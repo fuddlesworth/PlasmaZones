@@ -698,6 +698,30 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // rather than re-resolving, for the same cache reason.
     m_tilingHandler->noteScrollTabOutputRemoved(output, removedScreenId);
 
+    // m_fullscreenSuppressedOutputs holds raw LogicalOutput* too. It is only ever
+    // COMPARED, never dereferenced, so a stale entry cannot crash — but a later
+    // hotplug landing at the same address inherits the dead output's suppression
+    // and every window on the NEW output is silently left undecorated (the gate
+    // routes through the normal undecorate path, so it is a teardown, not a paint
+    // glitch) until some unrelated trigger happens to refresh.
+    //
+    // An explicit ERASE, deliberately, not refreshFullscreenSuppression(). That
+    // rebuilds the set by resolving every fullscreen window through
+    // effects->screenAt(), and whether KWin has already dropped the dying output
+    // from that answer when screenRemoved fires is not something this code can
+    // rely on — a rebuild that still sees it would put the dead pointer straight
+    // back. Erasing names the one output we know is going. It also avoids the
+    // full decoration sweep the rebuild runs, which has no business firing
+    // mid-teardown. Runs BEFORE the motion-clock early-return below, with the
+    // other output-forgetting calls above, so it fires for an output that never
+    // had an animation clock.
+    if (m_fullscreenSuppressedOutputs.remove(output)) {
+        // Keep the pointer pass's copy in step, the way refreshFullscreenSuppression
+        // does on a real change. Other outputs' entries are untouched, so no
+        // decoration re-sweep is owed.
+        m_pointerPass.setSuppressedOutputs(m_fullscreenSuppressedOutputs);
+    }
+
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
     // unique_ptr. Reap only the animations bound to THIS output's clock

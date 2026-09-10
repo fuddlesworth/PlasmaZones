@@ -40,6 +40,7 @@
 // this block sits with the other project includes rather than after the Qt /
 // KDE ones (own header → project → KDE → Qt).
 #include "effect_state.h"
+#include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
 #include "types.h"
 
@@ -82,6 +83,7 @@
 namespace KWin {
 class SurfaceItem;
 class LogicalOutput;
+class RenderDevice;
 struct PointerMotionEvent;
 struct PointerButtonEvent;
 }
@@ -196,19 +198,36 @@ public:
     // a desktop blend replaces the scene wholesale, so a strip pass under it
     // would decorate a frame nobody sees. Otherwise this chains straight
     // through.
-    void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
-                     const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
-    void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                     KWin::WindowPaintData& data) override;
+    //
+    // KWin 6.8 turned the three paint hooks into bool: false means the paint
+    // FAILED (a GPU reset, typically) and upstream's contract is that the effect
+    // stops rendering immediately. 6.7 returns void and cannot report failure.
+    //
+    // So the overrides are ADAPTERS of KWinCompat::PaintResult (bool or void),
+    // and all the logic lives in the *Impl methods below, which always return
+    // bool and are compiled once for both versions. Each Impl returns the result
+    // of the call it chains into, and a false from that chain skips whatever this
+    // effect would otherwise have drawn afterwards — every one of those trailing
+    // steps issues raw GL against a context that may already be gone. A frame
+    // this effect deliberately replaces (a desktop or strip transition) is a
+    // SUCCESS and returns true. On 6.7 the chained calls always report success,
+    // so the failure arms are simply never taken there.
+    KWinCompat::PaintResult paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        int mask, const KWin::Region& deviceRegion,
+                                        KWin::LogicalOutput* screen) override;
+    KWinCompat::PaintResult paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                        KWin::WindowPaintData& data) override;
     // Border render path (implemented in decorations.cpp). A static bordered window
     // is rendered through the offscreen border shader PASSIVELY here: we bind the
     // border shader + push its uniforms, then let OffscreenEffect::drawWindow
     // re-blit the redirected FBO through it on EVERY composite (idle included),
     // with no FBO re-render and no forced per-frame repaints — the
     // KDE-Rounded-Corners model. paintWindow no longer touches the border.
-    void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
-                    int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
+    KWinCompat::PaintResult drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data) override;
+
     void grabbedKeyboardEvent(QKeyEvent* e) override;
     /// Pointer events delivered while this effect holds the mouse
     /// interception — which it does for exactly the span the pointer is over
@@ -274,6 +293,12 @@ protected:
     enum class ShaderBranchOutcome {
         Handled,
         Continue,
+        /// The branch's own present draw FAILED (KWin 6.8 onwards reports it; a
+        /// GPU reset in practice). Distinct from Handled because the caller must
+        /// report the failure out of paintWindow rather than treat the window as
+        /// painted, and distinct from Continue because the chain must not be
+        /// entered a second time after a failed draw.
+        Failed,
     };
 
     /// The shader-transition branch of paintWindow, extracted verbatim
@@ -945,7 +970,7 @@ private:
      * resolving against the animator's rect would cancel the relocation applied
      * just above and put the predicate right back at the destination.
      *
-     * SEVEN consumers, and they must stay in lockstep or a column blinks or
+     * The consumers, which must stay in lockstep or a column blinks or
      * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
      * culling is free to skip the window instead of being forced to paint
      * it), paintWindow skips the backdrop capture / decoration fold / draw,
@@ -1041,6 +1066,16 @@ private:
      */
     void paintScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                   const KWin::Region& deviceRegion);
+
+    /// The render device of the output pass currently executing, for the callers
+    /// that hand a scene item to an ItemRenderer themselves (KWin 6.8 keys those
+    /// renderers by device). Never guess one instead: guessing means the primary
+    /// GPU, which is the wrong renderer for an output rendering on a secondary one.
+    ///
+    /// Null both outside a pass bracket AND always on 6.7, which has no
+    /// render-device concept — so null does NOT mean "cannot draw"; pass it to
+    /// KWinCompat::sceneRenderer and let that decide. See m_currentPassView.
+    KWin::RenderDevice* currentPassRenderDevice() const;
 
     TilingHandler* tilingHandler() const
     {
@@ -1722,11 +1757,39 @@ private:
                                     const QStringList& chain, SurfaceMultipassState& state,
                                     const CompiledPackResolver& compiledPackLazy, bool inTransition);
 
+    /// Drive @p windows through this effect's OWN paintWindow with the
+    /// direct-capture latch held, invoking @p afterWindow (when set) after each
+    /// one paints. The shared body of the two screen-level transition
+    /// composites — the desktop switch's outgoing reconstruction and the strip
+    /// pass's above-strip set. Returns false at the first window whose paint
+    /// reported failure, having also set m_currentPassPaintFailed. Defined in
+    /// paint_capture.cpp.
+    [[nodiscard]] bool compositeWindowsDirect(const KWin::RenderTarget& renderTarget,
+                                              const KWin::RenderViewport& viewport,
+                                              const QList<KWin::EffectWindow*>& windows,
+                                              const std::function<void(KWin::EffectWindow*)>& afterWindow = {});
+
+    /// How densely the backdrop must be captured for @p deco's chain: 0.0 when no
+    /// compiled pack reads the backdrop, 1.0 when a MAIN pass samples it sharp,
+    /// otherwise the largest bufferScale among the buffer passes that link it (a
+    /// blur pyramid reads through normalized uvs, so capturing past its density
+    /// stores texels the samplers stride over; max rather than min, because a
+    /// chain with two blur packs must satisfy the denser reader).
+    ///
+    /// Resolves through the SAME lazy compile the fold uses, so the gate and the
+    /// fold agree within one frame — needsBackdrop is metadata and over-reports
+    /// when the linker dropped every backdrop uniform. Defined in
+    /// surface_capture.cpp, beside the rest of the fold's input side.
+    qreal chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId, KWin::EffectWindow* w);
+
     /// Capture the raw window surface for the fold to read as uTexture0. The single
     /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
-    /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
-    void captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
-                              qreal captureScale, bool intoCaptureTex, qreal captureOpacity);
+    /// reason SurfaceMultipassState::captureValid exists. Returns false when the draw
+    /// chain reported failure (6.8 only), meaning the target holds only the clear and
+    /// the caller must abandon the fold. Defined in surface_capture.cpp.
+    [[nodiscard]] bool captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
+                                            const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
+                                            qreal captureOpacity);
 
     /// Shell surfaces only: derive the VISIBLE content rect of the freshly
     /// captured surface from its alpha, inside the frame rect. A Plasma panel's
@@ -1995,7 +2058,7 @@ private:
     /// Per-pack CLAMPED bufferScale (clampedBufferScale() — the user's global
     /// multiplier already folded in), cached off the registry's by-value
     /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
-    /// (chainBackdropScale in paint_pipeline.cpp). Metadata only — the
+    /// (chainBackdropScale in surface_capture.cpp). Metadata only — the
     /// linked-uniform verdicts are compile state and deliberately NOT cached
     /// here (see that lambda's comment for the two bugs a raw probe caused).
     /// Cleared wherever m_compiledPacks clears (a registry hot-reload can
@@ -2499,6 +2562,63 @@ private:
     /// m_capturingSnapshot instead. With the latch null the suppression does
     /// not engage (fails open).
     KWin::LogicalOutput* m_currentPassOutput = nullptr;
+    /// The RenderView of the pass named by m_currentPassOutput, latched and
+    /// cleared in the same two places for the same bracket. KWin 6.8 keeps one
+    /// ItemRenderer per RenderDevice rather than one per scene, and the view is
+    /// the only per-output route to that device — so anything drawing a scene
+    /// item by hand (currently just the cursor sprite) has to ask this pass's
+    /// view which device it is rendering on. Reading the compositor's PRIMARY
+    /// device instead would be wrong on a multi-GPU desktop, where an output can
+    /// render on a secondary one. Latched and cleared at the same two sites as
+    /// m_currentPassOutput. ScreenPrePaintData::screen and ::view are independent
+    /// fields, so this is not the same condition as that latch being null; it is
+    /// the same bracket.
+    KWin::RenderView* m_currentPassView = nullptr;
+    /// Whether a chained paint reported FAILURE during this pass. 6.8 only: the
+    /// 6.7 wrappers always answer true, so this never becomes true there.
+    ///
+    /// Exists because a transition pass that discovers the failure cannot report
+    /// it through its own bool — paintOutput's false already means "I did not
+    /// take this frame", and the caller answers that by running the normal scene
+    /// walk. Without a second channel the effect would issue a SECOND full
+    /// effects->paintScreen against a context KWin has just declared lost, and
+    /// would then report whatever that second walk said, silently swallowing the
+    /// first failure whenever the retry happened to succeed.
+    ///
+    /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside
+    /// the two latches above. Read by paintScreenImpl (to bail instead of
+    /// re-walking) and by postPaintScreen, which per KWin 6.8's contract still
+    /// runs after a failed paint and must not book a discarded frame as painted.
+    bool m_currentPassPaintFailed = false;
+
+    /// The three paint hooks' actual bodies, version-independent: true when the
+    /// paint succeeded (or was deliberately skipped), false when the chained call
+    /// reported failure. See the override declarations near the top of the class.
+    ///
+    /// Private: the only callers are the three overrides, which are members. They
+    /// exist solely so the version-conditional return type lives in the adapters
+    /// and nowhere else, and they are not part of the plugin's surface.
+    [[nodiscard]] bool paintScreenImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen);
+    [[nodiscard]] bool paintWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data);
+    [[nodiscard]] bool drawWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                      KWin::WindowPaintData& data);
+
+    /// Record @p ok on the pass and hand it straight back, so a chained result can
+    /// be returned and latched in one expression. For the tail returns of
+    /// paintWindowImpl, whose value goes to KWin through the window walk while the
+    /// pill blit's scope guard — which runs AFTER the return value is computed —
+    /// can only see the latch.
+    [[nodiscard]] bool notePaintOk(bool ok)
+    {
+        if (!ok) {
+            m_currentPassPaintFailed = true;
+        }
+        return ok;
+    }
     /// Per-pass memo for scrollManagedOutputFor: prePaintWindow and
     /// paintWindow each probe the predicate for every window, and its chain
     /// (id lookup, tiled-bucket scan, float check, output resolve) is not
@@ -3095,10 +3215,11 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. TWO setters: DesktopTransitionManager::compositeWindowsInto —
-    /// the shared tail of both desktop captures, captureDesktop (the switch
-    /// legs) and capturePeekWindowsScene (the peek's windows layer) — and
-    /// StripTransitionManager's top-composite, which draws the above-strip
+    /// walk. ONE setter, compositeWindowsDirect, which both screen-level
+    /// transition composites go through: DesktopTransitionManager's
+    /// compositeWindowsInto (the shared tail of captureDesktop for the switch
+    /// legs and capturePeekWindowsScene for the peek's windows layer), and
+    /// StripTransitionManager's compositeSharp, which draws the above-strip
     /// windows onto the SCREEN target after its quad (not a capture, and
     /// per-frame for the whole leg). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
@@ -3154,7 +3275,8 @@ private:
     /// refreshFullscreenSuppression() and empty whenever the setting is off, so
     /// every consumer is a plain set lookup rather than a stacking-order walk.
     /// Never dereferenced — only compared — so a stale entry cannot crash, but
-    /// onScreenRemoved refreshes anyway to keep it honest.
+    /// onScreenRemoved erases the dying output anyway, so a hotplug landing at
+    /// the same address cannot inherit its suppression.
     QSet<KWin::LogicalOutput*> m_fullscreenSuppressedOutputs;
 
     /// Multiplier on each pack's declared buffer-pass bufferScale
