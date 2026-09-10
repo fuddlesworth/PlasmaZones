@@ -1757,6 +1757,31 @@ private:
                                     const QStringList& chain, SurfaceMultipassState& state,
                                     const CompiledPackResolver& compiledPackLazy, bool inTransition);
 
+    /// Drive @p windows through this effect's OWN paintWindow with the
+    /// direct-capture latch held, invoking @p afterWindow (when set) after each
+    /// one paints. The shared body of the two screen-level transition
+    /// composites — the desktop switch's outgoing reconstruction and the strip
+    /// pass's above-strip set. Returns false at the first window whose paint
+    /// reported failure, having also set m_currentPassPaintFailed. Defined in
+    /// paint_capture.cpp.
+    [[nodiscard]] bool compositeWindowsDirect(const KWin::RenderTarget& renderTarget,
+                                              const KWin::RenderViewport& viewport,
+                                              const QList<KWin::EffectWindow*>& windows,
+                                              const std::function<void(KWin::EffectWindow*)>& afterWindow = {});
+
+    /// How densely the backdrop must be captured for @p deco's chain: 0.0 when no
+    /// compiled pack reads the backdrop, 1.0 when a MAIN pass samples it sharp,
+    /// otherwise the largest bufferScale among the buffer passes that link it (a
+    /// blur pyramid reads through normalized uvs, so capturing past its density
+    /// stores texels the samplers stride over; max rather than min, because a
+    /// chain with two blur packs must satisfy the denser reader).
+    ///
+    /// Resolves through the SAME lazy compile the fold uses, so the gate and the
+    /// fold agree within one frame — needsBackdrop is metadata and over-reports
+    /// when the linker dropped every backdrop uniform. Defined in
+    /// surface_capture.cpp, beside the rest of the fold's input side.
+    qreal chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId, KWin::EffectWindow* w);
+
     /// Capture the raw window surface for the fold to read as uTexture0. The single
     /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
     /// reason SurfaceMultipassState::captureValid exists. Returns false when the draw
@@ -2033,7 +2058,7 @@ private:
     /// Per-pack CLAMPED bufferScale (clampedBufferScale() — the user's global
     /// multiplier already folded in), cached off the registry's by-value
     /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
-    /// (chainBackdropScale in paint_pipeline.cpp). Metadata only — the
+    /// (chainBackdropScale in surface_capture.cpp). Metadata only — the
     /// linked-uniform verdicts are compile state and deliberately NOT cached
     /// here (see that lambda's comment for the two bugs a raw probe caused).
     /// Cleared wherever m_compiledPacks clears (a registry hot-reload can
@@ -3190,10 +3215,11 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. TWO setters: DesktopTransitionManager::compositeWindowsInto —
-    /// the shared tail of both desktop captures, captureDesktop (the switch
-    /// legs) and capturePeekWindowsScene (the peek's windows layer) — and
-    /// StripTransitionManager's top-composite, which draws the above-strip
+    /// walk. ONE setter, compositeWindowsDirect, which both screen-level
+    /// transition composites go through: DesktopTransitionManager's
+    /// compositeWindowsInto (the shared tail of captureDesktop for the switch
+    /// legs and capturePeekWindowsScene for the peek's windows layer), and
+    /// StripTransitionManager's compositeSharp, which draws the above-strip
     /// windows onto the SCREEN target after its quad (not a capture, and
     /// per-frame for the whole leg). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:

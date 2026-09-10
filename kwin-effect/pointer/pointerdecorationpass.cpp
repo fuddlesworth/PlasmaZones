@@ -26,6 +26,7 @@
 #include <QSizeF>
 
 #include <algorithm>
+#include <cmath>
 
 namespace PlasmaZones {
 
@@ -400,7 +401,17 @@ QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint
         }
         m_lastSpriteCanvasRect = sprite;
     }
-    const QSizeF deviceSize = screen->geometryF().size() * scale;
+    // ROUNDED to the same integer canvas the draw quad uses, not the raw
+    // fractional product. paintOutput takes its canvas from
+    // RenderViewport::scaledRenderRect(), which KWin builds as
+    // `renderRect.scaled(scale).rounded()` — so on a scale where the product is
+    // not integral (1707x960 at 1.25 gives 2133.75) the fractional size sits a
+    // quarter of a device pixel INSIDE the quad's own canvas, and the outermost
+    // column or row could never enter the damage rect. Two canvases for one
+    // output is the thing this pass's own comment forbids; this is the second
+    // one, reconciled.
+    const QSizeF deviceSize(std::round(screen->geometryF().width() * scale),
+                            std::round(screen->geometryF().height() * scale));
     return rect.intersected(QRectF(QPointF(0.0, 0.0), deviceSize));
 }
 

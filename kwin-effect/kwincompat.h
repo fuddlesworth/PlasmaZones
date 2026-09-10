@@ -42,6 +42,14 @@
 namespace KWin {
 /// 6.8-only type: 6.7 has no render-device concept at all, so on 6.7 this stays an
 /// incomplete type that only ever appears as a pointer nobody dereferences.
+///
+/// `class`, matching upstream's own `class KWIN_EXPORT RenderDevice : public QObject`
+/// in core/renderdevice.h — a struct/class mismatch would be a warning on some
+/// compilers. Three other headers in this tree (plasmazoneseffect.h,
+/// pointer/pointerdecorationpass.h and transitions/transitionpasshelpers.h)
+/// declare it identically rather than including this file for it, and that
+/// duplication is deliberate: a header should not have to pull in the whole
+/// compat layer, with its version-macro requirement, to name a pointer type.
 class RenderDevice;
 }
 

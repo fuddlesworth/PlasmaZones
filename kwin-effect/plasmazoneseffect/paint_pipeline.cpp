@@ -1821,76 +1821,10 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // through normalized uvs, so capturing past that density stores and
         // re-blits texels the samplers stride over. Max, not min: a chain
         // with two blur packs must satisfy the denser reader.
-        // The id parameter is named apart from the `windowId` derived once for
-        // this function: the lambda is handed `backIt.key()`, which is the same
-        // string, and a shadowing name made that look like a coincidence to be
-        // checked rather than the identity it is.
-        const auto chainBackdropScale = [this, w](const WindowDecoration& deco, const QString& decoWindowId) -> qreal {
-            std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
-            qreal scale = 0.0;
-            for (const QString& packId : deco.chain) {
-                CompiledSurfacePack* pk = nullptr;
-                if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
-                    pk = &cacheIt->second;
-                } else {
-                    if (!profile) {
-                        // Pass the window: the id-only overload re-derives through
-                        // findWindowByIdExact, which is a wasted lookup when the
-                        // caller already holds the very window it would find. Same
-                        // form the surfacelayers.cpp sibling uses.
-                        profile = m_decorationTree.resolve(resolveSurfacePathFor(decoWindowId, w));
-                    }
-                    pk = compiledPack(packId, *profile);
-                }
-                if (!pk || !pk->shader) {
-                    continue;
-                }
-                if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
-                    return 1.0; // a sharp main-pass read caps every other answer
-                }
-                for (const CompiledSurfaceBufferPass& bp : pk->bufferPasses) {
-                    if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
-                        // Same clamp ensureSurfaceTargets applies when sizing
-                        // the buffer targets themselves, so capture density
-                        // and sampler density agree by construction. The
-                        // clamped value is cached per pack: bufferScale is
-                        // pack METADATA (unlike the linked-uniform probes
-                        // above, which are compile state and MUST resolve
-                        // through the lazy compile — see the comment above
-                        // this lambda), and the registry lookup copies a
-                        // whole SurfaceShaderEffect by value, which this
-                        // per-frame path must not pay per pack. The cached
-                        // value is the multiplier-folded PRODUCT, so it has
-                        // three invalidators: the two m_compiledPacks clears
-                        // (a registry hot-reload can change the metadata) and
-                        // the blur-scale-multiplier loader in
-                        // daemon_settings.cpp.
-                        qreal packScale = 0.0;
-                        if (const auto bsIt = m_packBufferScaleCache.find(packId);
-                            bsIt != m_packBufferScaleCache.end()) {
-                            packScale = bsIt->second;
-                        } else {
-                            packScale = clampedBufferScale(m_surfaceShaderRegistry.effect(packId).bufferScale);
-                            m_packBufferScaleCache.emplace(packId, packScale);
-                        }
-                        scale = qMax(scale, packScale);
-                        break; // one linked buffer pass answers for the pack
-                    }
-                }
-                // A buffer pass at the ceiling is already the maximum
-                // possible answer (the main-pass branch above returns the
-                // same value), so stop walking the chain — restores the
-                // short-circuit the pre-scale code had for every pack.
-                if (scale >= PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale) {
-                    return PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale;
-                }
-            }
-            return scale;
-        };
         qreal backdropScale = 0.0;
         if (backIt != m_windowDecorations.constEnd() && backIt->needsBackdrop
             && (backIt->shaderApplied || m_shaderManager.findTransition(w)) && !isWithheldThisFrame()
-            && (backdropScale = chainBackdropScale(*backIt, backIt.key())) > 0.0) {
+            && (backdropScale = chainBackdropScale(*backIt, backIt.key(), w)) > 0.0) {
             // While an animation is drawing the window somewhere other than
             // its resting rect, capture the backdrop where the quad actually
             // IS this frame, or the pane shows the wrong slice of the scene

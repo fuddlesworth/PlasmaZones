@@ -282,8 +282,20 @@ jobs:
           printf '[kde-unstable]\nInclude = /etc/pacman.d/mirrorlist\n\n' > /tmp/kde-unstable.conf
           cat /tmp/kde-unstable.conf /etc/pacman.conf > /tmp/pacman.conf.new
           mv /tmp/pacman.conf.new /etc/pacman.conf
-          # Same package set as the `build` job. Kept in step with it by hand:
-          # this job exists to change the Plasma VERSION, not the dependencies.
+          # Same package set as the `build` job's "Setup (Arch)" and as
+          # `build-shell`. THREE hand-maintained copies: a dependency added to one
+          # and not the others makes this job quietly build a different
+          # configuration from the one it exists to mirror — the same class of
+          # false equivalence the verify step below guards against for the paint
+          # API. Change one, change all three.
+          #
+          # NOT hoisted into a composite action under .github/actions, which is
+          # the obvious fix: a LOCAL action is only readable once
+          # actions/checkout has run, and these container jobs install their
+          # dependencies BEFORE checkout because the archlinux image ships
+          # without git. Reordering that bootstrap across every container job
+          # cannot be validated without running CI, which is not a trade worth
+          # making to de-duplicate a package list.
           # Note what kde-unstable actually moves, though: it carries beta Qt, KF6
           # and Kirigami as well as Plasma, and the Test step below runs the FULL
           # suite against them. A failure here is not necessarily about the paint
@@ -670,6 +682,21 @@ jobs:
       contents: read
       # Required so the sticky-comment step at the end can post / edit the
       # comment on the PR. No other write surfaces are needed.
+      #
+      # SECURITY NOTE, because this job both holds a write scope AND executes
+      # code from the pull request (makepkg runs the PR's own CMakeLists):
+      #   * The trigger already requires a maintainer to apply the `build-draft`
+      #     label, so a drive-by fork PR cannot start it.
+      #   * The repository's default workflow permission is `read` (verified via
+      #     the Actions permissions API), and for `pull_request` events from a
+      #     FORK, GitHub issues a read-only GITHUB_TOKEN regardless of this
+      #     block — this is not `pull_request_target`, which would be the
+      #     dangerous variant.
+      # The one thing that changes that is the repository setting "Send write
+      # tokens to workflows from fork pull requests" (Settings → Actions →
+      # General). It has no REST endpoint for a user-owned repo, so it cannot be
+      # asserted here: keep it OFF, or this job hands a write-scoped token to a
+      # build script an outside contributor authored.
       pull-requests: write
 
     steps:

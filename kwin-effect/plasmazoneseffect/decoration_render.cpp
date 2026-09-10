@@ -330,6 +330,15 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // content substitution above: `expanded` describes the canvas TEXTURE
     // extent, and substituting the visible-body rect there would tell the
     // shader the texture is only as big as the body, mis-mapping the SDF.
+    //
+    // DEAD on the only call path today, and it must stay that way: surfacelayers
+    // passes the same `logicalGeometry` it stored as state.canvasGeo, and
+    // foldCursorFor decides the inside/outside cursor sentinel against THAT rect.
+    // A caller that let this fallback fire would map iMouse against
+    // expandedGeometry while the sentinel was decided against the canvas, and the
+    // two would disagree by the canvas/expanded delta — a cursor-reactive pack
+    // reading the pointer at the wrong offset. Keep the two fed from one rect;
+    // this exists only so a missing canvas degrades instead of dividing by zero.
     QRectF expanded = canvasRect;
     if (!expanded.isValid() || expanded.isEmpty()) {
         expanded = w->expandedGeometry();
@@ -514,7 +523,19 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
     };
     std::optional<ForeignBandUndo> foreignBandUndo;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
-        const QString wid = getWindowId(w);
+        // The FROZEN cache, not getWindowId — the same rule apply() follows and
+        // for the same reason: that resolver re-derives on a miss and re-inserts
+        // into both id maps, and the reverse map holds a raw EffectWindow*, so a
+        // miss taken for a dying window would re-populate exactly what the close
+        // path's scrub just cleared. Behaviour is identical on every path that
+        // reaches here — a window with a decoration entry necessarily had its id
+        // derived when that entry was made, and slotWindowClosed deliberately
+        // KEEPS the mapping for a window riding a close animation, which is the
+        // only way a corpse is still painted. So this is a hit in both cases; the
+        // frozen read just makes a future miss fail closed instead of resurrecting
+        // the maps. A miss yields an empty id, which no decoration key is expected
+        // to be.
+        const QString wid = m_idCaches.windowIdCache.value(w);
         // Mutable: the foreign-transform branch below records what it painted.
         const auto bit = m_windowDecorations.find(wid);
         if (bit != m_windowDecorations.end() && bit->shaderApplied) {
@@ -644,7 +665,10 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
     bool reboundSnapshotUnit = false;
     const ShaderTransition* const st = m_capturingSnapshot ? nullptr : m_shaderManager.findTransition(w);
     if (st && st->cached) {
-        const auto reIt = m_surfaceMultipass.find(getWindowId(w));
+        // Frozen read, as above. `wid` is not in scope here: that branch is the
+        // no-transition arm and this one requires a live transition, so the two
+        // are mutually exclusive.
+        const auto reIt = m_surfaceMultipass.find(m_idCaches.windowIdCache.value(w));
         if (reIt != m_surfaceMultipass.end()) {
             if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
                 constexpr int kSurfaceLayerUnitDraw = ShaderInternal::kSurfaceLayerUnit;

@@ -59,6 +59,31 @@ struct ScopedFd
     }
     ScopedFd(const ScopedFd&) = delete;
     ScopedFd& operator=(const ScopedFd&) = delete;
+    /// Movable so an owner can live in a container. Non-copyable stays: two
+    /// owners of one descriptor is a double close.
+    ScopedFd(ScopedFd&& other) noexcept
+        : fd(other.fd)
+    {
+        other.fd = -1;
+    }
+    ScopedFd& operator=(ScopedFd&& other) noexcept
+    {
+        if (this != &other) {
+            reset();
+            fd = other.fd;
+            other.fd = -1;
+        }
+        return *this;
+    }
+    /// Close now rather than at scope exit, for an owner whose scope outlives
+    /// the point the descriptor stops being needed.
+    void reset()
+    {
+        if (fd >= 0) {
+            ::close(fd);
+            fd = -1;
+        }
+    }
     /// Transfer ownership out (the success path hands the fd to the caller).
     int release()
     {

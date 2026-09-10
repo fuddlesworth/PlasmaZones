@@ -1057,4 +1057,70 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     quads.append(surfaceQuad);
 }
 
+// Drive @p windows through this effect's OWN paintWindow with the direct-capture
+// latch held, calling @p afterWindow (when set) once each window has painted.
+//
+// The shared body of the two screen-level transition composites: the desktop
+// switch reconstructing its outgoing desktop, and the strip pass compositing the
+// above-strip set sharp over its presented frame. They differ only in where the
+// window list comes from — a filtered stacking walk versus a list the capture
+// recorded — and in whether anything happens between windows, which is what
+// @p afterWindow is for (the desktop pass blits the tab pills at its anchor).
+// Everything else was duplicated line for line, including the latch, its scope
+// guard, the renderability ref, the paint data and the mask.
+//
+// NOT effects->paintWindow (the whole chain): these windows were not necessarily
+// in this frame's scene walk, so they may have had no prePaintWindow, and a
+// third-party paintWindow hook keying off that state would be driven with none.
+// Our paintWindow tolerates the absence (it falls back to a live opacity
+// resolve). Under m_directPaintCapture its tail terminates in a raw draw rather
+// than continuing the chain, because the chain iterator is at begin() here.
+//
+// Paint-data opacity stays at its default 1.0. The window's own opacity lives on
+// its WindowItem and KWin's renderer multiplies that in, so seeding the paint
+// data with w->opacity() applies it TWICE — a notification mid-fade at 0.5
+// composited at 0.25 for every frame of the leg.
+//
+// Returns false at the FIRST window whose paint reported failure (6.8 only),
+// leaving a partial composite the caller must not use. The pass-failure latch is
+// set too: paintOutput's own false only means "I did not take this frame", which
+// the caller answers by walking the scene again.
+bool PlasmaZonesEffect::compositeWindowsDirect(const KWin::RenderTarget& renderTarget,
+                                               const KWin::RenderViewport& viewport,
+                                               const QList<KWin::EffectWindow*>& windows,
+                                               const std::function<void(KWin::EffectWindow*)>& afterWindow)
+{
+    // Scope-guarded so a throw from the draw chain cannot leak the mode into
+    // live painting.
+    m_directPaintCapture = true;
+    const auto directPaintGuard = qScopeGuard([this] {
+        m_directPaintCapture = false;
+    });
+    for (KWin::EffectWindow* w : windows) {
+        if (!w) {
+            continue;
+        }
+        // ItemEffect is a QPointer plus an effect-reference count on the item, so
+        // per-window construction is noise next to the paint it brackets. The ref
+        // matters for the window that stops being renderable mid-walk (a
+        // notification starting its close) while still in the list.
+        KWin::ItemEffect keepRenderable(w->windowItem());
+        KWin::WindowPaintData data;
+        const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+        // Region::infinite() rather than a damage clip: both callers repaint the
+        // whole output anyway (the strip's shader quad, the desktop's blend), and
+        // a region clip would risk dropping parts the scene's own damage never
+        // listed.
+        if (!PLASMAZONES_PAINT_OK(
+                paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), data))) {
+            m_currentPassPaintFailed = true;
+            return false;
+        }
+        if (afterWindow) {
+            afterWindow(w);
+        }
+    }
+    return true;
+}
+
 } // namespace PlasmaZones

@@ -152,10 +152,17 @@ void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderV
         // for the pass, so returning quietly means nobody draws the pointer for
         // the length of the leg — and kwincompat.h forbids callers from testing
         // the device themselves, so no caller can defend against it. Say so, once
-        // per run: at vsync rate this would otherwise flood the journal.
+        // per DEVICE: at vsync rate this would otherwise flood the journal, but a
+        // once-per-run latch would also swallow a genuinely new occurrence later
+        // in the session — a second GPU, an output moved to another device. The
+        // device pointer is only ever compared, never dereferenced, so a stale
+        // one here cannot be unsafe; at worst a re-used address costs one
+        // suppressed line.
+        static const void* lastWarnedDevice = nullptr;
         static bool warned = false;
-        if (!warned) {
+        if (!warned || lastWarnedDevice != static_cast<const void*>(device)) {
             warned = true;
+            lastWarnedDevice = static_cast<const void*>(device);
             qCWarning(lcEffect) << "no ItemRenderer for this pass's render device — the scene cursor cannot be drawn; "
                                    "the pointer will be missing while a strip leg or pointer pack holds the hide";
         }

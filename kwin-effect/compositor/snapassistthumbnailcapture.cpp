@@ -29,7 +29,7 @@
 
 #include <algorithm>
 #include <cstring>
-#include <unistd.h>
+#include <vector>
 
 #include <QByteArray>
 #include <QDBusConnection>
@@ -452,6 +452,23 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     // directly — without this flip every zero-copy thumbnail displays
     // upside down. The wire descriptor deliberately carries no orientation
     // field; the producer ships top-down, always.
+    // Reused only when the fit is the SAME size. fittedThumbnailSize preserves
+    // each window's aspect inside a square box, so a batch of differently-shaped
+    // windows reallocates this per candidate and the reuse never fires; a batch of
+    // similarly-shaped ones reuses it throughout.
+    //
+    // Deliberately NOT grown-and-shared, which is the obvious way to make the
+    // reuse unconditional. Two things block it, both verified rather than
+    // assumed: GLFramebuffer::bind() sets glViewport to the FBO's FULL size, and
+    // more importantly the RenderViewport's projection below is derived from the
+    // RenderTarget, so an oversized scratch changes the projection and the window
+    // renders at the wrong scale — a viewport call alone does not fix that. The
+    // blit would need reworking too, since blitFromFramebuffer reads its source
+    // rect against the source FBO's full height (srcY0 = height - (y + h)), so a
+    // sub-rect source lands in the wrong half. Every one of those failure modes is
+    // a silently wrong thumbnail rather than a visible error, and none of this
+    // path is test-covered. Not worth one texture allocation per candidate, off
+    // the paint path, on a timer.
     if (!m_flipScratch || m_flipScratch->size() != fbSize) {
         m_flipScratch = KWin::GLTexture::allocate(GL_RGBA8, fbSize);
     }
@@ -611,8 +628,17 @@ void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batc
             Pending p;
             DmabufExport exported;
             TraceSample trace;
+            // OWNS the two descriptors named in `exported`, which is only a
+            // non-owning view of them from here on. Exports accumulate across the
+            // whole batch before any of them is posted, so without an owner every
+            // early return added to this loop later is a descriptor leak, and the
+            // peak is two fds per candidate with nothing structural keeping them
+            // paired to a close. std::vector rather than QVector because these
+            // are move-only.
+            ScopedFd fdOwner;
+            ScopedFd fenceOwner;
         };
-        QVector<Ready> ready;
+        std::vector<Ready> ready;
         QVector<Pending> retry;
         const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         for (const Pending& p : batch) {
@@ -644,7 +670,7 @@ void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batc
                 }
             }
             if (exported.ok) {
-                ready.append({p, exported, trace});
+                ready.push_back(Ready{p, exported, trace, ScopedFd(exported.fd), ScopedFd(exported.fenceFd)});
                 continue;
             }
             if (retriesLeft > 0) {
@@ -678,8 +704,14 @@ void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batc
         }
         // Post after the context is released: the posts are async D-Bus calls
         // and need no GL.
-        for (const Ready& r : ready) {
+        for (Ready& r : ready) {
             postThumbnailDmabuf(r.p, r.exported, generation, r.trace);
+            // Closed here rather than at the vector's destruction: the post has
+            // queued the call, and QDBusUnixFileDescriptor already dup()ed both,
+            // so holding ours any longer only raises the peak descriptor count
+            // for the rest of the batch.
+            r.fdOwner.reset();
+            r.fenceOwner.reset();
         }
         if (!retry.isEmpty()) {
             // This retry batch is the chain's continuation; it kicks
@@ -731,6 +763,16 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
         // FBO, and the readback is a valid, fully transparent image. Posting
         // that would latch an invisible thumbnail into the dedup window —
         // strictly worse than the icon fallback.
+        //
+        // A window that is LEGITIMATELY fully transparent reads the same way and
+        // is treated the same way: rendered and scanned twice per snap-assist
+        // show, then dropped to its icon and never markRecentlyPosted, so the
+        // next show pays the pair again. That is the right answer — an invisible
+        // thumbnail is worse than an icon — and it is bounded by the per-show
+        // retry budget rather than looping. Note also that this gate is inert on
+        // the DEFAULT path: the dma-buf batch has no transparent-content test (it
+        // cannot read the buffer back), so this only runs with
+        // PLASMAZONES_DMABUF_THUMBNAILS=0 or after the session fallback trips.
         const bool empty = image.isNull() || isFullyTransparent(image);
         if (empty && retriesLeft > 0) {
             // The window's first compositor frame after mapping is occasionally
@@ -977,8 +1019,9 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setWindowThumbnailDmabuf"));
-    // QDBusUnixFileDescriptor dup()s each fd in its constructor; we close our
-    // originals after queuing the call.
+    // QDBusUnixFileDescriptor dup()s each fd in its constructor, so the caller's
+    // originals can be closed as soon as the call is queued — which is what the
+    // ScopedFd pair owning them does, immediately after this returns.
     msg << compositorHandle << exported.width << exported.height << static_cast<uint>(exported.fourcc)
         << static_cast<qulonglong>(exported.modifier) << static_cast<uint>(exported.stride)
         << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd))
@@ -988,8 +1031,9 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
 
     QDBusPendingCall pending =
         QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
-    ::close(exported.fd);
-    ::close(exported.fenceFd);
+    // The descriptors are NOT closed here: @p exported is a non-owning view and
+    // the caller's ScopedFd pair owns them, closing immediately after this
+    // returns. Single ownership, so no path can double-close or strand them.
 
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Same accepted-gated recently-posted contract as the raw-pixel path: only

@@ -158,20 +158,17 @@ bool DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& re
                                                     const std::function<bool(KWin::EffectWindow*)>& includeWindow,
                                                     KWin::LogicalOutput* pillScreen)
 {
-    // Direct-drive mode for the loop below: paintWindow's tail must
-    // terminate with a raw draw instead of continuing the paintWindow
-    // chain (see m_directPaintCapture's doc — the chain iterator is at
-    // begin() here, so chaining would re-enter paintWindow and drive
-    // later effects without prePaintWindow). Scope-guarded so a throw
-    // from the draw chain cannot leak the mode into live painting.
-    m_effect->m_directPaintCapture = true;
-    const auto directPaintGuard = qScopeGuard([this] {
-        m_effect->m_directPaintCapture = false;
-    });
-
     // Bottom-to-top: stackingOrder() is already bottom→top. Windows outside
     // this output are clipped by the viewport.
     const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    QList<KWin::EffectWindow*> paintList;
+    paintList.reserve(stack.size());
+    for (KWin::EffectWindow* w : stack) {
+        if (w && includeWindow(w) && w->expandedGeometry().intersects(logicalGeometry)) {
+            paintList.append(w);
+        }
+    }
+
     // The pill anchor for THIS walk: the topmost window the loop will paint
     // that is scroll-managed on pillScreen (the scene walk's election skips
     // off-desktop columns, so it cannot be reused for an outgoing-desktop
@@ -185,10 +182,7 @@ bool DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& re
     const bool wantPills = pillScreen && pillScreen == m_effect->m_currentPassOutput
         && m_effect->m_scrollTabPainter->hasIndicators(pillScreen);
     if (wantPills) {
-        for (KWin::EffectWindow* w : stack) {
-            if (!w || !includeWindow(w) || !w->expandedGeometry().intersects(logicalGeometry)) {
-                continue;
-            }
+        for (KWin::EffectWindow* w : paintList) {
             if (m_effect->scrollManagedOutputFor(w) == pillScreen
                 && !m_effect->scrollParkedOffscreen(w, m_effect->getWindowId(w))) {
                 pillAnchor = w; // topmost wins
@@ -203,59 +197,21 @@ bool DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& re
     if (pillAnchor) {
         pillScope.emplace(*m_effect, captureRegion, /*resetPaintedLatch=*/true);
     }
-    for (KWin::EffectWindow* w : stack) {
-        if (!w || !includeWindow(w)) {
-            continue;
-        }
-        if (!w->expandedGeometry().intersects(logicalGeometry)) {
-            continue;
-        }
-        KWin::ItemEffect keepRenderable(w->windowItem());
-        KWin::WindowPaintData captureData;
-        captureData.setOpacity(1.0);
-        const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-        // Drive the window through OUR OWN per-window pipeline, exactly as the
-        // live scene does for the incoming desktop (captureLiveScene →
-        // effects->paintScreen → scene → our paintWindow). paintWindow builds
-        // the decoration composite, and under m_directPaintCapture (set
-        // above) its tail terminates with effects->drawWindow — the same
-        // call this used to make directly — whose present branch then
-        // binds that FRESH composite. Going straight to effects->drawWindow
-        // skipped all of it, so the outgoing texture lost not just borders but
-        // rule opacity, the animator's translate/scale, and any in-flight
-        // transition's true progress.
-        //
-        // NOT effects->paintWindow (the whole chain): these windows were not in
-        // this frame's scene walk, so they never got prePaintWindow, and a
-        // third-party paintWindow hook that keys off that state would be driven
-        // with none. Our paintWindow explicitly tolerates the missing
-        // prePaintWindow (it falls back to a live opacity resolve).
-        //
-        // Stepping an in-flight transition's spring here is safe. Within a
-        // frame it cannot double-step: paintWindow's dt comes from the frame
-        // clock pinned in prePaintScreen, and the first step of a frame
-        // stamps lastPaintTimeMs to that same pinned value, so a second call
-        // sees dt = 0. Across frames an extra step is a no-op by
-        // construction: Spring::step is an exact exponential integrator, so
-        // step(a) then step(b) lands bit-for-bit where step(a+b) does.
-        // Checked for the same reason every other chained paint in this file is:
-        // a false is a failed paint, and continuing the loop would keep drawing
-        // into a target the compositor has already given up on. Give up on the
-        // whole composite instead — a partial one is not a usable endpoint. The
-        // pass latch carries the failure past paintOutput's own bool, which only
-        // means "I did not take this frame".
-        if (!PLASMAZONES_PAINT_OK(
-                m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData))) {
-            m_effect->m_currentPassPaintFailed = true;
-            return false;
-        }
-        if (w == pillAnchor) {
-            // Above every column this capture paints, below whatever the
-            // stacking puts over the strip — the live walk's anchor slot.
-            m_effect->paintScrollTabIndicators(renderTarget, viewport, captureRegion);
-        }
-    }
-    return true;
+
+    // The per-window drive itself is shared with the strip pass's above-strip
+    // composite (PlasmaZonesEffect::compositeWindowsDirect), which owns the
+    // m_directPaintCapture latch, the renderability ref, the paint data, the
+    // mask and the failure handling. The only thing this pass adds between
+    // windows is the pill blit at the anchor's slot.
+    return m_effect->compositeWindowsDirect(
+        renderTarget, viewport, paintList,
+        [this, pillAnchor, &renderTarget, &viewport, &captureRegion](KWin::EffectWindow* w) {
+            if (w == pillAnchor) {
+                // Above every column this capture paints, below whatever the
+                // stacking puts over the strip — the live walk's anchor slot.
+                m_effect->paintScrollTabIndicators(renderTarget, viewport, captureRegion);
+            }
+        });
 }
 
 std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen,
@@ -365,6 +321,9 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
 
     const ShaderInternal::ScopedGlState glStateGuard;
 
+    // Same size / format / colour space as the other two captures — see
+    // captureDesktop for why all three must agree and why the size comes from
+    // the output viewport rather than being re-derived.
     std::unique_ptr<KWin::GLTexture> tex =
         allocateOutputTexture(outputViewport.deviceSize(), captureFormatFor(outputTarget));
     if (!tex) {
