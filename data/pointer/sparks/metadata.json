@@ -9,7 +9,7 @@
     "layer": "below",
     "reachParam": "reach",
     "trailSeconds": 1.0,
-    "trailWindowParam": "life",
+    "trailWindowParam": "lifetime",
     "parameters": [
         {
             "id": "reach",
@@ -48,8 +48,8 @@
             "description": "How strongly sparks fall (px per second squared)"
         },
         {
-            "id": "life",
-            "name": "Life",
+            "id": "lifetime",
+            "name": "Lifetime",
             "type": "float",
             "default": 0.7,
             "min": 0.2,

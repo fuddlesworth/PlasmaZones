@@ -88,7 +88,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float life = clamp(p_life, 0.05, kTrailSeconds);
+    float lifetime = clamp(p_lifetime, 0.05, kTrailSeconds);
     float size = max(p_size, 0.25) * scale;
     float gravity = p_gravity * scale;
     float launch = 220.0 * max(p_spread, 0.0) * scale;
@@ -110,19 +110,19 @@ vec4 pPointer(vec2 uv) {
     // the sliders stopped working. Read from the uniform the host filled from
     // that parameter, so the damage rect and the shader cannot drift.
     float reachPx = pointerReach();
-    float travel = launch * life + 0.5 * gravity * life * life;
+    float travel = launch * lifetime + 0.5 * gravity * lifetime * lifetime;
     float envelope = max(reachPx - size * 3.0, 0.0);
     float shrink = (travel > envelope && travel > 0.0) ? (envelope / travel) : 1.0;
     launch *= shrink;
     gravity *= shrink;
 
     // Only the LIVE run of samples sheds or is smoothed over, like the other
-    // trail packs: the ring is never purged, and at a life equal to the
+    // trail packs: the ring is never purged, and at a lifetime equal to the
     // metadata trailSeconds the samples behind the run are outside the
     // damage rect, where the smoothing kernel would otherwise pull a launch
     // point toward them. The live count is the window pointerSmoothedAt
     // clamps its neighbours into.
-    int live = pointerLiveCount(count, life);
+    int live = pointerLiveCount(count, lifetime);
 
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
@@ -188,7 +188,7 @@ vec4 pPointer(vec2 uv) {
             vec3 h = hash23(seed + vec2(float(k) * 7.31, float(k) * 3.17));
             // Fractional budget: the last spark is dimmer instead of popping.
             float share = clamp(shed - float(k), 0.0, 1.0);
-            vec4 spark = sparkAt(rel, h, h.x * TAU, launch * (0.35 + 0.65 * h.y), s.z, life, gravity, size);
+            vec4 spark = sparkAt(rel, h, h.x * TAU, launch * (0.35 + 0.65 * h.y), s.z, lifetime, gravity, size);
             rgb += spark.rgb * share * thin;
             alpha += spark.a * share * thin;
         }
@@ -196,7 +196,7 @@ vec4 pPointer(vec2 uv) {
 
     float sincePress = pointerSincePress();
     int burst = clamp(int(p_clickBurst + 0.5), 0, kMaxSparks);
-    if (burst > 0 && uPointerPress.w > 0.5 && sincePress < life) {
+    if (burst > 0 && uPointerPress.w > 0.5 && sincePress < lifetime) {
         vec2 origin = uPointerPress.xy;
         vec2 rel = px - origin;
         float extent = sparkExtent(sincePress, launch, gravity, size);
@@ -210,7 +210,7 @@ vec4 pPointer(vec2 uv) {
                 // Even fan around the press point, jittered so it does not
                 // read as a ring: that shape belongs to Click Ripple.
                 float angle = (float(k) + 0.35 * h.x) / float(burst) * TAU;
-                vec4 spark = sparkAt(rel, h, angle, launch * 0.75 * (0.4 + 0.6 * h.y), sincePress, life, gravity, size);
+                vec4 spark = sparkAt(rel, h, angle, launch * 0.75 * (0.4 + 0.6 * h.y), sincePress, lifetime, gravity, size);
                 rgb += spark.rgb;
                 alpha += spark.a;
             }

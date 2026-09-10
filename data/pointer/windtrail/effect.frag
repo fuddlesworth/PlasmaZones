@@ -18,9 +18,9 @@
 //   • Width also tapers with age on a `pow(smoothstep(life), 1.55)` curve, so
 //     the ribbon narrows toward its old end. Upstream tapers hard. This is a
 //     wide ribbon that narrows, not comet's narrow tail behind a bright head.
-//   • Lifetime is floored at 53% of `duration`, upstream's clamp. An earlier
-//     revision here dropped to 15%, which made slow strokes vanish almost
-//     before they were drawn and read as flicker.
+//   • A segment's own life is floored at 53% of `lifetime`, upstream's clamp.
+//     An earlier revision here dropped to 15%, which made slow strokes vanish
+//     almost before they were drawn and read as flicker.
 //   • The ribbon fades out as the pointer comes to rest rather than being cut
 //     off, upstream's stop fade.
 //
@@ -36,21 +36,21 @@
 // the same width on any machine.
 const float kFullWidthSpeed = 900.0;
 
-// The metadata trailSeconds. `duration` is this pack's trailWindowParam, so
+// The metadata trailSeconds. `lifetime` is this pack's trailWindowParam, so
 // the host spaces the ring over it and inflates the damage rect for it; a
 // value past this would walk samples the host has already stopped repainting
 // and leave their last sliver frozen on screen.
 const float kTrailSeconds = 1.4;
 
-// Stop fade, as a share of `duration`: the seconds of stillness over which
-// the ribbon fades away once the pointer stops. Scaled off the duration
+// Stop fade, as a share of `lifetime`: the seconds of stillness over which
+// the ribbon fades away once the pointer stops. Scaled off the lifetime
 // rather than fixed, because a fixed 0.35 s took the whole ribbon to zero
-// long before a 1.2 s duration had let its far end age out, which made most
-// of the Duration slider inert once the hand stopped. The ratio reproduces
-// the old 0.35 s at the default 0.5 s duration, and the result is floored so
-// a very short duration still gets a fade rather than a cut. No cap is
-// needed to stay inside trailSeconds: at the longest duration the fade is
-// 0.84 s against a 1.4 s window. (A clamp against the duration had its
+// long before a 1.2 s lifetime had let its far end age out, which made most
+// of the Lifetime slider inert once the hand stopped. The ratio reproduces
+// the old 0.35 s at the default 0.5 s lifetime, and the result is floored so
+// a very short lifetime still gets a fade rather than a cut. No cap is
+// needed to stay inside trailSeconds: at the longest lifetime the fade is
+// 0.84 s against a 1.4 s window. (A clamp against the lifetime had its
 // bounds cross below 0.2 s, which GLSL leaves undefined.)
 const float kStopFadeShare = 0.35 / 0.5;
 const float kStopFadeFloorSeconds = 0.2;
@@ -63,7 +63,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float duration = clamp(p_duration, 0.05, kTrailSeconds);
+    float lifetime = clamp(p_lifetime, 0.05, kTrailSeconds);
     float halfWidth = 0.5 * max(p_thickness, 0.5) * scale;
 
     // One gate for the whole ribbon, from the FILTERED speed. Upstream gates
@@ -76,7 +76,7 @@ vec4 pPointer(vec2 uv) {
     }
 
     // Stop fade: rest dims the whole ribbon out rather than cutting it.
-    float stopFadeSeconds = max(kStopFadeShare * duration, kStopFadeFloorSeconds);
+    float stopFadeSeconds = max(kStopFadeShare * lifetime, kStopFadeFloorSeconds);
     float stopFade = 1.0 - smoothstep(0.0, stopFadeSeconds, pointerIdleSeconds());
     if (stopFade <= 0.0) {
         return vec4(0.0);
@@ -92,7 +92,7 @@ vec4 pPointer(vec2 uv) {
     // behind it can be outside the damage rect, and the smoothing kernel
     // would blend a segment's far end toward one); the live count is the
     // window pointerSmoothedAt clamps its neighbours into.
-    int live = pointerLiveCount(count, duration);
+    int live = pointerLiveCount(count, lifetime);
     // Four-point window over the smoothed path. The span drawn this
     // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts by
     // one per iteration, so each sample is smoothed once rather than four
@@ -140,9 +140,10 @@ vec4 pPointer(vec2 uv) {
         float speedNorm = clamp(segSpeed / (kFullWidthSpeed * scale), 0.0, 1.0);
         float responsive = sqrt(speedNorm);
 
-        // Lifetime answers to speed, floored at 53% of duration as upstream
-        // clamps it, so a slow stretch still lives long enough to be seen.
-        float life = duration * mix(0.53, 1.0, responsive);
+        // A segment's life answers to speed, floored at 53% of `lifetime` as
+        // upstream clamps it, so a slow stretch still lives long enough to be
+        // seen.
+        float life = lifetime * mix(0.53, 1.0, responsive);
         float age = mix(a.z, b.z, t);
         if (age >= life) {
             continue;

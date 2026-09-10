@@ -9,7 +9,7 @@
     "layer": "below",
     "reachParam": "thickness",
     "trailSeconds": 1.4,
-    "trailWindowParam": "duration",
+    "trailWindowParam": "lifetime",
     "parameters": [
         {
             "id": "thickness",
@@ -30,8 +30,8 @@
             "description": "Brightness of the ribbon"
         },
         {
-            "id": "duration",
-            "name": "Duration",
+            "id": "lifetime",
+            "name": "Lifetime",
             "type": "float",
             "default": 0.5,
             "min": 0.1,

@@ -37,7 +37,7 @@ vec4 pPointer(vec2 uv) {
     // reason the head fade ends there: the last live frame at a low refresh
     // rate lands just inside the window, and a tail still fading at the edge
     // would leave its last sliver frozen at 20 Hz and below.
-    float tailSeconds = clamp(p_length, 0.05, 0.9 * kTrailSeconds);
+    float tailSeconds = clamp(p_lifetime, 0.05, 0.9 * kTrailSeconds);
     // The smoothing kernel clamps its neighbours into the run it is told about,
     // so it has to be told the LIVE run rather than the whole ring (the rule
     // pointer_lib states on pointerSmoothedAt, and what ink and sparks do).
@@ -81,7 +81,7 @@ vec4 pPointer(vec2 uv) {
     //
     // On `count`, NOT on the live run. The head belongs to the pointer, not to
     // the tail the user sized: gating it on `live` would retire it as soon as
-    // the idle time passed `length`, so at the shortest length it vanished a
+    // the idle time passed `lifetime`, so at the shortest setting it vanished a
     // tenth of a second after the pointer stopped while idleFade below was
     // still at full strength, and would not be out for another six tenths.
     float idleFade = 1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle);
