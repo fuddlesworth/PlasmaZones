@@ -30,7 +30,7 @@ struct AnimationShaderEffect;
 
 namespace PlasmaZones {
 
-/// Helpers shared by the SCREEN-LEVEL transition passes — the desktop
+/// Helpers shared by the screen-level passes that composite over a finished frame — the desktop
 /// switch/peek blend (DesktopTransitionManager) and the scrolling strip pass
 /// (StripTransitionManager). Both capture per-output scenes into
 /// output-sized FBOs and draw one full-screen quad through a pack shader, so

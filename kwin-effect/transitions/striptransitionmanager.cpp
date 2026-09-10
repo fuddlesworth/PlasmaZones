@@ -515,15 +515,41 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                                                                   /*resetPaintedLatch=*/false);
             // A failed walk (KWin 6.8 reports it) leaves the capture unusable,
             // and this capture IS the presented frame. Give the frame up rather
-            // than decorating a cleared texture: returning false sends
-            // PlasmaZonesEffect::paintScreen down its normal fall-through, whose
-            // own effects->paintScreen result is checked there — so the failure
-            // still reaches KWin, without this internal bool having to carry a
-            // third state. The three scope guards above unwind the framebuffer
-            // push and both latches on the way out; the cursor hide is released
-            // the same way the re-seat failure below does it.
+            // than decorating a cleared texture. The three scope guards above
+            // unwind the framebuffer push and both latches on the way out.
+            //
+            // The failure is reported through the effect's per-pass latch, NOT
+            // through this bool: paintOutput's false means "I did not take this
+            // frame", and on its own it would send the caller down the normal
+            // scene walk — a second full effects->paintScreen against a context
+            // KWin has just declared lost, whose answer would then be reported
+            // in place of this failure. The latch makes paintScreenImpl bail
+            // instead.
             if (!KWinCompat::paintScreenChecked(captureTarget, captureViewport, mask, walkRegion, screen)) {
-                updateCursorHiding();
+                m_effect->m_currentPassPaintFailed = true;
+                // NOT updateCursorHiding(): this entry is still live in m_active
+                // (it passed the settle check to get here), so that call returns
+                // early without releasing and the pointer would stay hidden with
+                // nobody drawing it. The re-seat arm below can use it only
+                // because its entry is already gone from the map. This is the
+                // unconditional per-output release, which is what "the caller is
+                // about to paint this output without us" needs.
+                releaseCursorHideForForeignPaint(screen);
+                // A settling leg pumps its own remaining frames — the spring's
+                // repaint pump died with the spring — and that pump lives in the
+                // tail this return skips.
+                //
+                // postPaintScreen DOES still run after a failed paint, but it
+                // deliberately skips reapSettled on such a pass, because freeing
+                // the entry's two output-sized textures needs a GL context a reset
+                // may have taken. So a settling leg that fails has nothing left to
+                // schedule its next frame, and its textures stay resident until
+                // unrelated damage happens by. One repaint per failed frame is
+                // what buys a pass that succeeds, which is where the reap runs; it
+                // stops at the first success, or when the fade closes.
+                if (!springLive) {
+                    KWin::effects->addRepaint(screen->geometry());
+                }
                 return false;
             }
         }
@@ -732,9 +758,18 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // local instead.
     QList<KWin::EffectWindow*> aboveStrip;
     aboveStrip.swap(m_effect->m_stripCaptureSkippedWindows);
-    compositeSharp(renderTarget, viewport, aboveStrip);
+    const bool compositedSharp = compositeSharp(renderTarget, viewport, aboveStrip);
     aboveStrip.clear();
     aboveStrip.swap(m_effect->m_stripCaptureSkippedWindows); // return the allocation for the next frame
+    if (!compositedSharp) {
+        // Give the frame up rather than presenting one silently missing its OSDs
+        // and notifications. Returning false here reaches paintScreenImpl's latch
+        // check, which reports the failure to KWin instead of re-walking the
+        // scene; the allocation swap above has already run, and the cursor is
+        // handed back below the same way every other abandon does it.
+        releaseCursorHideForForeignPaint(screen);
+        return false;
+    }
     // Last draw of the pass: the cursor, above everything, where KWin's own
     // overlay item would have put it had this pass not replaced the paint.
     // Shared with the pointer decoration pass, which hides and re-draws the
@@ -781,12 +816,17 @@ void StripTransitionManager::snapshotBelowCapture()
     TransitionPass::clearAlpha(0.0f);
 }
 
-void StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarget,
+// Returns whether every window composited. False means a chained paint reported
+// failure partway through, so the PRESENTED frame is missing everything above the
+// strip from that point up. The caller has to give the frame up on it — the latch
+// alone cannot carry this, because paintOutput's own true would already have been
+// returned to KWin by the time anything read it.
+bool StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarget,
                                             const KWin::RenderViewport& viewport,
                                             const QList<KWin::EffectWindow*>& windows)
 {
     if (windows.isEmpty()) {
-        return;
+        return true;
     }
     // Same direct-drive shape as the desktop pass's compositeWindowsInto:
     // drive each window through OUR OWN paintWindow so decorations, rule
@@ -822,8 +862,18 @@ void StripTransitionManager::compositeSharp(const KWin::RenderTarget& renderTarg
         // full-output anyway and every pixel of these windows has to be
         // redrawn. A region clip would only risk dropping parts the scene's
         // own damage never listed.
-        m_effect->paintWindow(renderTarget, viewport, w, paintMask, KWin::Region::infinite(), data);
+        // Checked like every other chained paint in this pass. These windows go
+        // onto the PRESENTED frame, so swallowing a failure here means the frame
+        // ships silently missing whatever sits above the strip — OSDs,
+        // notifications, dialogs. Stop at the first failure and record it on the
+        // pass so paintScreenImpl reports it rather than re-walking the scene.
+        if (!PLASMAZONES_PAINT_OK(
+                m_effect->paintWindow(renderTarget, viewport, w, paintMask, KWin::Region::infinite(), data))) {
+            m_effect->m_currentPassPaintFailed = true;
+            return false;
+        }
     }
+    return true;
 }
 
 bool StripTransitionManager::cursorOnOutput(KWin::LogicalOutput* screen) const

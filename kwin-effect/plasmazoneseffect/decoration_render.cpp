@@ -499,6 +499,20 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
     // for a window nothing else is animating; the padded-present branch below
     // widens it when a FOREIGN effect has clipped it.
     KWin::Region drawRegion = deviceRegion;
+    // What the foreign-band bookkeeping looked like BEFORE this draw recorded its
+    // intent, so a draw that then fails can put it back. Those two fields say
+    // "this is the band we last painted", and the next frame's changed-test is
+    // their only reader: recording a band a failed draw never painted makes that
+    // test answer "unchanged", so none of the three damage rects is issued and the
+    // halo band is neither recomposited nor cleared. A transform that then holds
+    // still leaves it that way indefinitely.
+    struct ForeignBandUndo
+    {
+        QString wid;
+        QRectF band;
+        qreal opacity = 1.0;
+    };
+    std::optional<ForeignBandUndo> foreignBandUndo;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
         // Mutable: the foreign-transform branch below records what it painted.
@@ -545,8 +559,12 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
                 const QRectF band = foreign
                     ? paddedBandRect(w, bit->outerPadding).translated(data.xTranslation(), data.yTranslation())
                     : QRectF();
-                const bool changed =
-                    band != bit->lastForeignBand || !qFuzzyCompare(data.opacity(), bit->lastForeignOpacity);
+                // foldStateEqual, not qFuzzyCompare: this is a 0..1 fold-state
+                // value and data.opacity() genuinely reaches 0.0 during a peek
+                // fade, where a relative comparison collapses. Same rule, and the
+                // same reason, as the fold-state comparisons in surface_capture.cpp.
+                const bool changed = band != bit->lastForeignBand
+                    || !foldStateEqual(static_cast<float>(data.opacity()), static_cast<float>(bit->lastForeignOpacity));
                 if (changed && KWin::effects) {
                     if (!band.isEmpty()) {
                         drawRegion |= viewport.mapToDeviceCoordinatesAligned(KWin::RectF(band));
@@ -557,6 +575,7 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
                     }
                     damagePaddedBand(w, bit->outerPadding);
                 }
+                foreignBandUndo = ForeignBandUndo{wid, bit->lastForeignBand, bit->lastForeignOpacity};
                 bit->lastForeignBand = band;
                 bit->lastForeignOpacity = data.opacity();
             }
@@ -687,6 +706,16 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
     }
     if (boundChannels > 0 || reboundLayerUnit || reboundSnapshotUnit) {
         glActiveTexture(GL_TEXTURE0);
+    }
+    // The draw failed, so the band recorded above was never painted. Put the
+    // previous values back, or the next frame's changed-test compares against a
+    // band that does not exist on screen and issues no damage for it.
+    if (!drawn && foreignBandUndo) {
+        const auto bit = m_windowDecorations.find(foreignBandUndo->wid);
+        if (bit != m_windowDecorations.end()) {
+            bit->lastForeignBand = foreignBandUndo->band;
+            bit->lastForeignOpacity = foreignBandUndo->opacity;
+        }
     }
     return drawn;
 }

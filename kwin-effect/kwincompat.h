@@ -35,7 +35,8 @@
 
 #if !defined(PLASMAZONES_KWIN_PAINT_RETURNS_BOOL)
 #error                                                                                                                 \
-    "PLASMAZONES_KWIN_PAINT_RETURNS_BOOL is not defined - kwin-effect/CMakeLists.txt sets it from the detected KWin version"
+    "PLASMAZONES_KWIN_PAINT_RETURNS_BOOL is not defined - "                                                         \
+    "kwin-effect/CMakeLists.txt sets it from the detected KWin version"
 #endif
 
 namespace KWin {
@@ -115,17 +116,38 @@ inline PaintResult paintResult([[maybe_unused]] bool ok)
 /// Keeping it here anyway is deliberate — every 6.7-vs-6.8 difference stays in this
 /// one file, so deleting the file is all the eventual cleanup needs. Expands to a
 /// bool expression; use it as `const bool drawn = PLASMAZONES_OFFSCREEN_DRAW_WINDOW(...)`.
+///
+/// Defined OUTSIDE the namespace below, with every other macro here: the
+/// preprocessor has no notion of namespaces, so a #define inside one only misleads
+/// a reader into thinking it is scoped.
+} // namespace PlasmaZones::KWinCompat
+
 #if PLASMAZONES_KWIN_PAINT_RETURNS_BOOL
 #define PLASMAZONES_OFFSCREEN_DRAW_WINDOW(...) (KWin::OffscreenEffect::drawWindow(__VA_ARGS__))
 #else
 #define PLASMAZONES_OFFSCREEN_DRAW_WINDOW(...) ((KWin::OffscreenEffect::drawWindow(__VA_ARGS__)), true)
 #endif
 
+/// Whether a call returning KWinCompat::PaintResult succeeded. A MACRO for the same
+/// reason PaintResult itself cannot simply be a bool: on 6.7 the expression's type
+/// is `void`, which no function could accept as an argument. Use it to check any of
+/// this effect's OWN paint hooks when one is called directly — the transition passes
+/// drive paintWindow that way to composite a window into a capture.
+///
+/// Always true on 6.7, where the hooks report nothing.
+#if PLASMAZONES_KWIN_PAINT_RETURNS_BOOL
+#define PLASMAZONES_PAINT_OK(...) (__VA_ARGS__)
+#else
+#define PLASMAZONES_PAINT_OK(...) ((__VA_ARGS__), true)
+#endif
+
+namespace PlasmaZones::KWinCompat {
+
 /// The render device @p view is painting on. 6.8-only: on 6.7 neither RenderDevice
 /// nor RenderView::renderDevice() exists, so this is always nullptr there — which
 /// sceneRenderer() below accepts, because 6.7 has a single renderer to return
 /// regardless. Callers must therefore NOT treat a null device as "cannot draw".
-inline KWin::RenderDevice* renderDeviceOf([[maybe_unused]] KWin::RenderView* view)
+[[nodiscard]] inline KWin::RenderDevice* renderDeviceOf([[maybe_unused]] KWin::RenderView* view)
 {
 #if PLASMAZONES_KWIN_PAINT_RETURNS_BOOL
     return view ? view->renderDevice() : nullptr;
@@ -137,7 +159,15 @@ inline KWin::RenderDevice* renderDeviceOf([[maybe_unused]] KWin::RenderView* vie
 /// The scene's ItemRenderer for @p device. 6.7 has one renderer per scene and
 /// ignores the device; 6.8 keys them by device, and passing the wrong one draws
 /// with another GPU's renderer. Callers pass the device of the pass they are in.
-inline KWin::ItemRenderer* sceneRenderer(KWin::Scene* scene, [[maybe_unused]] KWin::RenderDevice* device)
+///
+/// The one place the two versions differ in BEHAVIOUR rather than just in
+/// signature: on 6.8 a null device yields a null renderer, while on 6.7 the same
+/// call always returns the scene's only renderer. A caller's null-renderer arm is
+/// therefore reachable on 6.8 alone and a 6.7 build can never exercise it, so it
+/// must fail loudly rather than quietly. This is not a contradiction of the file
+/// header above: the SOURCE is written once, and it is the 6.7 half that cannot
+/// take the arm.
+[[nodiscard]] inline KWin::ItemRenderer* sceneRenderer(KWin::Scene* scene, [[maybe_unused]] KWin::RenderDevice* device)
 {
 #if PLASMAZONES_KWIN_PAINT_RETURNS_BOOL
     return device ? scene->renderer(device) : nullptr;

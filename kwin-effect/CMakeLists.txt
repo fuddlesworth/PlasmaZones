@@ -4,8 +4,9 @@
 # PlasmaZones KWin Effect (C++ Plugin) — requires KWin from Plasma 6.7+
 # (prePaintWindow(RenderView*,...), paintWindow(Region), no postPaintWindow).
 #
-# Builds against Plasma 6.7 AND 6.8. The two differ in the effect API at four
-# seams, all of them isolated in kwincompat.h and selected by the
+# Builds against Plasma 6.7 AND 6.8. The two differ in the effect API at three
+# seams (bool paint hooks, the new RenderDevice type, and a per-device
+# Scene::renderer), all of them isolated in kwincompat.h and selected by the
 # PLASMAZONES_KWIN_PAINT_RETURNS_BOOL definition set below; no function body in
 # this tree is version-conditional. Both versions are supported because the
 # distro channels reach 6.8 weeks apart, and a source tree that only built
@@ -68,15 +69,17 @@ endif()
 # RenderDevice its ItemRenderer belongs to. kwincompat.h is the only place that
 # reads this; see the header of this file for when the 6.7 side is removed.
 #
-# An UNDETECTABLE version (no KWinConfigVersion.cmake, or a format change in it)
-# falls to the 6.7 signatures and fails loudly at compile time on a 6.8 tree,
-# rather than being silently assumed either way.
+# An UNDETECTABLE version (a format change in KWinConfigVersion.cmake, so the
+# regex above finds nothing) falls to the 6.7 signatures and fails loudly at
+# compile time on a 6.8 tree, rather than being silently assumed either way.
+# A MISSING version file is not one of these cases: find_package(KWin 6.7
+# REQUIRED) above has already failed by then.
 set(PZ_KWIN_PAINT_RETURNS_BOOL 0)
 if(_pz_kwin_version AND _pz_kwin_version VERSION_GREATER_EQUAL 6.7.90)
     set(PZ_KWIN_PAINT_RETURNS_BOOL 1)
-    message(STATUS "PlasmaZones KWin effect: Plasma 6.8 paint API (bool paint hooks, per-device ItemRenderer)")
+    message(STATUS "PlasmaZones KWin effect: bool paint API selected for KWin ${_pz_kwin_version} (bool paint hooks, per-device ItemRenderer)")
 else()
-    message(STATUS "PlasmaZones KWin effect: Plasma 6.7 paint API (void paint hooks, single ItemRenderer)")
+    message(STATUS "PlasmaZones KWin effect: void paint API selected for KWin ${_pz_kwin_version} (void paint hooks, single ItemRenderer)")
 endif()
 
 # Tell AutoMoc about KWin's effect factory macro (suppresses false positive warning)
@@ -180,6 +183,7 @@ set(plasmazones_effect_SRCS
     handlers/dragtracker.h
     compositor/snapassistthumbnailcapture.cpp
     compositor/snapassistthumbnailcapture.h
+    compositor/snapassistcapturehelpers.h
     compositor/windowanimator.cpp
     compositor/windowanimator.h
     compositor/stripviewanimator.cpp

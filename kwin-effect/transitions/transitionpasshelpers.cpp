@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include "compositor/effectlogging.h"
 #include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 
@@ -146,6 +147,18 @@ void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderV
     // a secondary GPU. 6.7 has a single renderer and ignores it (see kwincompat.h).
     KWin::ItemRenderer* const renderer = KWinCompat::sceneRenderer(scene, device);
     if (!renderer) {
+        // 6.8 only, and only when the pass had no device to resolve a renderer
+        // from. Every caller reaches this while holding KWin's own cursor HIDDEN
+        // for the pass, so returning quietly means nobody draws the pointer for
+        // the length of the leg — and kwincompat.h forbids callers from testing
+        // the device themselves, so no caller can defend against it. Say so, once
+        // per run: at vsync rate this would otherwise flood the journal.
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            qCWarning(lcEffect) << "no ItemRenderer for this pass's render device — the scene cursor cannot be drawn; "
+                                   "the pointer will be missing while a strip leg or pointer pack holds the hide";
+        }
         return;
     }
     const ShaderInternal::ScopedGlState glStateGuard;

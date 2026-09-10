@@ -349,8 +349,10 @@ private:
     /// Draw @p windows sharp onto the current target, bottom to top, each
     /// through the effect's own paintWindow with m_directPaintCapture set.
     /// Used for the above-strip set after the pack's quad.
-    void compositeSharp(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                        const QList<KWin::EffectWindow*>& windows);
+    /// Returns false when a window's paint reported failure (6.8 only), leaving
+    /// the presented frame missing everything above the strip from that point up.
+    [[nodiscard]] bool compositeSharp(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                      const QList<KWin::EffectWindow*>& windows);
 
     /// Erase one entry, freeing its GL resources. Caller ensures a current
     /// GL context (paintOutput is on the paint thread; the off-thread

@@ -415,6 +415,15 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // which has to happen on this path too — the source's slot was cleared for
     // the capture and nothing else puts it back.
     if (!drawn) {
+        // Clear the request as well, exactly as every other abort arm in this
+        // function does. The only consumer re-enters this capture whenever
+        // needsSnapshot is still set and oldSnapshot is still null, and for a
+        // non-tab leg it returns Handled without drawing the window — so leaving
+        // the flag set does not cost one frame, it costs the whole leg, and
+        // re-runs a full drawWindow chain plus a fresh texture and framebuffer
+        // every frame of it. Cleared, the shader falls back to iHasOldWindow == 0,
+        // which is the documented degradation.
+        transition.needsSnapshot = false;
         return;
     }
 

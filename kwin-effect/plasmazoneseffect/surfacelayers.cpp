@@ -373,6 +373,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // the wrong side of it is not a capture at all: the fold would read a texture that
     // was allocated and never written. Re-capture on the flip, which costs exactly one
     // frame and happens almost never.
+    //
+    // Whether the capture actually drew. On 6.8 the draw chain can report failure,
+    // which leaves the target holding nothing but its clear; captureValid stays
+    // false for the retake, but the two steps below run BEFORE anything would read
+    // that back, so the outcome has to be carried in hand.
+    bool captureOk = true;
     if (!state.captureValid) {
         // The capture is RAW (opacity 1.0), with ONE fail-safe exception: an opacity-baking
         // chain (the plain opacity-tint layer) whose opacity-tint pack has no compiled shader
@@ -400,8 +406,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
             }
         }
-        captureWindowSurface(w, state, logicalGeometry, captureScale,
-                             /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
+        captureOk = captureWindowSurface(w, state, logicalGeometry, captureScale,
+                                         /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
     }
     // Shell surfaces: bound the capture's VISIBLE content so the packs can
     // hug what the user actually sees instead of the window rect (a floating
@@ -414,7 +420,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // is throttled inside (1 s), and a rect that actually moved clears the
     // prefix/composite caches itself — which is why this sits ABOVE the
     // allStatic early return below: the re-fold must see the drop this frame.
-    if (deco.isShellSurface) {
+    //
+    // Gated on the capture having DRAWN, which is not the same gate this comment
+    // argues against. That one refused a rescan when the capture was merely CACHED
+    // (captureValid false meaning "nothing fresh this frame"); this one refuses it
+    // when there is no usable capture at all. Scanning the cleared texture reads
+    // alpha 0 everywhere, stores an empty content rect, and stamps the scan
+    // timestamp — which arms the 1 s throttle, so the empty rect stands for up to a
+    // second and the packs fall back to the raw window rect. It would also measure
+    // against a stale captureInComposite and captureFrameOffset, neither of which
+    // the failed capture updated.
+    if (captureOk && deco.isShellSurface) {
         updateShellContentRect(w, state, captureScale);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
@@ -422,6 +438,21 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // capture-skipped path too — the slot is a per-window binding the transition
     // path relies on being (re)asserted every fold, not a side effect of capturing.
     setShader(w, captureRestoreShader ? captureRestoreShader : surfacePresentShader());
+
+    // Nothing was captured, so there is nothing to fold. Abandon the way the
+    // decoration-teardown path above does, with no composite for this frame: folding
+    // on would run every pack's draw over a transparent texture and then stamp
+    // compositeValid on the result for an all-static chain, which is the common case
+    // — presenting a blank decoration and caching it. planSurfaceFold re-captures on
+    // the next fold because captureValid is still false.
+    //
+    // Placed after the setShader above for the reason the next comment gives: the
+    // slot is a per-window binding the transition path relies on being re-asserted on
+    // every fold, and an early return that skipped it would strand the window on the
+    // wrong shader.
+    if (!captureOk) {
+        return nullptr;
+    }
 
     // A chain with no animated pack in it produces a composite that is a pure
     // function of the capture — so once folded, it stays correct for exactly as long

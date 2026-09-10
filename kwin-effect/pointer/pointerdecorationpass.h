@@ -7,7 +7,6 @@
 #include <PhosphorPointer/PointerShaderContract.h>
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorPointer/PointerShaderRegistry.h>
-#include <PhosphorPointer/PointerUniformExtension.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
 
@@ -318,7 +317,7 @@ private:
             userTextures;
         std::vector<CompiledBufferPass> bufferPasses;
         /// Ping-pong buffer targets, one pair per compiled buffer stage. Slot
-        /// `bufferFront` holds the LAST frame's output (what `bufferFeedback`
+        /// While the run is in progress `bufferFront` holds the LAST frame's output (what `bufferFeedback`
         /// reads); the other is written this frame, and the two swap after the
         /// draw. Sized to the output's device size times the pack's clamped
         /// `bufferScale`, revalidated every frame and reallocated on a change.
@@ -409,7 +408,7 @@ private:
     KWin::GLTexture* cursorSpriteTexture();
 
     /// Is @p screen covered by the effect's fullscreen gate? Inline and header-
-    /// resident because all three TUs of this pass consult it: every liveness,
+    /// resident because both TUs that gate on suppression consult it: every liveness,
     /// damage and draw path funnels through this one expression, so no two of
     /// them can disagree about whether the pass is suppressed.
     bool suppressedOn(KWin::LogicalOutput* screen) const

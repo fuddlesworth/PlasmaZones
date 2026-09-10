@@ -112,7 +112,7 @@ BuildRequires:  kf6-kirigami-devel >= 6.26.0
 # block for why an exact pin breaks whole-desktop upgrades.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
-# find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
+# find_package(KWin) in kwin-effect/CMakeLists.txt pulls in KWinConfig.cmake,
 # which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
 # 6.7). openSUSE's kwin6-devel does not drag these into the build root itself,
 # so the KWin effect's CMake configure step fails without them. KF6Config /
@@ -220,6 +220,14 @@ Features:
 %autosetup -n PlasmaZones-%{version}
 
 %build
+# There is no %%check section, deliberately. Building the tests needs glslang on
+# PATH, because the shader-validate gates hard-fail when it is missing rather
+# than skipping, and the suite also needs a session D-Bus. Neither is a
+# reasonable BuildRequires for a distro package. Test evidence for this tree
+# comes from CI, which builds and runs the full suite on every push and pull
+# request, including one job against the next Plasma. Worth remembering when
+# changing the KWin floor: this is the path that compiles against Fedora's and
+# openSUSE's KWin, so it proves the build rather than the behaviour.
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF

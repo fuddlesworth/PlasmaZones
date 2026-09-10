@@ -795,14 +795,26 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                     continue;
                 }
                 KWin::GLTexture* tex = entry->texture.get();
-                if (cached->userTextureLoc[slot] >= 0) {
-                    shader->setUniform(cached->userTextureLoc[slot], 1 + slot);
-                }
+                // The declared size goes up whether or not the SAMPLER survived
+                // the link: a pack may read iTextureResolution[slot] without ever
+                // sampling the texture, and this cached program persists uniform
+                // state across transitions, so skipping the push would leave a
+                // prior leg's stale size standing — the same reason the fallback
+                // arm above pushes it explicitly.
                 if (cached->iTextureResolutionLoc[slot] >= 0) {
                     const QSize sz = tex->size();
                     shader->setUniform(cached->iTextureResolutionLoc[slot],
                                        QVector4D(sz.width(), sz.height(), 0.0f, 0.0f));
                 }
+                // A slot the linker dropped (the shader never samples it) has no
+                // sampler to point anywhere, so the bind below has no reader —
+                // pure waste at per-paint, per-slot, per-transition rate. The
+                // no-texture arm above already skips the bind on this same
+                // condition; this arm did not. The unbind below matches.
+                if (cached->userTextureLoc[slot] < 0) {
+                    continue;
+                }
+                shader->setUniform(cached->userTextureLoc[slot], 1 + slot);
                 glActiveTexture(GL_TEXTURE1 + slot);
                 tex->bind();
                 // Wrap mode lives on the cached `GLTexture`'s GL
@@ -982,7 +994,15 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // resolved sampler location but no cached texture bound the
         // transparent fallback above, so it needs the same unbind.
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-            if (!transition.userTextures[slot] && cached->userTextureLoc[slot] < 0) {
+            // A superset of what was bound, narrowed to exclude the one case that
+            // never binds: a slot whose sampler the linker dropped. Within
+            // loc >= 0 the two arms bind a cached texture or the transparent
+            // fallback — and the fallback arm can itself decline if
+            // transparentFallbackTexture() returns null, so this may still unbind
+            // a unit that draw did not touch. glBindTexture(0) on an already-zero
+            // unit is harmless; the alternative is threading a per-slot bound flag
+            // through the loop for nothing.
+            if (cached->userTextureLoc[slot] < 0) {
                 continue;
             }
             glActiveTexture(GL_TEXTURE1 + slot);

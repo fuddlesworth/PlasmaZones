@@ -130,19 +130,30 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         // engine's relayout for the incoming desktop already landed — a
         // one-frame race at worst, and the pills are over the columns they
         // label either way.
-        compositeWindowsInto(
-            renderTarget, viewport, logicalGeometry,
-            [desktop](KWin::EffectWindow* w) {
-                return !w->isMinimized() && !w->isHidden() && !w->isHiddenByShowDesktop() && w->isOnCurrentActivity()
-                    && (w->isOnDesktop(desktop) || w->isOnAllDesktops());
-            },
-            screen);
+        // Abandon the endpoint on a partial composite, the same way the failed
+        // scene walks in this file do. The texture is non-null and would otherwise
+        // pass the caller's null-pair check and be blended, missing every window
+        // above the failure, for the whole switch.
+        if (!compositeWindowsInto(
+                renderTarget, viewport, logicalGeometry,
+                [desktop](KWin::EffectWindow* w) {
+                    return !w->isMinimized() && !w->isHidden() && !w->isHiddenByShowDesktop()
+                        && w->isOnCurrentActivity() && (w->isOnDesktop(desktop) || w->isOnAllDesktops());
+                },
+                screen)) {
+            return nullptr;
+        }
     }
 
     return tex;
 }
 
-void DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& renderTarget,
+// Returns whether every window composited. A false means the draw chain reported
+// failure partway through (6.8 only), so the target holds a PARTIAL composite —
+// every window above the failure point missing. That has to reach the caller: the
+// texture is not null, so it would otherwise sail past the endpoint null-check and
+// be blended for the whole duration of the switch.
+bool DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& renderTarget,
                                                     const KWin::RenderViewport& viewport, const QRectF& logicalGeometry,
                                                     const std::function<bool(KWin::EffectWindow*)>& includeWindow,
                                                     KWin::LogicalOutput* pillScreen)
@@ -227,13 +238,24 @@ void DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& re
         // sees dt = 0. Across frames an extra step is a no-op by
         // construction: Spring::step is an exact exponential integrator, so
         // step(a) then step(b) lands bit-for-bit where step(a+b) does.
-        m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
+        // Checked for the same reason every other chained paint in this file is:
+        // a false is a failed paint, and continuing the loop would keep drawing
+        // into a target the compositor has already given up on. Give up on the
+        // whole composite instead — a partial one is not a usable endpoint. The
+        // pass latch carries the failure past paintOutput's own bool, which only
+        // means "I did not take this frame".
+        if (!PLASMAZONES_PAINT_OK(
+                m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData))) {
+            m_effect->m_currentPassPaintFailed = true;
+            return false;
+        }
         if (w == pillAnchor) {
             // Above every column this capture paints, below whatever the
             // stacking puts over the strip — the live walk's anchor slot.
             m_effect->paintScrollTabIndicators(renderTarget, viewport, captureRegion);
         }
     }
+    return true;
 }
 
 std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen,
@@ -296,6 +318,12 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
             // does above, rather than animating to a black desktop. The scope
             // guard pops the framebuffer on the way out.
             if (!KWinCompat::paintScreenChecked(renderTarget, viewport, mask, walkRegion, screen)) {
+                // Record it on the pass as well as abandoning the endpoint. The
+                // null reaches paintOutput's abandon, which returns false — and
+                // false on its own only means "I did not take this frame", which
+                // the caller answers with a second full scene walk against a
+                // context KWin has already declared lost.
+                m_effect->m_currentPassPaintFailed = true;
                 return nullptr;
             }
         }
@@ -400,6 +428,12 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
             // and for the same reason: this texture is a peek endpoint held for
             // the length of the animation.
             if (!KWinCompat::paintScreenChecked(renderTarget, viewport, mask, walkRegion, screen)) {
+                // Record it on the pass as well as abandoning the endpoint. The
+                // null reaches paintOutput's abandon, which returns false — and
+                // false on its own only means "I did not take this frame", which
+                // the caller answers with a second full scene walk against a
+                // context KWin has already declared lost.
+                m_effect->m_currentPassPaintFailed = true;
                 return nullptr;
             }
         }
@@ -418,13 +452,16 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
         // election found no column to anchor on. The hidden columns are
         // composited here, so the pills are blitted here too, at the topmost
         // column this walk paints.
-        compositeWindowsInto(
-            renderTarget, viewport, logicalGeometry,
-            [](KWin::EffectWindow* w) {
-                return w->isHiddenByShowDesktop() && !w->isDeleted() && !w->isMinimized() && !w->isHidden()
-                    && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
-            },
-            screen);
+        // As in captureDesktop: a partial composite is not a usable endpoint.
+        if (!compositeWindowsInto(
+                renderTarget, viewport, logicalGeometry,
+                [](KWin::EffectWindow* w) {
+                    return w->isHiddenByShowDesktop() && !w->isDeleted() && !w->isMinimized() && !w->isHidden()
+                        && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+                },
+                screen)) {
+            return nullptr;
+        }
     }
     return tex;
 }

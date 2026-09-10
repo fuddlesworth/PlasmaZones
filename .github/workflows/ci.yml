@@ -44,6 +44,17 @@ on:
 permissions:
   contents: read
 
+# One in-flight run per ref, matching kwin-rebuild-watch.yml and release.yml.
+# Without this every push to a PR ran the whole matrix — now five container jobs,
+# each doing a full pacman -Syu, build and ctest — to completion, including the
+# runs whose results nobody will ever read. Cancellation is limited to pull
+# requests: a superseded PR push is genuinely dead work, whereas a push to a
+# release branch or a tag is a result worth keeping even when another lands
+# behind it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build (arch, KDE_FRAMEWORKS=${{ matrix.kde }})
@@ -246,8 +257,10 @@ jobs:
   #
   # ADVISORY (continue-on-error): kde-unstable is a moving target that is
   # legitimately mid-rebuild at times, and a beta repo's health must not block
-  # merging unrelated work. Failures still show on the PR. Flip this to
-  # required if the noise turns out to be lower than the risk.
+  # merging unrelated work. Be clear about what that costs: this job reports a
+  # GREEN check whatever happens, so the verify step below and a genuine 6.8
+  # compile break are both visible only by opening the job log. Flip this to
+  # required once the beta repo's noise turns out to be lower than that risk.
   #
   # This job's whole life is the gap between a Plasma beta and that Plasma
   # reaching Arch stable. Once the `build` job's own KWin is 6.8 or newer, this
@@ -271,6 +284,10 @@ jobs:
           mv /tmp/pacman.conf.new /etc/pacman.conf
           # Same package set as the `build` job. Kept in step with it by hand:
           # this job exists to change the Plasma VERSION, not the dependencies.
+          # Note what kde-unstable actually moves, though: it carries beta Qt, KF6
+          # and Kirigami as well as Plasma, and the Test step below runs the FULL
+          # suite against them. A failure here is not necessarily about the paint
+          # API — the Verify step above is the part that speaks only to that.
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed \
             git base-devel ccache \
@@ -312,12 +329,16 @@ jobs:
       # this job becomes a duplicate of `build`. Assert the NEW arm was actually
       # selected, so "no newer Plasma to test" is a visible state rather than a
       # false pass. kwin-effect/CMakeLists.txt emits the line.
+      #
+      # Matched on the API-SELECTION phrase rather than a marketing version
+      # number: a grep for "Plasma 6.8" keeps passing once kde-unstable moves on
+      # to 6.9, while no longer distinguishing anything.
       - name: Verify the next-Plasma paint API was selected
         run: |
           set -euo pipefail
           grep -F 'building against KWin' configure.log || true
-          if ! grep -qF 'Plasma 6.8 paint API' configure.log; then
-            echo "::error::kde-unstable did not provide a Plasma 6.8 KWin, so this job compiled the 6.7 arm and duplicated the 'build' job. If 6.8 has reached Arch stable, retire this job and the 6.7 half of kwin-effect/kwincompat.h."
+          if ! grep -qF 'bool paint API selected' configure.log; then
+            echo "::error::kde-unstable did not provide KWin 6.7.90 or newer, so this job compiled the 6.7 arm and duplicated the 'build' job. If 6.8 has reached Arch stable, retire this job and the 6.7 half of kwin-effect/kwincompat.h."
             exit 1
           fi
 

@@ -3,6 +3,7 @@
 
 #include "snapassistthumbnailcapture.h"
 
+#include "compositor/snapassistcapturehelpers.h"
 #include "kwincompat.h"
 #include "plasmazoneseffect/shader_internal.h"
 
@@ -52,85 +53,7 @@ Q_LOGGING_CATEGORY(lcSnapAssistTrace, "kwin.effect.plasmazones.snapassist.trace"
 
 namespace PlasmaZones {
 
-namespace {
-/// Settle delay before the first capture attempt for a candidate. A freshly
-/// mapped window may not have a renderable compositor frame the instant it is
-/// queued; one frame at 60Hz (~16ms) is reliably enough for drawWindow to read
-/// non-empty content, while not adding meaningful latency to the snap-assist UI
-/// (which already shows icons immediately and fades thumbs in asynchronously).
-constexpr int RENDER_SETTLE_MS = 16;
-/// Retry delay used when the first render produced an empty buffer. Four
-/// frames at 60Hz: long enough for a stalled compositor frame to clear,
-/// short enough that the user still sees the thumbnail before the eye
-/// notices the fallback icon.
-constexpr int RENDER_RETRY_MS = 64;
-/// Consecutive dma-buf capture failures (export failure or daemon import
-/// rejection) before the session permanently falls back to the raw-pixel path.
-/// >1 so a single transient bad frame doesn't disable the zero-copy path,
-/// while a genuine capability gap (every frame fails) trips it quickly.
-constexpr int DmabufFailureThreshold = 2;
-/// Smallest useful thumbnail axis. A fit below this (an extreme-aspect
-/// window rounding one axis toward 1px) produces a sliver that passes the
-/// daemon's `width > 0` validation and then latches into the dedup window
-/// as a useless thumbnail — treat it as a capture failure so the candidate
-/// falls back to its icon instead.
-constexpr int MinThumbnailAxisPx = 8;
-
-/// RAII holder for a raw fd. exportTextureToDmabuf juggles a dma-buf fd and
-/// a fence fd across six distinct early-return paths; a scoped owner makes
-/// "every path closes what it opened" structural instead of per-branch
-/// bookkeeping the next edit can silently break.
-struct ScopedFd
-{
-    int fd = -1;
-    ScopedFd() = default;
-    explicit ScopedFd(int f)
-        : fd(f)
-    {
-    }
-    ~ScopedFd()
-    {
-        if (fd >= 0) {
-            ::close(fd);
-        }
-    }
-    ScopedFd(const ScopedFd&) = delete;
-    ScopedFd& operator=(const ScopedFd&) = delete;
-    /// Transfer ownership out (the success path hands the fd to the caller).
-    int release()
-    {
-        const int f = fd;
-        fd = -1;
-        return f;
-    }
-    bool valid() const
-    {
-        return fd >= 0;
-    }
-};
-
-/// True when every pixel of an ARGB32 image has zero alpha. A cleared FBO
-/// whose drawWindow produced nothing reads back as a valid, fully transparent
-/// image — isNull() cannot distinguish that from a real capture, so the
-/// "window had no renderable frame yet" retry must test content, not
-/// nullness. 256² is 256 KiB; a linear byte scan at capture cadence is
-/// negligible next to the GPU readback that produced the image.
-bool isFullyTransparent(const QImage& image)
-{
-    if (image.isNull() || image.format() != QImage::Format_ARGB32) {
-        return false;
-    }
-    for (int y = 0; y < image.height(); ++y) {
-        const auto* line = reinterpret_cast<const quint32*>(image.constScanLine(y));
-        for (int x = 0; x < image.width(); ++x) {
-            if (line[x] & 0xff000000u) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-} // namespace
+using namespace PlasmaZones::SnapAssistCaptureHelpers;
 
 SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
     : QObject(parent)
@@ -268,11 +191,6 @@ void SnapAssistThumbnailCapture::rearmDmabufPath()
     }
     m_dmabufEnabled = true;
     m_dmabufConsecutiveFailures = 0;
-}
-
-static int boxMajorAxis(QSize box)
-{
-    return std::max(box.width(), box.height());
 }
 
 bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle, QSize box) const
@@ -436,11 +354,11 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                 // KWin 6.8 reports a failed draw (a GPU reset, typically) instead
                 // of leaving it to be inferred. Skipping the readback leaves
                 // `result` null, which the isNull() check below already treats as
-                // a capture failure — the same route fbo.valid() takes above. This
-                // is the one case isFullyTransparent could not separate: a reset
-                // reads back as a valid, fully transparent image, indistinguishable
-                // from "no renderable frame yet" and so retried forever. Now it is
-                // a failure outright.
+                // a capture failure — the same route fbo.valid() takes above, so
+                // the candidate goes through the ordinary empty-image handling:
+                // one retry, then dropped to its icon. Worth skipping rather than
+                // reading back, because a cleared FBO comes back as a VALID fully
+                // transparent image that only isFullyTransparent would catch.
                 if (drawn) {
                     // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
                     // origin is bottom-left, so flip to a top-down QImage.
@@ -588,6 +506,18 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     // cleared or uninitialised buffer to the daemon as a thumbnail. Popped first,
     // so the framebuffer stack is balanced on this path too.
     if (!drawn) {
+        // Flagged as a per-candidate miss rather than left to the caller's default
+        // bucket. That default counts the failure toward DmabufFailureThreshold,
+        // which is 2 — so two failed draws (one GPU reset spanning the batch and
+        // its retry) would permanently disable the zero-copy path for the session.
+        // A lost context says nothing whatever about whether the driver supports
+        // dma-buf export. The flag is not a perfect fit either (this is transient,
+        // not a property of the window), but it carries the one meaning that
+        // matters here: drop this candidate without counting it as a capability
+        // failure. Snap-assist shows the window's icon for this round.
+        if (candidateNotRenderable) {
+            *candidateNotRenderable = true;
+        }
         qCDebug(lcSnapAssistCapture) << "renderWindowToExportTexture: draw failed, discarding capture";
         return nullptr;
     }

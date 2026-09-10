@@ -217,7 +217,13 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
 // whole capture cache is for. @p intoCaptureTex is false only for the degenerate chain
 // where no pack compiled, which folds nothing and presents the capture directly out of
 // compositeTex[0].
-void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
+//
+// Returns whether the capture succeeded. False means the target holds nothing but the
+// clear below, so the caller must abandon the fold rather than run it over a
+// transparent texture — captureValid is left false for the retake, but the caller
+// cannot rely on reading that back, because the shell content scan and the composite
+// validity stamp both run before the next fold would consult it.
+bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
                                              const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
                                              qreal captureOpacity)
 {
@@ -258,7 +264,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         // whole fix: the fold retakes the capture on a later frame instead of
         // folding and presenting a cleared one. Every other field below
         // describes a capture that now does not exist, so none of them is set.
-        return;
+        return false;
     }
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
@@ -269,6 +275,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     // move-invariant, because the canvas is derived from the window's own
     // geometry and moves with it.
     state.captureFrameOffset = w->frameGeometry().topLeft() - logicalGeometry.topLeft();
+    return true;
 }
 
 void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale)
