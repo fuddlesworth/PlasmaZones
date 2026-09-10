@@ -79,6 +79,16 @@ void main() {
         if (count >= 2) {
             // A capsule along the newest segment, so a fast stroke lays down
             // a continuous line rather than a row of dots.
+            //
+            // A STRAIGHT capsule, and a deliberate exception to the shared
+            // curve every other path pack traces. This pack does not stroke a
+            // path at all: it stamps the newest span into an accumulation
+            // buffer once per frame and lets the buffer decay, so what a
+            // viewer sees is the union of hundreds of overlapping stamps
+            // rather than one traced line, and a curve through four control
+            // points would cost the walk without changing the union. If this
+            // ever draws the whole run in one pass, it must come onto
+            // pointerCurveDistanceFrom with the rest of the family.
             float t;
             d = pointerSegmentDistance(px, 0, t);
         } else {

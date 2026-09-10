@@ -1,7 +1,7 @@
 {
     "id": "echo",
     "name": "Echo",
-    "description": "The pointer leaves copies of itself behind. Each echo is the real cursor, stamped where the pointer was a moment ago and tinted further along the spectrum as it ages, from cyan just behind the tip to rose at the end of the trail. Move slowly and they read as separate ghosts, move quickly and they blur into one streak. A click throws the whole line of echoes bright for an instant.",
+    "description": "The pointer leaves copies of itself behind. Each echo is the real cursor, stamped where the pointer was a moment ago and tinted further along the spectrum as it ages, from cyan just behind the tip to rose at the end of the trail. Move quickly and they spread out into separate ghosts, move slowly and they gather into one soft smudge. A click throws the whole line of echoes bright for an instant.",
     "author": "PlasmaZones",
     "version": "0.1",
     "category": "Trail",

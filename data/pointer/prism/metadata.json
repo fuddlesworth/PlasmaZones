@@ -1,7 +1,7 @@
 {
     "id": "prism",
     "name": "Prism",
-    "description": "The pointer draws a stroke of light that splits into its colours. At rest the stroke is a single white filament. As the pointer speeds up the filament spreads across the width of the stroke into the full spectrum, cyan along one edge and rose along the other, and it draws back together the moment the hand slows. A click throws the split wide open for an instant.",
+    "description": "The pointer draws a stroke of light that splits into its colours. Move slowly and it is a single white filament. As the pointer speeds up the filament spreads across the width of the stroke into the full spectrum, cyan along one edge and rose along the other, and it draws back together as the hand slows again. A click throws the split wide open for an instant.",
     "author": "PlasmaZones",
     "version": "0.1",
     "category": "Trail",

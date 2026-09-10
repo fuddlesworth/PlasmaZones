@@ -6,8 +6,9 @@
 // moves faster. Same silhouette, motion along the length instead of only a
 // fade.
 //
-// THE IDEA. The tube keeps the constant width and the age fade Phosphor
-// Trail owns, and gains motion ALONG ITS LENGTH: bright nodes travelling
+// THE IDEA. The tube keeps the constant width Phosphor Trail owns (the age
+// fade is filament's own, and is shallower, because the train already gives
+// the stroke motion) and gains motion ALONG ITS LENGTH: bright nodes travelling
 // toward the pointer, faster as the hand moves faster. A stroke that carries
 // current reads as live; a stroke that only dims reads as a smear. The
 // silhouette is unchanged, so the pack still sits clearly apart from the
@@ -16,18 +17,28 @@
 // THE NODE COORDINATE is AGE, not arc length. Age increases monotonically
 // from the pointer to the tail and every fragment already has it; arc length
 // would need a prefix sum over the whole path per fragment for a difference
-// nobody could see. Nodes move toward the pointer, so the phase is
-// SUBTRACTED from the age.
+// nobody could see. Nodes move toward the pointer, so the phase is ADDED to
+// the age: a node sits where age * nodes + phase is constant, and since the
+// phase grows the node's age SHRINKS, which is the walk from the tail to the
+// pointer.
 //
-// FLOW SPEED. The travel rate is the `flow` parameter lifted by the pointer's
-// FILTERED speed, not its raw per-sample speed: the per-sample figure reads 0
-// whenever two events share a millisecond, and the nodes would stutter on a
-// steady drag. It goes through pointerWrapSafeRate so the phase does not jump
-// when iTime wraps in the settings preview; on the compositor iTime restarts
-// per burst of pointer activity and never wraps.
+// FLOW SPEED, AND WHY THE RATE IS CONSTANT. `flow` is a rate in cycles per
+// second and nothing lifts it with the pointer's speed, because the racing is
+// already there for free. A node holds a constant speed in AGE, and the live
+// run always spans `lifetime` seconds of age however long it is in pixels, so
+// a path of length speed * lifetime carries that node across the screen at a
+// rate proportional to the pointer's own. Lifting the rate as well would be
+// worse than redundant: `phase` is iTime * rate, not an integral of the rate,
+// so any rate that moves per frame steps the whole train by iTime * dRate at
+// once. That is a jump of whole cycles seconds into a drag, and it reads as
+// scintillation rather than as acceleration. The rate goes through
+// pointerWrapSafeRate so the phase does not jump when iTime wraps in the
+// settings preview; on the compositor iTime restarts per burst of pointer
+// activity and never wraps.
 //
-// The nodes modulate the CORE only. The bloom stays smooth, so the stroke
-// still reads as one continuous tube of light with something moving inside
+// The nodes modulate the CORE only. The bloom stays smooth, so while there is
+// bloom to carry it the stroke reads as one continuous tube of light with
+// something moving inside
 // it rather than as a dotted line, and the alpha never drops out between
 // nodes.
 //
@@ -37,8 +48,10 @@
 // inside the declared reach.
 
 const float kPacketSeconds = 0.4;
-// Speed at which the flow is fully lifted (logical px/s, scaled at use).
-const float kFullSpeed = 350.0;
+// The metadata trailSeconds. `lifetime` is this pack's trailWindowParam, so
+// the host spaces the ring over it; a value past this would walk samples the
+// host has already dropped from the damage rect and freeze their last sliver.
+const float kTrailSeconds = 2.0;
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
@@ -53,7 +66,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float lifetime = max(p_lifetime, 0.05);
+    float lifetime = clamp(p_lifetime, 0.05, kTrailSeconds);
     float halfWidth = 0.5 * max(p_width, 0.5) * scale;
     float sigma = halfWidth * 2.2 + 1.5 * scale;
     float innerSigma = sigma * 0.5;
@@ -65,15 +78,16 @@ vec4 pPointer(vec2 uv) {
     // frames while the hand sweeps genuinely has a soft edge, and a 1.5 px
     // hard edge on a stroke crossing 40 px between frames reads as a cut-out
     // ribbon rather than as light. The speed it answers to is the FILTERED
-    // one, so the edge does not chatter between frames. Small enough that the
-    // stroke is still crisp at rest.
+    // one, so the edge does not chatter between frames. That figure does not
+    // decay when the hand stops -- it is measured over the current stroke and
+    // holds its last value -- so a stroke that swept fast keeps its softest
+    // edge for the whole fade rather than crisping up as it dies.
     float feather = 0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed());
 
-    // The travelling phase. The flow parameter is the resting rate in cycles
-    // per second and the pointer's speed lifts it up to three times that, so
-    // a fast sweep visibly races.
-    float activity = clamp(pointerFilteredSpeed() / (kFullSpeed * scale), 0.0, 1.0);
-    float flowRate = max(p_flow, 0.0) * (1.0 + 2.0 * activity);
+    // The travelling phase, at a rate that does not move: see FLOW SPEED
+    // above. A sweep races because the path it is painted along is longer,
+    // not because this number grows.
+    float flowRate = max(p_flow, 0.0);
     float phase = flowRate > 0.0 ? iTime * pointerWrapSafeRate(flowRate) : 0.0;
     float nodes = max(p_nodes, 0.5);
     float depth = clamp(p_depth, 0.0, 1.0);
@@ -106,8 +120,8 @@ vec4 pPointer(vec2 uv) {
     // Four-point window over the smoothed path. The span drawn this
     // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts by
     // one per iteration, so each sample is smoothed once rather than four
-    // times. The newest end passes its endpoint twice, which gives that end a
-    // zero tangent and a span that leaves it straight down the chord.
+    // times. The newest end passes its endpoint twice, so that end's
+    // tangent is the chord itself and the span leaves it straight.
     vec2 c0 = pointerSmoothedAt(0, live, p_smoothing);
     vec2 c1 = c0;
     vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
@@ -140,9 +154,9 @@ vec4 pPointer(vec2 uv) {
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
         c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        c1 = c2;
+        c2 = c3;
+        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
         if (d > limit) {
             continue;
         }
@@ -150,18 +164,27 @@ vec4 pPointer(vec2 uv) {
         float u = 1.0 - age;
         float fade = u * u;
 
-        // The node train. Subtracting the phase runs the nodes toward the
-        // pointer, which is the direction that reads as current arriving
-        // rather than as the trail draining away.
-        float wave = 0.5 + 0.5 * sin((age * nodes - phase) * TAU);
+        // The node train. Adding the phase runs the nodes toward the pointer
+        // (a node holds age * nodes + phase constant, so a growing phase walks
+        // it to a smaller age), which is the direction that reads as current
+        // arriving rather than as the trail draining away.
+        float wave = 0.5 + 0.5 * sin((age * nodes + phase) * TAU);
         // Sharpened so the nodes are beads rather than a soft ripple, then
         // mixed in by `depth` so 0 leaves the even tube.
         float train = mix(1.0, wave * wave, depth);
 
-        float c = (1.0 - smoothstep(halfWidth - feather, halfWidth + feather, d)) * fade * train;
+        // The core silhouette before the train chops it. The packet is
+        // sampled off this rather than off `c`, because the packet runs from
+        // the pointer to the tail while the train runs the other way, and a
+        // band read through a counter-propagating chopper is strobed into
+        // fragments instead of arriving as one bright pulse.
+        float cFlat = (1.0 - smoothstep(halfWidth - feather, halfWidth + feather, d)) * fade;
+        float c = cFlat * train;
         float ht = exp(-(d * d) / (2.0 * hotSigma * hotSigma)) * fade * train;
-        // The bloom is NOT modulated by the train: the tube stays continuous
-        // and only what is inside it moves.
+        // The bloom is NOT modulated by the train: while there is bloom, the
+        // tube stays continuous and only what is inside it moves. At glow 0
+        // there is none, so the train chops the core alone and a deep enough
+        // `depth` really does read as a dotted line.
         float h = (0.62 * exp(-(d * d) / (2.0 * innerSigma * innerSigma))
                    + 0.38 * exp(-(d * d) / (2.0 * sigma * sigma)))
                   * fade * 0.45 * max(p_glow, 0.0);
@@ -172,7 +195,7 @@ vec4 pPointer(vec2 uv) {
         }
         if (packetGain > 0.0) {
             float da = age - packetPos;
-            packet = max(packet, exp(-(da * da) / (2.0 * kPacketBand * kPacketBand)) * max(c, h * 1.6));
+            packet = max(packet, exp(-(da * da) / (2.0 * kPacketBand * kPacketBand)) * max(cFlat, h * 1.6));
         }
         core = max(core, c);
         hot = max(hot, ht);

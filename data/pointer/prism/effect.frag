@@ -8,9 +8,12 @@
 // THE IDEA. Colour is read ACROSS THE WIDTH of the stroke, not along its
 // length and not over time. One edge of the stroke is cyan, the other is
 // rose, and the brand spectrum runs between them through a white filament in
-// the middle. How far apart the colours sit is driven by pointer speed: at
-// rest the whole spectrum collapses onto the filament and the stroke is a
-// single white line, and at speed it opens into the full ramp. That makes
+// the middle. How far apart the colours sit is driven by pointer speed: as
+// the hand slows the spectrum draws back together and the stroke goes white,
+// and at speed it opens into the full ramp. It is the hand SLOWING that
+// closes it, not the hand stopping: the filtered speed is measured over the
+// current stroke and holds its last value once the pointer parks, so a stroke
+// that swept fast keeps its split for the whole fade. That makes
 // the palette the mechanic rather than a tint, which is what Phosphor Trail
 // never had.
 //
@@ -21,8 +24,10 @@
 // SIGNED OFFSET. The split needs to know WHICH SIDE of the stroke a fragment
 // is on, so this pack computes the perpendicular offset itself rather than
 // taking the unsigned distance from the shared helper: the closest point on
-// the segment comes back through `t`, and the sign is the cross product of
-// the segment direction with the fragment's offset from its near end. The
+// the span comes back through `t`, and the sign is the cross product of the
+// curve's TANGENT AT THAT POINT with the fragment's offset from it. Taking
+// the chord direction and the near end instead would disagree with the drawn
+// curve by the whole turn angle at a bend. The
 // magnitude is still the same distance the helper returns, so the silhouette
 // and the reject boxes are identical to every other path pack's.
 //
@@ -42,6 +47,11 @@
 
 const float kFlareSeconds = 0.35;
 
+// The metadata trailSeconds. `lifetime` is this pack's trailWindowParam, so the
+// host spaces the ring over it and inflates the damage rect for it; a value
+// past this would walk samples the host has already stopped repainting.
+const float kTrailSeconds = 2.0;
+
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
     if (count < 2) {
@@ -58,7 +68,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float lifetime = max(p_lifetime, 0.05);
+    float lifetime = clamp(p_lifetime, 0.05, kTrailSeconds);
     float halfWidth = 0.5 * max(p_width, 0.5) * scale;
     float sigma = halfWidth * 1.6 + 1.5 * scale;
     float innerSigma = sigma * 0.5;
@@ -71,8 +81,10 @@ vec4 pPointer(vec2 uv) {
     // frames while the hand sweeps genuinely has a soft edge, and a 1.5 px
     // hard edge on a stroke crossing 40 px between frames reads as a cut-out
     // ribbon rather than as light. The speed it answers to is the FILTERED
-    // one, so the edge does not chatter between frames. Small enough that the
-    // stroke is still crisp at rest.
+    // one, so the edge does not chatter between frames. That figure does not
+    // decay when the hand stops -- it is measured over the current stroke and
+    // holds its last value -- so a stroke that swept fast keeps its softest
+    // edge for the whole fade rather than crisping up as it dies.
     float feather = 0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed());
 
     // How far apart the colours sit, 0 (one white filament) to 1 (full ramp
@@ -107,11 +119,14 @@ vec4 pPointer(vec2 uv) {
     // the damage rect, and the smoothing kernel would otherwise blend a
     // segment's far end toward one of them.
     int live = pointerLiveCount(count, lifetime);
+    if (live < 2) {
+        return vec4(0.0);
+    }
     // Four-point window over the smoothed path. The span drawn this
     // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts by
     // one per iteration, so each sample is smoothed once rather than four
-    // times. The newest end passes its endpoint twice, which gives that end a
-    // zero tangent and a span that leaves it straight down the chord.
+    // times. The newest end passes its endpoint twice, so that end's
+    // tangent is the chord itself and the span leaves it straight.
     vec2 c0 = pointerSmoothedAt(0, live, p_smoothing);
     vec2 c1 = c0;
     vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
@@ -154,8 +169,23 @@ vec4 pPointer(vec2 uv) {
         // twist through the bend. The tangent is taken as a short forward
         // difference along the span, which is the same construction the
         // distance walk uses and costs one extra curve evaluation.
-        vec2 here = pointerCurvePoint(c0, c1, c2, c3, t);
-        vec2 ahead = pointerCurvePoint(c0, c1, c2, c3, min(t + 0.05, 1.0));
+        // The span's control points are kept while the window advances, so
+        // the cull below can come FIRST. Most fragments inside a reject box
+        // are still outside the tube, and the side costs a second curve
+        // evaluation, a length and a divide that they would otherwise all pay.
+        vec2 s0 = c0;
+        vec2 s1 = c1;
+        vec2 s2 = c2;
+        vec2 s3 = c3;
+        c0 = c1;
+        c1 = c2;
+        c2 = c3;
+        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        if (d > limit) {
+            continue;
+        }
+        vec2 here = pointerCurvePoint(s0, s1, s2, s3, t);
+        vec2 ahead = pointerCurvePoint(s0, s1, s2, s3, min(t + 0.05, 1.0));
         vec2 seg = ahead - here;
         vec2 rel = px - here;
         // The 2D cross product, normalised by the tangent length so it is a
@@ -165,13 +195,6 @@ vec4 pPointer(vec2 uv) {
         // the middle of the ramp rather than as an edge colour.
         float tangentLen = length(seg);
         float side = tangentLen > 1e-4 ? (seg.x * rel.y - seg.y * rel.x) / tangentLen : 0.0;
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
-        if (d > limit) {
-            continue;
-        }
         float age = clamp(mix(a.z, b.z, t) / lifetime, 0.0, 1.0);
         float u = 1.0 - age;
         float fade = u * u;
@@ -213,6 +236,11 @@ vec4 pPointer(vec2 uv) {
     // seam, the one maximum-contrast join the brand ramp has no return leg
     // for.
     vec3 rgb = phosphorGradient(clamp(ramp * 0.9 + 0.1 * bestAge, 0.0, 1.0));
+    // As the split closes, the ramp collapses onto its own middle, which is
+    // mid-spectrum violet rather than white. The stroke is only the single
+    // white filament the description promises if the COLOUR collapses with
+    // it, so fold the same factor through here.
+    rgb = mix(vec3(1.0), rgb, clamp(disp / max(clamp(p_dispersion, 0.0, 1.0), 1e-4), 0.0, 1.0));
     // The filament is white where the colours have not separated, and the
     // press flare drives it whiter still.
     rgb = mix(rgb, vec3(1.0), clamp(hot * (0.9 - 0.35 * disp) + 0.5 * flare, 0.0, 1.0));

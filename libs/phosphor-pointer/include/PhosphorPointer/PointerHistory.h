@@ -188,8 +188,9 @@ public:
     [[nodiscard]] bool isLive(qint64 nowMs, double trailSeconds) const;
 
     /// Bounding box of the trail samples, press and release points younger
-    /// than @p trailSeconds, inflated by @p reachDevicePx on every side.
-    /// Null when not live.
+    /// than @p trailSeconds, inflated by @p reachDevicePx on every side plus
+    /// the overshoot the packs' curve is allowed outside the straight path
+    /// between those samples. Null when not live.
     [[nodiscard]] QRectF damageRect(double reachDevicePx, qint64 nowMs, double trailSeconds) const;
 
     void reset();

@@ -400,10 +400,13 @@ QRectF PointerHistory::damageRect(double reachDevicePx, qint64 nowMs, double tra
         maxX = std::max(maxX, p.x());
         maxY = std::max(maxY, p.y());
     };
+    std::array<QPointF, kCapacity> live{};
+    int liveCount = 0;
     for (int i = 0; i < m_count; ++i) {
         const Sample& sample = sampleAt(i);
         if (secondsBetween(nowMs, sample.timeMs) < trailSeconds) {
             include(sample.pos);
+            live[static_cast<size_t>(liveCount++)] = sample.pos;
         }
     }
     if (m_hasPress && secondsBetween(nowMs, m_pressMs) < trailSeconds) {
@@ -418,7 +421,33 @@ QRectF PointerHistory::damageRect(double reachDevicePx, qint64 nowMs, double tra
         // by the tests above, so this cannot be reached.
         return {};
     }
-    const double r = std::max(0.0, reachDevicePx);
+    // Every path pack strokes a Catmull-Rom curve through the SMOOTHED
+    // samples, not the straight chords between the raw ones this box is built
+    // from, and that curve is allowed to bulge outside them. The packs already
+    // pay for the overshoot in their own reject boxes (pointerCurveBulge in
+    // data/pointer/shared/pointer_lib.glsl); without the same allowance here
+    // the host repaints a rect the packs are entitled to paint outside of, and
+    // the stroke is cut flat at the damage edge on a fast curved sweep. It
+    // bites hardest on the packs whose paint limit IS the reach, which have no
+    // slack to absorb it.
+    //
+    // The bound: the curve leaves the box of its span's endpoints by at most
+    // tension/3 of the longer neighbour chord, |c2 - c0| or |c3 - c1|. Those
+    // are SMOOTHED points, and a smoothed point is a convex blend of three
+    // consecutive raw samples, so both chords lie inside the diameter of the
+    // five raw samples one span can reach -- indices no more than four apart.
+    // Taking the widest such pair holds for every smoothing setting, which is
+    // why this needs no knowledge of the packs' own parameters.
+    double widestSpan = 0.0;
+    for (int i = 0; i < liveCount; ++i) {
+        const int last = std::min(i + 4, liveCount - 1);
+        for (int j = i + 1; j <= last; ++j) {
+            widestSpan =
+                std::max(widestSpan, QLineF(live[static_cast<size_t>(i)], live[static_cast<size_t>(j)]).length());
+        }
+    }
+    const double curveAllowance = PointerShaderContract::kPointerCurveTension * (1.0 / 3.0) * widestSpan;
+    const double r = std::max(0.0, reachDevicePx) + curveAllowance;
     return QRectF(QPointF(minX, minY), QPointF(maxX, maxY)).adjusted(-r, -r, r, r);
 }
 

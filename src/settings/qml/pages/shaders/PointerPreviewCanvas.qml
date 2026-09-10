@@ -111,10 +111,18 @@ Item {
     /// Seconds per lap. Slow enough to read the trail, quick enough that a
     /// click pack does not keep the viewer waiting.
     readonly property real _lapSeconds: 4.0
-    /// Where in the lap the button goes down, and for how long. Placed at the
-    /// crossing point of the eight, where the cursor is briefly slowest, so a
-    /// click ring is not smeared by the motion around it.
-    readonly property real _pressAt: 0.5
+    /// Where in the lap the button goes down, and for how long. Placed near
+    /// the slowest point of the lap so a click ring is not smeared by the
+    /// motion around it.
+    ///
+    /// NOT the centre crossing at 0.5, which is where this used to sit: on a
+    /// figure eight both axes reach their peak rate together at the crossing,
+    /// so it is the FASTEST point of the whole lap (about 324 px/s, the figure
+    /// kPreviewPeakSpeedPxPerSecond is derived from) rather than the slowest.
+    /// Every click pack was previewed under the worst smear the stage can
+    /// produce. The speed is |(248.3 cos 2pi p, 207.6 cos 4pi p)|, which
+    /// bottoms out near p = 0.34 at about 159 px/s.
+    readonly property real _pressAt: 0.34
     readonly property real _pressTurns: 0.03
     readonly property bool _pressed: _phase >= _pressAt && _phase < _pressAt + _pressTurns
 

@@ -10,7 +10,9 @@
 // BRIGHTNESS PROFILE. Three terms, not two. `core` is the plateau that
 // carries the constant-width silhouette and the alpha. `hot` is a narrow
 // gaussian at its centre and is the only thing that whitens, so the filament
-// goes white while the core's own edge stays fully coloured. `halo` is the
+// goes white while the core's own edge stays fully coloured. It is the only
+// thing that whitens the RESTING stroke; the click flare whitens too, on top
+// of it. `halo` is the
 // bloom, two gaussians sharing one peak (a tight lobe at half the width plus
 // the wide one) rather than a single wide gaussian that spends its energy in
 // the skirt. The core also gives up its brightness faster than the bloom, so
@@ -32,8 +34,8 @@
 //
 // `activationSpeed` gates the whole tube once through the shared
 // pointerActivationGate(), and `smoothing` goes through pointerSmoothedAt(),
-// so this pack and every other speed-gated pack (Comet, Sparks, WindTrail,
-// Halo, Arc) gate on the same filtered figure, and every path pack traces
+// so this pack and every other speed-gated pack gate on the same filtered
+// figure -- naming them here only rots as packs land -- and every path pack traces
 // the same curve. Both default to 0, which is the no-threshold, raw-path
 // behaviour.
 
@@ -55,6 +57,8 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
+    // Floored against an UNSET uniform reading 0, not against a user value:
+    // the metadata min is 0.2, so no setting can reach this.
     float lifetime = max(p_lifetime, 0.05);
     float halfWidth = 0.5 * max(p_width, 0.5) * scale;
     float sigma = halfWidth * 2.2 + 1.5 * scale;
@@ -80,8 +84,10 @@ vec4 pPointer(vec2 uv) {
     // frames while the hand sweeps genuinely has a soft edge, and a 1.5 px
     // hard edge on a stroke crossing 40 px between frames reads as a cut-out
     // ribbon rather than as light. The speed it answers to is the FILTERED
-    // one, so the edge does not chatter between frames. Small enough that the
-    // stroke is still crisp at rest.
+    // one, so the edge does not chatter between frames. That figure does not
+    // decay when the hand stops -- it is measured over the current stroke and
+    // holds its last value -- so a stroke that swept fast keeps its softest
+    // edge for the whole fade rather than crisping up as it dies.
     float feather = 0.75 + 1.6 * smoothstep(0.0, 1200.0 * scale, pointerFilteredSpeed());
 
     // Press pulse, gone well inside trailSeconds.
@@ -130,8 +136,8 @@ vec4 pPointer(vec2 uv) {
     // Four-point window over the smoothed path. The span drawn this
     // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts by
     // one per iteration, so each sample is smoothed once rather than four
-    // times. The newest end passes its endpoint twice, which gives that end a
-    // zero tangent and a span that leaves it straight down the chord.
+    // times. The newest end passes its endpoint twice, so that end's
+    // tangent is the chord itself and the span leaves it straight.
     vec2 c0 = pointerSmoothedAt(0, live, p_smoothing);
     vec2 c1 = c0;
     vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
@@ -171,9 +177,9 @@ vec4 pPointer(vec2 uv) {
         float t;
         float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
         c0 = c1;
-            c1 = c2;
-            c2 = c3;
-            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+        c1 = c2;
+        c2 = c3;
+        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
         if (d > limit) {
             continue;
         }

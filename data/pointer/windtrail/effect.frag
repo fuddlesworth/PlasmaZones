@@ -36,6 +36,12 @@
 // the same width on any machine.
 const float kFullWidthSpeed = 900.0;
 
+// The metadata trailSeconds. `duration` is this pack's trailWindowParam, so
+// the host spaces the ring over it and inflates the damage rect for it; a
+// value past this would walk samples the host has already stopped repainting
+// and leave their last sliver frozen on screen.
+const float kTrailSeconds = 1.4;
+
 // Stop fade, as a share of `duration`: the seconds of stillness over which
 // the ribbon fades away once the pointer stops. Scaled off the duration
 // rather than fixed, because a fixed 0.35 s took the whole ribbon to zero
@@ -57,7 +63,7 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float duration = max(p_duration, 0.05);
+    float duration = clamp(p_duration, 0.05, kTrailSeconds);
     float halfWidth = 0.5 * max(p_thickness, 0.5) * scale;
 
     // One gate for the whole ribbon, from the FILTERED speed. Upstream gates
@@ -90,8 +96,8 @@ vec4 pPointer(vec2 uv) {
     // Four-point window over the smoothed path. The span drawn this
     // iteration is c1..c2 and c0 / c3 set its tangents; the window shifts by
     // one per iteration, so each sample is smoothed once rather than four
-    // times. The newest end passes its endpoint twice, which gives that end a
-    // zero tangent and a span that leaves it straight down the chord.
+    // times. The newest end passes its endpoint twice, so that end's
+    // tangent is the chord itself and the span leaves it straight.
     vec2 c0 = pointerSmoothedAt(0, live, p_smoothing);
     vec2 c1 = c0;
     vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);

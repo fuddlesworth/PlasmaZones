@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Comet pointer shader — one bright head on the newest trail sample and a
-// tapered single-colour tail along the trail polyline, with hashed grain
+// tapered single-colour tail along the smoothed curve through the trail, with hashed grain
 // twinkling through the tail. Coverage is the max over segments. The head
 // itself fades with idle time so the whole comet is gone within the
 // metadata's trailSeconds even while the pointer rests.
@@ -99,8 +99,8 @@ vec4 pPointer(vec2 uv) {
     // Four-point window over the smoothed path. The span drawn this iteration
     // is c1..c2 and c0 / c3 set its tangents; the window shifts by one per
     // iteration, so each sample is smoothed once rather than four times. The
-    // head end passes its own position twice, which gives it a zero tangent
-    // and a span that leaves the head straight down the chord.
+    // head end passes its own position twice, so the head's tangent is the
+    // chord itself and the span leaves it straight.
     vec2 c0 = headPos;
     vec2 c1 = headPos;
     vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
@@ -111,21 +111,20 @@ vec4 pPointer(vec2 uv) {
         }
         vec4 a = pointerTrailAt(i);
         vec4 b = pointerTrailAt(i + 1);
-        if (a.z >= tailSeconds) {
-            break;
-        }
-        // The box is over ALL FOUR control points, not just the span's ends:
-        // the curve is guaranteed to stay inside their hull plus the bulge,
-        // and a box over c1..c2 alone would cut a rounded corner that leaves
-        // it.
+        // The box is over all four control points rather than the span's two
+        // ends. That is deliberately CONSERVATIVE, not required: the bulge
+        // already bounds the curve against the box of c1..c2 alone (see
+        // pointerCurveBulge), and c0 / c3 are not on the curve at all. Taking
+        // them in costs a slightly larger box and buys never having to think
+        // about the bound again.
         float bulge = pointerCurveBulge(c0, c1, c2, c3);
         vec2 lo = min(min(c0, c1), min(c2, c3)) - reach - bulge;
         vec2 hi = max(max(c0, c1), max(c2, c3)) + reach + bulge;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-        c0 = c1;
-        c1 = c2;
-        c2 = c3;
-        c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
+            c0 = c1;
+            c1 = c2;
+            c2 = c3;
+            c3 = pointerSmoothedAt(i + 3, live, p_smoothing);
             continue;
         }
 

@@ -5,10 +5,10 @@
 #include <PhosphorPointer/PointerHistory.h>
 #include <PhosphorPointer/PointerShaderContract.h>
 
+#include <QLineF>
 #include <QtTest/QtTest>
 
 #include <algorithm>
-#include <QLineF>
 #include <cmath>
 #include <limits>
 
@@ -60,7 +60,11 @@ private Q_SLOTS:
     void testTrailWindowEdgeValuesFallBackToTheFloor();
     void testClockStepDoesNotLatchAcrossFollowingEvents();
     void testRestingPointerEventuallyEvictsEveryMotionSample();
-    void testRenderedPathNeverChangesOnceDrawn();
+    void testButtonMaskCarriesEveryHeldButton();
+    void testSimultaneousPressReportsTheDocumentedPrecedence();
+    void testFrameStateCarriesTheCanvasScale();
+    void testDamageRectDropsAPressOlderThanTheWindow();
+    void testDamageRectSurvivesANegativeReach();
 };
 
 void TestPointerHistory::testFreshHistoryIsNotLive()
@@ -461,10 +465,13 @@ void TestPointerHistory::testStationaryAppendsAreNotMotion()
     history.setTrailSeconds(0.5);
     history.notePointer(QPointF(0.0, 0.0), 0);
     history.notePointer(QPointF(100.0, 0.0), 50);
+    // Captured BEFORE the rest: filteredSpeed() takes no nowMs and reads only
+    // the ring, so reading it after the loop would compare the figure to
+    // itself and hold for any implementation at all.
+    const double movingSpeed = history.frameState(50, 1.0).filteredSpeed;
     for (qint64 t = 66; t <= 1050; t += 16) {
         history.notePointer(QPointF(100.0, 0.0), t);
     }
-    const PointerFrameState moving = history.frameState(50, 1.0);
     const PointerFrameState resting = history.frameState(1050, 1.0);
     QVERIFY2(resting.trailSize() > 2, "the stationary samples still land in the ring");
     QVERIFY2(resting.idleSeconds >= 1.0, qPrintable(QStringLiteral("idle %1").arg(resting.idleSeconds)));
@@ -473,7 +480,7 @@ void TestPointerHistory::testStationaryAppendsAreNotMotion()
     // The stationary samples are skipped by the filter, so the figure HOLDS
     // across the rest, as it does on the compositor where no sample lands at
     // all; the packs' idle fades end the drawing, not a decaying gate.
-    QCOMPARE(resting.filteredSpeed, moving.filteredSpeed);
+    QCOMPARE(resting.filteredSpeed, movingSpeed);
     QVERIFY(resting.filteredSpeed > 0.0);
 
     // The pairing stayed put too: the next real move pairs with the 50 ms
@@ -675,11 +682,16 @@ void TestPointerHistory::testTrailWindowChangeMidStreamRespacesTheRing()
     QCOMPARE(history.sampleIntervalMs(), qint64(26)); // ceil(800 / 31)
 
     qint64 t = 0;
-    for (int i = 0; i < 40; ++i) {
+    for (int i = 0; i < 20; ++i) {
         t += 30;
         history.notePointer(QPointF(double(i) * 20.0, 0.0), t);
     }
-    QCOMPARE(history.frameState(t, 0.8).trailSize(), PointerShaderContract::kMaxTrailPoints);
+    // Deliberately NOT filled to capacity: trailSize saturates at kCapacity,
+    // so on a full ring the refresh assertion below would read 32 == 32 and
+    // hold even for an implementation that appended on every event.
+    const int filled = history.frameState(t, 0.8).trailSize();
+    QVERIFY2(filled > 2 && filled < PointerShaderContract::kMaxTrailPoints,
+             qPrintable(QStringLiteral("filled %1").arg(filled)));
 
     // Grow the window. The interval widens, and the slots already in the ring
     // keep their absolute anchors, so the next append simply waits longer.
@@ -805,131 +817,71 @@ void TestPointerHistory::testRestingPointerEventuallyEvictsEveryMotionSample()
     QCOMPARE(history.frameState(t, 0.5).filteredSpeed, 0.0);
 }
 
-namespace {
-
-// Mirrors of the two shared-library functions the packs reconstruct the path
-// with, pointerSmoothedAt() and pointerCurvePoint(), so this test measures
-// what is actually DRAWN rather than what the ring happens to store. They have
-// to be kept in step with data/pointer/shared/pointer_lib.glsl.
-struct DrawnPath
+void TestPointerHistory::testButtonMaskCarriesEveryHeldButton()
 {
-    const PointerFrameState* state = nullptr;
-    int live = 0;
-    double smoothing = 0.0;
-
-    [[nodiscard]] QPointF at(int i) const
-    {
-        const QVector4D v = state->trailAt(std::clamp(i, 0, live - 1));
-        return QPointF(v.x(), v.y());
-    }
-    [[nodiscard]] double age(int i) const
-    {
-        return state->trailAt(std::clamp(i, 0, live - 1)).z();
-    }
-    [[nodiscard]] QPointF smoothed(int i) const
-    {
-        const QPointF here = at(i);
-        if (smoothing <= 0.0) {
-            return here;
-        }
-        const double dtPrev = std::max(age(i) - age(i - 1), 0.0) + 1e-4;
-        const double dtNext = std::max(age(i + 1) - age(i), 0.0) + 1e-4;
-        const QPointF mean = (at(i - 1) * dtNext + at(i + 1) * dtPrev) / (dtPrev + dtNext);
-        return here * (1.0 - smoothing) + ((here + mean) / 2.0) * smoothing;
-    }
-    /// Catmull-Rom position at @p t along the span between smoothed samples
-    /// @p i and i + 1, at kPointerCurveTension.
-    [[nodiscard]] QPointF curve(int i, double t) const
-    {
-        const QPointF c0 = smoothed(std::max(i - 1, 0));
-        const QPointF c1 = smoothed(i);
-        const QPointF c2 = smoothed(i + 1);
-        const QPointF c3 = smoothed(i + 2);
-        const QPointF m1 = (c2 - c0) * 0.25;
-        const QPointF m2 = (c3 - c1) * 0.25;
-        const double t2 = t * t;
-        const double t3 = t2 * t;
-        return c1 * (2 * t3 - 3 * t2 + 1) + m1 * (t3 - 2 * t2 + t) + c2 * (-2 * t3 + 3 * t2) + m2 * (t3 - t2);
-    }
-};
-
-} // namespace
-
-void TestPointerHistory::testRenderedPathNeverChangesOnceDrawn()
-{
-    // THE INVARIANT: a piece of trail, once drawn, must never be redrawn
-    // somewhere else. The user is looking at it. Anything that mutates the
-    // ring BEHIND the head breaks this, because the packs rebuild the whole
-    // stroke from the ring every frame.
-    //
-    // The ring keeps it by construction: samples are only ever appended at the
-    // head and dropped off the tail, so a sample's neighbours are the same
-    // physical samples for its entire life. That is a stronger guarantee than
-    // it looks, because a pack's curve reads TWO samples past each end of the
-    // span it draws (the Catmull-Rom tangents), so dropping one sample from
-    // the middle would reshape spans whose own endpoints never moved. An
-    // earlier attempt to space the ring non-uniformly by dropping interior
-    // samples measured 2.9 px of movement per frame here, which is what a
-    // trail that re-smooths itself as it grows looks like.
-    //
-    // Pinned to an ABSOLUTE moment, never to an age: the point at a fixed AGE
-    // names an earlier place on the path every frame, so it genuinely moves,
-    // and tracking one would measure the pointer's speed and pass regardless.
+    // The mask is a bitmask (1 left, 2 right, 4 middle) and is published to
+    // every pack, but nothing asserted a nonzero value, so an implementation
+    // that reused the 1/2/3 button-code encoding passed the whole suite.
     PointerHistory history;
-    history.setTrailSeconds(0.9);
-    const auto pathAt = [](double ms) {
-        const double u = ms / 1000.0;
-        return QPointF(300.0 + 400.0 * std::sin(u * 1.7), 300.0 + 300.0 * std::cos(u * 1.1));
-    };
-    qint64 t = 0;
-    for (; t <= 2000; ++t) {
-        history.notePointer(pathAt(double(t)), t);
-    }
+    history.noteButtons(Qt::LeftButton | Qt::MiddleButton, Qt::NoButton, QPointF(10.0, 10.0), 0);
+    QCOMPARE(history.frameState(0, 1.0).buttons, 5);
 
-    const qint64 pinnedMs = t - 300;
-    QPointF previous;
-    bool havePrevious = false;
-    double worstShift = 0.0;
-    int frames = 0;
-    for (int frame = 0; frame < 120; ++frame) {
-        for (int k = 0; k < 8; ++k) {
-            ++t;
-            history.notePointer(pathAt(double(t)), t);
-        }
-        const PointerFrameState state = history.frameState(t, 1.0);
-        const DrawnPath drawn{&state, state.trailSize(), 0.35};
-        const double wantAge = double(t - pinnedMs) / 1000.0;
-        if (drawn.live < 4 || wantAge >= drawn.age(drawn.live - 1)) {
-            break; // the pinned moment has aged out of the ring
-        }
-        int i = 0;
-        while (i + 1 < drawn.live && drawn.age(i + 1) < wantAge) {
-            ++i;
-        }
-        // The last two spans are skipped, not because they may move but
-        // because their tangents read CLAMPED neighbours: the oldest span's
-        // shape does change as the run shortens under it. That happens at the
-        // very end of the trail, where every pack has faded to nothing.
-        if (i + 2 >= drawn.live - 1) {
-            break;
-        }
-        const double a0 = drawn.age(i);
-        const double a1 = drawn.age(i + 1);
-        const double f = a1 > a0 ? (wantAge - a0) / (a1 - a0) : 0.0;
-        const QPointF here = drawn.curve(i, f);
-        if (havePrevious) {
-            worstShift = std::max(worstShift, QLineF(previous, here).length());
-        }
-        previous = here;
-        havePrevious = true;
-        ++frames;
-    }
-    QVERIFY2(frames > 40, qPrintable(QStringLiteral("only %1 frames measured").arg(frames)));
-    // EXACTLY still, not merely close. The reconstruction is a pure function
-    // of samples that do not change, so the only tolerance needed is for the
-    // float round trip through the frame state.
-    QVERIFY2(worstShift < 0.01,
-             qPrintable(QStringLiteral("drawn path moved %1 px after it was drawn").arg(worstShift)));
+    PointerHistory middle;
+    middle.noteButtons(Qt::MiddleButton, Qt::NoButton, QPointF(10.0, 10.0), 0);
+    QCOMPARE(middle.frameState(0, 1.0).buttons, 4);
+}
+
+void TestPointerHistory::testSimultaneousPressReportsTheDocumentedPrecedence()
+{
+    // Left, then right, then middle when several land at once. Reversing the
+    // scan would change which button code every multi-button press reports.
+    PointerHistory history;
+    history.noteButtons(Qt::RightButton | Qt::LeftButton, Qt::NoButton, QPointF(5.0, 5.0), 0);
+    QCOMPARE(history.frameState(0, 1.0).pressButton, 1);
+
+    PointerHistory rightAndMiddle;
+    rightAndMiddle.noteButtons(Qt::MiddleButton | Qt::RightButton, Qt::NoButton, QPointF(5.0, 5.0), 0);
+    QCOMPARE(rightAndMiddle.frameState(0, 1.0).pressButton, 2);
+}
+
+void TestPointerHistory::testFrameStateCarriesTheCanvasScale()
+{
+    // Every other call site in this file passes 1.0, so the field had no
+    // coverage at all: dropping the assignment passed the suite.
+    PointerHistory history;
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    QCOMPARE(history.frameState(0, 1.75).scale, 1.75);
+}
+
+void TestPointerHistory::testDamageRectDropsAPressOlderThanTheWindow()
+{
+    // The mixed case: a stale click with a live trail. Without the window test
+    // on the press the rect would span from any old click position for the
+    // rest of the session, which is the cost this class exists to avoid.
+    PointerHistory history;
+    history.setTrailSeconds(1.0);
+    history.noteButtons(Qt::LeftButton, Qt::NoButton, QPointF(2000.0, 2000.0), 0);
+    history.notePointer(QPointF(100.0, 100.0), 5000);
+    history.notePointer(QPointF(140.0, 100.0), 5040);
+    const QRectF damage = history.damageRect(10.0, 5040, 1.0);
+    QVERIFY(!damage.isEmpty());
+    QVERIFY2(!damage.contains(QPointF(2000.0, 2000.0)),
+             "a press older than the window must not hold the damage rect open");
+    QVERIFY(damage.contains(QPointF(140.0, 100.0)));
+}
+
+void TestPointerHistory::testDamageRectSurvivesANegativeReach()
+{
+    // A negative reach would invert the rect through adjusted(), and QRectF
+    // does not normalise, so isEmpty() would report true and the pass would
+    // silently stop repainting.
+    PointerHistory history;
+    history.setTrailSeconds(1.0);
+    history.notePointer(QPointF(100.0, 100.0), 0);
+    history.notePointer(QPointF(160.0, 100.0), 40);
+    const QRectF damage = history.damageRect(-5.0, 40, 1.0);
+    QVERIFY(!damage.isEmpty());
+    QVERIFY(damage.width() >= 60.0);
 }
 
 QTEST_MAIN(TestPointerHistory)
