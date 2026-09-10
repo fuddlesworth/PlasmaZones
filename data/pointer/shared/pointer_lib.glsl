@@ -58,7 +58,9 @@ int pointerTrailCount() {
 }
 
 // Trail sample i (0 = newest). .xy canvas px, .z age seconds, .w speed.
-// Out-of-range indices read the zero entry, never out of bounds.
+// Indices in [count, 31] read the contract's zero entry; anything outside
+// 0..31 is clamped into the array (a negative index reads the newest sample),
+// never out of bounds.
 vec4 pointerTrailAt(int i) {
     return uPointerTrail[clamp(i, 0, kPointerTrailCapacity - 1)];
 }
@@ -201,29 +203,65 @@ vec4 premul(vec3 rgb, float a) {
 // and the pack flickers on and off, which is exactly how the windtrail pack
 // first shipped.
 //
-// This walks the ring oldest to newest with the same exponential filter the
-// upstream windtrail effect uses on its own sampler
+// This walks the current STROKE oldest to newest with the same exponential
+// filter the upstream windtrail effect uses on its own sampler
 // (`filtered = filtered * (1 - a) + raw * a`, a = 0.46), so one loud sample
 // moves the answer a little rather than deciding it. Use this for anything a
 // user would notice switching, above all pointerSpeedGate(). Per-sample `.w`
 // is still the right input for something drawn AT that sample, such as how
 // wide the ribbon was where the pointer actually was.
+//
+// Only the current stroke: the ring is never purged while the pointer rests,
+// and on the compositor a resting pointer sends no events, so after a fast
+// stroke and a pause the older slots still carry the old speeds. Seeding the
+// filter from those would open every speed gate for a few samples on the
+// first slow move after the pause. A gap of kPointerParkSeconds or more
+// between two neighbouring samples is the sampler's own "parked" threshold
+// (kVelocityHoldMs, past which it scores the next move from zero), so the
+// walk starts at the newest sample on the far side of such a gap.
+const float kPointerParkSeconds = 0.1;
 float pointerFilteredSpeed() {
     int count = pointerTrailCount();
     if (count < 1) {
         return 0.0;
     }
-    // Seeded from the oldest sample rather than 0, or a short ring would
+    // The oldest sample of the current stroke: the last one reached from the
+    // head without crossing a park gap. Never past the filled window, so the
+    // zero entries beyond it are not walked.
+    int oldest = 0;
+    for (int i = 1; i < kPointerTrailCapacity; ++i) {
+        if (i >= count || pointerTrailAt(i).z - pointerTrailAt(i - 1).z >= kPointerParkSeconds) {
+            break;
+        }
+        oldest = i;
+    }
+    // Seeded from that oldest sample rather than 0, or a short stroke would
     // always report a speed biased down toward standing still.
-    float filtered = pointerTrailAt(count - 1).w;
-    // Start at the newest filled neighbour of the seed rather than at the
-    // ring's capacity: the entries past `count` are zero and were only ever
-    // skipped, so walking them cost a bounds test per unfilled slot on every
-    // fragment for nothing.
-    for (int i = min(count - 2, kPointerTrailCapacity - 2); i >= 0; --i) {
+    float filtered = pointerTrailAt(oldest).w;
+    for (int i = oldest - 1; i >= 0; --i) {
         filtered = filtered * 0.54 + pointerTrailAt(i).w * 0.46;
     }
     return max(filtered, 0.0);
+}
+
+// Speed gate for a pack whose `activationSpeed` parameter defaults to 0: the
+// filtered walk above is up to 31 dependent trail reads per fragment, and at
+// 0 pointerSpeedGate() returns 1 without looking at the speed, so the walk
+// is skipped there rather than paid for and thrown away.
+float pointerActivationGate(float activationSpeed) {
+    return activationSpeed > 0.0 ? pointerSpeedGate(pointerFilteredSpeed(), activationSpeed) : 1.0;
+}
+
+// The per-button colour a click pack paints with: left, right, middle by the
+// button code the press and release uniforms carry (1, 2, 3).
+vec4 pointerButtonColour(float button, vec4 left, vec4 right, vec4 middle) {
+    if (button > 2.5) {
+        return middle;
+    }
+    if (button > 1.5) {
+        return right;
+    }
+    return left;
 }
 
 #endif // PLASMAZONES_POINTER_LIB_GLSL

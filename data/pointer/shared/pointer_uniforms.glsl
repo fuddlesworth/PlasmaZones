@@ -42,8 +42,10 @@
 
 // ── Compositor branch — classic default-block uniforms ──────────────────────
 
-// Continuously-increasing seconds (wrapped like every family; the base
-// iTimeHi wrap counterpart is not used by pointer packs).
+// Seconds since this burst of pointer activity began: restarts at 0 for each
+// burst and never wraps on the compositor. (The preview wraps it at 1024 s
+// like every family; the base iTimeHi counterpart is not used by pointer
+// packs on either runtime.)
 uniform float iTime;
 
 // The rest of the preview branch's BaseUniforms members, declared here too so

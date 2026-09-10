@@ -56,7 +56,7 @@ vec4 pPointer(vec2 uv) {
     // One gate for the whole comet, from the filtered speed: the raw per-event
     // velocity reads 0 whenever two events share a millisecond, which would
     // blink the head and the newest tail segment on and off.
-    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+    float gate = pointerActivationGate(p_activationSpeed);
 
     // Head: a soft dot on the newest sample that dims as the pointer idles,
     // and is fully out by the end of the live window. It sits on the smoothed

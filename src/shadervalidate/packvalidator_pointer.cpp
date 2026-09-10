@@ -137,50 +137,67 @@ bool mentionsParam(const QString& source, const QString& id)
 }
 
 // The `p_<id>` names a pack passes as the `activationSpeed` argument of
-// pointerSpeedGate(). Parsed rather than regexed because the first argument is
-// routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so the
-// split has to happen at the top-level comma.
+// pointerSpeedGate() (its second argument) or of the pointerActivationGate()
+// wrapper (its only argument), which is what a pack whose threshold defaults
+// to 0 calls so the filtered walk is skipped there. Both are scanned, or a
+// pack moving to the wrapper would silently leave this lint's coverage.
+// Parsed rather than regexed because pointerSpeedGate's first argument is
+// routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so
+// the split has to happen at the top-level comma.
 QStringList speedGateParamNames(const QString& strippedSource)
 {
+    struct Callee
+    {
+        QLatin1String name;
+        bool argAfterComma;
+    };
+    static const Callee kCallees[] = {
+        {QLatin1String("pointerSpeedGate"), true},
+        {QLatin1String("pointerActivationGate"), false},
+    };
     const QString& source = strippedSource;
-    const QLatin1String callee("pointerSpeedGate");
     QStringList found;
-    int at = 0;
-    while ((at = source.indexOf(callee, at)) >= 0) {
-        int i = at + callee.size();
-        while (i < source.size() && source[i].isSpace()) {
-            ++i;
-        }
-        if (i >= source.size() || source[i] != QLatin1Char('(')) {
-            at += callee.size();
-            continue;
-        }
-        // Walk the argument list, remembering where the top-level comma fell.
-        int depth = 0;
-        int comma = -1;
-        int j = i;
-        for (; j < source.size(); ++j) {
-            const QChar c = source[j];
-            if (c == QLatin1Char('(')) {
-                ++depth;
-            } else if (c == QLatin1Char(')')) {
-                if (--depth == 0) {
-                    break;
-                }
-            } else if (c == QLatin1Char(',') && depth == 1 && comma < 0) {
-                comma = j;
+    for (const Callee& callee : kCallees) {
+        int at = 0;
+        while ((at = source.indexOf(callee.name, at)) >= 0) {
+            int i = at + callee.name.size();
+            while (i < source.size() && source[i].isSpace()) {
+                ++i;
             }
-        }
-        if (comma > 0 && j < source.size()) {
-            const QString arg = source.mid(comma + 1, j - comma - 1).trimmed();
-            if (arg.startsWith(QLatin1String("p_"))) {
-                const QString id = arg.mid(2);
-                if (PhosphorShaders::isValidParamId(id) && !found.contains(id)) {
-                    found << id;
+            if (i >= source.size() || source[i] != QLatin1Char('(')) {
+                at += callee.name.size();
+                continue;
+            }
+            // Walk the argument list, remembering where the top-level comma
+            // fell.
+            int depth = 0;
+            int comma = -1;
+            int j = i;
+            for (; j < source.size(); ++j) {
+                const QChar c = source[j];
+                if (c == QLatin1Char('(')) {
+                    ++depth;
+                } else if (c == QLatin1Char(')')) {
+                    if (--depth == 0) {
+                        break;
+                    }
+                } else if (c == QLatin1Char(',') && depth == 1 && comma < 0) {
+                    comma = j;
                 }
             }
+            const int argStart = callee.argAfterComma ? comma + 1 : i + 1;
+            const bool haveArg = callee.argAfterComma ? comma > 0 : comma < 0;
+            if (haveArg && j < source.size()) {
+                const QString arg = source.mid(argStart, j - argStart).trimmed();
+                if (arg.startsWith(QLatin1String("p_"))) {
+                    const QString id = arg.mid(2);
+                    if (PhosphorShaders::isValidParamId(id) && !found.contains(id)) {
+                        found << id;
+                    }
+                }
+            }
+            at = j > at ? j : at + callee.name.size();
         }
-        at = j > at ? j : at + callee.size();
     }
     return found;
 }
@@ -718,12 +735,19 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             // cleared target per frame and keeps a feedback pair only for the
             // single-buffer path, so a two-pass feedback pack persists on the
             // compositor and starts from black in the browser every frame.
-            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && declaredBuffers.size() > 1) {
+            // Counted over the entries that survive the load: an empty entry
+            // is dropped there (and linted above), so it must not turn a
+            // single-pass pack into a two-pass one here.
+            const auto livePasses =
+                std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
+                    return !v.toString().isEmpty();
+                });
+            if (root.value(QLatin1String("bufferFeedback")).toBool(false) && livePasses > 1) {
                 lints << QStringLiteral(
                              "bufferFeedback with %1 buffer passes persists on the compositor only: the settings "
                              "preview keeps a previous frame for a single buffer pass, so the browser shows this "
                              "pack without its state")
-                             .arg(declaredBuffers.size());
+                             .arg(livePasses);
             }
         }
     } else {

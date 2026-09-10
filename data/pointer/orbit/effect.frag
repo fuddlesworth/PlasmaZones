@@ -75,6 +75,14 @@ vec2 orbitCentre(int count, float lag) {
 // Mean sample speed over the samples younger than kSpeedWindowSeconds, the
 // eased stand-in for a smoothed speed the contract gives no state to keep.
 // Ages are monotonic in the index, so the walk ends at the first old sample.
+//
+// Age-WEIGHTED, not a flat mean: on the compositor a resting pointer sends
+// no events, so the in-window set empties from its oldest end until only the
+// head is left, and a flat mean would hold the final stroke speed until the
+// head crossed the window edge and then drop to zero in one frame, popping
+// the ring inward while it is still fully live. With a weight that reaches
+// zero at the edge each sample fades out of the average as it ages, so the
+// draw-back is the ease the header promises on both runtimes.
 float orbitMeanSpeed(int count) {
     float sum = 0.0;
     float n = 0.0;
@@ -86,8 +94,9 @@ float orbitMeanSpeed(int count) {
         if (s.z >= kSpeedWindowSeconds) {
             break;
         }
-        sum += s.w;
-        n += 1.0;
+        float w = 1.0 - s.z / kSpeedWindowSeconds;
+        sum += s.w * w;
+        n += w;
     }
     return n > 0.0 ? sum / n : 0.0;
 }

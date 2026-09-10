@@ -20,13 +20,7 @@ const float kCornerFraction = 0.70;   // starting corner offset, as a share of s
 const float kArmMax = 0.9;            // arm length cap, as a share of the corner offset
 
 vec4 buttonColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 // Distance from `q` to the straight segment a..b, through the shared
@@ -101,7 +95,9 @@ vec4 pPointer(vec2 uv) {
     float duration = clamp(p_duration, 0.2, kDurationMax);
     float hold = clamp(p_hold, 0.0, kHoldMax);
     float total = duration + hold;
-    float spread = max(p_spread, 16.0) * scale;
+    // The reach the host resolved from `spread`, in device px, read from the
+    // uniform so the damage rect and the shader cannot drift.
+    float spread = pointerReach();
     float half_ = 0.5 * clamp(p_thickness, 0.5, 6.0) * scale;
 
     vec3 rgb = vec3(0.0);

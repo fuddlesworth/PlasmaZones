@@ -40,8 +40,10 @@ const float kFullWidthSpeed = 900.0;
 // long before a 1.2 s duration had let its far end age out, which made most
 // of the Duration slider inert once the hand stopped. The ratio reproduces
 // the old 0.35 s at the default 0.5 s duration, and the result is floored so
-// a very short duration still gets a fade rather than a cut, and capped at
-// the duration itself so it stays inside trailSeconds.
+// a very short duration still gets a fade rather than a cut. No cap is
+// needed to stay inside trailSeconds: at the longest duration the fade is
+// 0.84 s against a 1.4 s window. (A clamp against the duration had its
+// bounds cross below 0.2 s, which GLSL leaves undefined.)
 const float kStopFadeShare = 0.35 / 0.5;
 const float kStopFadeFloorSeconds = 0.2;
 
@@ -60,13 +62,13 @@ vec4 pPointer(vec2 uv) {
     // whether a trail starts at all, not each segment every frame, so the
     // ribbon appears and retreats as a whole instead of breaking into
     // flickering patches wherever the raw speed dipped for one sample.
-    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+    float gate = pointerActivationGate(p_activationSpeed);
     if (gate <= 0.0) {
         return vec4(0.0);
     }
 
     // Stop fade: rest dims the whole ribbon out rather than cutting it.
-    float stopFadeSeconds = clamp(kStopFadeShare * duration, kStopFadeFloorSeconds, duration);
+    float stopFadeSeconds = max(kStopFadeShare * duration, kStopFadeFloorSeconds);
     float stopFade = 1.0 - smoothstep(0.0, stopFadeSeconds, pointerIdleSeconds());
     if (stopFade <= 0.0) {
         return vec4(0.0);

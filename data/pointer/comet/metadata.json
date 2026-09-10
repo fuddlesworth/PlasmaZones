@@ -7,7 +7,6 @@
     "category": "Trail",
     "fragmentShader": "effect.frag",
     "layer": "below",
-    "reach": 40,
     "reachParam": "reach",
     "trailSeconds": 0.8,
     "parameters": [

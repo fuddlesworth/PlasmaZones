@@ -37,7 +37,7 @@ vec4 pPointer(vec2 uv) {
     // One gate for the whole tube, from the filtered speed: the raw per-sample
     // figure is one event pair and reads 0 whenever two events share a
     // millisecond, which gated per segment would blink patches of the tube.
-    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+    float gate = pointerActivationGate(p_activationSpeed);
     if (gate <= 0.0) {
         return vec4(0.0);
     }

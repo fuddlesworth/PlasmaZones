@@ -27,7 +27,7 @@
             "min": 0.05,
             "max": 1.0,
             "step": 0.01,
-            "description": "Where the brackets come to rest, as a share of the spread"
+            "description": "Where the brackets come to rest, as a share of where they start"
         },
         {
             "id": "arm",

@@ -12,9 +12,10 @@
 // inside one roll window therefore draws the identical arc and the pack
 // crackles at `rate` re-rolls a second instead of strobing at the frame rate.
 //
-// Arcs are driven by speed: at rest only the first arc is lit and it is dim,
-// and the full set comes in as the pointer moves. The count fades in
-// fractionally so an arc appears by brightening rather than popping.
+// Arcs are driven by speed: at low speed only the first arc is lit and it is
+// dim, the full set comes in as the pointer speeds up, and at rest they go
+// out within kQuietSeconds. The count fades in fractionally so an arc
+// appears by brightening rather than popping.
 //
 // A press throws `clickBurst` extra arcs radiating OUT from the press point,
 // each one striking from the press point to a jittered direction that
@@ -78,7 +79,9 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float reachPx = max(p_reach, 4.0) * scale;
+    // The reach the host resolved from the `reach` parameter, in device px,
+    // read from the uniform so the damage rect and the shader cannot drift.
+    float reachPx = pointerReach();
     float rate = clamp(p_crackleRate, 1.0, 60.0);
     float jag = clamp(p_jaggedness, 0.0, 1.0);
     float intensity = max(p_intensity, 0.0);
@@ -172,7 +175,10 @@ vec4 pPointer(vec2 uv) {
         float k = sincePress / kBurstLife;
         float remain = 1.0 - k;
         // The strike reaches out over the burst's life and dims as it goes.
-        float len = reachPx * (0.35 + 0.65 * k);
+        // The halo's own extent (three glow sigmas, the reject box below) is
+        // taken off the reach first, so a full-length strike's glow ends
+        // inside the damage rect instead of being cut flat at its edge.
+        float len = max(reachPx - glow * 3.0, 0.0) * (0.35 + 0.65 * k);
         float burstAlpha = remain * remain * intensity;
         for (int j = 0; j < kMaxArcs; ++j) {
             if (j >= burst) {
@@ -186,7 +192,7 @@ vec4 pPointer(vec2 uv) {
             // together are held inside the reach, or the kinks of a full-length
             // strike would hang outside the damage rect.
             float tipLen = length(tip - origin);
-            float amp = min(jag * 0.22 * tipLen, max(reachPx - tipLen, 0.0));
+            float amp = min(jag * 0.22 * tipLen, max(reachPx - glow * 3.0 - tipLen, 0.0));
             vec2 lo = min(origin, tip) - vec2(amp + glow * 3.0);
             vec2 hi = max(origin, tip) + vec2(amp + glow * 3.0);
             if (any(lessThan(px, lo)) || any(greaterThan(px, hi))) {

@@ -10,9 +10,8 @@
 // left behind; its sparks are at age zero and barely displaced, so the
 // re-roll is not visible. Each spark follows a ballistic arc under
 // `gravity`, shrinks and fades over `life`, and shifts colour from colorA to
-// colorB. Coverage
-// is accumulated additively then clamped. Everything is gone once a
-// sample's age passes `life`, which stays within the metadata's
+// colorB. Coverage is accumulated additively then clamped. Everything is
+// gone once a sample's age passes `life`, which stays within the metadata's
 // trailSeconds.
 //
 // A press throws an extra ring of sparks from the press point, `clickBurst`
@@ -48,7 +47,7 @@ vec4 pPointer(vec2 uv) {
     // per-sample figure reads 0 whenever two events share a millisecond,
     // which gated per sample would blink patches of sparks. The click burst
     // below sits outside it.
-    float gate = pointerSpeedGate(pointerFilteredSpeed(), p_activationSpeed);
+    float gate = pointerActivationGate(p_activationSpeed);
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
@@ -93,11 +92,15 @@ vec4 pPointer(vec2 uv) {
         if (s.z >= life) {
             break;
         }
-        // The far half of the tail sheds from every second sample only. Those
-        // sparks are near the end of their life and faint, and the inner loop
-        // below is the pack's whole cost, so thinning them there halves the
-        // worst case for no visible loss.
-        if (i >= 8 && (i & 1) == 1) {
+        // From the eighth sample on, only half the samples shed. The inner
+        // loop below is the pack's whole cost, so thinning the older part of
+        // the tail nearly halves the worst case. The half is chosen by a hash
+        // of the sample's POSITION, the same key its sparks are seeded from:
+        // a sample's ring index advances by one on every append, so choosing
+        // by index parity drew and skipped the same sparks on alternate
+        // appends and the outer tail strobed at the sample rate.
+        vec2 seed = floor(s.xy * 0.5);
+        if (i >= 8 && hash13(seed + 57.0) < 0.5) {
             continue;
         }
         // Spark budget for this sample scales with its speed. The shed
@@ -117,7 +120,6 @@ vec4 pPointer(vec2 uv) {
         if (abs(rel.x) > reach || abs(rel.y) > reach) {
             continue;
         }
-        vec2 seed = floor(s.xy * 0.5);
         for (int k = 0; k < kMaxSparks; ++k) {
             if (k >= sparks) {
                 break;

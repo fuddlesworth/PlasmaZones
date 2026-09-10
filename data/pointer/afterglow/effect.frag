@@ -19,7 +19,8 @@
 // rate was. At a low refresh rate the canvas has not emptied by then and the
 // last painted frame would stay on screen as a frozen smear. So the idle cut
 // below is the liveness guarantee: coverage is exactly zero once the pointer
-// has rested for kIdleCutSeconds, inside trailSeconds, on every refresh rate.
+// has rested for kIdleCutSeconds (0.9 s, inside the 1.0 s trailSeconds so
+// the last live frame is already clear), on every refresh rate.
 // The per-frame decay is only the visual speed of the fade. buffer.frag
 // applies the same cut to the stored energy so a resumed stroke does not
 // bring the previous one back.
@@ -30,7 +31,7 @@
 #include <pointer_multipass.glsl>
 
 const float kIdleCutStart = 0.6;
-const float kIdleCutSeconds = 1.0;
+const float kIdleCutSeconds = 0.9;
 
 vec4 pPointer(vec2 uv) {
     float energy = texture(iChannel0, uv).r;

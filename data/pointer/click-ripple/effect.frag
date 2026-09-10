@@ -10,13 +10,7 @@
 const float kTrailSeconds = 0.9;
 
 vec4 buttonColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 // Ring coverage for an event at `origin`, `since` seconds old, at the

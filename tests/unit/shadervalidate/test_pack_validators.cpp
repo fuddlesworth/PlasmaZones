@@ -714,6 +714,23 @@ private Q_SLOTS:
             QVERIFY2(!r.report.contains(marker), qPrintable(r.report));
         }
         {
+            // The pointerActivationGate() wrapper is what a pack whose
+            // threshold defaults to 0 calls; a pack that moves to it must not
+            // fall out of this lint's coverage, since windtrail (default 120)
+            // is exactly the shipped shape it was written for.
+            QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-wrapper-shut"), 400.0);
+            const PackResult r =
+                validatePointer(tmp, QStringLiteral("pt-wrapper-shut"), obj,
+                                QStringLiteral("float pointerActivationGate(float a) {\n"
+                                               "    return a > 0.0 ? pointerSpeedGate(uPointerVelocity.z, a) : 1.0;\n"
+                                               "}\n"
+                                               "vec4 pPointer(vec2 uv) {\n"
+                                               "    return vec4(pointerActivationGate(p_activationSpeed));\n"
+                                               "}\n"));
+            QVERIFY2(r.report.contains(marker), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("activationSpeed")), qPrintable(r.report));
+        }
+        {
             // A pack that never gates on speed must never be linted for it,
             // however high a numeric parameter of its own happens to default.
             QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-ungated"), 900.0);

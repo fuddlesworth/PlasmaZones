@@ -14,7 +14,8 @@
 // The set mirrors surface_noise.glsl helper for helper, so a shader author
 // moving between the families finds the same names, and a third-party pack
 // can rely on every one of them being there whether or not a bundled pack
-// happens to use it (vnoise and hashSin currently have no bundled consumer).
+// happens to use it (vnoise, hashSin and hashSin1 currently have no bundled
+// consumer).
 
 #ifndef PLASMAZONES_POINTER_NOISE_GLSL
 #define PLASMAZONES_POINTER_NOISE_GLSL

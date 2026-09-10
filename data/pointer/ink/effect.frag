@@ -26,13 +26,17 @@
 
 // Speed at which the stroke reaches its thinnest, in px/s.
 const float kThinSpeed = 1200.0;
+// The metadata trailSeconds. The host does not clamp parameters to their
+// declared range, so a hand-edited lifetime past this would outlive the
+// window and freeze its last frame on screen.
+const float kLifetimeMax = 2.5;
 
 vec4 pPointer(vec2 uv) {
     int count = pointerTrailCount();
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
     float halfWidth = 0.5 * max(p_width, 1.0) * scale;
-    float lifetime = max(p_lifetime, 0.05);
+    float lifetime = clamp(p_lifetime, 0.05, kLifetimeMax);
     float bleed = clamp(p_bleed, 0.0, 1.0);
 
     float cover = 0.0;
@@ -103,7 +107,7 @@ vec4 pPointer(vec2 uv) {
 
     // ── The blot ──
     // A click lands a drop of ink. Round and clean, on the same wet then dry
-    // curve as the stroke. Bounded well inside the reach `width` buys.
+    // curve as the stroke. Bounded inside the reach `width` buys.
     float blot = clamp(p_blot, 0.0, 0.7);
     float since = pointerSincePress();
     if (blot > 0.0 && uPointerPress.w > 0.5 && since < lifetime) {

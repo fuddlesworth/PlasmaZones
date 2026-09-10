@@ -43,7 +43,7 @@ layout(location = 0) out vec4 fragColor;
 
 const float kFreshSeconds = 0.05;
 const float kIdleCutStart = 0.6;
-const float kIdleCutSeconds = 1.0;
+const float kIdleCutSeconds = 0.9;
 
 void main() {
     float persistence = clamp(customParams[0].x, 0.0, 0.97);

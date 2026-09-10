@@ -29,13 +29,7 @@
 // derives from it.
 
 vec4 flashColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 vec4 pPointer(vec2 uv) {
@@ -52,7 +46,9 @@ vec4 pPointer(vec2 uv) {
 
     vec2 px = pointerPixel(uv);
     float scale = pointerScale();
-    float limit = max(p_spikeLength, 1.0) * scale;
+    // The reach the host resolved from `spikeLength`, in device px, read from
+    // the uniform so the damage rect and the shader cannot drift.
+    float limit = pointerReach();
 
     vec2 rel = px - uPointerPress.xy;
     if (abs(rel.x) > limit || abs(rel.y) > limit) {
@@ -81,7 +77,9 @@ vec4 pPointer(vec2 uv) {
     int spikes = clamp(int(p_spikeCount + 0.5), 0, 12);
     if (spikes > 0) {
         float len = limit * grow;
-        float width = max(p_spikeWidth, 0.25) * scale;
+        // Held under the reach so a wide spike on a tiny reach still tapers
+        // rather than having its base cut square by the box above.
+        float width = min(max(p_spikeWidth, 0.25) * scale, limit * 0.4);
         float base = radians(p_spikeAngle);
         for (int i = 0; i < 12; ++i) {
             if (i >= spikes) {

@@ -35,13 +35,7 @@
 const int kMaxBits = 48;
 
 vec4 burstColour(float button) {
-    if (button > 2.5) {
-        return p_colorMiddle;
-    }
-    if (button > 1.5) {
-        return p_colorRight;
-    }
-    return p_colorLeft;
+    return pointerButtonColour(button, p_colorLeft, p_colorRight, p_colorMiddle);
 }
 
 // A single bit's contribution. `rel` is the fragment relative to the event
@@ -76,7 +70,9 @@ vec4 pPointer(vec2 uv) {
     float scale = pointerScale();
     float life = clamp(p_life, 0.15, 0.9);
     float radius = max(p_size, 0.5) * scale;
-    float reach = max(p_reach, 1.0) * scale;
+    // The reach the host resolved from the `reach` parameter, in device px,
+    // read from the uniform so the damage rect and the shader cannot drift.
+    float reach = pointerReach();
 
     // Ballistic envelope, then the shrink factor that keeps it inside reach.
     float speed = max(p_speed, 0.0) * scale;
