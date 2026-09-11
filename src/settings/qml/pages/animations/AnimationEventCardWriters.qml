@@ -161,6 +161,19 @@ QtObject {
         }
     }
 
+    /// Point every write path at @p presetId, leaving each path's pack and its
+    /// own parameter edits alone. Empty clears the reference.
+    function _setShaderPresetOnAll(presetId) {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.setShaderPresetOnPaths(card._writePaths, presetId) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     /// Clear the shader override on every write path, returning the event to
     /// inheritance. Distinct from writing the engaged-empty sentinel, which is
     /// an explicit "None" that BLOCKS inheritance — that is the picker's job,

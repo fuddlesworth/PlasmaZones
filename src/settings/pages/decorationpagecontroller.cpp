@@ -136,6 +136,17 @@ QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QSt
     return paramsFilteredToChain(resolved.effectiveParameters(), resolved.effectiveChain());
 }
 
+/// The preset twin of inheritedParamsForChain, and there for the same reason:
+/// DecorationProfile::overlay replaces the presetIds map wholesale, so engaging
+/// a direct override from an empty map at an inheriting path would silently
+/// drop every sibling layer's inherited preset. Filtered to the resolved chain
+/// so a pack no longer in it cannot be carried back in.
+QVariantMap inheritedPresetIdsForChain(const DecorationProfileTree& tree, const QString& path)
+{
+    const DecorationProfile resolved = tree.resolve(path);
+    return paramsFilteredToChain(resolved.effectivePresetIds(), resolved.effectiveChain());
+}
+
 /// Write @p profile back as the DIRECT profile at @p path (baseline for the
 /// empty path), then persist the whole tree through Settings.
 void writeDirectProfile(ISettings* settings, DecorationProfileTree& tree, const QString& path,
@@ -630,6 +641,28 @@ void DecorationPageController::setChainParams(const QString& path, const QString
         packParams.insert(it.key(), it.value());
     allParams.insert(packId, packParams);
     profile.parameters = allParams;
+    writeDirectProfile(m_settings, tree, path, profile);
+}
+
+void DecorationPageController::setChainPreset(const QString& path, const QString& packId, const QString& presetId)
+{
+    if (!m_settings || packId.isEmpty())
+        return;
+    if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
+        return;
+    DecorationProfileTree tree = this->tree();
+    DecorationProfile profile = directProfileAt(tree, path);
+    // Engage from the RESOLVED map, not an empty one, for the same reason
+    // setChainParam does: DecorationProfile::overlay replaces the map
+    // wholesale, so a first preset pick at an inheriting path would otherwise
+    // materialize an override naming only this pack and drop every other
+    // layer's inherited preset.
+    QVariantMap presets = profile.presetIds ? *profile.presetIds : inheritedPresetIdsForChain(tree, path);
+    if (presetId.isEmpty())
+        presets.remove(packId);
+    else
+        presets.insert(packId, presetId);
+    profile.presetIds = presets;
     writeDirectProfile(m_settings, tree, path, profile);
 }
 

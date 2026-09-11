@@ -151,6 +151,46 @@ Kirigami.Dialog {
     readonly property int _zonePreviewWidth: Math.max(1, Math.round(livePreviewPane.width))
     on_ZonePreviewWidthChanged: _recompute()
     property string _presetError: ""
+
+    /// Which preset the preview is currently showing, or empty for none. Local
+    /// to the dialog: the browser has no assignment to store it on.
+    property string _browsePresetId: ""
+
+    /// The family's preset bridge, picked the same way `previewController` is.
+    /// Null for a family the host did not hand one over for, which hides the
+    /// row rather than breaking it.
+    readonly property QtObject _presetBridge: {
+        if (root._animationPreview)
+            return settingsController.animationPresets;
+        if (root._pointerPreview)
+            return settingsController.pointerPresets;
+        if (root._decorationPreview)
+            return settingsController.surfacePresets;
+        if (root._zonePreview)
+            return settingsController.overlayPresets;
+        return null;
+    }
+
+    /// Load @p presetId's values onto the live preview map, falling back to
+    /// each parameter's declared default for anything the preset does not
+    /// mention — so picking a preset shows exactly what it specifies rather
+    /// than what happened to be on screen before.
+    function _applyPresetToPreview(presetId) {
+        if (!root._presetBridge || !root.effect)
+            return;
+        const preset = presetId.length > 0 ? root._presetBridge.presetParams(root.effect.id, presetId) : ({});
+        const next = {};
+        const defs = (root.effect && root.effect.parameters) ? root.effect.parameters : [];
+        for (let i = 0; i < defs.length; ++i) {
+            const def = defs[i];
+            if (!def || !def.id)
+                continue;
+            next[def.id] = (preset[def.id] !== undefined) ? preset[def.id] : def["default"];
+        }
+        root._liveParams = next;
+        root._recompute();
+    }
+
     // T3.2: drives the preview-renderer Loader. Toggled off→on in _resetPreview
     // so the ZoneShaderItem is destroyed and recreated on every shader switch —
     // a fresh item has no inherited Error/errorLog, so the placeholder covers the
@@ -398,58 +438,48 @@ Kirigami.Dialog {
     standardButtons: Kirigami.Dialog.Close
     padding: Kirigami.Units.largeSpacing
 
-    // Preset controls on the footer's left (Close stays on the right) — zone
-    // preview only. Order: Load · Save.
+    // Preset controls on the footer's left (Close stays on the right).
+    //
+    // No longer zone-only. This used to drive two file dialogs through
+    // shaderPresetDirectory / saveShaderPreset / loadShaderPreset, which
+    // existed on the zone preview controller alone, so the whole row was gated
+    // on `_zonePreview`. Named presets live in a registry every family shares,
+    // so the row now works wherever this dialog does.
     footerLeadingComponent: Component {
-        // Span the full params column (left ScrollView) so Load · Save sit at
-        // its left, lining up under the params/preview split.
+        // Span the full params column (left ScrollView) so the row sits at its
+        // left, lining up under the params/preview split.
         Item {
-            // Presets only, and those are zone-only: shaderPresetDirectory /
-            // saveShaderPreset / loadShaderPreset live on the zone preview
-            // controller and would be a hard "not a function" on the decoration
-            // one. Reset is NOT here any more — it belongs to the shared
-            // parameter editor's header, so every host gets it without wiring.
-            visible: root._zonePreview && root._hasParameters
+            visible: root._hasParameters && root._presetBridge !== null
             // Width = the params content width: availableWidth already excludes
             // the scrollbar, and subtracting one largeSpacing matches the params
-            // column's own right margin, so Default's right edge lines up with the
-            // per-row lock column rather than the divider. MUST be 0 when hidden:
-            // a bridge without a previewController gets no preview column, so
-            // availableWidth is nearly the full dialog width — claiming that
-            // here would make the footer wider than the dialog and feed back
-            // into availableWidth, a runaway layout loop that freezes the
-            // dialog.
+            // column's own right margin. MUST be 0 when hidden: a bridge without
+            // a previewController gets no preview column, so availableWidth is
+            // nearly the full dialog width — claiming that here would make the
+            // footer wider than the dialog and feed back into availableWidth, a
+            // runaway layout loop that freezes the dialog.
             implicitWidth: visible ? detailsScroll.availableWidth - Kirigami.Units.largeSpacing : 0
-            implicitHeight: visible ? presetRow.implicitHeight : 0
+            implicitHeight: visible ? browserPresetRow.implicitHeight : 0
 
-            RowLayout {
-                id: presetRow
+            PresetRow {
+                id: browserPresetRow
 
                 anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Kirigami.Units.smallSpacing
 
-                Button {
-                    text: i18nc("@action:button", "Load Preset…")
-                    icon.name: "document-open"
-                    Accessible.name: text
-                    onClicked: {
-                        // See root._encodeFilePath for the encoding rationale.
-                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + root._encodeFilePath(root.previewController.shaderPresetDirectory()));
-                        shaderPresetLoadDialog.open();
-                    }
+                packId: root.effect ? root.effect.id : ""
+                presetBridge: root._presetBridge
+                presetId: root._browsePresetId
+                currentValues: root._liveParams
+                // The browser tunes a PREVIEW, not an assignment, so picking a
+                // preset loads its values into the live map rather than storing
+                // a reference. Persisting one belongs to the pages that own an
+                // assignment; this dialog owns none.
+                onPresetSelected: function (id) {
+                    root._browsePresetId = id;
+                    root._applyPresetToPreview(id);
                 }
-
-                Button {
-                    text: i18nc("@action:button", "Save Preset…")
-                    icon.name: "document-save"
-                    Accessible.name: text
-                    onClicked: {
-                        // See root._encodeFilePath for the encoding rationale.
-                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + root._encodeFilePath(root.previewController.shaderPresetDirectory()));
-                        shaderPresetSaveDialog.open();
-                    }
-                }
+                onRevertRequested: root._applyPresetToPreview(root._browsePresetId)
             }
         }
     }
@@ -1121,91 +1151,13 @@ Kirigami.Dialog {
         }
     }
 
-    // Surface preset save/load failures from the shared controller.
+    // The two FileDialogs and the previewController save/load-failure
+    // Connections that used to live here went with the loose-file flow they
+    // served. Refusals now come from the bridge, which is the one writer.
     Connections {
-        target: root.previewController
-        enabled: root.previewController !== null
-        // The decoration preview controller declares neither of these signals
-        // (its only signal is audioSpectrumChanged), and `enabled` does not
-        // suppress signal RESOLUTION — without this the decoration route logs
-        // a "not a signal" warning every time the dialog opens.
-        ignoreUnknownSignals: true
-        function onShaderPresetSaveFailed(error) {
+        target: root._presetBridge
+        function onPresetWriteFailed(error) {
             root._presetError = error;
-        }
-        function onShaderPresetLoadFailed(error) {
-            root._presetError = error;
-        }
-    }
-
-    FileDialog {
-        id: shaderPresetSaveDialog
-
-        title: i18nc("@title:window", "Save Shader Preset")
-        fileMode: FileDialog.SaveFile
-        defaultSuffix: "json"
-        nameFilters: [i18nc("@item:inlistbox preset file filter", "Shader presets (*.json)")]
-
-        onAccepted: {
-            // Same guarded settingsController lookup as the image picker.
-            if (root.previewController && root.effect && typeof settingsController !== "undefined" && settingsController)
-                root.previewController.saveShaderPreset(settingsController.urlToLocalFile(selectedFile), root.effect.id, root._liveParams, "");
-        }
-    }
-
-    FileDialog {
-        id: shaderPresetLoadDialog
-
-        title: i18nc("@title:window", "Load Shader Preset")
-        fileMode: FileDialog.OpenFile
-        nameFilters: [i18nc("@item:inlistbox preset file filter", "Shader presets (*.json)")]
-
-        onAccepted: {
-            // Same guarded settingsController lookup as the image picker.
-            if (!root.previewController || !root.effect || typeof settingsController === "undefined" || !settingsController)
-                return;
-            var r = root.previewController.loadShaderPreset(settingsController.urlToLocalFile(selectedFile));
-            if (!r || !r.shaderParams)
-                return;
-            // This detail dialog is bound to a single shader (root.effect) and
-            // cannot switch shaders, so a preset saved for a different shader
-            // would silently apply mismatched params. Reject it loudly instead.
-            if (r.shaderId && r.shaderId !== root.effect.id) {
-                root._presetError = i18nc("@info", "This preset was saved for a different shader.");
-                return;
-            }
-            // The load succeeded — drop any error left from an earlier
-            // failed save/load so the stale message doesn't sit next to a
-            // freshly applied preset.
-            root._presetError = "";
-            // Apply the preset's values onto the current shader's parameter set
-            // (preset value where present, else the param default), so a preset
-            // saved for a slightly different param list still loads cleanly.
-            var next = {};
-            var params = root.effect.parameters || [];
-            for (var i = 0; i < params.length; i++) {
-                var p = params[i];
-                if (!p || p.id === undefined)
-                    continue;
-                next[p.id] = (r.shaderParams[p.id] !== undefined) ? r.shaderParams[p.id] : (p.default !== undefined ? p.default : root._liveParams[p.id]);
-            }
-            // Carry SVG image params' `<id>_svgSize` companion (not a schema
-            // param, so the loop above skips it): preset value where present,
-            // else the current size. Without this, loading a preset would
-            // revert a custom SVG render size to the default, unlike the editor
-            // dialog and the randomize path which preserve it.
-            for (var j = 0; j < params.length; j++) {
-                var ip = params[j];
-                if (!ip || ip.id === undefined || ip.type !== "image")
-                    continue;
-                var svgKey = ip.id + "_svgSize";
-                if (r.shaderParams[svgKey] !== undefined)
-                    next[svgKey] = r.shaderParams[svgKey];
-                else if (root._liveParams[svgKey] !== undefined)
-                    next[svgKey] = root._liveParams[svgKey];
-            }
-            root._liveParams = next;
-            root._recompute();
         }
     }
 }

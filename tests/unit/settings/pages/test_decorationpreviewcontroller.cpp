@@ -568,9 +568,9 @@ private Q_SLOTS:
         // The DECORATION-only files. ShaderBrowserCard and
         // ShaderBrowserDetailDialog are deliberately excluded: their
         // `previewController` is whichever controller the route supplied, so
-        // the zone route's calls (getShaderInfo, zonesForShaderPreview,
-        // shaderPresetDirectory, …) legitimately appear there behind
-        // `_zonePreview` guards and belong to ShaderPreviewController. Holding
+        // the zone route's calls (getShaderInfo, zonesForShaderPreview, …)
+        // legitimately appear there behind `_zonePreview` guards and belong to
+        // ShaderPreviewController. Holding
         // this controller to those would demand the wrong route's API, which is
         // the same mistake the animations guard makes in the other direction.
         const QString settingsQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");

@@ -76,6 +76,33 @@ ShaderPreset ShaderPresetRegistry::preset(ShaderFamily family, const QString& pa
     return m_packDeclared.value(key).value(presetId);
 }
 
+ShaderPreset ShaderPresetRegistry::presetById(ShaderFamily family, const QString& presetId) const
+{
+    if (presetId.isEmpty()) {
+        return {};
+    }
+    const QString familyPrefix = QString(shaderFamilyToken(family)) + QLatin1Char('/');
+    // User presets first, for the same reason the pack-scoped lookup prefers
+    // them: a user preset shadowing a pack-declared id is the one that answers.
+    for (auto it = m_userDefined.constBegin(); it != m_userDefined.constEnd(); ++it) {
+        if (!it.key().startsWith(familyPrefix)) {
+            continue;
+        }
+        if (const auto found = it->constFind(presetId); found != it->constEnd()) {
+            return *found;
+        }
+    }
+    for (auto it = m_packDeclared.constBegin(); it != m_packDeclared.constEnd(); ++it) {
+        if (!it.key().startsWith(familyPrefix)) {
+            continue;
+        }
+        if (const auto found = it->constFind(presetId); found != it->constEnd()) {
+            return *found;
+        }
+    }
+    return {};
+}
+
 QVariantMap ShaderPresetRegistry::resolveParams(ShaderFamily family, const QString& packId, const QString& presetId,
                                                 const QVariantMap& deltas) const
 {

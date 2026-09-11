@@ -468,6 +468,23 @@ public:
     /// distinguish "refused" from "no-op" gets that from -1 alone.
     Q_INVOKABLE int setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters);
 
+    /// Point every shader-capable path in @p rawPaths at preset @p presetId,
+    /// WITHOUT touching which pack each uses or the parameter edits it carries.
+    ///
+    /// The third member of the family beside setShaderOverrideOnPaths and
+    /// setShaderParametersOnPaths, and split from them for the same reason they
+    /// are split from each other: a path that INHERITS its pack can carry a
+    /// preset of its own, and stamping the inherited id alongside would sever
+    /// the cascade the user is relying on.
+    ///
+    /// An empty @p presetId clears the reference, which is how "stop using a
+    /// preset here" lands. A path left with nothing engaged loses its override
+    /// outright rather than keeping an empty one.
+    ///
+    /// @return the number of paths written, or -1 for an over-long id (a caller
+    ///         bug, so it warns rather than toasts).
+    Q_INVOKABLE int setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId);
+
     /// Number of DISTINCT shadowing descendant overrides beneath the paths in
     /// @p rawPaths, using the one definition of "shadowing descendant" that
     /// clearShaderOverrideDescendantsOnPaths clears — so the count a parent

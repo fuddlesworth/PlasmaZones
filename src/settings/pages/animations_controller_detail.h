@@ -104,6 +104,7 @@ inline QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
 /// introduce a second independently-spelled literal.
 inline constexpr QLatin1String JsonEffectIdKey{"effectId"};
 inline constexpr QLatin1String JsonShaderParametersKey{"parameters"};
+inline constexpr QLatin1String JsonShaderPresetIdKey{"presetId"};
 
 inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& profile)
 {
@@ -112,6 +113,8 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
         m.insert(JsonEffectIdKey, *profile.effectId);
     if (profile.parameters)
         m.insert(JsonShaderParametersKey, *profile.parameters);
+    if (profile.presetId)
+        m.insert(JsonShaderPresetIdKey, *profile.presetId);
     return m;
 }
 

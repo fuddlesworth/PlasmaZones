@@ -197,6 +197,12 @@ ColumnLayout {
     /// so the per-layer preview the chain editors show collapses here to
     /// previewing the pack that is picked.
     property QtObject shaderPreviewController: null
+    /// The animation family's `ShaderPresetBridge`, fed by the consumer for
+    /// the same reason the preview controller is: this editor does not reach
+    /// for a global context.
+    property QtObject shaderPresetBridge: null
+    /// The event's current preset id, empty for none.
+    property string shaderPresetId: ""
     // ── Computed ────────────────────────────────────────────────────
     /// Whether the shader section has anything to reveal (full
     /// description or a parameter editor). Mirrors the decoration
@@ -336,6 +342,12 @@ ColumnLayout {
     /// snapshot the effect at user-action time and skip late writes
     /// against a stale effect.
     signal shaderParamWriteRequested(string effectId, string paramId, var value)
+    /// The user picked a different preset for this event. The consumer writes
+    /// it through setShaderPresetOnPaths.
+    signal shaderPresetWriteRequested(string presetId)
+    /// The event's own parameter edits should be dropped so every value goes
+    /// back to following its preset.
+    signal shaderPresetRevertRequested
     /// Randomize all params. The editor rolls a new map (honouring the lock set)
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
@@ -945,6 +957,12 @@ ColumnLayout {
                 previewKind: "animation"
                 previewController: root.shaderPreviewController
                 previewActive: shaderExpansionClip.effectiveExpanded
+                presetBridge: root.shaderPresetBridge
+                presetId: root.shaderPresetId
+                onPresetSelected: function (id) {
+                    root.shaderPresetWriteRequested(id);
+                }
+                onPresetRevertRequested: root.shaderPresetRevertRequested()
                 // The shared editor owns the lock map and hosts the colour
                 // dialog, so only the value-write and randomize signals need
                 // handling here. Lock state is working-state only and is not

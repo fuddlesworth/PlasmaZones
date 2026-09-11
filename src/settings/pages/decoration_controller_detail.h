@@ -94,6 +94,8 @@ inline QVariantMap profileToSparseMap(const PhosphorSurfaceShaders::DecorationPr
         m.insert(QLatin1String(DP::JsonFieldChain), QVariant(*p.chain));
     if (p.parameters)
         m.insert(QLatin1String(DP::JsonFieldParameters), *p.parameters);
+    if (p.presetIds)
+        m.insert(QLatin1String(DP::JsonFieldPresetIds), *p.presetIds);
     return m;
 }
 

@@ -657,6 +657,42 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                  });
 }
 
+int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId)
+{
+    using namespace PhosphorAnimationShaders;
+
+    // Bounded like every other string that reaches disk. An over-long id is a
+    // caller bug rather than something a user can type, and an id naming no
+    // preset resolves to the assignment's own parameters anyway, so dropping
+    // it degrades rather than breaks.
+    if (presetId.size() > kMaxWrittenMapStringChars) {
+        qCWarning(lcConfig) << "setShaderPresetOnPaths: refusing an over-long preset id";
+        return -1;
+    }
+
+    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderPresetOnPaths"), {},
+                                 [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+                                     // Starts from the stored profile for the same reason
+                                     // setShaderParametersOnPaths does: this call carries a preset and
+                                     // nothing else, so the pack and the parameter deltas must survive
+                                     // it untouched.
+                                     ShaderProfile profile = stored;
+                                     if (presetId.isEmpty()) {
+                                         profile.presetId.reset();
+                                     } else {
+                                         profile.presetId = presetId;
+                                     }
+                                     // An entry with nothing engaged is no override at all, so it goes
+                                     // rather than being stored empty. Clearing the preset on a path
+                                     // that owned only a preset is how "stop using a preset here" lands.
+                                     if (!profile.effectId.has_value() && !profile.parameters.has_value()
+                                         && !profile.presetId.has_value()) {
+                                         return std::nullopt;
+                                     }
+                                     return profile;
+                                 });
+}
+
 bool AnimationsPageController::paramsAreStaleAt(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                 const QString& path) const
 {

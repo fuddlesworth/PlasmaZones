@@ -11,6 +11,10 @@
 
 #include "settingscontroller.h"
 
+#include "settings/stores/shaderpresetbridge.h"
+
+#include <PhosphorShaders/ShaderPresetStore.h>
+
 #include "settings/pages/editorpagecontroller.h"
 #include "settings/pages/generalpagecontroller.h"
 #include "settings/utils/registryshaderpreviewbackend.h"
@@ -743,6 +747,66 @@ SettingsController::SettingsController(QObject* parent)
     // surface, so that page owns the pointer chain and takes this registry.
     m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
     registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
+
+    // ── Shader presets ────────────────────────────────────────────────────
+    //
+    // After the four pack registries, because the store is seeded from what
+    // they have already discovered rather than waiting for a reload that may
+    // never come. Before the page controllers below, which hand a bridge to
+    // QML.
+    m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
+    m_presetStore->load();
+    {
+        auto& presets = m_presetStore->registry();
+
+        // Push each family's pack-declared presets now, and again on every
+        // reload, so a pack dropped in while the window is open brings its
+        // presets with it.
+        const auto syncAnimation = [this, &presets]() {
+            const auto effects = m_animationShaderRegistry->availableEffects();
+            for (const auto& effect : effects) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Animation, effect.id, effect.presets);
+            }
+        };
+        const auto syncSurface = [this, &presets]() {
+            const auto effects = m_surfaceShaderRegistry->availableEffects();
+            for (const auto& effect : effects) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Surface, effect.id, effect.presets);
+            }
+        };
+        const auto syncPointer = [this, &presets]() {
+            const auto effects = m_pointerShaderRegistry->availableEffects();
+            for (const auto& effect : effects) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Pointer, effect.id, effect.presets);
+            }
+        };
+        const auto syncOverlay = [this, &presets]() {
+            if (!m_overlayShaderRegistry) {
+                return;
+            }
+            const auto shaders = m_overlayShaderRegistry->availableShaders();
+            for (const auto& info : shaders) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Overlay, info.id, info.presets);
+            }
+        };
+
+        syncAnimation();
+        syncSurface();
+        syncPointer();
+        syncOverlay();
+
+        connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+                syncAnimation);
+        connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                syncSurface);
+        connect(m_pointerShaderRegistry, &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
+                syncPointer);
+
+        m_animationPresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Animation, this);
+        m_surfacePresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Surface, this);
+        m_pointerPresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Pointer, this);
+        m_overlayPresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Overlay, this);
+    }
 
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
     // DecorationProfileTree (per-surface chains of decoration packs) with a

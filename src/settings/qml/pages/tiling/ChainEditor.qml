@@ -99,7 +99,20 @@ ColumnLayout {
     readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
 
     signal chainChangeRequested(var newChain)
+    /// The family's `ShaderPresetBridge`. Null hides every layer's preset row,
+    /// which is what the rules-action embed passes: a rule chain is edited
+    /// against no particular surface and has nowhere to persist a preset.
+    property QtObject presetBridge: null
+    /// Per-pack preset ids for this chain, shaped `{ packId: presetId }`, the
+    /// same shape `packParameters` already has.
+    property var packPresetIds: ({})
+
     signal paramChangeRequested(string packId, string paramId, var value)
+    /// A layer was pointed at a different preset. Empty clears it.
+    signal presetChangeRequested(string packId, string presetId)
+    /// A layer's own parameter edits should be dropped so every value goes
+    /// back to following its preset.
+    signal presetRevertRequested(string packId)
     signal paramsRandomizeRequested(string packId, var rolled)
     signal paramsResetRequested(string packId, var defaults)
     signal layerEnabledChangeRequested(string packId, bool enabled)
@@ -336,6 +349,12 @@ ColumnLayout {
                         previewKind: root.previewKind
                         previewController: root.previewController
                         previewActive: packDelegate.expanded
+                        presetBridge: root.presetBridge
+                        presetId: (root.packPresetIds && root.packPresetIds[packDelegate.packId]) ? root.packPresetIds[packDelegate.packId] : ""
+                        onPresetSelected: function (id) {
+                            root.presetChangeRequested(packDelegate.packId, id);
+                        }
+                        onPresetRevertRequested: root.presetRevertRequested(packDelegate.packId)
                         onValueChanged: function (effectId, paramId, value) {
                             root.paramChangeRequested(effectId, paramId, value);
                         }

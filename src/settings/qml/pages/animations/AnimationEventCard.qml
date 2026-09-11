@@ -232,6 +232,7 @@ Item {
     property alias currentSpringOmega: editor.springOmega
     property alias currentSpringZeta: editor.springZeta
     property alias currentShaderEffectId: editor.shaderEffectId
+    property alias currentShaderPresetId: editor.shaderPresetId
     property alias currentShaderParams: editor.shaderParams
     property alias lockedShaderParams: editor.lockedShaderParams
     readonly property alias currentCurveString: editor.curveString
@@ -460,6 +461,9 @@ Item {
 
     function _setShaderParamsOnAll() {
         return writers._setShaderParamsOnAll.apply(writers, arguments);
+    }
+    function _setShaderPresetOnAll() {
+        return writers._setShaderPresetOnAll.apply(writers, arguments);
     }
     function _setOverrideMerged() {
         return writers._setOverrideMerged.apply(writers, arguments);
@@ -871,6 +875,10 @@ Item {
                 // Live preview of the picked pack in the expanded shader
                 // section, on the animations page's own preview controller.
                 shaderPreviewController: settingsController.animationsPage.previewController
+                // Named parameter presets for the animation family. The bridge
+                // is shared across every card; each one only ever asks it about
+                // the pack it is showing.
+                shaderPresetBridge: settingsController.animationPresets
                 // Live per-field commit — the slider's 30 Hz drag fires
                 // `durationEdited` on every move, writing only the duration
                 // field of the merged Profile JSON; curve edits (mode combo,
@@ -987,6 +995,14 @@ Item {
                 }
                 onShaderParamWriteRequested: function (effectId, paramId, value) {
                     root._writeShaderParam(effectId, paramId, value);
+                }
+                onShaderPresetWriteRequested: function (presetId) {
+                    root._setShaderPresetOnAll(presetId);
+                }
+                onShaderPresetRevertRequested: {
+                    // Dropping the deltas is the whole revert: every value then
+                    // resolves from the preset again.
+                    root._setShaderParamsOnAll({});
                 }
                 // Lock-toggle handlers are no-ops here —
                 // AnimationProfileEditor self-updates its own

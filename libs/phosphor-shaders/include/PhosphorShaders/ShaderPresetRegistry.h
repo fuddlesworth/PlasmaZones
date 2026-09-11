@@ -70,6 +70,18 @@ public:
     /// preset — degraded, never broken.
     ShaderPreset preset(ShaderFamily family, const QString& packId, const QString& presetId) const;
 
+    /// The preset @p presetId names, searched across every pack in @p family.
+    ///
+    /// Ids are unique within a family (a user preset is a UUID, a pack-declared
+    /// one is namespaced by its pack), so the pack is recoverable from the
+    /// preset rather than required to find it. The WRITE side needs this: it
+    /// acts on a preset the user picked by id and has to learn which pack it
+    /// belongs to in order to write it back.
+    ///
+    /// Prefer the pack-scoped `preset()` for RESOLUTION, which must not match a
+    /// preset belonging to a different pack than the assignment resolved to.
+    ShaderPreset presetById(ShaderFamily family, const QString& presetId) const;
+
     /// The effective parameter map for an assignment: the preset's parameters
     /// overlaid with @p deltas, the assignment's own edits.
     ///

@@ -56,6 +56,10 @@ Item {
     // starts from what the layout is actually drawing with.
     readonly property string _editShaderId: (root._hasOverride || root.isBaseline) ? (root._raw.shaderId || "") : (root._resolved.shaderId || "")
     readonly property var _editParams: (root._hasOverride || root.isBaseline) ? (root._raw.parameters || ({})) : (root._resolved.parameters || ({}))
+    /// The preset this node points at, read the same way the parameters are:
+    /// the direct override when there is one, else what the layout inherits,
+    /// so a card with no override still shows the preset it draws with.
+    readonly property string _editPresetId: (root._hasOverride || root.isBaseline) ? (root._raw.presetId || "") : (root._resolved.presetId || "")
 
     // Parameter DECLARATIONS for the shader being edited. Imperative like
     // the rest of the model state: a function-call binding on
@@ -334,6 +338,28 @@ Item {
                             root._dropPendingParams();
                             root._writeNode(id, ({}));
                         }
+                    }
+                }
+
+                // Overlays embed the params editor directly rather than going
+                // through PackEditorBody (there is no preview here), so the
+                // preset row is added alongside instead of riding in with it.
+                PresetRow {
+                    Layout.fillWidth: true
+                    visible: root._editShaderId.length > 0
+                    packId: root._editShaderId
+                    presetBridge: settingsController.overlayPresets
+                    presetId: root._editPresetId
+                    currentValues: root._editParams
+                    onPresetSelected: function (id) {
+                        settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
+                        root.refresh();
+                    }
+                    onRevertRequested: {
+                        // Dropping the deltas is the whole revert: every value
+                        // then resolves from the preset again.
+                        root._dropPendingParams();
+                        root._writeNode(root._editShaderId, ({}));
                     }
                 }
 

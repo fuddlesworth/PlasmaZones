@@ -70,9 +70,22 @@ GridLayout {
     property bool enableReset: true
     property bool enableImage: false
 
+    // ── Presets ──────────────────────────────────────────────────────────
+    /// The family's `ShaderPresetBridge`. Null hides the preset row, which is
+    /// what a host with no preset support passes.
+    property QtObject presetBridge: null
+    /// The assignment's current preset id, or empty for none.
+    property string presetId: ""
+
     signal valueChanged(string effectId, string paramId, var value)
     signal randomizeRequested(var rolled)
     signal resetRequested(var defaults)
+    /// The user picked a different preset. The host writes it to the
+    /// assignment; nothing is persisted here.
+    signal presetSelected(string presetId)
+    /// The assignment's own parameter edits should be dropped, so every value
+    /// goes back to following the preset.
+    signal presetRevertRequested
 
     // Wide enough that a preview lands at 1:1 rather than being reduced to fit,
     // at any font scale. A pane-shaped preview frames the canvas, so the column
@@ -89,6 +102,22 @@ GridLayout {
     columns: root._twoColumn ? 2 : 1
     columnSpacing: Kirigami.Units.largeSpacing
     rowSpacing: Kirigami.Units.smallSpacing
+
+    // Spans both columns and sits above them: the preset governs every
+    // parameter below it, so it reads as a heading for the editor rather than
+    // as one more control inside it.
+    PresetRow {
+        Layout.fillWidth: true
+        Layout.columnSpan: root.columns
+        packId: root.packId
+        presetBridge: root.presetBridge
+        presetId: root.presetId
+        currentValues: root.currentValues
+        onPresetSelected: function (id) {
+            root.presetSelected(id);
+        }
+        onRevertRequested: root.presetRevertRequested()
+    }
 
     PZCommon.ShaderParamsEditor {
         id: paramEditor

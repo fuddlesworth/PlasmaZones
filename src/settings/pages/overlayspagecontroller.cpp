@@ -210,6 +210,12 @@ bool OverlaysPageController::acceptableShaderEffectId(const QString& effectId) c
     return true;
 }
 
+/// An overlay preset id is a UUID or a pack-declared preset name. Bounded like
+/// every other string this controller lets reach disk; the schema sanitizer
+/// bounds it again on the way in, and an id naming no preset resolves to the
+/// node own parameters, so dropping one degrades rather than breaks.
+constexpr int kMaxOverlayPresetIdChars = 1024;
+
 void OverlaysPageController::setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params)
 {
     if (!m_settings)
@@ -219,7 +225,39 @@ void OverlaysPageController::setShaderOverride(const QString& path, const QStrin
         return;
     }
     OverlayShaderTree tree = m_settings->overlayShaderTree();
-    const OverlayShaderProfile node{effectId, params};
+    const OverlayShaderProfile stored = path.isEmpty() ? tree.baseline() : tree.directOverride(path);
+    OverlayShaderProfile node{effectId, params};
+    // Carry the preset reference across, but ONLY while the pack is unchanged.
+    // This writer is how a parameter edit lands as well as how a pack is
+    // picked, so rebuilding the node without this would silently drop the
+    // preset the moment a slider moved. When the pack DOES change the
+    // reference has to go: presets are keyed by pack, so one belonging to the
+    // old pack would resolve to nothing against the new one.
+    if (stored.shaderId == effectId)
+        node.presetId = stored.presetId;
+    if (path.isEmpty())
+        tree.setBaseline(node);
+    else
+        tree.setOverride(path, node);
+    writeTreeAnnouncing(tree, path);
+}
+
+void OverlaysPageController::setShaderPreset(const QString& path, const QString& presetId)
+{
+    if (!m_settings)
+        return;
+    if (presetId.size() > kMaxOverlayPresetIdChars) {
+        qCWarning(lcConfig) << "OverlaysPageController: refusing an over-long preset id for path" << path;
+        return;
+    }
+    OverlayShaderTree tree = m_settings->overlayShaderTree();
+    OverlayShaderProfile node = path.isEmpty() ? tree.baseline() : tree.directOverride(path);
+    if (node.presetId == presetId)
+        return;
+    // The pack and the parameter edits are left exactly as stored: this call
+    // carries a preset and nothing else, and the parameters become deltas on
+    // top of it rather than being replaced by it.
+    node.presetId = presetId;
     if (path.isEmpty())
         tree.setBaseline(node);
     else
