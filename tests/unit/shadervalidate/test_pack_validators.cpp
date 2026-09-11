@@ -1,13 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The offline pack validator's metadata lints, across three of the four
-// authoring models: animation, overlay and pointer. The bundled-pack CI gates
-// (shader_validate_*) only prove the shipped packs are clean — they cannot
-// show that a BROKEN pack is actually caught, which is how an appliesTo token
-// that the parser accepted and the lint rejected shipped undetected, and how a
-// pointer pack with a speed gate the preview could never open shipped
-// invisible. These tests build deliberately-broken packs in a temp dir and
+// The offline pack validator's metadata lints, across two of the four
+// authoring models: ANIMATION and OVERLAY. The pointer arm has its own file,
+// test_pointer_pack_validator.cpp, and the SURFACE arm has none at all — which
+// is worth knowing rather than discovering, because a shared lint wired into all
+// four arms can be deleted from the surface one with every test here still
+// green. (This header used to claim three models including pointer, and a
+// pointer diagnostic as its own motivating example, neither of which was true of
+// the file.)
+//
+// The bundled-pack CI gates (shader_validate_*) only prove the shipped packs are
+// clean — they cannot show that a BROKEN pack is actually caught, which is how an
+// appliesTo token that the parser accepted and the lint rejected shipped
+// undetected. These tests build deliberately-broken packs in a temp dir and
 // assert the diagnostic.
 //
 // The stage bakes live in test_animation_pack_bakes.cpp and the authoring-model
@@ -270,6 +276,10 @@ private Q_SLOTS:
         QVERIFY2(!r.report.contains(QStringLiteral("appliesTo")),
                  qPrintable(QStringLiteral("an explicit empty appliesTo must draw no diagnostic:\n") + r.report));
         QCOMPARE(r.errors, 0);
+        // Positive alongside the negative: the silence above is also what a
+        // validator that bailed before reaching the appliesTo lint would produce,
+        // so require the report to have actually got through the metadata section.
+        QVERIFY2(r.report.contains(QStringLiteral("metadata       OK")), qPrintable(r.report));
 
         // The degenerate cousins DO lint, which is what makes the silence
         // above a decision rather than a gap.
@@ -701,6 +711,70 @@ private Q_SLOTS:
         // the pack name in the report header.
         QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
         QCOMPARE(r.errors, 0);
+    }
+
+    void aPresetIdThatIsNotAPathComponentIsLinted()
+    {
+        // A pack-declared preset's key IS its id, and the settings app builds a
+        // filename from an id when the user duplicates one into an editable
+        // preset. The runtime refuses an unusable id on load and drops the
+        // preset with a log line the author will never see.
+        //
+        // This lived in the metadata schema as a `propertyNames` rule, where it
+        // worked on no family: the vendored JSON-schema validator rejects every
+        // name under that keyword, so on the one arm that applies it the rule
+        // refused legitimate packs, and the animation gate never consulted it at
+        // all — a `"../escape"` preset id shipped clean.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-badid"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("../escape"), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        presets.insert(QStringLiteral(".."), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        presets.insert(QStringLiteral("Fine"), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-badid"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("not a single safe path component")), qPrintable(r.report));
+        QVERIFY(r.errors >= 2);
+        // The usable one beside them is not implicated: one bad id does not
+        // condemn the pack's other presets.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Fine'")), qPrintable(r.report));
+    }
+
+    void anIntPresetValueMustBeIntegralAndAColourMustParse()
+    {
+        // An int-typed parameter reaches the shader through a cast that
+        // TRUNCATES, and an unparseable colour becomes an INVALID QColor, which
+        // the uniform receives as transparent black. Both read as "the preset did
+        // nothing" rather than "the preset has a typo", and both were invisible:
+        // the lint checked an int value was numeric and a colour value was a
+        // string, which each bad value here already is.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-types"));
+        obj.insert(
+            QStringLiteral("parameters"),
+            QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 4),
+                       animationParam(QStringLiteral("tint"), QStringLiteral("color"), QStringLiteral("#112233"))});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Sloppy"),
+                       QJsonObject{{QStringLiteral("count"), 1.5}, {QStringLiteral("tint"), QStringLiteral("ochre")}});
+        presets.insert(QStringLiteral("Tidy"),
+                       QJsonObject{{QStringLiteral("count"), 3}, {QStringLiteral("tint"), QStringLiteral("#445566")}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-types"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("truncates to 1")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("not a colour QColor can parse")), qPrintable(r.report));
+        QVERIFY(r.errors >= 2);
+        // The well-formed preset beside them reports nothing, so neither check is
+        // merely firing on every value it sees.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
     }
 
     void theOverlayArmLintsPresetsToo()

@@ -8,9 +8,11 @@
 #include "daemon/rendering/zoneentryscaffold.h"
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderPreset.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -22,6 +24,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <cmath>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorPointerShaders::PointerShaderEffect;
@@ -382,6 +385,27 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
     for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
         const QString& presetName = it.key();
         const QVariantMap& values = it.value();
+
+        // A pack-declared preset's key IS its id, and the settings app builds a
+        // filename from an id when the user duplicates the preset into an
+        // editable one. The runtime refuses an unusable id on load, which drops
+        // the preset with a log line the pack author will never see.
+        //
+        // Checked HERE rather than in the metadata schema. The schemas carried a
+        // `propertyNames` rule for this, and the vendored valijson rejects every
+        // name under it, valid ones included — so on the one family whose gate
+        // actually applies the rule it refused legitimate packs, and on the
+        // others it was never consulted at all. One predicate, shared with the
+        // runtime that enforces it, beats a schema keyword that works on neither
+        // path.
+        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName)) {
+            lints << QStringLiteral(
+                         "preset '%1' has an id that is not a single safe path component, so the runtime "
+                         "will refuse it")
+                         .arg(presetName);
+            ++problems;
+            continue;
+        }
         for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
             const auto found = byId.constFind(vit.key());
             if (found == byId.constEnd()) {
@@ -405,6 +429,17 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 if (value.typeId() != QMetaType::QString) {
                     lints << QStringLiteral("preset '%1' sets '%2' to a non-%3 value")
                                  .arg(presetName, vit.key(), param.type);
+                    ++problems;
+                    continue;
+                }
+                // A colour-typed value is parsed with QColor at runtime, and an
+                // unparseable one becomes an INVALID colour rather than an
+                // error: the uniform then receives transparent black, which
+                // reads as "the preset did nothing" instead of "the preset has a
+                // typo". Checking the string is a string caught only half of it.
+                if (param.type == QLatin1String("color") && !QColor::isValidColorName(value.toString())) {
+                    lints << QStringLiteral("preset '%1' sets '%2' to '%3', which is not a colour QColor can parse")
+                                 .arg(presetName, vit.key(), value.toString());
                     ++problems;
                     continue;
                 }
@@ -439,6 +474,18 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 continue;
             }
             const double v = value.toDouble();
+            // An int-typed parameter reaches the shader through a C++ cast that
+            // TRUNCATES, so `"count": 1.5` silently becomes 1 and the author's
+            // declared value is not the one that renders. A fractional literal
+            // under an int parameter is always a mistake, and this is the one
+            // place it can be said so before the pack ships.
+            if (param.type == QLatin1String("int") && v != std::trunc(v)) {
+                lints << QStringLiteral(
+                             "preset '%1' sets '%2' to %3, but '%2' is an int parameter, so the value "
+                             "truncates to %4 at runtime")
+                             .arg(presetName, vit.key(), QString::number(v), QString::number(std::trunc(v)));
+                ++problems;
+            }
             if (param.minValue.isValid() && v < param.minValue.toDouble()) {
                 lints << QStringLiteral("preset '%1' sets '%2' to %3, below its declared minimum %4")
                              .arg(presetName, vit.key(), QString::number(v),

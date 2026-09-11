@@ -63,8 +63,7 @@
         },
         "presets": {
             "type": "object",
-            "description": "Named parameter presets. Each value is a map of parameter id to value, naming a subset of the pack's declared parameters. A preset id is its key here and reaches the filesystem as <family>/<id>.json, so it must be a single safe path component.",
-            "propertyNames": { "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]*$" },
+            "description": "Named parameter presets. Each value is a map of parameter id to value, naming a subset of the pack's declared parameters. A preset id is its key here and reaches the filesystem as <family>/<id>.json, so it must be a single safe path component. That rule is enforced by plasmazones-shader-validate rather than here, because the vendored JSON-schema validator rejects every name under a propertyNames rule, legitimate ones included.",
             "additionalProperties": {
                 "type": "object",
                 "additionalProperties": { "type": ["number", "string", "boolean"] }

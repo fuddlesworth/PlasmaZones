@@ -123,5 +123,24 @@
         { "id": "colorPurple", "name": "Gradient Purple", "type": "color", "default": "#A855F7" },
         { "id": "colorRose", "name": "Gradient Rose", "type": "color", "default": "#F43F5E" },
         { "id": "colorTint", "name": "Unlit Tint", "type": "color", "default": "#0B1730" }
-    ]
+    ],
+    "presets": {
+        "Quiet": {
+            "speedRef": 0.8,
+            "depth": 0.09,
+            "glow": 0.45,
+            "unlitDim": 0.35,
+            "afterglow": 0.2,
+            "meander": 0.2
+        },
+        "Vivid": {
+            "speedRef": 0.2,
+            "depth": 0.2,
+            "glow": 1.7,
+            "afterglow": 0.9,
+            "meander": 0.8,
+            "grain": 1.8,
+            "colorRose": "#FF2D55"
+        }
+    }
 }
