@@ -4,31 +4,62 @@
 #pragma once
 
 #include <PhosphorShaders/ShaderPreset.h>
-#include <PhosphorShaders/ShaderPresetLoader.h>
 #include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorShaders/phosphorshaders_export.h>
 
-#include <QHash>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+
 #include <QList>
 #include <QObject>
 #include <QString>
 
+#include <array>
+#include <memory>
+
 namespace PhosphorShaders {
+
+using LiveReload = PhosphorFsLoader::LiveReload;
+
+/// The standard root for user-saved shader presets:
+/// `<XDG_DATA_HOME>/plasmazones/shader-presets`. One subdirectory per family,
+/// named by `shaderFamilyToken`.
+///
+/// Does NOT create the directory. `WatchedDirectorySet` promotes its watch to
+/// the parent when the target does not exist yet, so a preset saved into a
+/// fresh install is picked up without a restart and without every reader having
+/// to mkdir a directory it only wants to read.
+PHOSPHORSHADERS_EXPORT QString standardUserPresetRoot();
+
+/// The directory holding @p family's user presets under @p root.
+PHOSPHORSHADERS_EXPORT QString userPresetDirectory(const QString& root, ShaderFamily family);
+
+/**
+ * @brief Import pre-existing overlay preset files into the family layout.
+ *
+ * Before presets became assignable, the zone shader browser saved them through
+ * a different path. This moves any it finds at @p root into
+ * `<root>/overlay/<id>.json`, deriving each id from the old filename so two
+ * processes racing the migration agree on the result rather than importing
+ * twice. Idempotent: a file it has already moved is not seen again, and each
+ * import clears the reference it applied.
+ *
+ * @return the number of files imported.
+ */
+PHOSPHORSHADERS_EXPORT int migrateLegacyOverlayPresets(const QString& root);
 
 /**
  * @brief One object per process holding every shader preset, for every family.
  *
- * The whole preset side of a consumer's wiring: the registry, one loader per
+ * The whole preset side of a consumer's wiring: the registry, one publisher per
  * family, and the one-shot import of the pre-existing overlay preset files.
  * Three processes need all of this — the settings app, the daemon and the KWin
  * effect — and none of them differs in how it sets it up, so it lives here
  * rather than three times over.
  *
- * A consumer wires the parts it actually has. The effect resolves animation,
- * surface and pointer presets; the daemon resolves animation, surface and
- * overlay; the settings app shows all four. Loading a family a given process
- * never resolves costs one scan of a usually-absent directory, which is far
- * cheaper than making each process reason about which families it needs.
+ * A consumer names the families it actually resolves. The effect resolves
+ * animation, surface and pointer presets; the daemon resolves animation, surface
+ * and overlay; the settings app shows all four. An unlisted family simply has no
+ * user presets, which is the registry's documented miss behaviour.
  *
  * Pack-declared presets are NOT loaded here — they arrive from each family's
  * pack registry, whose reload edge the consumer connects to
@@ -36,9 +67,29 @@ namespace PhosphorShaders {
  * the directory layout; it deliberately knows nothing about pack registries,
  * which live in four different libraries.
  *
+ * ## Why the scanning lives here and not in a class of its own
+ *
+ * There used to be a `ShaderPresetLoader` between this and
+ * `PhosphorFsLoader::DirectoryLoader`: a forwarder of four methods, owning a
+ * parse sink, with a destructor that retracted its whole family from the
+ * registry. Three separate teardown faults lived in the seam, including a
+ * use-after-free that crashed the daemon on every shutdown, and they had one
+ * shared cause — **the invariant "a family has exactly one publisher" had no
+ * owner.** The loader ASSUMED it (its retraction was whole-family, correct only
+ * under that assumption), the registry did not know about it, and this class was
+ * the only one positioned to enforce it and merely happened to.
+ *
+ * So the publisher is now a slot in a fixed array here, one per family, and the
+ * invariant is a property of the data structure rather than of a check: a second
+ * publisher for a family is not something this class can be asked to build. The
+ * retraction happens in this destructor's BODY, at a point the owner chose,
+ * while the registry is provably alive — it is declared first below, so it is
+ * destroyed last. That is what removes the use-after-free, with no QPointer
+ * anywhere in it.
+ *
  * ## Thread safety
  *
- * GUI-thread only, like the registry and loaders it owns.
+ * GUI-thread only, like the registry it owns.
  */
 class PHOSPHORSHADERS_EXPORT ShaderPresetStore : public QObject
 {
@@ -52,31 +103,27 @@ public:
     ShaderPresetStore& operator=(const ShaderPresetStore&) = delete;
 
     /**
-     * @brief Import any legacy overlay presets, then scan every family.
+     * @brief Import any legacy overlay presets, then scan the named families.
      *
      * Safe to call from every process that has one of these, and in any order:
      * the migration derives its target ids from the old filenames, so two
      * processes racing it agree on the result instead of importing twice.
      *
-     * Calling it twice on the same store is a no-op. The second call does NOT
-     * rebuild: one loader per family is an invariant the loaders depend on,
-     * because their teardown retracts a whole family rather than only what they
-     * themselves published.
+     * A family already publishing is left exactly as it is, so a second call
+     * cannot produce two publishers for one family — and now cannot even be
+     * asked to, because the publisher IS the slot.
      *
      * @param root  The preset root, defaulting to `standardUserPresetRoot()`.
      *              Tests pass a temporary directory. Must be an absolute path —
      *              an empty or relative root would resolve against the process
      *              working directory, and is refused with a warning.
-     * @param families  Which families to build a loader for. Empty (the default)
-     *              means all four. A consumer that resolves only some of them
-     *              should name them: a loader is not just one startup scan, it
-     *              holds a QFileSystemWatcher and RE-PARSES every file in its
-     *              directory each time the user saves a preset there. The
-     *              compositor paid that on its own thread for the overlay family
-     *              it cannot consult at all. Naming a subset is the only thing
-     *              this costs: an unlisted family simply has no presets, and
-     *              `resolveParams` on it falls back to the assignment's own
-     *              values, which is its documented miss behaviour.
+     * @param families  Which families to publish. Empty (the default) means all
+     *              four. A consumer that resolves only some of them should name
+     *              them: a publisher is not just one startup scan, it holds a
+     *              QFileSystemWatcher and RE-PARSES every file in its directory
+     *              each time the user saves a preset there. The compositor paid
+     *              that on its own thread for the overlay family it cannot
+     *              consult at all.
      */
     void load(const QString& root = standardUserPresetRoot(), const QList<ShaderFamily>& families = {});
 
@@ -84,24 +131,63 @@ public:
     ShaderPresetRegistry& registry();
     const ShaderPresetRegistry& registry() const;
 
-    /// The loader for @p family, for the write side to rescan after saving.
-    /// Null before `load()`.
-    ShaderPresetLoader* loader(ShaderFamily family) const;
+    /// Whether this store publishes @p family, i.e. whether `load()` was called
+    /// and named it. False for every family before `load()`.
+    bool publishes(ShaderFamily family) const;
+
+    /// Rescan @p family's directory synchronously, so the registry reflects the
+    /// new state before this returns.
+    ///
+    /// This is what the WRITE side wants: after saving a preset file the picker
+    /// has to show it in the same turn rather than a debounce later, and the
+    /// caller usually wants to select what it just saved.
+    ///
+    /// @return false when this store does not publish @p family, so a caller
+    ///         that saved into a family it never loaded learns that rather than
+    ///         silently getting a stale list.
+    bool rescanNow(ShaderFamily family);
 
     /// Where a new user preset for @p family belongs.
     QString directoryFor(ShaderFamily family) const;
 
 private:
-    // Parent-based ownership: both are QObjects parented to this, so Qt frees
-    // them with it. No smart pointer on top, which would be a second owner for
-    // the same object.
-    //
-    // The destructor deletes m_loaders explicitly first. Qt's own child
-    // destruction runs in insertion order, which would free this registry —
-    // child #0, built in the init list — before the loaders whose teardown
-    // still talks to it.
-    ShaderPresetRegistry* m_registry;
-    QHash<int, ShaderPresetLoader*> m_loaders;
+    /// The parse sink for one family. Defined in the .cpp: it is an
+    /// implementation detail of how this class talks to `DirectoryLoader`, and
+    /// exposing it is what made the old seam look like an API.
+    class Sink;
+
+    /// One family's publisher: the sink that parses its files and the loader
+    /// that watches its directory. Both empty until `load()` names the family.
+    struct Publisher
+    {
+        std::unique_ptr<Sink> sink;
+        std::unique_ptr<PhosphorFsLoader::DirectoryLoader> loader;
+
+        bool active() const
+        {
+            return loader != nullptr;
+        }
+    };
+
+    /// Index of @p family in `m_publishers`. The enum is contiguous from zero,
+    /// which is what lets one slot per family be an array rather than a hash a
+    /// second entry could be inserted into.
+    static constexpr std::size_t slotOf(ShaderFamily family)
+    {
+        return static_cast<std::size_t>(family);
+    }
+
+    /// DECLARED FIRST, so reverse member-destruction order destroys it LAST —
+    /// after every publisher below. Belt and braces either way: the destructor
+    /// body retracts and clears the publishers explicitly before this is
+    /// touched. By value rather than a QObject child, because child destruction
+    /// order is exactly what produced the use-after-free this shape removes.
+    ShaderPresetRegistry m_registry;
+
+    /// One slot per family, so "two publishers for one family" is not
+    /// representable. See the class doc.
+    std::array<Publisher, 4> m_publishers;
+
     QString m_root;
 };
 

@@ -3,17 +3,30 @@
 
 #include <PhosphorShaders/ShaderPresetStore.h>
 
-#include <QDir>
-#include <QLoggingCategory>
+#include <PhosphorFsLoader/FileLimits.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/ParsedEntry.h>
 
-#include <array>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QLoggingCategory>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QStringList>
+#include <QUuid>
+
+#include <any>
 
 namespace PhosphorShaders {
 
 namespace {
 Q_LOGGING_CATEGORY(lcPresetStore, "phosphorshaders.presetstore")
 
-/// Every family, in one place, so adding one cannot leave a loader unbuilt.
+/// Every family, in one place, so adding one cannot leave a slot unconsidered.
 constexpr std::array<ShaderFamily, 4> kAllFamilies{
     ShaderFamily::Animation,
     ShaderFamily::Surface,
@@ -22,39 +35,272 @@ constexpr std::array<ShaderFamily, 4> kAllFamilies{
 };
 } // namespace
 
+QString standardUserPresetRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/plasmazones/shader-presets");
+}
+
+QString userPresetDirectory(const QString& root, ShaderFamily family)
+{
+    return root + QLatin1Char('/') + shaderFamilyToken(family);
+}
+
+namespace {
+/// Namespace UUID for deriving a migrated preset's id from its old filename.
+/// Function-local static rather than a namespace-scope QUuid: fromString is not
+/// constexpr, and a dynamic-initialised global would be subject to cross-TU
+/// static-init ordering. Same idiom as `shaderNamespaceUuid` in the registry.
+const QUuid& legacyPresetNamespaceUuid()
+{
+    static const QUuid uuid = QUuid::fromString(QStringLiteral("{6f2b8d51-4c3a-4e7f-9b10-2d8e4a5c7b63}"));
+    return uuid;
+}
+
+// The keys the old zone-only save path wrote. Named here rather than inline so
+// the mapping onto the current shape reads as a table.
+constexpr auto LegacyFieldShaderId = "shaderId";
+constexpr auto LegacyFieldShaderParams = "shaderParams";
+constexpr auto LegacyFieldName = "name";
+} // namespace
+
+int migrateLegacyOverlayPresets(const QString& root)
+{
+    QDir rootDir(root);
+    if (!rootDir.exists()) {
+        return 0;
+    }
+    const QStringList candidates = rootDir.entryList({QStringLiteral("*.json")}, QDir::Files);
+    if (candidates.isEmpty()) {
+        return 0;
+    }
+
+    const QString targetDir = userPresetDirectory(root, ShaderFamily::Overlay);
+    // Hoisted: the whole migration aborts if this fails, so nothing depended on
+    // it running once per candidate file.
+    if (!QDir().mkpath(targetDir)) {
+        qCWarning(lcPresetStore) << "Cannot create the overlay preset directory, aborting migration:" << targetDir;
+        return 0;
+    }
+    int migrated = 0;
+
+    for (const QString& fileName : candidates) {
+        const QString sourcePath = rootDir.absoluteFilePath(fileName);
+
+        QFile source(sourcePath);
+        if (!source.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qCWarning(lcPresetStore) << "Legacy preset will not open, leaving it:" << sourcePath
+                                     << source.errorString();
+            continue;
+        }
+        // Same per-file cap the rest of the preset path inherits from
+        // DirectoryLoader. This scan runs at startup in three processes over a
+        // user-writable directory, and read-all had no bound at all.
+        if (source.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
+            qCWarning(lcPresetStore) << "Legacy preset is larger than"
+                                     << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes
+                                     << "bytes, leaving it:" << sourcePath;
+            continue;
+        }
+        QJsonParseError parseError{};
+        const QJsonDocument doc = QJsonDocument::fromJson(source.readAll(), &parseError);
+        source.close();
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            qCWarning(lcPresetStore) << "Legacy preset is not a JSON object, leaving it:" << sourcePath;
+            continue;
+        }
+
+        const QJsonObject obj = doc.object();
+        const QString packId = obj.value(QLatin1String(LegacyFieldShaderId)).toString();
+        if (packId.isEmpty()) {
+            // Not a preset this ever wrote. Someone else's file living in the
+            // same directory, and not ours to move or delete.
+            continue;
+        }
+
+        ShaderPreset preset;
+        // Derived, not random: two processes racing this migration must land on
+        // the same target path, or the user ends up with the preset twice.
+        //
+        // WithoutBraces because this id becomes a filename below, and CLAUDE.md
+        // reserves the braced spelling for everything that is not a filesystem
+        // path. It also makes the id identical to the file's stem, so the
+        // stem fallback and the declared `id` field agree.
+        preset.id = QUuid::createUuidV5(legacyPresetNamespaceUuid(), fileName).toString(QUuid::WithoutBraces);
+        preset.name = obj.value(QLatin1String(LegacyFieldName)).toString();
+        if (preset.name.isEmpty()) {
+            preset.name = QFileInfo(fileName).completeBaseName();
+        }
+        preset.packId = packId;
+        preset.params = obj.value(QLatin1String(LegacyFieldShaderParams)).toObject().toVariantMap();
+
+        const QString targetPath = targetDir + QLatin1Char('/') + preset.id + QStringLiteral(".json");
+
+        if (!QFile::exists(targetPath)) {
+            // QSaveFile so a crash mid-write cannot leave a truncated preset
+            // behind that the scan then refuses on every later pass.
+            QSaveFile target(targetPath);
+            if (!target.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                qCWarning(lcPresetStore) << "Cannot write migrated preset, leaving the original:" << targetPath
+                                         << target.errorString();
+                continue;
+            }
+            const QByteArray json = QJsonDocument(preset.toJson()).toJson(QJsonDocument::Indented);
+            if (target.write(json) != json.size() || !target.commit()) {
+                qCWarning(lcPresetStore) << "Failed writing migrated preset, leaving the original:" << targetPath
+                                         << target.errorString();
+                continue;
+            }
+            ++migrated;
+        }
+
+        // Remove only once the target is known to exist, so a failure anywhere
+        // above leaves the original in place to be retried. A target that
+        // already existed means an earlier run wrote it and died before the
+        // removal; finishing the job here is why this is not gated on having
+        // just written the file.
+        if (!QFile::remove(sourcePath)) {
+            qCWarning(lcPresetStore) << "Migrated preset but could not remove the original:" << sourcePath;
+        }
+    }
+
+    if (migrated > 0) {
+        qCInfo(lcPresetStore) << "Imported" << migrated << "overlay preset(s) into" << targetDir;
+    }
+    return migrated;
+}
+
+/// Turns one preset file into a `ShaderPreset` and commits each rescan batch to
+/// the registry. The registry does its own diffing and per-pack signalling, so
+/// this sink keeps no snapshot of its own — unlike `CurveLoader::Sink`, which
+/// has to diff because its registry is replace-semantic and unconditionally
+/// noisy.
+class ShaderPresetStore::Sink : public PhosphorFsLoader::IDirectoryLoaderSink
+{
+public:
+    Sink(ShaderPresetRegistry& reg, ShaderFamily fam)
+        : registry(reg)
+        , family(fam)
+    {
+    }
+
+    /// A plain reference, and that is the point of the shape around it. This
+    /// used to be a QPointer guarding against the registry being destroyed
+    /// first, because both it and the owning loader were QObject children of the
+    /// store and Qt frees children in insertion order. The store now owns the
+    /// registry as a by-value member declared BEFORE these sinks and retracts
+    /// them in its own destructor body, so "destroyed first" is not reachable
+    /// and there is nothing for a weak pointer to catch.
+    ShaderPresetRegistry& registry;
+    ShaderFamily family;
+
+    std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
+    {
+        QFile file(filePath);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qCWarning(lcPresetStore) << "Skipping preset file that will not open:" << filePath << file.errorString();
+            return std::nullopt;
+        }
+
+        QJsonParseError parseError{};
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qCWarning(lcPresetStore) << "Skipping malformed preset file:" << filePath << parseError.errorString();
+            return std::nullopt;
+        }
+        if (!doc.isObject()) {
+            qCWarning(lcPresetStore) << "Skipping preset file whose root is not an object:" << filePath;
+            return std::nullopt;
+        }
+
+        // The filename stem is the fallback identity, so a hand-written file
+        // with no `id` still gets a stable one an assignment can reference.
+        const QString fallbackId = QFileInfo(filePath).completeBaseName();
+        ShaderPreset preset = ShaderPreset::fromJson(doc.object(), fallbackId);
+        preset.sourcePath = filePath;
+        preset.readOnly = false;
+
+        if (!preset.isValid()) {
+            // isValid() is id + packId. A preset naming no pack cannot be
+            // offered anywhere, because parameter ids mean nothing across
+            // packs — so this is a refusal, not a degraded load.
+            qCWarning(lcPresetStore) << "Skipping preset file with no pack id:" << filePath;
+            return std::nullopt;
+        }
+        if (preset.name.isEmpty()) {
+            // A nameless preset would render as a blank row in the picker.
+            // Fall back to the id, which is at worst a UUID the user can
+            // rename, rather than dropping a preset an assignment may point at.
+            preset.name = preset.id;
+        }
+
+        PhosphorFsLoader::ParsedEntry parsed;
+        parsed.key = preset.id;
+        parsed.sourcePath = filePath;
+        parsed.payload = std::move(preset);
+        return parsed;
+    }
+
+    void commitBatch(const QStringList& removedKeys,
+                     const QList<PhosphorFsLoader::ParsedEntry>& currentEntries) override
+    {
+        // `removedKeys` needs no handling of its own: the registry takes the
+        // whole family's current set and replaces it, so a key that is no
+        // longer in `currentEntries` is dropped by construction. Reading it
+        // would be a second, redundant source of truth for the same fact.
+        Q_UNUSED(removedKeys);
+
+        QList<ShaderPreset> presets;
+        presets.reserve(currentEntries.size());
+        for (const auto& parsed : currentEntries) {
+            const auto* preset = std::any_cast<ShaderPreset>(&parsed.payload);
+            if (!preset) {
+                qCWarning(lcPresetStore) << "commitBatch: payload type-mismatch for" << parsed.key;
+                continue;
+            }
+            presets.append(*preset);
+        }
+
+        // No null check on the registry, and none is owed now: it is a reference
+        // to a member that outlives every sink. The check this replaces existed
+        // only because the pointer could dangle.
+        registry.setUserPresets(family, presets);
+    }
+};
+
 ShaderPresetStore::ShaderPresetStore(QObject* parent)
     : QObject(parent)
-    , m_registry(new ShaderPresetRegistry(this))
 {
 }
 
 ShaderPresetStore::~ShaderPresetStore()
 {
-    // Delete the loaders before the registry, not with it. Both are QObject
-    // children of this store, and QObject frees children in insertion order —
-    // the registry is constructed in the init list above, so it is child #0 and
-    // would die first, leaving each loader's destructor retracting its presets
-    // through a freed registry. Reproduced under ASAN as a heap-use-after-free,
-    // with the write landing inside QHash::insert.
+    // Retract in the destructor BODY, at a point this class chose, rather than
+    // leaving it to a member or child destructor to do on the way out.
     //
-    // The loaders' QPointer to the registry makes that safe even if this order
-    // is ever lost, but the retraction is wanted, so do it while the registry
-    // is still alive rather than relying on the null check to skip it.
-    qDeleteAll(m_loaders);
-    m_loaders.clear();
+    // That ordering is the whole fix for the use-after-free this shape replaces.
+    // The retraction is whole-family, which is only meaningful while a family
+    // has exactly one publisher — and here it provably does, because the
+    // publisher IS the slot. The registry is a member declared before the slots,
+    // so it is alive for every line below and destroyed after all of them.
+    for (const ShaderFamily family : kAllFamilies) {
+        Publisher& publisher = m_publishers[slotOf(family)];
+        if (!publisher.active()) {
+            continue;
+        }
+        // Hand back an empty set, so tearing the store down drops presets no
+        // file backs any more rather than leaving them for a sequential store
+        // (tests, a settings window opened twice) to inherit.
+        m_registry.setUserPresets(family, {});
+        // Loader before sink: the loader's watcher can still call into the sink,
+        // so the thing that calls must die before the thing it calls.
+        publisher.loader.reset();
+        publisher.sink.reset();
+    }
 }
 
 void ShaderPresetStore::load(const QString& root, const QList<ShaderFamily>& families)
 {
-    // Idempotent by refusal rather than by rebuild. A second call used to build
-    // four more loaders, leak the first four with their watchers still armed,
-    // and leave two publishers per family — which the loader destructor's
-    // whole-family retraction cannot survive, since the first one to die wipes
-    // the other's presets.
-    if (!m_loaders.isEmpty()) {
-        return;
-    }
-
     // An empty root would resolve against the process working directory:
     // QDir(QString()) is QDir("."), whose exists() is true, so the migration
     // would scan and read the CWD's *.json files, and userPresetDirectory()
@@ -75,34 +321,50 @@ void ShaderPresetStore::load(const QString& root, const QList<ShaderFamily>& fam
     // behaviour and a new one opts in to less.
     const QList<ShaderFamily> wanted =
         families.isEmpty() ? QList<ShaderFamily>(kAllFamilies.cbegin(), kAllFamilies.cend()) : families;
+
     for (const ShaderFamily family : wanted) {
-        if (m_loaders.contains(static_cast<int>(family))) {
-            continue; // a caller listing one family twice
+        Publisher& publisher = m_publishers[slotOf(family)];
+        if (publisher.active()) {
+            // Already publishing: leave it exactly as it is. A caller naming a
+            // family twice, or calling load() twice, cannot produce a second
+            // publisher — the slot is the publisher, so there is nowhere for a
+            // second one to go.
+            continue;
         }
-        auto* loader = new ShaderPresetLoader(*m_registry, family, this);
+        publisher.sink = std::make_unique<Sink>(m_registry, family);
+        publisher.loader = std::make_unique<PhosphorFsLoader::DirectoryLoader>(*publisher.sink);
         // LiveReload::On is the point of the whole design: a preset retuned on
         // disk has to reach every process without a restart. The watcher
         // promotes itself to the parent directory when the family directory
         // does not exist yet, so a fresh install picks up the first preset the
         // user saves without anyone having to create the tree up front.
-        loader->loadFromDirectory(userPresetDirectory(root, family), LiveReload::On);
-        m_loaders.insert(static_cast<int>(family), loader);
+        publisher.loader->loadFromDirectory(userPresetDirectory(root, family), LiveReload::On);
     }
 }
 
 ShaderPresetRegistry& ShaderPresetStore::registry()
 {
-    return *m_registry;
+    return m_registry;
 }
 
 const ShaderPresetRegistry& ShaderPresetStore::registry() const
 {
-    return *m_registry;
+    return m_registry;
 }
 
-ShaderPresetLoader* ShaderPresetStore::loader(ShaderFamily family) const
+bool ShaderPresetStore::publishes(ShaderFamily family) const
 {
-    return m_loaders.value(static_cast<int>(family), nullptr);
+    return m_publishers[slotOf(family)].active();
+}
+
+bool ShaderPresetStore::rescanNow(ShaderFamily family)
+{
+    Publisher& publisher = m_publishers[slotOf(family)];
+    if (!publisher.active()) {
+        return false;
+    }
+    publisher.loader->rescanNow();
+    return true;
 }
 
 QString ShaderPresetStore::directoryFor(ShaderFamily family) const

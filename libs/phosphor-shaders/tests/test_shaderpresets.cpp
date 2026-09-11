@@ -13,7 +13,6 @@
  */
 
 #include <PhosphorShaders/ShaderPreset.h>
-#include <PhosphorShaders/ShaderPresetLoader.h>
 #include <PhosphorShaders/ShaderPresetParse.h>
 #include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
@@ -46,6 +45,28 @@ bool writeFile(const QString& path, const QString& body)
         return false;
     }
     return file.write(body.toUtf8()) == body.toUtf8().size();
+}
+
+/// A store publishing exactly @p family out of @p root.
+///
+/// Every scan-side test drives the STORE, because the publisher is no longer a
+/// class of its own: the store owns the parse sink and the directory loader
+/// directly, which is what gives the "one publisher per family" invariant an
+/// owner instead of leaving it as an assumption three classes each half-held.
+///
+/// These tests lose nothing by the change. Every one of them already wrote into
+/// `userPresetDirectory(root, family)` — the store's own layout — so pointing a
+/// loader at an arbitrary directory was a capability none of them used. They
+/// gain the real watcher settings the product runs with, since `load()` always
+/// registers LiveReload::On.
+///
+/// Returned by pointer because the store is a QObject: non-copyable, and the
+/// caller needs it to outlive the assertions that read its registry.
+std::unique_ptr<ShaderPresetStore> storePublishing(const QString& root, ShaderFamily family)
+{
+    auto store = std::make_unique<ShaderPresetStore>();
+    store->load(root, {family});
+    return store;
 }
 } // namespace
 
@@ -427,11 +448,10 @@ void TestShaderPresets::loadsPresetFilesFromDisk()
         "params": { "speed": 1.4 }
     })")));
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
-    loader.loadFromDirectory(dir, LiveReload::Off);
+    const auto store = storePublishing(root.path(), ShaderFamily::Animation);
 
-    const QList<ShaderPreset> presets = registry.presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve"));
+    const QList<ShaderPreset> presets =
+        store->registry().presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve"));
     QCOMPARE(presets.size(), 1);
     QCOMPARE(presets.at(0).id, QStringLiteral("{neon}"));
     QCOMPARE(presets.at(0).name, QStringLiteral("Neon Pulse"));
@@ -450,11 +470,9 @@ void TestShaderPresets::filenameStemIsTheFallbackId()
     QVERIFY(writeFile(dir + QStringLiteral("/my-preset.json"),
                       QStringLiteral(R"({ "name": "Mine", "packId": "trail", "params": {} })")));
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Pointer);
-    loader.loadFromDirectory(dir, LiveReload::Off);
+    const auto store = storePublishing(root.path(), ShaderFamily::Pointer);
 
-    const QList<ShaderPreset> presets = registry.presetsFor(ShaderFamily::Pointer, QStringLiteral("trail"));
+    const QList<ShaderPreset> presets = store->registry().presetsFor(ShaderFamily::Pointer, QStringLiteral("trail"));
     QCOMPARE(presets.size(), 1);
     QCOMPARE(presets.at(0).id, QStringLiteral("my-preset"));
 }
@@ -468,14 +486,12 @@ void TestShaderPresets::skipsPresetWithNoPackId()
     QVERIFY(writeFile(dir + QStringLiteral("/orphan.json"),
                       QStringLiteral(R"({ "name": "Orphan", "params": { "x": 1 } })")));
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Overlay);
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("preset file with no pack id")));
-    loader.loadFromDirectory(dir, LiveReload::Off);
+    const auto store = storePublishing(root.path(), ShaderFamily::Overlay);
 
     // A preset naming no pack cannot be offered anywhere: parameter ids mean
     // nothing across packs.
-    QVERIFY(registry.presetsFor(ShaderFamily::Overlay, QStringLiteral("aurora")).isEmpty());
+    QVERIFY(store->registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("aurora")).isEmpty());
 }
 
 void TestShaderPresets::editingAPresetFileReachesTheRegistry()
@@ -494,9 +510,8 @@ void TestShaderPresets::editingAPresetFileReachesTheRegistry()
         "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 1.0 }
     })")));
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
-    loader.loadFromDirectory(dir, LiveReload::Off);
+    const auto store = storePublishing(root.path(), ShaderFamily::Animation);
+    ShaderPresetRegistry& registry = store->registry();
 
     const QVariantMap deltas{{QStringLiteral("glow"), 0.5}};
     QVariantMap resolved =
@@ -508,7 +523,10 @@ void TestShaderPresets::editingAPresetFileReachesTheRegistry()
     QVERIFY(writeFile(file, QStringLiteral(R"({
         "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 9.0 }
     })")));
-    loader.rescanNow();
+    // The store's own synchronous rescan, which is the entry point the write
+    // side uses after saving a preset. It answers false for a family this store
+    // does not publish, so assert it actually ran.
+    QVERIFY(store->rescanNow(ShaderFamily::Animation));
 
     QCOMPARE(spy.count(), 1);
     resolved =
@@ -538,11 +556,9 @@ void TestShaderPresets::migratesLegacyOverlayPreset()
     QVERIFY(!QFile::exists(root.path() + QStringLiteral("/my-aurora.json")));
 
     // ...and the preset now loads through the ordinary overlay path.
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Overlay);
-    loader.loadFromDirectory(userPresetDirectory(root.path(), ShaderFamily::Overlay), LiveReload::Off);
+    const auto store = storePublishing(root.path(), ShaderFamily::Overlay);
 
-    const QList<ShaderPreset> presets = registry.presetsFor(ShaderFamily::Overlay, QStringLiteral("aurora"));
+    const QList<ShaderPreset> presets = store->registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("aurora"));
     QCOMPARE(presets.size(), 1);
     QCOMPARE(presets.at(0).name, QStringLiteral("My Aurora"));
     QCOMPARE(presets.at(0).packId, QStringLiteral("aurora"));
@@ -613,12 +629,10 @@ void TestShaderPresets::migrationFallsBackToFilenameForName()
 
     QCOMPARE(migrateLegacyOverlayPresets(root.path()), 1);
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Overlay);
-    loader.loadFromDirectory(userPresetDirectory(root.path(), ShaderFamily::Overlay), LiveReload::Off);
+    const auto store = storePublishing(root.path(), ShaderFamily::Overlay);
     // A nameless preset would render as a blank picker row; the old filename is
     // the best name available and is what the user recognises.
-    QCOMPARE(registry.presetsFor(ShaderFamily::Overlay, QStringLiteral("aurora")).at(0).name,
+    QCOMPARE(store->registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("aurora")).at(0).name,
              QStringLiteral("deep-teal"));
 }
 
@@ -641,9 +655,8 @@ void TestShaderPresets::watcherSeesAPlainRewrite()
         "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 1.0 }
     })")));
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
-    loader.loadFromDirectory(dir, LiveReload::On);
+    const auto store = storePublishing(root.path(), ShaderFamily::Animation);
+    ShaderPresetRegistry& registry = store->registry();
     QCOMPARE(registry.preset(ShaderFamily::Animation, QStringLiteral("dissolve"), QStringLiteral("{neon}"))
                  .params.value(QStringLiteral("speed"))
                  .toDouble(),
@@ -676,9 +689,8 @@ void TestShaderPresets::watcherSeesAnAtomicRenameSave()
         "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 1.0 }
     })")));
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
-    loader.loadFromDirectory(dir, LiveReload::On);
+    const auto store = storePublishing(root.path(), ShaderFamily::Animation);
+    ShaderPresetRegistry& registry = store->registry();
 
     QSignalSpy spy(&registry, &ShaderPresetRegistry::presetsChanged);
 
@@ -708,9 +720,8 @@ void TestShaderPresets::watcherSeesAPresetAddedToAFreshInstall()
     const QString dir = userPresetDirectory(root.path(), ShaderFamily::Animation);
     QVERIFY(!QDir(dir).exists());
 
-    ShaderPresetRegistry registry;
-    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
-    loader.loadFromDirectory(dir, LiveReload::On);
+    const auto store = storePublishing(root.path(), ShaderFamily::Animation);
+    ShaderPresetRegistry& registry = store->registry();
 
     QSignalSpy spy(&registry, &ShaderPresetRegistry::presetsChanged);
     QVERIFY(QDir().mkpath(dir));
@@ -731,14 +742,22 @@ void TestShaderPresets::storeDestructionDoesNotTouchAFreedRegistry()
 {
     // No test constructed a ShaderPresetStore at all, which is why a
     // use-after-free on its teardown was invisible to a green suite: the store
-    // parents both the registry and the loaders to itself, and QObject frees
+    // parented both the registry and its loaders to itself, and QObject frees
     // children in insertion order, so the registry died first while each
     // loader's destructor was still retracting through it.
     //
-    // Under a normal build this asserts the destruction ORDER contract rather
-    // than proving the absence of the fault — freed-memory reuse is
-    // nondeterministic and there is no sanitizer configuration in this repo. Run
-    // it under ASAN to get the stronger answer.
+    // The fault is now STRUCTURALLY unreachable rather than ordered-around. The
+    // registry is a by-value member declared before the publisher slots, so it
+    // outlives them under ordinary member-destruction rules, and the retraction
+    // happens in the store's own destructor body while it is provably alive.
+    // There is no QObject child destruction in the path at all, and nothing for
+    // a QPointer to catch — which is why there is no longer a QPointer.
+    //
+    // What this test can still only do weakly is PROVE the absence: freed-memory
+    // reuse is nondeterministic and this repo has no sanitizer configuration.
+    // Run it under ASAN for the stronger answer. What it does assert is that the
+    // teardown runs to completion twice over and that the registry is readable
+    // right up to the end of each scope.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QVERIFY(QDir().mkpath(dir.filePath(QStringLiteral("animation"))));
@@ -774,12 +793,13 @@ void TestShaderPresets::storeLoadIsIdempotent()
 
     ShaderPresetStore store;
     store.load(dir.path());
-    ShaderPresetLoader* first = store.loader(ShaderFamily::Animation);
-    QVERIFY(first != nullptr);
+    QVERIFY(store.publishes(ShaderFamily::Animation));
 
     store.load(dir.path());
-    // Same loader, not a second one layered over it.
-    QCOMPARE(store.loader(ShaderFamily::Animation), first);
+    // One publisher still, and the presets are not doubled. Now guaranteed by
+    // the slot rather than by an early return: there is one slot per family, so
+    // a second publisher is not a thing the store can be asked to build.
+    QVERIFY(store.publishes(ShaderFamily::Animation));
     QCOMPARE(store.registry().presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve")).size(), 1);
 }
 
@@ -791,11 +811,14 @@ void TestShaderPresets::storeRefusesANonAbsoluteRoot()
     // filesystem-root paths. A relative root is the same hazard.
     ShaderPresetStore store;
     store.load(QString());
-    QVERIFY(store.loader(ShaderFamily::Animation) == nullptr);
+    QVERIFY(!store.publishes(ShaderFamily::Animation));
+    // And the write-side entry point reports the refusal rather than silently
+    // doing nothing, which is what a caller that saved a file needs to hear.
+    QVERIFY(!store.rescanNow(ShaderFamily::Animation));
 
     ShaderPresetStore relative;
     relative.load(QStringLiteral("shader-presets"));
-    QVERIFY(relative.loader(ShaderFamily::Animation) == nullptr);
+    QVERIFY(!relative.publishes(ShaderFamily::Animation));
 }
 
 void TestShaderPresets::anIdThatIsNotAPathComponentIsRefused()
@@ -866,10 +889,10 @@ void TestShaderPresets::storeLoadsOnlyTheFamiliesTheConsumerNames()
     ShaderPresetStore store;
     store.load(root.path(), {ShaderFamily::Animation, ShaderFamily::Surface});
 
-    QVERIFY(store.loader(ShaderFamily::Animation) != nullptr);
-    QVERIFY(store.loader(ShaderFamily::Surface) != nullptr);
-    QVERIFY(store.loader(ShaderFamily::Pointer) == nullptr);
-    QVERIFY(store.loader(ShaderFamily::Overlay) == nullptr);
+    QVERIFY(store.publishes(ShaderFamily::Animation));
+    QVERIFY(store.publishes(ShaderFamily::Surface));
+    QVERIFY(!store.publishes(ShaderFamily::Pointer));
+    QVERIFY(!store.publishes(ShaderFamily::Overlay));
 
     // The named family's preset is loaded; the unnamed one's is simply absent,
     // which is the registry's documented miss case rather than an error.
@@ -879,7 +902,7 @@ void TestShaderPresets::storeLoadsOnlyTheFamiliesTheConsumerNames()
     // The default is still every family, so an existing caller is unchanged.
     ShaderPresetStore all;
     all.load(root.path());
-    QVERIFY(all.loader(ShaderFamily::Overlay) != nullptr);
+    QVERIFY(all.publishes(ShaderFamily::Overlay));
     QCOMPARE(all.registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("pack")).size(), 1);
 }
 

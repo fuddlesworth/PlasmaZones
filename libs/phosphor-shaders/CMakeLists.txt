@@ -80,7 +80,6 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/ShaderPackPaths.h
     include/PhosphorShaders/ShaderParamPreamble.h
     include/PhosphorShaders/ShaderPreset.h
-    include/PhosphorShaders/ShaderPresetLoader.h
     include/PhosphorShaders/ShaderPresetParse.h
     include/PhosphorShaders/ShaderPresetRegistry.h
     include/PhosphorShaders/ShaderPresetStore.h
@@ -101,7 +100,6 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/ShaderPackPaths
     include/PhosphorShaders/ShaderParamPreamble
     include/PhosphorShaders/ShaderPreset
-    include/PhosphorShaders/ShaderPresetLoader
     include/PhosphorShaders/ShaderPresetParse
     include/PhosphorShaders/ShaderPresetRegistry
     include/PhosphorShaders/ShaderPresetStore
@@ -115,7 +113,6 @@ set(phosphorshaders_SRCS
     src/shaderincluderesolver.cpp
     src/shaderparampreamble.cpp
     src/shaderpreset.cpp
-    src/shaderpresetloader.cpp
     src/shaderpackpaths.cpp
     src/shaderpresetparse.cpp
     src/shaderpresetregistry.cpp

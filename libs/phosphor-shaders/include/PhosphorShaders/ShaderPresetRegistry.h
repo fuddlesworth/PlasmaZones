@@ -25,7 +25,7 @@ namespace PhosphorShaders {
  *   • Pack-declared presets arrive via `setPackPresets`, called by whoever owns
  *     the family's pack registry whenever that registry reloads (the existing
  *     `effectsChanged` / `shadersChanged` edge).
- *   • User presets arrive via `setUserPresets`, called by `ShaderPresetLoader`
+ *   • User presets arrive via `setUserPresets`, called by `ShaderPresetStore`
  *     on each rescan of the user preset directories.
  *
  * On a collision the USER preset wins, matching the user-wins layering every

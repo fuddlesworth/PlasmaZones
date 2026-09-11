@@ -255,7 +255,7 @@ void TestShaderPresetBridge::renameWritesBackToTheFileTheRecordCameFrom()
         "id": "hand-written", "name": "Mine", "packId": "dissolve",
         "params": { "speed": 1.0 }
     })")));
-    m_store->loader(kFamily)->rescanNow();
+    m_store->rescanNow(kFamily);
     QCOMPARE(m_bridge->presetsFor(kPack).size(), 1);
 
     QVERIFY(m_bridge->renamePreset(QStringLiteral("hand-written"), QStringLiteral("Renamed")));

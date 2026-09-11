@@ -6,7 +6,6 @@
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 
-#include <PhosphorShaders/ShaderPresetLoader.h>
 #include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
 
@@ -213,9 +212,7 @@ bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
     // Synchronous, not the debounced requestRescan: the caller is about to
     // select what it just saved, and a picker that does not yet list it would
     // silently select nothing.
-    if (auto* loader = m_store->loader(m_family)) {
-        loader->rescanNow();
-    }
+    m_store->rescanNow(m_family);
     return true;
 }
 
@@ -301,9 +298,7 @@ bool ShaderPresetBridge::deletePreset(const QString& presetId)
     // went wrong when the end state is exactly what they asked for, and skipped the
     // rescan, so the stale row lingered until the watcher fired.
     if (!preset.sourcePath.isEmpty() && !QFile::exists(preset.sourcePath)) {
-        if (auto* loader = m_store->loader(m_family)) {
-            loader->rescanNow();
-        }
+        m_store->rescanNow(m_family);
         return true;
     }
     if (preset.sourcePath.isEmpty() || !QFile::remove(preset.sourcePath)) {
@@ -312,9 +307,7 @@ bool ShaderPresetBridge::deletePreset(const QString& presetId)
         Q_EMIT presetWriteFailed(error);
         return false;
     }
-    if (auto* loader = m_store->loader(m_family)) {
-        loader->rescanNow();
-    }
+    m_store->rescanNow(m_family);
     return true;
 }
 
