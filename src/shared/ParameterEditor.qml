@@ -49,6 +49,19 @@ ColumnLayout {
     required property var parameters
     required property var currentValues
     property var lockedParams: ({})
+    /// Parameter ids whose value is the ASKING ASSIGNMENT'S own, laid over
+    /// whatever a named preset supplies, as a `{ paramId: true }` map.
+    ///
+    /// Empty by default, which is every host that has no preset axis: nothing is
+    /// marked and the rows look exactly as they did. Where a preset IS engaged,
+    /// the editor is fed the MERGED values, so without this the preset's values
+    /// and the assignment's own edits render identically and the only signal is a
+    /// whole-assignment "Modified" label that cannot say WHICH value was
+    /// changed. Revert-to-preset then looks like it might discard anything.
+    ///
+    /// A map rather than a list because the row delegates test one id at a time
+    /// and a list would make that a linear scan per row per rebind.
+    property var overriddenParams: ({})
     property bool enableLocking: true
     property bool enableRandomize: true
     /// Show the header "reset all to defaults" button (left of Lock-All).
@@ -127,6 +140,15 @@ ColumnLayout {
         }
         return result;
     }
+    /// Whether @p data's parameter carries an edit of the asking assignment's
+    /// own. False for every host that passes no map, which is how the eight
+    /// hosts with no preset axis stay unmarked.
+    function _isOverridden(data) {
+        if (!data || !root.overriddenParams)
+            return false;
+        return root.overriddenParams[data.id] === true;
+    }
+
     readonly property bool _hasAnyLocked: {
         if (!lockedParams)
             return false;
@@ -576,6 +598,11 @@ ColumnLayout {
                 text: modelData ? (modelData.name || modelData.id || "") : ""
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideRight
+                // Marked, not merely coloured: a colour alone says nothing to a
+                // screen reader, and this row's whole job here is to tell the
+                // user which values are theirs rather than the preset's.
+                font.bold: root._isOverridden(modelData)
+                Accessible.description: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
             }
 
             ParameterRow {
@@ -629,6 +656,10 @@ ColumnLayout {
                     text: modelData ? (modelData.name || modelData.id || "") : ""
                     Layout.fillWidth: true
                     elide: Text.ElideRight
+                    // See the wide delegate's twin: bold plus an accessible
+                    // description, so the mark survives a screen reader.
+                    font.bold: root._isOverridden(modelData)
+                    Accessible.description: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
                 }
 
                 Label {

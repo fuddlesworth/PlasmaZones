@@ -61,6 +61,19 @@ Item {
     /// so a card with no override still shows the preset it draws with.
     readonly property string _editPresetId: (root._hasOverride || root.isBaseline) ? (root._raw.presetId || "") : (root._resolved.presetId || "")
 
+    /// `{ paramId: true }` for every key this assignment stores of its own, and
+    /// empty with no preset engaged (with nothing underneath, marking every row
+    /// would say nothing). Twin of PackEditorBody's.
+    readonly property var _overriddenParams: {
+        if (root._editPresetId.length === 0)
+            return ({});
+        const marks = {};
+        const deltas = root._editParams || {};
+        for (const key in deltas)
+            marks[key] = true;
+        return marks;
+    }
+
     /// What the overlay actually renders with: the assigned preset's values
     /// with this node's own edits laid over the top.
     ///
@@ -391,6 +404,12 @@ Item {
                     visible: root._editShaderId.length > 0
                     parameters: root._paramDefs
                     currentValues: root._effectiveParams
+                    // Merged values go in, so mark which of them are this
+                    // assignment's own. `_editParams` is the stored delta map and
+                    // presence in it is the pin, so no comparison is needed —
+                    // which matters, because a delta equal to the preset's value
+                    // is still a delta.
+                    overriddenParams: root._overriddenParams
                     effectId: root._editShaderId
                     subjectMissing: root._editShaderMissing
                     enableLocking: true

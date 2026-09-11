@@ -468,6 +468,21 @@ public:
     /// distinguish "refused" from "no-op" gets that from -1 alone.
     Q_INVOKABLE int setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters);
 
+    /// Merge ONE parameter into every shader-capable path's own stored map,
+    /// leaving that path's pack, preset and other parameters exactly as stored.
+    ///
+    /// The slider path. Its sibling above REPLACES the whole map, which is right
+    /// for a Reset or a Randomize (both stage a complete map on purpose) and
+    /// wrong for a single-value edit, because a slider hands over the map the card
+    /// is DISPLAYING. That is safe only while the displayed map holds stored
+    /// values alone; the day it holds the preset-merged effective ones, a whole-map
+    /// write would pin every preset value as this assignment's own delta. Written
+    /// up in full beside the implementation.
+    ///
+    /// Same return contract as every sibling here, -1 included.
+    Q_INVOKABLE int setShaderParameterOnPaths(const QStringList& rawPaths, const QString& paramId,
+                                              const QVariant& value);
+
     /// Point every shader-capable path in @p rawPaths at preset @p presetId,
     /// WITHOUT touching which pack each uses or the parameter edits it carries.
     ///

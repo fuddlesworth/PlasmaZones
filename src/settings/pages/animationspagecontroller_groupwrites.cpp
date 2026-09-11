@@ -677,6 +677,42 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                  });
 }
 
+int AnimationsPageController::setShaderParameterOnPaths(const QStringList& rawPaths, const QString& paramId,
+                                                        const QVariant& value)
+{
+    using namespace PhosphorAnimationShaders;
+    // ONE key, merged into each path's own stored map. The sibling above takes a
+    // whole map and REPLACES it, which is right for a Reset or a Randomize (both
+    // stage a complete map deliberately) and wrong for a slider.
+    //
+    // A slider used to go through that sibling, handing it the card's DISPLAYED
+    // map. That was correct only because the displayed map comes from a tree
+    // walk-up that never consults the preset registry, so it held nothing but
+    // stored values. The moment it holds the EFFECTIVE values — binding it to the
+    // merged map, or moving the flatten into the walk-up the way the daemon side
+    // already does — one slider nudge would write every value the preset supplies
+    // into the assignment as its own delta, pinning the whole pack to the preset's
+    // current tuning with no signal of any kind. Writing the key the user actually
+    // moved cannot do that, whatever the display holds.
+    if (paramId.isEmpty()) {
+        qCWarning(lcConfig) << "setShaderParameterOnPaths: refusing an empty parameter id";
+        return -1;
+    }
+    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderParameterOnPaths"), {},
+                                 [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+                                     // From the stored profile, so `effectId` and
+                                     // `presetId` stay exactly as they were: a
+                                     // parameter edit is not a pack pick and not a
+                                     // preset pick.
+                                     ShaderProfile profile = stored;
+                                     QVariantMap params = profile.parameters.value_or(QVariantMap());
+                                     params.insert(paramId, value);
+                                     profile.parameters =
+                                         boundedWrittenMap(params, QLatin1String("setShaderParameterOnPaths"));
+                                     return profile;
+                                 });
+}
+
 int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,
                                                      bool blockInherited)
 {

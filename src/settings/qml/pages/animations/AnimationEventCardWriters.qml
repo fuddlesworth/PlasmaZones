@@ -161,6 +161,28 @@ QtObject {
         }
     }
 
+    /// Merge ONE parameter into every write path's stored map, leaving each
+    /// path's pack, preset and other parameters as stored.
+    ///
+    /// What the sliders use. `_setShaderParamsOnAll` above replaces the whole map,
+    /// which is what a Reset or a Randomize wants — each stages a complete map on
+    /// purpose — and is a hazard for a single-value edit, because the map a slider
+    /// has to hand over is the one the card is DISPLAYING. That holds stored values
+    /// only because `currentShaderParams` comes from a tree walk-up that never
+    /// consults the preset registry; bind it to the effective map instead, or move
+    /// the flatten into that walk-up the way the daemon side already does, and one
+    /// nudge would pin every value the preset supplies as this event's own.
+    function _setShaderParamOnAll(paramId, value) {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.setShaderParameterOnPaths(card._writePaths, paramId, value) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     /// Point every write path at @p presetId, leaving each path's pack and its
     /// own parameter edits alone.
     ///

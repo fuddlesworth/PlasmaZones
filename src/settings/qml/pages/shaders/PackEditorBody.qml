@@ -109,6 +109,19 @@ GridLayout {
         root._effectiveValues = root.presetBridge.effectiveParams(root.packId, root.presetId, deltas);
     }
 
+    /// `{ paramId: true }` for every key this assignment stores of its own, and
+    /// empty with no preset engaged (nothing is "on top of" anything, so marking
+    /// every row would say nothing).
+    readonly property var _overriddenParams: {
+        if (!root.presetId || root.presetId.length === 0)
+            return ({});
+        const marks = {};
+        const deltas = root.currentValues || {};
+        for (const key in deltas)
+            marks[key] = true;
+        return marks;
+    }
+
     onCurrentValuesChanged: root._recomputeEffective()
     onPresetIdChanged: root._recomputeEffective()
     onPackIdChanged: root._recomputeEffective()
@@ -163,6 +176,11 @@ GridLayout {
         compact: true
         parameters: root.parameters
         currentValues: root._effectiveValues
+        // The editor is fed the MERGED values, so the preset's values and this
+        // assignment's own edits would otherwise render identically. The delta
+        // map IS the set of own edits — presence in it is the pin, equal value
+        // included — so it needs no comparison to derive.
+        overriddenParams: root._overriddenParams
         effectId: root.packId
         enableGroups: root.enableGroups
         enableLocking: root.enableLocking
