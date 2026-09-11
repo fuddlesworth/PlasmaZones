@@ -1605,6 +1605,11 @@ private:
     /// (m_shaderRegistry is ctor-owned and survives stop(), unlike the
     /// animation/surface registries which are recreated each init).
     QMetaObject::Connection m_zoneWarmBakeConnection;
+    /// The overlay preset sync, on the ctor-owned m_shaderRegistry — the other
+    /// connection to the one sender that outlives stop(). Its lambda reaches the
+    /// preset store, which stop() DOES reset, so it is severed there beside the
+    /// handle above and dropped on setupShaderPresets re-entry.
+    QMetaObject::Connection m_overlayPresetSyncConnection;
     /// Skip-unchanged gate for the warm bakes: "<category>:<id>" → last
     /// scheduled fingerprint (vert path + vert mtime + frag path + frag mtime +
     /// include-candidate paths + mtimes + param preamble). The fingerprint is

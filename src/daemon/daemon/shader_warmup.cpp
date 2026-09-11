@@ -111,6 +111,15 @@ void Daemon::setupSurfaceShaderEffects()
 
 void Daemon::setupShaderPresets()
 {
+    // Clear the borrow BEFORE replacing the store, the order stop() is careful
+    // about. make_unique destroys the previous store — and the registry that is
+    // its QObject child — while OverlayService may still be holding a pointer to
+    // that registry, and load() below touches the filesystem, so the window is
+    // not one that can be argued away as event-loop-free. Only reachable on an
+    // init() re-run, which this daemon documents as supported.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(nullptr);
+    }
     m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
     // Scans the user preset directories with live reload, and imports any
     // presets left by the old zone-only save path on the way past.
@@ -175,13 +184,21 @@ void Daemon::setupShaderPresets()
     syncAnimationPresets();
     syncSurfacePresets();
 
-    // A pack REMOVED from disk keeps its entry here until something replaces
-    // it. That is deliberate and harmless: presets are looked up by (family,
-    // packId), so a preset for a pack nobody can assign any more is never
-    // reached. Pruning would mean diffing the registry's pack list on every
-    // reload for no observable gain.
+    // The overlay registry is CTOR-OWNED and survives stop(), unlike the
+    // animation and surface ones below, which stop() resets — so their
+    // connections die with their senders and this one does not. It is therefore
+    // held in a member and severed explicitly, the same discipline
+    // m_zoneWarmBakeConnection follows on the same sender: without it a
+    // shadersChanged arriving after stop() would run this lambda against a
+    // preset store that has already been reset, and an init() re-run would stack
+    // a second copy on top of the first.
+    if (m_overlayPresetSyncConnection) {
+        disconnect(m_overlayPresetSyncConnection);
+        m_overlayPresetSyncConnection = {};
+    }
     if (m_shaderRegistry) {
-        connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, syncOverlayPresets);
+        m_overlayPresetSyncConnection =
+            connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, syncOverlayPresets);
     }
     if (m_animationShaderRegistry) {
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,

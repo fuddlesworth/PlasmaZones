@@ -662,6 +662,16 @@ void Daemon::stop()
     if (m_overlayService) {
         m_overlayService->setPresetRegistry(nullptr);
     }
+    // Both connections to the ctor-owned m_shaderRegistry, severed before the
+    // store goes. That registry is not reset here, keeps its watcher running, and
+    // stop() runs with the event loop alive — so a later shadersChanged would
+    // reach the preset sync (publishing into the store reset below) and the zone
+    // warm-bake (parenting a watcher to an already-reset host). Every other
+    // connection here dies with the sender stop() resets; these two do not.
+    disconnect(m_overlayPresetSyncConnection);
+    m_overlayPresetSyncConnection = {};
+    disconnect(m_zoneWarmBakeConnection);
+    m_zoneWarmBakeConnection = {};
     m_presetStore.reset();
     // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every
     // pack (the registries are rebuilt, so a remembered fingerprint would

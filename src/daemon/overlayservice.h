@@ -1116,6 +1116,9 @@ private:
     // (disconnect(src, sig, this, nullptr) would sever ALL slots matching -
     // safe today but trap-prone if a second connection is ever added).
     QMetaObject::Connection m_shadersChangedConnection;
+    /// presetsChanged, on the same terms: a blanket disconnect here would be
+    /// exactly the trap-prone form described above.
+    QMetaObject::Connection m_presetsChangedConnection;
     // Debounce layoutModified → refreshVisibleWindows. layoutModified fires on
     // every Q_PROPERTY change (e.g. per-frame during a zone drag), so
     // coalescing prevents redundant rebuilds of zone variant lists + label
@@ -1594,6 +1597,12 @@ private:
     /// fallback. An empty shaderId means "no shader" (isNoneShader).
     OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                                 const PhosphorZones::Layout* screenLayout) const;
+    /// Just the id, for callers asking only whether a shader is in play. Skips the
+    /// preset flatten (a deep copy of the preset's parameter map) — a preset moves
+    /// PARAMETERS, never the pack, so the id is identical, and
+    /// `useShaderForScreen` is per-frame while an overlay is up.
+    QString effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                     const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;
     bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;

@@ -82,8 +82,13 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     // or a re-set would leave a second connection behind. The daemon nulls this
     // borrow before tearing the store down, so the old pointer is still alive
     // here. Same discipline as setSurfaceShaderRegistry.
-    if (m_presetRegistry) {
-        disconnect(m_presetRegistry, nullptr, this, nullptr);
+    // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`:
+    // the blanket form severs every slot this object has on that sender, which
+    // is safe only while there is exactly one. This class keeps handles for
+    // exactly that reason (see m_shadersChangedConnection).
+    if (m_presetsChangedConnection) {
+        disconnect(m_presetsChangedConnection);
+        m_presetsChangedConnection = {};
     }
     m_presetRegistry = registry;
     if (!m_presetRegistry) {
@@ -103,47 +108,65 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     // FAMILY, which the signal also carries and which is free to test — and each
     // family needs a different arm anyway, because each bakes its parameters
     // somewhere else.
-    connect(m_presetRegistry, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
-            [this](PhosphorShaders::ShaderFamily family, const QString&) {
-                switch (family) {
-                case PhosphorShaders::ShaderFamily::Overlay:
-                    refreshVisibleWindows();
-                    break;
-                case PhosphorShaders::ShaderFamily::Animation:
-                    // The flattened parameters are baked into SurfaceAnimator's
-                    // per-role Config, which is only rebuilt here and on a
-                    // shaderProfileTree edit — so without this arm a retuned
-                    // animation preset never reached the OSD and popup show/hide
-                    // legs until the user happened to edit the tree. "The next
-                    // show re-resolves" is true of the effect, not of here.
-                    if (m_settings) {
-                        applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+    m_presetsChangedConnection =
+        connect(m_presetRegistry, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+                [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                    switch (family) {
+                    case PhosphorShaders::ShaderFamily::Overlay:
+                        refreshVisibleWindows();
+                        break;
+                    case PhosphorShaders::ShaderFamily::Animation:
+                        // The flattened parameters are baked into SurfaceAnimator's
+                        // per-role Config, which is only rebuilt here and on a
+                        // shaderProfileTree edit — so without this arm a retuned
+                        // animation preset never reached the OSD and popup show/hide
+                        // legs until the user happened to edit the tree. "The next
+                        // show re-resolves" is true of the effect, not of here.
+                        if (m_settings) {
+                            applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                        }
+                        break;
+                    case PhosphorShaders::ShaderFamily::Surface:
+                        // Mirror of the decorationProfileTreeChanged arm in
+                        // setSettings: a visible popup's decoration chain is
+                        // resolved at show time, so a retune has to be pushed into
+                        // the slots that are already up. OSDs are omitted for the
+                        // same reason they are there — they auto-dismiss sub-second.
+                        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                            const auto& state = it.value();
+                            if (m_zoneSelectorVisible)
+                                applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
+                            if (m_snapAssistVisible)
+                                applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
+                            if (m_layoutPickerVisible)
+                                applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                            if (m_cheatsheetVisible)
+                                applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
+                        }
+                        break;
+                    case PhosphorShaders::ShaderFamily::Pointer:
+                        // The daemon does not render the cursor chain; the
+                        // compositor owns it and has its own arm.
+                        break;
                     }
-                    break;
-                case PhosphorShaders::ShaderFamily::Surface:
-                    // Mirror of the decorationProfileTreeChanged arm in
-                    // setSettings: a visible popup's decoration chain is
-                    // resolved at show time, so a retune has to be pushed into
-                    // the slots that are already up. OSDs are omitted for the
-                    // same reason they are there — they auto-dismiss sub-second.
-                    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-                        const auto& state = it.value();
-                        if (m_zoneSelectorVisible)
-                            applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
-                        if (m_snapAssistVisible)
-                            applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
-                        if (m_layoutPickerVisible)
-                            applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
-                        if (m_cheatsheetVisible)
-                            applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
-                    }
-                    break;
-                case PhosphorShaders::ShaderFamily::Pointer:
-                    // The daemon does not render the cursor chain; the
-                    // compositor owns it and has its own arm.
-                    break;
-                }
-            });
+                });
+}
+
+QString OverlayService::effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                                 const PhosphorZones::Layout* screenLayout) const
+{
+    // The id half of effectiveOverlayShader, for callers that only ask "is a
+    // shader in play here". Deliberately skips the preset flatten: a preset
+    // changes an assignment's PARAMETERS and never which pack it uses, so the
+    // answer is identical and the deep copy is not paid. Kept beside its sibling
+    // so the rule-wins-over-tree precedence cannot drift between the two.
+    if (overlayOverride.shaderId) {
+        return *overlayOverride.shaderId;
+    }
+    if (!screenLayout) {
+        return {};
+    }
+    return m_overlayShaderTree.resolve(screenLayout->id().toString()).shaderId;
 }
 
 OverlayShaderProfile
@@ -224,7 +247,12 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     // A context overlay rule may override the resolved shader / style for
     // this (screen, desktop, activity). Resolve once and apply over the tree.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
-    const QString effectiveShaderId = effectiveOverlayShader(overlayOverride, screenLayout).shaderId;
+    // Id only. This is a per-frame path while an overlay is up — the audio
+    // spectrum drives it per screen per frame at the configured shader frame
+    // rate — and the full resolve deep-copies the preset's parameter map
+    // (overlayPresetDeltas detaches the QMap on its first insert) to produce
+    // values this function then discards.
+    const QString effectiveShaderId = effectiveOverlayShaderId(overlayOverride, screenLayout);
     if (ShaderRegistry::isNoneShader(effectiveShaderId)) {
         return false;
     }
