@@ -127,8 +127,14 @@ RowLayout {
     QQC2.ComboBox {
         id: combo
 
-        Layout.fillWidth: true
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+        // A FIXED width, not fillWidth and not content-hugging. The row spans
+        // the whole card so the preset reads as a heading for the parameters
+        // under it, and a combo that filled that span stretched the full card
+        // width, far wider than any preset name and wider than every control
+        // below it. Hugging its content instead would make the combo resize
+        // every time a longer name was picked, so the width is pinned and a
+        // long name elides.
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 14
         Accessible.name: i18nc("@info:whatsthis", "Named parameter preset for this shader pack")
 
         // "None" is a real first entry rather than an empty row, because
@@ -314,6 +320,12 @@ RowLayout {
                     nameDialog.commit();
             }
         }
+    }
+
+    // Absorbs the rest of the row's span, so the controls above stay grouped at
+    // the left under the parameter labels instead of spreading across the card.
+    Item {
+        Layout.fillWidth: true
     }
 
     // The bridge relays registry changes, so a preset edited in another
