@@ -42,9 +42,18 @@ RowLayout {
     property QtObject presetBridge: null
     /// The assignment's current preset id, or empty for none.
     property string presetId: ""
-    /// The assignment's live parameter values, used to save a new preset and
-    /// to work out whether it has been modified away from the current one.
+    /// The assignment's live parameter values — preset ⊕ deltas — used to save a
+    /// new preset and to update the current one. These are the values the rows
+    /// show, so saving from them captures the whole tuning.
     property var currentValues: ({})
+    /// The assignment's OWN stored parameter map, if the host has one.
+    ///
+    /// Distinct from `currentValues`, which is the merged view. Supply it and the
+    /// modified state becomes "does this assignment store any delta", which is
+    /// the question the three-state model is actually about. Leave it undefined
+    /// in a host that has no assignment behind it (the pack browser's preview)
+    /// and the row falls back to comparing values.
+    property var deltas: undefined
 
     /// Emitted when the user picks a different preset (or None). The host
     /// writes it to the assignment; this row does not persist anything itself.
@@ -56,6 +65,11 @@ RowLayout {
     /// Emitted after a save or update changed what is on disk, so the host can
     /// re-read anything it derived from the preset.
     signal presetsChanged
+    /// Emitted when the user deleted the selected preset. The host should drop the
+    /// reference and leave the VALUES alone — deleting a preset says nothing about
+    /// what the parameters should become. Distinct from `presetSelected("")`,
+    /// which in a preview host means "show me the pack's defaults".
+    signal presetDeleted(string presetId)
 
     // Imperative rather than bound, like the rest of this app's registry-backed
     // model state: the preset list lives on disk, so a function-call binding
@@ -72,12 +86,24 @@ RowLayout {
         return i >= 0 ? (root._rows[i].readOnly === true) : false;
     }
 
-    /// True when the live values diverge from the selected preset's. Compared
-    /// key by key against the PRESET rather than against a remembered
-    /// snapshot, so it stays right after the preset itself is edited.
+    /// True when this assignment carries edits on top of the selected preset.
+    ///
+    /// When the host supplies `deltas` — the assignment's OWN stored parameter
+    /// map, as distinct from the merged values shown in the rows — the answer is
+    /// simply whether that map has any keys. That is the honest reading, because
+    /// presence in the delta map IS the override: the library keeps a delta whose
+    /// value equals the preset's on purpose, so that the user's choice does not
+    /// silently start following a later retune of the preset. A value comparison
+    /// cannot see such a key at all, and it also misses a delta on a parameter
+    /// the preset says nothing about.
+    ///
+    /// Falls back to the value comparison for a host that has no delta map to
+    /// give (the pack browser's preview, where there is no assignment).
     readonly property bool _modified: {
         if (!root._hasPreset || root._presetMissing)
             return false;
+        if (root.deltas !== undefined && root.deltas !== null)
+            return Object.keys(root.deltas).length > 0;
         const preset = root._presetParams || {};
         const live = root.currentValues || {};
         for (const key in preset) {
@@ -124,7 +150,14 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
     }
 
-    QQC2.ComboBox {
+    // WideComboBox, not a bare ComboBox: the settings app pins its style to
+    // org.kde.desktop, whose Menu-based popup binds its width to the combo and
+    // ignores a popup.width override — so with the fixed width below, a longer
+    // preset name was truncated IN THE LIST, where the user needs to read it to
+    // choose. This component swaps the popup for one that fits its widest item,
+    // and is the house pattern across ~20 other sites here. `storedValue` stays
+    // undefined on purpose: this row manages `currentIndex` itself.
+    WideComboBox {
         id: combo
 
         // A FIXED width, not fillWidth and not content-hugging. The row spans
@@ -132,10 +165,15 @@ RowLayout {
         // under it, and a combo that filled that span stretched the full card
         // width, far wider than any preset name and wider than every control
         // below it. Hugging its content instead would make the combo resize
-        // every time a longer name was picked, so the width is pinned and a
-        // long name elides.
+        // every time a longer name was picked. The popup is not bound by this
+        // width (see above), so a long name stays readable when the list is open.
         Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-        Accessible.name: i18nc("@info:whatsthis", "Named parameter preset for this shader pack")
+        Accessible.name: i18nc("@label:listbox", "Shader preset")
+        // The modified state is shown beside the combo as its own label, which a
+        // screen reader reaches only by moving on. Fold it in here too, so a user
+        // who tabs to the combo is told the assignment diverges from the preset —
+        // the one state this row exists to say out loud.
+        Accessible.description: root._modified ? i18nc("@info:whatsthis", "Named parameter preset for this shader pack. This assignment has edits on top of it.") : i18nc("@info:whatsthis", "Named parameter preset for this shader pack.")
 
         // "None" is a real first entry rather than an empty row, because
         // clearing a preset is a thing the user does deliberately and it needs
@@ -176,6 +214,13 @@ RowLayout {
         }
 
         onActivated: function (index) {
+            // Bounds-guarded: `_entries` derives from `_rows`, which a file
+            // watcher refreshes, so the model can shrink between the click and
+            // this handler. Unguarded this threw on `.id` of undefined, and on a
+            // mere reorder it would have activated a different preset than the
+            // row the user clicked.
+            if (index < 0 || index >= _entries.length)
+                return;
             const picked = _entries[index].id;
             if (picked !== root.presetId)
                 root.presetSelected(picked);
@@ -254,10 +299,15 @@ RowLayout {
         QQC2.ToolTip.visible: hovered
         QQC2.ToolTip.text: text
         onClicked: {
-            if (root.presetBridge.deletePreset(root.presetId)) {
-                // The assignment keeps its own values, so clearing the
-                // reference changes nothing about how it looks.
-                root.presetSelected("");
+            const deletedId = root.presetId;
+            if (root.presetBridge.deletePreset(deletedId)) {
+                // Its own signal, NOT presetSelected(""). For the four assignment
+                // hosts the two mean the same thing — drop the reference, keep the
+                // values — but the pack browser's preview treats an empty
+                // selection as "load the pack's defaults", so reusing it there
+                // wiped the tuning the user was working on. Deleting a preset says
+                // nothing about what the values should become.
+                root.presetDeleted(deletedId);
                 root.presetsChanged();
             }
         }
@@ -336,5 +386,51 @@ RowLayout {
             if (packId === root.packId)
                 root.refresh();
         }
+        // Surfaced HERE rather than left to each host. The bridge emits this for
+        // every refusal — an unwritable directory, a read-only pack preset, a
+        // preset that vanished underneath, a failed delete — and only the pack
+        // browser's dialog was listening, so in the four assignment hosts every
+        // one of those failed silently: the save dialog simply closed and the
+        // delete button did nothing visible. The failure is host-independent, so
+        // the row owns it.
+        function onPresetWriteFailed(reason) {
+            failureMessage.text = reason;
+            failureMessage.visible = true;
+        }
+    }
+
+    // In the row rather than a toast: the row sits inside a scrollable card, and
+    // a transient notification elsewhere on screen does not tell the user WHICH
+    // preset refused. A Label rather than an icon so a screen reader announces
+    // it, on the same reasoning as the modified marker above.
+    QQC2.Label {
+        id: failureMessage
+
+        visible: false
+        color: Kirigami.Theme.negativeTextColor
+        font: Kirigami.Theme.smallFont
+        elide: Text.ElideRight
+        Layout.fillWidth: true
+        Layout.alignment: Qt.AlignVCenter
+        QQC2.ToolTip.visible: hovered && truncated
+        QQC2.ToolTip.text: text
+
+        // Cleared as soon as the list changes, so a stale refusal does not sit
+        // next to a preset the user has since fixed or switched away from.
+        Connections {
+            target: root
+            function onPresetIdChanged() {
+                failureMessage.visible = false;
+            }
+            function on_RowsChanged() {
+                failureMessage.visible = false;
+            }
+        }
+
+        // ToolTip.hovered needs a hover area on a plain Label.
+        HoverHandler {
+            id: failureHover
+        }
+        readonly property bool hovered: failureHover.hovered
     }
 }

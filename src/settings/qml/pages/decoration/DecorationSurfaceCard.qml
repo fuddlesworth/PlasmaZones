@@ -371,8 +371,15 @@ Item {
                             root.bridge.setChainParams(root.surfacePath, packId, rolled);
                     }
                     onParamsResetRequested: function (packId, defaults) {
-                        if (root.bridge)
-                            root.bridge.setChainParams(root.surfacePath, packId, defaults);
+                        if (!root.bridge)
+                            return;
+                        // With a preset engaged on this layer the baseline is the
+                        // PRESET, which is what the rows are showing. Writing the
+                        // pack defaults would pin every parameter over a preset
+                        // that stays selected. An empty map clears this layer's
+                        // deltas, the same write the revert below makes.
+                        const engaged = root._presetIds && root._presetIds[packId] !== undefined && String(root._presetIds[packId]).length > 0;
+                        root.bridge.setChainParams(root.surfacePath, packId, engaged ? ({}) : defaults);
                     }
                     onPresetChangeRequested: function (packId, presetId) {
                         if (root.bridge)

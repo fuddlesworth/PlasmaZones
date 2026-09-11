@@ -130,6 +130,9 @@ GridLayout {
     /// The assignment's own parameter edits should be dropped, so every value
     /// goes back to following the preset.
     signal presetRevertRequested
+    /// The selected preset was deleted. The host should clear its stored reference
+    /// and leave the parameter values alone.
+    signal presetDeleted(string presetId)
 
     // Wide enough that a preview lands at 1:1 rather than being reduced to fit,
     // at any font scale. A pane-shaped preview frames the canvas, so the column
@@ -225,8 +228,16 @@ GridLayout {
         presetBridge: root.presetBridge
         presetId: root.presetId
         currentValues: root._effectiveValues
+        // The assignment's own stored map, so the row can answer "does this carry
+        // a delta" rather than comparing merged values — which cannot see a delta
+        // pinned at the preset's own value, nor one on a parameter the preset
+        // does not mention.
+        deltas: root.currentValues
         onPresetSelected: function (id) {
             root.presetSelected(id);
+        }
+        onPresetDeleted: function (id) {
+            root.presetDeleted(id);
         }
         onRevertRequested: root.presetRevertRequested()
     }

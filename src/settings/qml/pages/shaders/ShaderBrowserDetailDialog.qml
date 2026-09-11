@@ -479,6 +479,7 @@ Kirigami.Dialog {
                     root._browsePresetId = id;
                     root._applyPresetToPreview(id);
                 }
+                onPresetDeleted: root._browsePresetId = "" // values stay; a delete is not a pick
                 onRevertRequested: root._applyPresetToPreview(root._browsePresetId)
             }
         }
@@ -1120,11 +1121,10 @@ Kirigami.Dialog {
         onAccepted: {
             // Store the STRING form, matching the editor twin and every other
             // producer of this map (randomize, preset load): a QColor object
-            // renders fine live (extractColor converts) but skips the
-            // registry's color normalization and does not survive
-            // saveShaderPreset's JSON serialization, dropping the alpha the
-            // picker's ShowAlphaChannel let the user choose (or the whole
-            // param).
+            // renders fine live (extractColor converts) but skips the registry's
+            // colour normalisation and does not survive the preset store's JSON
+            // serialisation, dropping the alpha the picker's ShowAlphaChannel let
+            // the user choose (or the whole param).
             if (paramId.length > 0)
                 root._setLiveParam(paramId, selectedColor.toString());
         }

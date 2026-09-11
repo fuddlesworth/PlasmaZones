@@ -408,7 +408,17 @@ Item {
                     }
                     onResetRequested: function (defaults) {
                         root._dropPendingParams();
-                        root._writeNode(root._editShaderId, defaults);
+                        // With a preset engaged the baseline is the PRESET, not
+                        // the pack's defaults — that is what the card is showing.
+                        // Writing the defaults would pin every parameter as a
+                        // delta over a preset that stays selected, so the card
+                        // would still claim the preset while following none of
+                        // it, and a later retune would reach nothing. Dropping
+                        // the deltas is the reset.
+                        if (root._editPresetId.length > 0)
+                            root._writeNode(root._editShaderId, ({}));
+                        else
+                            root._writeNode(root._editShaderId, defaults);
                     }
                 }
 
@@ -425,8 +435,18 @@ Item {
                     presetBridge: settingsController.overlayPresets
                     presetId: root._editPresetId
                     currentValues: root._effectiveParams
+                    // The assignment's own stored deltas, not the merged view, so
+                    // the modified state reflects what is actually stored.
+                    deltas: root._editParams
                     onPresetSelected: function (id) {
                         settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
+                        root.refresh();
+                    }
+                    // Same write as picking None here: the assignment keeps its own
+                    // values and only the reference goes. It is a separate signal
+                    // because a PREVIEW host cannot treat the two alike.
+                    onPresetDeleted: function (id) {
+                        settingsController.overlaysPage.setShaderPreset(root.assignmentPath, "");
                         root.refresh();
                     }
                     onRevertRequested: {

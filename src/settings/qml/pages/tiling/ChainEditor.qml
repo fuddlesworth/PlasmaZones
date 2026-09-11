@@ -354,6 +354,11 @@ ColumnLayout {
                         onPresetSelected: function (id) {
                             root.presetChangeRequested(packDelegate.packId, id);
                         }
+                        // Clearing the reference is the same write as picking None
+                        // on an assignment; the layer keeps its own values.
+                        onPresetDeleted: function (id) {
+                            root.presetChangeRequested(packDelegate.packId, "");
+                        }
                         onPresetRevertRequested: root.presetRevertRequested(packDelegate.packId)
                         onValueChanged: function (effectId, paramId, value) {
                             root.paramChangeRequested(effectId, paramId, value);

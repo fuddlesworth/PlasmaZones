@@ -192,6 +192,17 @@ Item {
     /// included. Gates the revert affordance, which has to reach the state
     /// where the pack row is not rendered at all.
     readonly property bool _storesShaderOverride: Object.keys(root._primaryRawShader).length > 0
+    /// This event's OWN preset reference, empty when it stores none.
+    ///
+    /// Read from the raw profile, never the resolved one: a resolved id may have
+    /// been inherited from an ancestor, and picking "None" against an inherited
+    /// preset is a different gesture from clearing one this event stores.
+    readonly property string _primaryPresetId: typeof root._primaryRawShader.presetId === "string" ? root._primaryRawShader.presetId : ""
+    /// Whether this event owns a preset reference and nothing else — the state
+    /// `setShaderPresetOnPaths` deliberately stores when a user picks a preset on
+    /// an event that inherits its pack. It IS a stored override that changes what
+    /// renders, which is why the toggle below has to count it.
+    readonly property bool _ownsShaderPresetOnly: !root._ownsShaderPack && !root._ownsShaderParamsOnly && root._primaryPresetId.length > 0
     /// Whether this event holds the engaged-EMPTY sentinel specifically: it
     /// resolves to no shader AND blocks what an ancestor would have given it.
     /// Narrower than `_storesShaderOverride`, because a params-only override
@@ -522,13 +533,18 @@ Item {
         var resolved = root._inheritResolved;
         var hasRaw = raw && Object.keys(raw).length > 0;
         // The card's "Override" toggle reflects ANY direct override at
-        // this path — timing curve OR shader assignment. Without the
-        // shader half, a user could see an event toggle "off" while a
-        // matrix shader was actively firing on every fire of that event
-        // (timing override clear, shader override still set), which
-        // exactly matches the user-reported "I turned this off but
-        // shaders still animate" bug. Reading rawShaderProfile here
-        // makes the toggle's checked state honest about both axes.
+        // this path — timing curve, shader pack, shader parameters, or a
+        // shader PRESET. Without the shader half, a user could see an
+        // event toggle "off" while a matrix shader was actively firing on
+        // every fire of that event (timing override clear, shader override
+        // still set), which exactly matches the user-reported "I turned
+        // this off but shaders still animate" bug. Reading rawShaderProfile
+        // here makes the toggle's checked state honest about every axis.
+        //
+        // There are THREE shader axes, not two. The preset one was added
+        // later and reads as its own stored state, so a test that covers
+        // only effectId and parameters reproduces the original bug for a
+        // preset-only override. Any FOURTH axis has to be added here too.
         // rawShaderProfile returns {} when there's no direct override at
         // this path; any non-empty map (effectId set, parameters set, etc.)
         // indicates a direct override. Mirrors the rawProfile check above.
@@ -548,7 +564,17 @@ Item {
         // always lands a real true/false.
         var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
-        var hasShader = hasShaderEffect || hasShaderParams;
+        // The preset axis counts too, and it is a THIRD axis rather than a
+        // variant of the other two. `setShaderPresetOnPaths` deliberately stores
+        // a profile whose only engaged field is the preset — exactly what picking
+        // a preset on an event that inherits its pack produces — and that
+        // override changes what renders. Without this the toggle read OFF and the
+        // banner claimed pure inheritance while a preset was actively tuning the
+        // event, which is the bug class the comment above exists to prevent, and
+        // it left this test disagreeing with `_storesShaderOverride`, which
+        // already counted it.
+        var hasShaderPreset = Boolean(rawShader && typeof rawShader.presetId === "string" && rawShader.presetId.length > 0);
+        var hasShader = hasShaderEffect || hasShaderParams || hasShaderPreset;
         // Stored once; the three ownership tests at the top of this file derive
         // from it. Feeds the editor's ownership caption and the revert
         // affordance's gate.
@@ -1063,6 +1089,18 @@ Item {
                     // that, which answers the question actually being asked and
                     // stays right for a partial ancestor map, where comparing
                     // the stored map directly is wrong in both directions.
+                    // With a preset engaged the baseline is the PRESET, which is
+                    // what the rows are showing — so reset means "drop my deltas",
+                    // not "write the pack defaults". Writing the defaults would
+                    // pin every parameter over a preset that stays selected, and
+                    // the guard below would not even let that happen on an event
+                    // carrying a preset and no deltas: it is preset-blind, reads
+                    // both maps as empty, and returns early, so reset was a silent
+                    // no-op while the rows visibly showed the preset's values.
+                    if (root._primaryPresetId.length > 0) {
+                        root._writeAllShaderParams(root.currentShaderEffectId, ({}));
+                        return;
+                    }
                     if (root._groupIsAtPackDefaults(defaults)) {
                         root.refreshShaderFromTree();
                         return;

@@ -962,6 +962,11 @@ ColumnLayout {
                 onPresetSelected: function (id) {
                     root.shaderPresetWriteRequested(id);
                 }
+                // Clearing the reference is the same write as picking None on an
+                // assignment; the event keeps its own parameter values.
+                onPresetDeleted: function (id) {
+                    root.shaderPresetWriteRequested("");
+                }
                 onPresetRevertRequested: root.shaderPresetRevertRequested()
                 // The shared editor owns the lock map and hosts the colour
                 // dialog, so only the value-write and randomize signals need
