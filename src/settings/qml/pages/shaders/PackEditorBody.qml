@@ -96,13 +96,17 @@ GridLayout {
             root._effectiveValues = deltas;
             return;
         }
-        const base = root.presetBridge.presetParams(root.packId, root.presetId) || {};
-        const out = {};
-        for (const key in base)
-            out[key] = base[key];
-        for (const key in deltas)
-            out[key] = deltas[key];
-        root._effectiveValues = out;
+        // The merge is `ShaderPresetRegistry::resolveParams`, reached through the
+        // bridge, so a preview cannot disagree with what the compositor will
+        // render — and it applies the declared-range clamp, which the hand-written
+        // JS overlay this replaced knew nothing about. It is also one definition
+        // instead of the three that had each been written out separately.
+        //
+        // One call per change, including per drag tick. That is cheaper than what it
+        // replaces: the JS version called `presetParams`, which returns a
+        // `ShaderPreset` BY VALUE and copied its whole parameter map, and then built
+        // the merged object in JS on top of that.
+        root._effectiveValues = root.presetBridge.effectiveParams(root.packId, root.presetId, deltas);
     }
 
     onCurrentValuesChanged: root._recomputeEffective()

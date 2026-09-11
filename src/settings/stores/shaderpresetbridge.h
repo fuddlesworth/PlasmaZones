@@ -69,6 +69,18 @@ public:
     /// decide which of the live values are deltas on top of it.
     Q_INVOKABLE QVariantMap presetParams(const QString& packId, const QString& presetId) const;
 
+    /// The effective values for an assignment: the preset @p presetId names with
+    /// @p deltas laid over the top, clamped to the pack's declared ranges.
+    ///
+    /// The ONE definition of that merge, forwarding to the same
+    /// `ShaderPresetRegistry::resolveParams` the daemon and the compositor resolve
+    /// through — so a preview cannot disagree with what will actually render.
+    /// Three QML sites had each reimplemented the overlay in JavaScript, which is
+    /// three chances to drift from the renderer's answer and three places that
+    /// silently knew nothing about clamping.
+    Q_INVOKABLE QVariantMap effectiveParams(const QString& packId, const QString& presetId,
+                                            const QVariantMap& deltas) const;
+
     /// True when @p name is one `savePreset` / `renamePreset` will accept:
     /// non-empty after trimming, within the length cap, and free of control or
     /// formatting characters (the name is rendered in a combo row, where a newline

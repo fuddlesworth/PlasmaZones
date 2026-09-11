@@ -83,13 +83,11 @@ Item {
             root._effectiveParams = deltas;
             return;
         }
-        const base = presets.presetParams(root._editShaderId, root._editPresetId) || {};
-        const out = {};
-        for (const key in base)
-            out[key] = base[key];
-        for (const key in deltas)
-            out[key] = deltas[key];
-        root._effectiveParams = out;
+        // The bridge's own merge, which is `ShaderPresetRegistry::resolveParams` —
+        // the same one the daemon resolves through, so this card cannot disagree
+        // with what is actually drawn. It also applies the pack's declared-range
+        // clamp, which the hand-written overlay this replaced did not.
+        root._effectiveParams = presets.effectiveParams(root._editShaderId, root._editPresetId, deltas);
     }
 
     on_EditParamsChanged: root._recomputeEffectiveParams()

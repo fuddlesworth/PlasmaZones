@@ -171,10 +171,11 @@ Kirigami.Dialog {
         return null;
     }
 
-    /// Load @p presetId's values onto the live preview map, falling back to
-    /// each parameter's declared default for anything the preset does not
-    /// mention — so picking a preset shows exactly what it specifies rather
-    /// than what happened to be on screen before.
+    /// Load @p presetId's values onto the live preview map, falling back to each
+    /// parameter's declared default for anything the preset does not mention — so
+    /// picking a preset shows exactly what it specifies rather than what happened to
+    /// be on screen before. Hence NOT `effectiveParams`, which leaves such a
+    /// parameter absent: right for an assignment, wrong for a preview.
     function _applyPresetToPreview(presetId) {
         if (!root._presetBridge || !root.effect)
             return;

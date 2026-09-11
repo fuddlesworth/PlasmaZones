@@ -375,10 +375,28 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
 
     const QJsonArray params = arrayOrWarn("parameters");
     e.parameters.reserve(params.size());
+    // First-declaration-wins, like the other three families. This one had no
+    // duplicate guard at all, so a repeated id was carried through — and the
+    // preamble then emitted `#define p_<id>` twice with DIFFERENT auto-slots, which
+    // glslang rejects as a macro redefinition. The author got a compile error
+    // pointing into generated code they did not write, for a metadata fault the
+    // siblings name precisely. It also left the preset lint range-checking the LAST
+    // declaration while the other families keep the first.
+    QSet<QString> seenParamIds;
     for (const QJsonValue& v : params) {
         const QJsonObject pObj = v.toObject();
         ParameterInfo p;
         p.id = pObj.value(QLatin1String("id")).toString();
+        if (!p.id.isEmpty() && seenParamIds.contains(p.id)) {
+            qCWarning(lcAnimationShader())
+                << "AnimationShaderEffect::fromJson: effect" << e.id << "declares parameter id" << p.id
+                << "more than once — ignoring the later entry (a duplicate would redefine its p_ macro and fail the "
+                   "shader compile)";
+            continue;
+        }
+        if (!p.id.isEmpty()) {
+            seenParamIds.insert(p.id);
+        }
         p.name = pObj.value(QLatin1String("name")).toString();
         p.type = pObj.value(QLatin1String("type")).toString();
         p.description = pObj.value(QLatin1String("description")).toString();

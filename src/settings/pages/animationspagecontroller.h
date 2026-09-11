@@ -483,7 +483,17 @@ public:
     ///
     /// @return the number of paths written, or -1 for an over-long id (a caller
     ///         bug, so it warns rather than toasts).
-    Q_INVOKABLE int setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId);
+    /// Write @p presetId to every path in the group.
+    ///
+    /// An EMPTY @p presetId means "no preset here", which has the same two readings
+    /// the pack axis's "None" does. With @p blockInherited false it clears this
+    /// path's own reference and lets an ancestor's flow in again; with it true it
+    /// stores the engaged-EMPTY sentinel, which blocks what an ancestor would have
+    /// supplied. The caller knows which, because it knows whether the preset it is
+    /// showing is this path's own or inherited — and the combo shows the RESOLVED
+    /// one, so on an inheriting event only the blocking reading does anything.
+    Q_INVOKABLE int setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,
+                                           bool blockInherited = false);
 
     /// Number of DISTINCT shadowing descendant overrides beneath the paths in
     /// @p rawPaths, using the one definition of "shadowing descendant" that

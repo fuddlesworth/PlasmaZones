@@ -54,7 +54,7 @@
     "src/settings/controller/settingscontroller.h": 1370,
     "src/settings/qml/pages/rules/ActionParamEditors.qml": 1215,
     "src/settings/qml/pages/screens/MonitorStatePage.qml": 1151,
-    "src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml": 1164,
+    "src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml": 1165,
     "src/settings/stores/profilestore.cpp": 1323,
     "src/shadervalidate/packvalidator_pointer.cpp": 1174,
     "tests/unit/compositor-common/test_wire_types.cpp": 1184,

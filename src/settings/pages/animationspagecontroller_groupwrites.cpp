@@ -677,7 +677,8 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                  });
 }
 
-int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId)
+int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,
+                                                     bool blockInherited)
 {
     using namespace PhosphorAnimationShaders;
 
@@ -698,7 +699,22 @@ int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths
                                      // it untouched.
                                      ShaderProfile profile = stored;
                                      if (presetId.isEmpty()) {
-                                         profile.presetId.reset();
+                                         // An empty id is the BLOCKING sentinel when the path would
+                                         // otherwise inherit a preset, and a plain clear when it would
+                                         // not — the same two meanings "None" already has on the pack
+                                         // axis, where engaged-empty blocks what an ancestor supplies.
+                                         //
+                                         // Without the blocking half this control was dead on exactly
+                                         // the cards that need it: the combo shows the RESOLVED preset,
+                                         // so an inheriting event displays its ancestor's, and picking
+                                         // None reset a presetId the path did not have — a no-op, after
+                                         // which the refresh re-resolved the inherited id and the combo
+                                         // snapped back with no feedback.
+                                         if (blockInherited && !stored.presetId.has_value()) {
+                                             profile.presetId = QString();
+                                         } else {
+                                             profile.presetId.reset();
+                                         }
                                      } else {
                                          profile.presetId = presetId;
                                      }
@@ -799,11 +815,24 @@ int AnimationsPageController::clearStaleParamDescendantsOnPaths(const QStringLis
     }
     if (stale.isEmpty())
         return 0;
-    // The whole entry goes, not just its parameter map. A params-only override
-    // IS its parameter map, so removing the values leaves nothing worth an
-    // entry, and clearOverride is what returns the event to plain inheritance.
-    for (const QString& path : stale)
-        tree.clearOverride(path);
+    // The parameter map goes. The whole ENTRY goes only when nothing else is
+    // engaged at that path — a params-only override IS its parameter map, so with
+    // the values gone there is nothing worth an entry and clearOverride is what
+    // returns the event to plain inheritance.
+    //
+    // A path carrying a PRESET keeps its entry. `collectParamsOnlyDescendants`
+    // selects on "no own pack, non-empty parameters", which includes a path that
+    // also stores a preset reference — and clearing the whole entry there threw
+    // away a reference the user chose, which this sweep has no business touching.
+    // It is the stale VALUES it exists to remove.
+    for (const QString& path : stale) {
+        PhosphorAnimationShaders::ShaderProfile profile = tree.directOverride(path);
+        profile.parameters.reset();
+        if (!profile.effectId.has_value() && !profile.presetId.has_value())
+            tree.clearOverride(path);
+        else
+            tree.setOverride(path, profile);
+    }
     m_settings->setShaderProfileTree(tree);
     // pendingChangesChanged arrives through the shaderProfileTreeChanged
     // handler, as it does for every other writer here.

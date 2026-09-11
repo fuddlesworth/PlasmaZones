@@ -162,11 +162,20 @@ QtObject {
     }
 
     /// Point every write path at @p presetId, leaving each path's pack and its
-    /// own parameter edits alone. Empty clears the reference.
+    /// own parameter edits alone.
+    ///
+    /// An empty @p presetId means "no preset here", and which of its two readings
+    /// applies is decided HERE rather than in the controller, because only the card
+    /// knows whether the preset it is showing is this event's own or inherited: the
+    /// combo is fed the RESOLVED id. On an event that stores none of its own, None
+    /// has to BLOCK what the ancestor supplies, or it is a dead control — the write
+    /// would clear a reference the path does not have, and the refresh would
+    /// re-resolve the ancestor's and snap the combo back with no feedback.
     function _setShaderPresetOnAll(presetId) {
         card._committingShader = true;
+        const blockInherited = presetId.length === 0 && card._primaryPresetId.length === 0 && card.currentShaderPresetId.length > 0;
         try {
-            return settingsController.animationsPage.setShaderPresetOnPaths(card._writePaths, presetId) >= 0;
+            return settingsController.animationsPage.setShaderPresetOnPaths(card._writePaths, presetId, blockInherited) >= 0;
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();

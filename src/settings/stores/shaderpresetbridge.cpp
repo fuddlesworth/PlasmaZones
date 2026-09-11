@@ -103,6 +103,12 @@ QVariantMap ShaderPresetBridge::presetParams(const QString& packId, const QStrin
     return m_store->registry().preset(m_family, packId, presetId).params;
 }
 
+QVariantMap ShaderPresetBridge::effectiveParams(const QString& packId, const QString& presetId,
+                                                const QVariantMap& deltas) const
+{
+    return m_store->registry().resolveParams(m_family, packId, presetId, deltas);
+}
+
 bool ShaderPresetBridge::canUsePresetName(const QString& name) const
 {
     const QString trimmed = name.trimmed();
