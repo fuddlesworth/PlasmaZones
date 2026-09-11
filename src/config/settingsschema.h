@@ -53,6 +53,18 @@ QVariant canonicalWheelTriggerList(const QVariant& v);
 /// colours, the tab indicator's three, and the drop indicator's two.
 QVariant canonicalThemeFallbackColor(const QVariant& v);
 
+/// Bound the animation-shader assignment tree at the persistence boundary:
+/// string lengths, parameter-map size and value shapes, override count. The
+/// twin of sanitizeOverlayShaderTree, sharing its bounds; see
+/// settingsschema_shadertrees.cpp for why the motion keys beside it cannot get
+/// the same treatment.
+QVariant sanitizeShaderProfileTree(const QVariant& v);
+
+/// The decoration-tree twin of the above. Its parameter map is nested one
+/// level deeper ({packId -> {paramId -> value}}), so only the inner level is
+/// bounded scalar-only.
+QVariant sanitizeDecorationProfileTree(const QVariant& v);
+
 void appendShadersSchema(PhosphorConfig::Schema& schema);
 void appendOverlayShadersSchema(PhosphorConfig::Schema& schema);
 void appendAppearanceSchema(PhosphorConfig::Schema& schema);

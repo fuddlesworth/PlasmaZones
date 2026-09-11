@@ -427,7 +427,8 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
                         "mode. The animations page writes this, so it is not meant to be edited by hand.")},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
-                        "writes this, so it is not meant to be edited by hand.")},
+                        "writes this, so it is not meant to be edited by hand."),
+         sanitizeShaderProfileTree},
         {CD::motionProfileTreeKey(), CD::motionProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of animation timing, holding each context's easing curve and duration. "
                         "The animations page writes this, so it is not meant to be edited by hand.")},
@@ -1200,8 +1201,12 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
 // shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
 // JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
-// entry above and the animation ShaderProfileTree blob, with no sanitizer because
-// the per-pack override schema is not known to the config layer. The blob is a
+// entry above and the animation ShaderProfileTree blob. Both of those are now
+// bounded at this boundary too (settingsschema_shadertrees.cpp), which is what
+// covers a hand-edited config.json that never reaches the typed setter this
+// key's own size bounds live in. Not knowing the per-pack override schema is
+// no obstacle there: the bounds are on string lengths, map sizes, value shapes
+// and entry counts, none of which need a registry. The blob is a
 // leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
 // Decorations.WindowFiltering sub-group is registered separately.
 
@@ -1218,7 +1223,8 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
          QMetaType::QVariantMap,
          QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window overrides. The "
-                        "decorations page writes this, so it is not meant to be edited by hand.")},
+                        "decorations page writes this, so it is not meant to be edited by hand."),
+         sanitizeDecorationProfileTree},
     };
     // Mostly what the decoration chain is allowed to keep redrawing (an animated
     // pack repaints every window carrying it on every vsync, which never lets the

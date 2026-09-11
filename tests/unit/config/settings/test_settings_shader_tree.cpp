@@ -364,6 +364,97 @@ private Q_SLOTS:
         QVERIFY(a.committedShaderProfileTree().hasOverride(QStringLiteral("osd.show")));
         QVERIFY(a.committedShaderProfileTree() == a.shaderProfileTree());
     }
+
+    // ─────── Schema sanitizer ───────
+    //
+    // Driven through a DIRECT BACKEND WRITE rather than the typed setter,
+    // because that is the door the setter's own size bounds cannot see: a
+    // hand-edited config.json, a migration writing outside the Store, a
+    // settings-profile blob. The sanitizer runs on read as well as write, so
+    // the oversized value has to come back bounded without anything having
+    // called the setter.
+
+    /// Helper: stamp a raw ShaderProfileTree JSON blob straight onto the
+    /// backend, bypassing Store::write and the typed setter entirely.
+    static void writeRawShaderTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
+    {
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto animations = backend->group(ConfigDefaults::animationsGroup());
+        const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+        animations->writeString(ConfigDefaults::shaderProfileTreeKey(), json);
+    }
+
+    void testShaderTreeSanitizerBoundsAHandEditedBlob()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("osd.show");
+
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile huge;
+        huge.effectId = QString(2000, QLatin1Char('x'));
+        huge.presetId = QString(2000, QLatin1Char('y'));
+        QVariantMap params;
+        for (int i = 0; i < 200; ++i)
+            params.insert(QStringLiteral("p%1").arg(i), i);
+        params.insert(QStringLiteral("long"), QString(2000, QLatin1Char('z')));
+        huge.parameters = params;
+        tree.setOverride(kPath, huge);
+        writeRawShaderTree(tree);
+
+        Settings a;
+        const auto stored = a.shaderProfileTree().directOverride(kPath);
+
+        // Each field is bounded independently: the two over-long ids go, and
+        // the parameters that fit stay rather than being discarded with them.
+        QVERIFY(!stored.effectId.has_value());
+        QVERIFY(!stored.presetId.has_value());
+        QVERIFY(stored.parameters.has_value());
+        QVERIFY(stored.parameters->size() <= 64);
+        QVERIFY(!stored.parameters->contains(QStringLiteral("long")));
+    }
+
+    void testShaderTreeSanitizerLeavesAnOrdinaryBlobAlone()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("osd.show");
+
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.presetId = QStringLiteral("{neon}");
+        p.parameters = QVariantMap{{QStringLiteral("glow"), 0.8}};
+        tree.setOverride(kPath, p);
+        writeRawShaderTree(tree);
+
+        Settings a;
+        const auto stored = a.shaderProfileTree().directOverride(kPath);
+        QCOMPARE(stored.effectiveEffectId(), QStringLiteral("dissolve"));
+        QCOMPARE(stored.effectivePresetId(), QStringLiteral("{neon}"));
+        QCOMPARE(stored.effectiveParameters().value(QStringLiteral("glow")).toDouble(), 0.8);
+    }
+
+    void testShaderTreeSanitizerPreservesEngagedEmptyFields()
+    {
+        // Engaged-but-empty is "explicitly no shader" / "explicitly no preset",
+        // which is how a child stops inheriting an ancestor's. A bound that
+        // disengaged the field would silently turn that back into "inherit".
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("osd.show");
+
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile p;
+        p.effectId = QString();
+        p.presetId = QString();
+        tree.setOverride(kPath, p);
+        writeRawShaderTree(tree);
+
+        Settings a;
+        const auto stored = a.shaderProfileTree().directOverride(kPath);
+        QVERIFY(stored.effectId.has_value());
+        QVERIFY(stored.effectId->isEmpty());
+        QVERIFY(stored.presetId.has_value());
+        QVERIFY(stored.presetId->isEmpty());
+    }
 };
 
 QTEST_MAIN(TestSettingsShaderTree)

@@ -121,6 +121,9 @@ set(plasmazones_core_SRCS
     config/settingsschema.cpp
     config/settingsschema_p.h
     config/settingsschema_overlayshaders.cpp
+    config/settingsschema_shaderbounds.h
+    config/settingsschema_shaderbounds.cpp
+    config/settingsschema_shadertrees.cpp
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
     config/settingsschemachoices.h
