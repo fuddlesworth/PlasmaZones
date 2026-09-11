@@ -758,12 +758,12 @@ public:
     void clearCurrentDesktopForScreen(const QString& screenId) override;
     void setCurrentActivity(const QString& activity) override;
     /// Pin screens whose managed windows are ALL sticky to their current
-    /// desktop before a desktop switch, and unpin (migrating the state to
-    /// the new desktop key) once a non-sticky window appears — the same
-    /// "virtualdesktopsonlyonprimary" contract as AutotileEngine: without
-    /// the pin a desktop switch resolves a fresh (screen, desktop) key and
-    /// the strip comes up empty while the sticky windows are still visible.
-    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
+    /// desktop, unpinning (and migrating the state to the new desktop key)
+    /// once a non-sticky window appears — the "virtualdesktopsonlyonprimary"
+    /// contract AutotileEngine also implements: without the pin a desktop
+    /// switch resolves a fresh key and the strip comes up empty while the
+    /// sticky windows are still visible. See PhosphorEngine::StickyPinPhase.
+    void updateStickyScreenPins(const PhosphorEngine::StickyPredicate&, PhosphorEngine::StickyPinPhase) override;
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void renumberDesktopsAfterRemoval(int removedDesktop) override;

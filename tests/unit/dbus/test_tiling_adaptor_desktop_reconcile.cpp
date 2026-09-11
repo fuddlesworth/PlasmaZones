@@ -399,9 +399,11 @@ private Q_SLOTS:
 
         // Pin the screen. The predicate is the caller's, so the fixture can
         // pin without a window-tracking service.
-        f.engine.updateStickyScreenPins([](const QString&) {
-            return true;
-        });
+        f.engine.updateStickyScreenPins(
+            [](const QString&) {
+                return true;
+            },
+            PhosphorEngine::StickyPinPhase::Acquire);
         QCOMPARE(f.engine.stickyPinnedDesktopForScreen(kScreen), 2);
 
         // The compositor now reports the window on desktop 5. Its held key

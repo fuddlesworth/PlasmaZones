@@ -359,16 +359,15 @@ public:
      *
      * For screens where every tiled/floating window is sticky, pins the
      * TilingStateKey desktop to the current effective desktop so that
-     * currentKeyForScreen() continues to resolve the existing state after
-     * a desktop switch. Screens where not all windows are sticky are unpinned,
-     * with state migrated to m_context's global desktop if necessary.
-     *
-     * Must be called BEFORE setCurrentDesktop()/setCurrentActivity() so the
-     * pins are evaluated against the pre-switch context.
-     *
-     * @param isWindowSticky Callback returning true if the window is on all desktops
+     * currentKeyForScreen() keeps resolving the existing state after a desktop
+     * switch. Screens where not all windows are sticky are unpinned, with
+     * state migrated to m_context's global desktop if necessary. Acquire must
+     * run BEFORE setCurrentDesktop()/setCurrentActivity() and Release AFTER,
+     * so the migration targets the desktop being entered rather than the one
+     * being left. See PhosphorEngine::StickyPinPhase. The predicate answers
+     * true when a window is on all desktops.
      */
-    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
+    void updateStickyScreenPins(const PhosphorEngine::StickyPredicate&, PhosphorEngine::StickyPinPhase) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState and saved floating entries for a removed desktop

@@ -221,7 +221,29 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
     }
 }
 
-void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+namespace {
+// Whether `screenId` holds a non-empty state on any desktop but `desktop`. A
+// screen under "virtualdesktopsonlyonprimary" has no desktop dimension, so it
+// never does — which separates it from a screen the user merely happens to be
+// viewing with sticky windows on it. Only the former may be pinned: the pin
+// outranks the per-output desktop in currentKeyForScreen, so while it is held
+// every other desktop's state on that screen is unreachable. Placeholders a
+// transient lookup minted are empty, so they are not evidence.
+bool hasStateOnOtherDesktop(const QHash<PhosphorEngine::PlacementStateKey, PhosphorTiles::TilingState*>& states,
+                            const QString& screenId, int desktop)
+{
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        if (it.key().screenId == screenId && it.key().desktop != desktop && it.value()
+            && !(it.value()->tiledWindows().isEmpty() && it.value()->floatingWindows().isEmpty())) {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
+void AutotileEngine::updateStickyScreenPins(const PhosphorEngine::StickyPredicate& isSticky,
+                                            PhosphorEngine::StickyPinPhase phase)
 {
     for (const QString& screenId : std::as_const(m_autotileScreens)) {
         const auto key = currentKeyForScreen(screenId);
@@ -239,14 +261,14 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
 
         bool allSticky = true;
         for (const QString& wid : tiled) {
-            if (!isWindowSticky(wid)) {
+            if (!isSticky(wid)) {
                 allSticky = false;
                 break;
             }
         }
         if (allSticky) {
             for (const QString& wid : floating) {
-                if (!isWindowSticky(wid)) {
+                if (!isSticky(wid)) {
                     allSticky = false;
                     break;
                 }
@@ -254,7 +276,8 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
         }
 
         if (allSticky) {
-            if (!m_context.hasStickyPin(screenId)) {
+            if (phase == PhosphorEngine::StickyPinPhase::Acquire && !m_context.hasStickyPin(screenId)
+                && !hasStateOnOtherDesktop(m_states.states(), screenId, key.desktop)) {
                 // Pin to current effective desktop (which is the desktop where
                 // the PhosphorTiles::TilingState actually lives).
                 m_context.setStickyPin(screenId, key.desktop);
@@ -263,7 +286,7 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                     << (tiled.size() + floating.size()) << "windows sticky)";
             }
         } else {
-            if (m_context.hasStickyPin(screenId)) {
+            if (phase == PhosphorEngine::StickyPinPhase::Release && m_context.hasStickyPin(screenId)) {
                 int pinnedDesktop = m_context.takeStickyPin(screenId);
                 qCInfo(PhosphorTileEngine::lcTileEngine)
                     << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop;
@@ -274,6 +297,11 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                 // effective desktop — its per-output virtual desktop under Plasma
                 // 6.7 (#648), else the global current desktop. Identical to the
                 // global current desktop when per-output desktops aren't in use.
+                //
+                // Correct only because the Release phase runs AFTER the caller
+                // has moved the context. Before the move this resolves to the
+                // desktop being LEFT, and the migration then lands the pinned
+                // state on that desktop's live state.
                 const int targetDesktop = currentKeyForScreen(screenId).desktop;
                 if (pinnedDesktop != targetDesktop) {
                     const TilingStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};

@@ -296,7 +296,29 @@ void ScrollEngine::clearCurrentDesktopForScreen(const QString& screenId)
     m_context.clearCurrentDesktopForScreen(screenId);
 }
 
-void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+namespace {
+// Whether `screenId` holds a non-empty strip on any desktop but `desktop`. A
+// screen under "virtualdesktopsonlyonprimary" has no desktop dimension, so it
+// never does — which separates it from a screen the user merely happens to be
+// viewing with sticky windows on it. Only the former may be pinned: the pin
+// outranks the per-output desktop in currentKeyForScreen, so while it is held
+// every other desktop's strip on that screen is unreachable. Empty states are
+// placeholders a transient lookup minted, so they are not evidence.
+bool hasStripOnOtherDesktop(const QHash<PhosphorEngine::PlacementStateKey, ScrollState*>& states,
+                            const QString& screenId, int desktop)
+{
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        if (it.key().screenId == screenId && it.key().desktop != desktop && it.value()
+            && !it.value()->managedWindows().isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
+void ScrollEngine::updateStickyScreenPins(const PhosphorEngine::StickyPredicate& isSticky,
+                                          PhosphorEngine::StickyPinPhase phase)
 {
     // Windows displaced by an unpin migration, collected across the loop and
     // released AFTER it: windowsReleased is a synchronous signal, and a slot
@@ -333,18 +355,19 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         }
         bool allSticky = true;
         for (const QString& wid : managed) {
-            if (!isWindowSticky(wid)) {
+            if (!isSticky(wid)) {
                 allSticky = false;
                 break;
             }
         }
         if (allSticky) {
-            if (!m_context.hasStickyPin(screenId)) {
+            if (phase == PhosphorEngine::StickyPinPhase::Acquire && !m_context.hasStickyPin(screenId)
+                && !hasStripOnOtherDesktop(m_states.states(), screenId, key.desktop)) {
                 m_context.setStickyPin(screenId, key.desktop);
                 qCInfo(lcScrollEngine) << "Pinning screen" << screenId << "to desktop" << key.desktop << "(all"
                                        << managed.size() << "windows sticky)";
             }
-        } else if (m_context.hasStickyPin(screenId)) {
+        } else if (phase == PhosphorEngine::StickyPinPhase::Release && m_context.hasStickyPin(screenId)) {
             const int pinnedDesktop = m_context.takeStickyPin(screenId);
             qCInfo(lcScrollEngine) << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop;
             // Migrate the strip to the screen's CURRENT desktop key (the pin
@@ -352,6 +375,14 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
             // effective desktop). Same terms as AutotileEngine: the pinned
             // state holds the actual windows, so a placeholder created at
             // the target key by a transient lookup is discarded.
+            //
+            // This depends on the caller having ALREADY moved the context
+            // before running the Release phase, which is what the phase
+            // split exists to guarantee. Run it beforehand and the key below
+            // resolves to the desktop being LEFT, and the migration drops
+            // this strip on top of that desktop's live one — the destination
+            // then hits the non-empty branch in migrateStateKey and every
+            // window it held is force-released.
             const PhosphorEngine::PlacementStateKey newKey = currentKeyForScreen(screenId);
             if (pinnedDesktop != newKey.desktop) {
                 // The strip under this screen has just been replaced, and

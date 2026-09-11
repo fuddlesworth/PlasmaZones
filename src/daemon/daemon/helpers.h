@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorContext/DisabledReason.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -24,6 +25,34 @@
 #include <optional>
 
 namespace PlasmaZones {
+
+/// Run one phase of the sticky-screen pin pass on the tiling-family engines.
+///
+/// The phases bracket a context change and the order is not cosmetic: Release
+/// run BEFORE the context moves resolves the migration's destination against
+/// the context being LEFT, dropping the pinned state on that context's live
+/// one and force-releasing every window it held. See
+/// PhosphorEngine::StickyPinPhase.
+inline void applyStickyScreenPins(WindowTrackingAdaptor* adaptor, PhosphorEngine::IPlacementEngine* autotileEngine,
+                                  PhosphorEngine::IPlacementEngine* scrollEngine, PhosphorEngine::StickyPinPhase phase)
+{
+    // Null-guarded service, matching every other daemon ->service() consumer.
+    auto* service = adaptor ? adaptor->service() : nullptr;
+    if (!service) {
+        return;
+    }
+    const auto sticky = [service](const QString& windowId) {
+        return service->isWindowSticky(windowId);
+    };
+    // Only the tiling-family engines keep pins; the snap engine has no pin
+    // concept and inherits the interface's no-op.
+    if (autotileEngine) {
+        autotileEngine->updateStickyScreenPins(sticky, phase);
+    }
+    if (scrollEngine) {
+        scrollEngine->updateStickyScreenPins(sticky, phase);
+    }
+}
 
 /// Ask plasmashell to show its own text OSD.
 ///

@@ -1137,9 +1137,9 @@ public:
     {
         Q_UNUSED(resolver)
     }
-    virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+    virtual void updateStickyScreenPins(const StickyPredicate& isSticky, StickyPinPhase) // see StickyPinPhase
     {
-        Q_UNUSED(isWindowSticky)
+        Q_UNUSED(isSticky)
     }
     virtual QSet<int> desktopsWithActiveState() const
     {

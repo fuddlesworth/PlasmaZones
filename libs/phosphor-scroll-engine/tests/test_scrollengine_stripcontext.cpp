@@ -50,6 +50,8 @@ private Q_SLOTS:
     void changedSetSwitchStillAnnouncesTheStayingScreen();
     void stripContextIsReAnnouncedAfterAScreenLeavesTheSet();
     void stripContextRePushAnnouncesNothing();
+    void unpinMigratesOntoTheDesktopBeingEnteredNotTheOneBeingLeft();
+    void allStickyScreenIsNotPinnedWhenAnotherDesktopHasAStrip();
 };
 
 void TestScrollEngineStripContext::desktopSwitchBackEmitsEvenWhenNoRectMoved()
@@ -540,6 +542,128 @@ void TestScrollEngineStripContext::stripContextRePushAnnouncesNothing()
     engine->setActiveScreens({QStringLiteral("S1")});
     QCoreApplication::processEvents();
     QCOMPARE(ctxSpy.count(), 0);
+}
+
+void TestScrollEngineStripContext::unpinMigratesOntoTheDesktopBeingEnteredNotTheOneBeingLeft()
+{
+    // The unpin migration resolves its destination through currentKeyForScreen,
+    // so WHEN it runs relative to the desktop switch decides which strip it
+    // lands on. Released AFTER the switch it targets the desktop being
+    // ENTERED — which is the desktop the pin was already holding, so the key
+    // does not move and nothing migrates at all. Released before, the tracker
+    // has not been updated yet, currentKeyForScreen still answers with the
+    // OUTGOING desktop, and the migration drops the pinned strip on top of
+    // that desktop's live one: every window it held is force-released, the
+    // two desktops' strips are transposed, and nothing short of restarting
+    // the daemon puts them back.
+    //
+    // Ordered as the real sequence runs. The pin is taken on the way OUT of
+    // the sticky desktop and released on the way BACK IN to it, which is what
+    // makes the stale key point at the desktop holding the real work.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    const QString kS1 = QStringLiteral("S1");
+    const auto allSticky = [](const QString&) {
+        return true;
+    };
+    const auto noneSticky = [](const QString&) {
+        return false;
+    };
+
+    // Desktop 2 holds a lone sticky window, and it is the ONLY desktop with a
+    // strip — screenHasStateOnOtherDesktop would otherwise refuse the pin, so
+    // this is the shape in which a pin can legitimately exist at all.
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->windowOpened(QStringLiteral("app|sticky"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+
+    // Leaving desktop 2 for desktop 1 pins the screen to 2: its whole managed
+    // set is sticky. One window is enough for that to hold vacuously. Still
+    // all sticky at Release, so the pin survives the switch — which is what
+    // makes it still be there on the way back.
+    engine->updateStickyScreenPins(allSticky, PhosphorEngine::StickyPinPhase::Acquire);
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->updateStickyScreenPins(allSticky, PhosphorEngine::StickyPinPhase::Release);
+    QCOMPARE(engine->stickyPinnedDesktopForScreen(kS1), 2);
+
+    // Back to desktop 2, and the window is no longer sticky: the bracket the
+    // daemon runs around every per-output desktop change.
+    QSignalSpy releaseSpy(engine, &ScrollEngine::windowsReleased);
+    // Acquire runs BEFORE the context moves and must not take the release arm.
+    // The destination it would resolve here is desktop 1 — the one being left,
+    // and the one holding the real strip.
+    engine->updateStickyScreenPins(noneSticky, PhosphorEngine::StickyPinPhase::Acquire);
+    QCOMPARE(engine->stickyPinnedDesktopForScreen(kS1), 2);
+    QCOMPARE(releaseSpy.count(), 0);
+
+    // Context moves, THEN release. Swapping these two lines is the old order,
+    // and it fails this test with the release below — verified by mutation,
+    // reproducing the field log line for line ("releasing 2 window(s) held by
+    // the state the unpin migration displaced", "Migrated screen strip from
+    // desktop 2 to 1").
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->updateStickyScreenPins(noneSticky, PhosphorEngine::StickyPinPhase::Release);
+    QCoreApplication::processEvents();
+
+    // The pin was held on desktop 2 and desktop 2 is where we arrived, so the
+    // key did not move and no migration ran at all. THIS is what the ordering
+    // buys: released early the destination resolves to desktop 1, the strip is
+    // re-keyed there, and returning to desktop 2 finds nothing — the two
+    // desktops transposed. The window staying keyed to desktop 2 is the
+    // assertion the old order fails, and it fails it whether or not the
+    // destination held windows to clobber.
+    QCOMPARE(releaseSpy.count(), 0);
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|sticky")));
+    const auto held = engine->heldKeyForWindow(QStringLiteral("app|sticky"));
+    QVERIFY(held.has_value());
+    QCOMPARE(held->desktop, 2);
+    QCOMPARE(held->screenId, kS1);
+}
+
+void TestScrollEngineStripContext::allStickyScreenIsNotPinnedWhenAnotherDesktopHasAStrip()
+{
+    // The pin overrides the per-output desktop in currentKeyForScreen, so
+    // while it is held every OTHER desktop's strip on that screen is
+    // unreachable. That is only ever right for a screen with no desktop
+    // dimension at all ("virtualdesktopsonlyonprimary", where KWin reports
+    // every window on such an output as on-all-desktops). A screen the user
+    // merely happens to be viewing with one sticky window on it is not that,
+    // and pinning it strands the strips on its other desktops — which is how
+    // one vacuously all-sticky strip came to displace five real windows.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    const QString kS1 = QStringLiteral("S1");
+
+    // Desktop 1 holds the real work.
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->windowOpened(QStringLiteral("app|keep1"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+
+    // Desktop 2 holds one sticky window, so its managed set is vacuously
+    // all-sticky.
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->windowOpened(QStringLiteral("app|sticky"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+
+    engine->updateStickyScreenPins(
+        [](const QString&) {
+            return true;
+        },
+        PhosphorEngine::StickyPinPhase::Acquire);
+
+    // No pin, so desktop 1's strip stays reachable.
+    QCOMPARE(engine->stickyPinnedDesktopForScreen(kS1), 0);
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    QCoreApplication::processEvents();
+    const auto held = engine->heldKeyForWindow(QStringLiteral("app|keep1"));
+    QVERIFY(held.has_value());
+    QCOMPARE(held->desktop, 1);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineStripContext)

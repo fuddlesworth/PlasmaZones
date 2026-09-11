@@ -981,17 +981,21 @@ void TestScrollEngineTemplate::anUnpinMigrationMovesOverridesOverAnEmptyMap()
     engine->applyPerScreenConfig(kS1, twoEntryTemplate());
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     QCoreApplication::processEvents();
-    engine->updateStickyScreenPins([](const QString&) {
-        return true;
-    });
+    engine->updateStickyScreenPins(
+        [](const QString&) {
+            return true;
+        },
+        PhosphorEngine::StickyPinPhase::Acquire);
 
     // Switch to desktop 2 (the pin keeps the strip resolving desktop 1) and
     // then unpin: the strip migrates to desktop 2, and its overrides must
     // come with it over the empty map that was already sitting there.
     engine->setCurrentDesktop(2);
-    engine->updateStickyScreenPins([](const QString&) {
-        return false;
-    });
+    engine->updateStickyScreenPins(
+        [](const QString&) {
+            return false;
+        },
+        PhosphorEngine::StickyPinPhase::Release);
     QCoreApplication::processEvents();
 
     QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
