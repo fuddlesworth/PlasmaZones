@@ -51,12 +51,13 @@ namespace PlasmaZones {
 /// timer and no spring: the only wake-ups are slotMouseChanged (notePointer)
 /// and, while live, the pass's own per-frame repaint request.
 ///
-/// A burst also ends early when the sprite it decorates goes away, whoever
-/// took it (cursorSpriteGone). The trail is then DROPPED rather than
-/// merely left unpainted: dropTrail damages the band the last frame covered
-/// and empties the history, and it is the emptied history — not the hide —
-/// that ends liveness, so the pass is still in the paint chain for the cycle
-/// that performs the erase.
+/// A burst also ends early when the sprite it decorates goes away entirely
+/// (cursorSpriteGone), which is NOT the same as another effect hiding KWin's
+/// cursor in order to composite its own copy. The trail is then DROPPED rather
+/// than merely left unpainted: dropTrail damages the band the last frame
+/// covered and empties the history, and it is the emptied history — not the
+/// missing sprite — that ends liveness, so the pass is still in the paint
+/// chain for the cycle that performs the erase.
 ///
 /// COST RULE. A chain with no live layer must cost nothing per frame. Every
 /// entry point early-returns on `m_engaged`, a cached verdict rebuilt only
@@ -432,7 +433,7 @@ private:
     /// `EffectsHandler::isCursorHidden()`. That counter does not mean "the
     /// user cannot see a pointer"; it means "KWin is not compositing the
     /// pointer itself", which is equally what an effect that hides the cursor
-    /// in order to draw its OWN copy leaves behind. KWin ships two:
+    /// in order to draw its OWN copy leaves behind. KWin ships at least two:
     /// `shakecursor`, which magnifies the pointer while the user shakes it,
     /// and `zoom` in its scaled-pointer mode. Reading the counter here meant
     /// that shaking the mouse — the very gesture that draws the longest trail

@@ -346,15 +346,15 @@ bool PointerDecorationPass::isLive() const
     // It leaves holdsCursorHide() to keep the effect in the chain long enough
     // to hand a hide of our own back.
     //
-    // A sprite hidden by someone else deliberately does NOT read that way.
+    // A sprite that has gone away deliberately does NOT read that way.
     // This verdict is what isActive() puts the effect in the chain on, and an
     // effect dropped from the chain gets neither paintOutput nor
     // scheduleRepaints — so answering false the moment the sprite goes would
     // retire the pass BEFORE anything damaged the trail it left on screen,
     // freezing the last frame there. setSuppressedOutputs has a signal to do
-    // that tidy-up on; a hide has none, so the pass stays live until the
-    // scheduleRepaints that drops the trail, and the emptied history is what
-    // ends liveness one cycle later.
+    // that tidy-up on; a vanishing sprite has none, so the pass stays live
+    // until the scheduleRepaints that drops the trail, and the emptied history
+    // is what ends liveness one cycle later.
     if (!m_engaged || suppressedOn(m_output)) {
         return false;
     }
