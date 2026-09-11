@@ -77,6 +77,50 @@ GridLayout {
     /// The assignment's current preset id, or empty for none.
     property string presetId: ""
 
+    /// What the pack actually renders with: the assigned preset's values with
+    /// this assignment's own edits laid over the top.
+    ///
+    /// `currentValues` holds only the DELTAS, because that is what an
+    /// assignment stores. Feeding those straight to the sliders and the preview
+    /// showed a pack's plain defaults for every parameter the preset supplies,
+    /// so picking a preset looked like it had done nothing at all.
+    ///
+    /// Imperative rather than bound, like every other registry-backed value in
+    /// this app: the preset lives on disk, so a binding would never re-evaluate
+    /// when it is retuned.
+    property var _effectiveValues: ({})
+
+    function _recomputeEffective() {
+        const deltas = root.currentValues || {};
+        if (!root.presetBridge || root.presetId.length === 0 || root.packId.length === 0) {
+            root._effectiveValues = deltas;
+            return;
+        }
+        const base = root.presetBridge.presetParams(root.packId, root.presetId) || {};
+        const out = {};
+        for (const key in base)
+            out[key] = base[key];
+        for (const key in deltas)
+            out[key] = deltas[key];
+        root._effectiveValues = out;
+    }
+
+    onCurrentValuesChanged: root._recomputeEffective()
+    onPresetIdChanged: root._recomputeEffective()
+    onPackIdChanged: root._recomputeEffective()
+    onPresetBridgeChanged: root._recomputeEffective()
+    Component.onCompleted: root._recomputeEffective()
+
+    // A preset retuned anywhere (this window, another process, a text editor)
+    // has to move what is on screen here too.
+    Connections {
+        target: root.presetBridge
+        function onPresetsChanged(packId) {
+            if (packId === root.packId)
+                root._recomputeEffective();
+        }
+    }
+
     signal valueChanged(string effectId, string paramId, var value)
     signal randomizeRequested(var rolled)
     signal resetRequested(var defaults)
@@ -112,7 +156,7 @@ GridLayout {
         packId: root.packId
         presetBridge: root.presetBridge
         presetId: root.presetId
-        currentValues: root.currentValues
+        currentValues: root._effectiveValues
         onPresetSelected: function (id) {
             root.presetSelected(id);
         }
@@ -127,7 +171,7 @@ GridLayout {
         visible: root._hasParams
         compact: true
         parameters: root.parameters
-        currentValues: root.currentValues
+        currentValues: root._effectiveValues
         effectId: root.packId
         enableGroups: root.enableGroups
         enableLocking: root.enableLocking
@@ -160,7 +204,7 @@ GridLayout {
             previewKind: root.previewKind
             previewController: root.previewController
             packId: root.packId
-            params: root.currentValues
+            params: root._effectiveValues
             active: root._hasPreview && root.previewActive
             // `active` covers "this row is collapsed" — it tears the shader item
             // down. This covers "the window is not in front": a chain row left

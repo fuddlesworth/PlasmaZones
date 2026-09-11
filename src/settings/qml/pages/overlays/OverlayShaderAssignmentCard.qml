@@ -61,6 +61,50 @@ Item {
     /// so a card with no override still shows the preset it draws with.
     readonly property string _editPresetId: (root._hasOverride || root.isBaseline) ? (root._raw.presetId || "") : (root._resolved.presetId || "")
 
+    /// What the overlay actually renders with: the assigned preset's values
+    /// with this node's own edits laid over the top.
+    ///
+    /// `_editParams` holds only the DELTAS, because that is what the node
+    /// stores. Showing those alone rendered the pack's plain defaults for every
+    /// parameter the preset supplies, so picking a preset looked inert.
+    ///
+    /// Imperative, like the rest of this card's model state: the preset lives
+    /// on disk and a binding would never re-evaluate when it is retuned.
+    property var _effectiveParams: ({})
+
+    function _recomputeEffectiveParams() {
+        const deltas = root._editParams || {};
+        // NOT named `bridge`: this card already has a `bridge` property, and
+        // that one is the overlays page controller. Shadowing it here read as
+        // a call on the page controller both to a human and to the QML-contract
+        // guard test.
+        const presets = settingsController.overlayPresets;
+        if (!presets || root._editPresetId.length === 0 || root._editShaderId.length === 0) {
+            root._effectiveParams = deltas;
+            return;
+        }
+        const base = presets.presetParams(root._editShaderId, root._editPresetId) || {};
+        const out = {};
+        for (const key in base)
+            out[key] = base[key];
+        for (const key in deltas)
+            out[key] = deltas[key];
+        root._effectiveParams = out;
+    }
+
+    on_EditParamsChanged: root._recomputeEffectiveParams()
+    on_EditPresetIdChanged: root._recomputeEffectiveParams()
+    on_EditShaderIdChanged: root._recomputeEffectiveParams()
+
+    // A preset retuned anywhere has to move this card too.
+    Connections {
+        target: settingsController.overlayPresets
+        function onPresetsChanged(packId) {
+            if (packId === root._editShaderId)
+                root._recomputeEffectiveParams();
+        }
+    }
+
     // Parameter DECLARATIONS for the shader being edited. Imperative like
     // the rest of the model state: a function-call binding on
     // shaderParameters() would not re-evaluate when the pack registry
@@ -231,6 +275,9 @@ Item {
     Component.onCompleted: {
         root._refreshEffects();
         root.refresh();
+        // After refresh(), which is what populates the node state the
+        // effective map is derived from.
+        root._recomputeEffectiveParams();
     }
     Component.onDestruction: {
         // Flush a still-pending debounced edit — the Timer dies with the
@@ -350,7 +397,7 @@ Item {
                     packId: root._editShaderId
                     presetBridge: settingsController.overlayPresets
                     presetId: root._editPresetId
-                    currentValues: root._editParams
+                    currentValues: root._effectiveParams
                     onPresetSelected: function (id) {
                         settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
                         root.refresh();
@@ -367,7 +414,7 @@ Item {
                     Layout.fillWidth: true
                     visible: root._editShaderId.length > 0
                     parameters: root._paramDefs
-                    currentValues: root._editParams
+                    currentValues: root._effectiveParams
                     effectId: root._editShaderId
                     subjectMissing: root._editShaderMissing
                     enableLocking: true

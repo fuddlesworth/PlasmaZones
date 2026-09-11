@@ -82,6 +82,9 @@ private Q_SLOTS:
     void filenameStemIsTheFallbackId();
     void skipsPresetWithNoPackId();
     void editingAPresetFileReachesTheRegistry();
+    void watcherSeesAPlainRewrite();
+    void watcherSeesAnAtomicRenameSave();
+    void watcherSeesAPresetAddedToAFreshInstall();
 
     // ─────── legacy migration ───────
 
@@ -507,6 +510,104 @@ void TestShaderPresets::migrationFallsBackToFilenameForName()
 void TestShaderPresets::migrationOnAbsentRootIsNoOp()
 {
     QCOMPARE(migrateLegacyOverlayPresets(QStringLiteral("/nonexistent/plasmazones/shader-presets")), 0);
+}
+
+void TestShaderPresets::watcherSeesAPlainRewrite()
+{
+    // The live-reload path, driven by the real QFileSystemWatcher rather than
+    // by an explicit rescan. This is what a text editor save has to trigger,
+    // and it is the whole premise of assignment-by-reference.
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const QString dir = userPresetDirectory(root.path(), ShaderFamily::Animation);
+    QVERIFY(QDir().mkpath(dir));
+    const QString file = dir + QStringLiteral("/neon.json");
+    QVERIFY(writeFile(file, QStringLiteral(R"({
+        "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 1.0 }
+    })")));
+
+    ShaderPresetRegistry registry;
+    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
+    loader.loadFromDirectory(dir, LiveReload::On);
+    QCOMPARE(registry.preset(ShaderFamily::Animation, QStringLiteral("dissolve"), QStringLiteral("{neon}"))
+                 .params.value(QStringLiteral("speed"))
+                 .toDouble(),
+             1.0);
+
+    QSignalSpy spy(&registry, &ShaderPresetRegistry::presetsChanged);
+    QVERIFY(writeFile(file, QStringLiteral(R"({
+        "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 9.0 }
+    })")));
+
+    QVERIFY2(spy.wait(5000), "the watcher never reported the rewritten preset");
+    QCOMPARE(registry.preset(ShaderFamily::Animation, QStringLiteral("dissolve"), QStringLiteral("{neon}"))
+                 .params.value(QStringLiteral("speed"))
+                 .toDouble(),
+             9.0);
+}
+
+void TestShaderPresets::watcherSeesAnAtomicRenameSave()
+{
+    // How most editors actually save: write a sibling temp file, then rename it
+    // over the original. The inode changes, so a watch on the FILE would be
+    // left pointing at a file nobody has any more — only a watch on the
+    // directory survives it.
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const QString dir = userPresetDirectory(root.path(), ShaderFamily::Animation);
+    QVERIFY(QDir().mkpath(dir));
+    const QString file = dir + QStringLiteral("/neon.json");
+    QVERIFY(writeFile(file, QStringLiteral(R"({
+        "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 1.0 }
+    })")));
+
+    ShaderPresetRegistry registry;
+    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
+    loader.loadFromDirectory(dir, LiveReload::On);
+
+    QSignalSpy spy(&registry, &ShaderPresetRegistry::presetsChanged);
+
+    const QString tmpFile = dir + QStringLiteral("/neon.json.tmp");
+    QVERIFY(writeFile(tmpFile, QStringLiteral(R"({
+        "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 7.0 }
+    })")));
+    QVERIFY(QFile::remove(file));
+    QVERIFY(QFile::rename(tmpFile, file));
+
+    QVERIFY2(spy.wait(5000), "the watcher never reported the atomically-saved preset");
+    QCOMPARE(registry.preset(ShaderFamily::Animation, QStringLiteral("dissolve"), QStringLiteral("{neon}"))
+                 .params.value(QStringLiteral("speed"))
+                 .toDouble(),
+             7.0);
+}
+
+void TestShaderPresets::watcherSeesAPresetAddedToAFreshInstall()
+{
+    // The directory does not exist when the loader starts, which is every
+    // process on a machine that has never saved a preset. The daemon and the
+    // compositor both register their watch at startup, long before the settings
+    // app creates the directory, so a watch that could not survive that would
+    // leave them blind until the next restart.
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const QString dir = userPresetDirectory(root.path(), ShaderFamily::Animation);
+    QVERIFY(!QDir(dir).exists());
+
+    ShaderPresetRegistry registry;
+    ShaderPresetLoader loader(registry, ShaderFamily::Animation);
+    loader.loadFromDirectory(dir, LiveReload::On);
+
+    QSignalSpy spy(&registry, &ShaderPresetRegistry::presetsChanged);
+    QVERIFY(QDir().mkpath(dir));
+    QVERIFY(writeFile(dir + QStringLiteral("/neon.json"), QStringLiteral(R"({
+        "id": "{neon}", "name": "Neon", "packId": "dissolve", "params": { "speed": 3.0 }
+    })")));
+
+    QVERIFY2(spy.wait(5000), "the watcher never reported the first preset in a fresh directory");
+    QCOMPARE(registry.preset(ShaderFamily::Animation, QStringLiteral("dissolve"), QStringLiteral("{neon}"))
+                 .params.value(QStringLiteral("speed"))
+                 .toDouble(),
+             3.0);
 }
 
 QTEST_MAIN(TestShaderPresets)
