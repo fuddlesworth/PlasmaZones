@@ -439,7 +439,7 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
     // ONE tree read for the whole group, like divergentPathCount — the header's
     // rule is that nothing here calls `rawShaderProfile` in a loop, because each
     // call rebuilds the tree.
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const ShaderProfileTree& tree = shaderTree();
     // Whether any member was actually compared. A group in which every path is
     // skipped below would otherwise fall through to `return true` having tested
     // nothing — the same vacuous true the empty-list guard above refuses,
@@ -504,7 +504,7 @@ int AnimationsPageController::applyShaderGroupWrite(
     // Writing once also means the group is applied ATOMICALLY: no card can
     // observe a half-written group and latch a divergence banner that the next
     // path's write immediately clears.
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
     int written = 0;
     int mutated = 0;
     for (const QString& path : paths) {
@@ -773,7 +773,7 @@ bool AnimationsPageController::shaderParamsAreStale(const QString& path) const
 {
     if (!m_settings || !isValidEventPath(path))
         return false;
-    return paramsAreStaleAt(m_settings->shaderProfileTree(), path);
+    return paramsAreStaleAt(shaderTree(), path);
 }
 
 int AnimationsPageController::staleParamDescendantCountForPaths(const QStringList& rawPaths) const
@@ -784,7 +784,7 @@ int AnimationsPageController::staleParamDescendantCountForPaths(const QStringLis
     // the same reasons shaderOverrideDescendantCountForPaths gives: two paths in
     // a mirror group can share a descendant, and the count drives a button whose
     // click must not claim to act on it twice.
-    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
     QSet<QString> stale;
     for (const QString& path : distinctPaths(rawPaths)) {
         if (!isValidEventPath(path))
@@ -802,7 +802,7 @@ int AnimationsPageController::clearStaleParamDescendantsOnPaths(const QStringLis
 {
     if (!m_settings)
         return 0;
-    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    PhosphorAnimationShaders::ShaderProfileTree tree = shaderTree();
     QSet<QString> stale;
     for (const QString& path : distinctPaths(rawPaths)) {
         if (!isValidEventPath(path))
@@ -846,7 +846,7 @@ int AnimationsPageController::shaderOverrideDescendantCountForPaths(const QStrin
     // ONE tree read for the whole group. The per-path Q_INVOKABLE rebuilds the
     // tree on every call, and the card used to call it once per write path from
     // a refresh that runs at drag rate.
-    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
     // Unioned, not summed. A group holding both an ancestor and one of its
     // descendants would count a shadowing override beneath both of them twice,
     // while the paired clear removes it once — and a count that disagrees with
@@ -872,7 +872,7 @@ bool AnimationsPageController::anyPathOwnsShaderPack(const QStringList& rawPaths
 {
     if (!m_settings)
         return false;
-    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
     for (const QString& path : distinctPaths(rawPaths)) {
         if (!isValidEventPath(path) || !supportsShaderLeg(path))
             continue;
@@ -903,7 +903,7 @@ int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& rawP
     // One read, one write, for the same reasons as the setter above.
     // `isValidEventPath` gates the loop so an unrecognised path cannot make the
     // caller's list the bound on the work done here.
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
     int cleared = 0;
     for (const QString& path : paths) {
         if (!isValidEventPath(path) || !tree.hasOverride(path))
@@ -929,7 +929,7 @@ int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStrin
     // sentinel dishonest: a refusal arriving mid-loop returned -1, meaning
     // "nothing was attempted", after earlier paths had already been persisted.
     // Refusing up front, above, is now the only way -1 leaves this function.
-    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    PhosphorAnimationShaders::ShaderProfileTree tree = shaderTree();
     // Unioned, not summed, matching shaderOverrideDescendantCountForPaths: two
     // paths in one group can share a descendant, and clearing it once must not
     // be reported twice.
@@ -996,13 +996,12 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
     if (mirrorPaths.isEmpty())
         return 0;
 
-    // The shader tree is read ONCE for the whole comparison. `rawShaderProfile`
-    // rebuilds it on every call (a settings read plus `ShaderProfileTree::
-    // fromJson` plus a prune walk), and this runs from `refreshFromTree`, i.e.
-    // on every tick of a duration drag for every visible card. Per path it was
-    // a full rebuild each.
-    const PhosphorAnimationShaders::ShaderProfileTree tree =
-        m_settings ? m_settings->shaderProfileTree() : PhosphorAnimationShaders::ShaderProfileTree{};
+    // The shader tree is read ONCE for the whole comparison, from the
+    // controller's parsed-tree cache. `rawShaderProfile` reaches the settings
+    // getter on every call, and this runs from `refreshFromTree`, i.e. on every
+    // tick of a duration drag for every visible card. Per path it was a full
+    // rebuild each.
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
 
     // The TIMING tree read once too, for the same reason the shader tree is:
     // rawProfile() reaches motionTree() on every call, and each of those copies

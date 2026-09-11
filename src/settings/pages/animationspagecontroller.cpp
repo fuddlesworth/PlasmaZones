@@ -38,6 +38,15 @@ using namespace animations_controller_detail;
 
 // ─── Construction ──────────────────────────────────────────────────────
 
+const PhosphorAnimationShaders::ShaderProfileTree& AnimationsPageController::shaderTree() const
+{
+    if (!m_shaderTreeCache.has_value()) {
+        m_shaderTreeCache =
+            m_settings ? m_settings->shaderProfileTree() : PhosphorAnimationShaders::ShaderProfileTree{};
+    }
+    return *m_shaderTreeCache;
+}
+
 AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry,
                                                    ISettings* settings, QObject* parent)
     // Id is the headless staging-domain identity, deliberately distinct from
@@ -105,7 +114,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             const QString id = shader.value(JsonEffectIdKey).toString();
             QString inheritedId;
             if (m_settings != nullptr) {
-                auto candidate = m_settings->shaderProfileTree();
+                auto candidate = shaderTree();
                 candidate.clearOverride(path);
                 inheritedId = PhosphorAnimationShaders::resolveShaderWithDefault(candidate, path).effectiveEffectId();
             }
@@ -177,7 +186,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 if (m_settings == nullptr) {
                     return out;
                 }
-                const auto tree = m_settings->shaderProfileTree();
+                const auto& tree = shaderTree();
                 for (const QString& path : PlasmaZones::shaderSupportedEventPaths()) {
                     out.insert(path,
                                PhosphorAnimationShaders::resolveShaderWithDefault(tree, path).effectiveEffectId());
@@ -287,8 +296,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                     Q_EMIT shaderProfileChanged(QString());
                 }
                 // The live tree moved, so the value-based dirty compare must
-                // be re-run on the next hasPendingChanges() query.
+                // be re-run on the next hasPendingChanges() query, and the
+                // parsed-tree cache is stale.
                 m_treeDirtyCache.reset();
+                m_shaderTreeCache.reset();
                 // Tree assignment is the primary input of the stock-suppression
                 // gate (see stockSuppressedEvents).
                 maybeEmitStockSuppressedEventsChanged();

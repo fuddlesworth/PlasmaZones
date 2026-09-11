@@ -11,6 +11,9 @@
 // signature puts ShaderProfile inside a std::optional, which needs the
 // complete type at the point of declaration.
 #include <PhosphorAnimation/ShaderProfile.h>
+// By value rather than forward-declared: the m_shaderTreeCache member puts a
+// ShaderProfileTree inside a std::optional, which needs the complete type.
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorControl/PageController.h>
 #include <QByteArray>
 #include <QHash>
@@ -25,9 +28,6 @@
 
 namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
-// Forward-declared rather than included: only a const reference to it appears
-// in this header (paramsAreStaleAt), so the definition is a .cpp concern.
-class ShaderProfileTree;
 }
 
 namespace PlasmaZones {
@@ -1031,6 +1031,29 @@ private:
     /// the shaderProfileTreeChanged lambda (live tree moved) and by
     /// refreshDirtyState() (committed baseline moved).
     mutable std::optional<bool> m_treeDirtyCache;
+
+    /// The shader profile tree, parsed once per change rather than once per read.
+    ///
+    /// `ISettings::shaderProfileTree()` rebuilds it from the config store on
+    /// every call, and since the tree's key gained a schema validator that read
+    /// is a full deep round trip (QVariantMap to QJsonObject to fromJson, a
+    /// per-path setOverride rebuild, back to QVariantMap) before the getter's own
+    /// fromJson and supported-path prune. Roughly seven traversals where it used
+    /// to be two. The group writers alone read it at fifteen sites, several
+    /// inside per-row QML evaluation, so a slider drag paid that several times
+    /// per frame.
+    ///
+    /// Invalidated on shaderProfileTreeChanged, which is the only thing that can
+    /// move it, a D-Bus write or a global reload included. Same shape as
+    /// DecorationPageController::m_treeCache, which needed one first.
+    mutable std::optional<PhosphorAnimationShaders::ShaderProfileTree> m_shaderTreeCache;
+
+    /// The live shader tree, from cache when warm. An empty tree with no settings.
+    ///
+    /// Read-only callers bind this by const reference. A MUTATOR still needs its
+    /// own copy, and takes it from here rather than from the store, so it pays
+    /// the copy without the parse.
+    const PhosphorAnimationShaders::ShaderProfileTree& shaderTree() const;
 
     /// Persist @p tree, marking the write as this controller's own.
     ///
