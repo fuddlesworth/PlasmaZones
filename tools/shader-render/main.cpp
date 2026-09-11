@@ -102,6 +102,17 @@ QString defaultShaderDir()
     return xdgPlasmaZonesDir(QStringLiteral("overlays"));
 }
 
+// The pointer family's equivalent of defaultShaderDir(). Used when --pointer is
+// given and --shader-dir was not, so `--pointer -s skid` finds the pack without
+// the caller having to spell out a directory that the flag already implies.
+QString defaultPointerDir()
+{
+    const QString cwd = QDir(QStringLiteral("data/pointer")).absolutePath();
+    if (QDir(cwd).exists())
+        return cwd;
+    return xdgPlasmaZonesDir(QStringLiteral("pointer"));
+}
+
 QString defaultLayoutDir()
 {
     const QString cwd = QDir(QStringLiteral("data/layouts")).absolutePath();
@@ -182,7 +193,8 @@ int main(int argc, char* argv[])
 
     QCommandLineOption shaderDirOpt(QStringLiteral("shader-dir"),
                                     QStringLiteral("Directory containing <id>/metadata.json. "
-                                                   "Defaults to data/overlays/ in the cwd, then the XDG data dirs."),
+                                                   "Defaults to data/overlays/ in the cwd, then the XDG data dirs. "
+                                                   "With --pointer the default becomes data/pointer/ instead."),
                                     QStringLiteral("path"), defaultShaderDir());
     parser.addOption(shaderDirOpt);
 
@@ -200,6 +212,69 @@ int main(int argc, char* argv[])
                        "zone. Defaults to 0 (cycling)."),
         QStringLiteral("ZONE_NUMBER"), QStringLiteral("0"));
     parser.addOption(stillHighlightOpt);
+
+    // ── Pointer-pack options ─────────────────────────────────────
+    // A pointer pack is driven by a synthetic pointer rather than by the zone
+    // schedule. Without --pointer its whole uniform tail reads zero, so a
+    // click-led pack paints nothing and the render is legitimately empty.
+    QCommandLineOption pointerOpt(
+        QStringLiteral("pointer"),
+        QStringLiteral("Render a POINTER pack (data/pointer): drive a synthetic pointer and bind the "
+                       "pointer uniform tail. Without this a pointer pack sees an all-zero tail and "
+                       "paints nothing."));
+    parser.addOption(pointerOpt);
+
+    QCommandLineOption pointerHeadingOpt(
+        QStringLiteral("pointer-heading"),
+        QStringLiteral("Direction the synthetic pointer travels, degrees clockwise from screen right "
+                       "(canvas y runs down, so 90 is downward). Defaults to 0."),
+        QStringLiteral("DEGREES"), QStringLiteral("0"));
+    parser.addOption(pointerHeadingOpt);
+
+    QCommandLineOption pointerSpeedOpt(
+        QStringLiteral("pointer-speed"),
+        QStringLiteral("Speed of the synthetic pointer in logical px per second. Defaults to 900."),
+        QStringLiteral("PX_PER_SEC"), QStringLiteral("900"));
+    parser.addOption(pointerSpeedOpt);
+
+    QCommandLineOption pointerStillOpt(
+        QStringLiteral("pointer-still"),
+        QStringLiteral("Hold the pointer still at the canvas centre instead of sweeping, to check "
+                       "that a pack still has an axis with no motion to take one from."));
+    parser.addOption(pointerStillOpt);
+
+    QCommandLineOption pressAtOpt(
+        QStringLiteral("press-at"),
+        QStringLiteral("Seconds at which the button goes down, or negative for no click at all. The "
+                       "pointer passes through the canvas centre at this moment. Defaults to 0.4."),
+        QStringLiteral("SECONDS"), QStringLiteral("0.4"));
+    parser.addOption(pressAtOpt);
+
+    QCommandLineOption releaseAtOpt(
+        QStringLiteral("release-at"),
+        QStringLiteral("Seconds at which the button comes back up. Negative leaves it DOWN for the "
+                       "rest of the render, which is how a hold-reading pack's window is exercised. "
+                       "Defaults to 0.55."),
+        QStringLiteral("SECONDS"), QStringLiteral("0.55"));
+    parser.addOption(releaseAtOpt);
+
+    QCommandLineOption pointerButtonOpt(
+        QStringLiteral("pointer-button"),
+        QStringLiteral("Which button the synthetic click uses: 1 left, 2 right, 3 middle. Defaults to 1."),
+        QStringLiteral("N"), QStringLiteral("1"));
+    parser.addOption(pointerButtonOpt);
+
+    QCommandLineOption noCursorSpriteOpt(
+        QStringLiteral("no-cursor-sprite"),
+        QStringLiteral("Do not bind the synthetic cursor sprite, so a needsCursor pack renders its "
+                       "no-sprite fallback instead. That fallback is what the settings preview shows."));
+    parser.addOption(noCursorSpriteOpt);
+
+    QCommandLineOption cursorSizeOpt(
+        QStringLiteral("cursor-size"),
+        QStringLiteral("Drawn size of the synthetic cursor sprite, logical px. Defaults to 24."), QStringLiteral("PX"),
+        QStringLiteral("24"));
+    parser.addOption(cursorSizeOpt);
 
     parser.process(app);
 
@@ -251,10 +326,54 @@ int main(int argc, char* argv[])
         return 2;
     }
 
+    PlasmaZones::ShaderRender::PointerDriveOptions pointerOptions;
+    pointerOptions.enabled = parser.isSet(pointerOpt);
+    if (pointerOptions.enabled) {
+        bool headingOk = false;
+        bool speedOk = false;
+        bool pressOk = false;
+        bool releaseOk = false;
+        bool buttonOk = false;
+        bool cursorOk = false;
+        pointerOptions.headingDegrees = parser.value(pointerHeadingOpt).toDouble(&headingOk);
+        pointerOptions.speedPxPerSec = parser.value(pointerSpeedOpt).toDouble(&speedOk);
+        pointerOptions.pressAt = parser.value(pressAtOpt).toDouble(&pressOk);
+        pointerOptions.releaseAt = parser.value(releaseAtOpt).toDouble(&releaseOk);
+        pointerOptions.button = parser.value(pointerButtonOpt).toInt(&buttonOk);
+        pointerOptions.cursorSize = parser.value(cursorSizeOpt).toDouble(&cursorOk);
+        pointerOptions.still = parser.isSet(pointerStillOpt);
+        pointerOptions.cursorSprite = !parser.isSet(noCursorSpriteOpt);
+        if (!headingOk || !speedOk || !pressOk || !releaseOk || !cursorOk) {
+            std::cerr << "error: --pointer-heading, --pointer-speed, --press-at, --release-at and "
+                         "--cursor-size must be numbers\n";
+            return 2;
+        }
+        if (pointerOptions.speedPxPerSec < 0.0 || pointerOptions.cursorSize <= 0.0) {
+            std::cerr << "error: --pointer-speed must not be negative and --cursor-size must be positive\n";
+            return 2;
+        }
+        if (!buttonOk || pointerOptions.button < 1 || pointerOptions.button > 3) {
+            std::cerr << "error: --pointer-button must be 1 (left), 2 (right) or 3 (middle)\n";
+            return 2;
+        }
+        // A release before the press would hand the history a button-up edge it
+        // never saw go down, and the pack would read a release older than its
+        // press. Caught here rather than producing a quietly wrong render.
+        if (pointerOptions.releaseAt >= 0.0 && pointerOptions.pressAt >= 0.0
+            && pointerOptions.releaseAt < pointerOptions.pressAt) {
+            std::cerr << "error: --release-at must not be before --press-at\n";
+            return 2;
+        }
+    }
+
     // ── Resolve inputs ───────────────────────────────────────────
     const QString shaderArg = parser.value(shaderOpt);
     const QString layoutArg = parser.value(layoutOpt);
-    const QString shaderDir = parser.value(shaderDirOpt);
+    // --pointer implies the pointer pack tree, unless the caller named a
+    // directory themselves. The option's own default is computed before the
+    // command line is parsed, so the substitution has to happen here.
+    const QString shaderDir =
+        (pointerOptions.enabled && !parser.isSet(shaderDirOpt)) ? defaultPointerDir() : parser.value(shaderDirOpt);
     const QString layoutDir = parser.value(layoutDirOpt);
 
     const QString metadataPath = resolveShaderMetadata(shaderArg, shaderDir);
@@ -316,6 +435,7 @@ int main(int argc, char* argv[])
     opts.fps = fps;
     opts.audio = audio.get();
     opts.stillHighlightZone = stillHighlightZone;
+    opts.pointer = pointerOptions;
 
     auto sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
     if (!sink) {
