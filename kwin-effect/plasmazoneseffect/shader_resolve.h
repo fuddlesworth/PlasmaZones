@@ -229,6 +229,10 @@ struct ResolvedDecorationChain
 {
     QStringList chain;
     QVariantMap params;
+    /// Per-pack preset references, `{packId -> presetId}`, the same nested
+    /// shape `params` uses. A rule can point one layer at a preset and tune the
+    /// next by hand, exactly as a decoration tree node can.
+    QVariantMap presetIds;
 };
 
 std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved);

@@ -1044,6 +1044,18 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // plus the installed shared helpers.
     const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
     const QStringList paramNames = declaredParamNames(eff.parameters);
+
+    // Preset lint: every preset key must name a declared parameter, and every
+    // value must match that parameter's declared type and range.
+    {
+        QList<PresetLintParam> lintParams;
+        lintParams.reserve(eff.parameters.size());
+        for (const auto& p : eff.parameters) {
+            lintParams.append(PresetLintParam{p.id, p.type, p.minValue, p.maxValue});
+        }
+        errors += reportPresetProblems(out, QDir(packDir).dirName(), eff.presets, lintParams);
+    }
+
     // Stages that get no p_<id> preamble cannot see any p_<id>, so the
     // did-you-mean hint would only ever suggest a name they cannot use.
     const QStringList noParams;

@@ -125,6 +125,17 @@ int validatePack(const QString& packDir, QTextStream& out)
 
     int errors = 0;
 
+    // Preset lint: every preset key must name a declared parameter, and every
+    // value must match that parameter's declared type and range.
+    {
+        QList<PresetLintParam> lintParams;
+        lintParams.reserve(info.parameters.size());
+        for (const auto& p : info.parameters) {
+            lintParams.append(PresetLintParam{p.id, p.type, p.minValue, p.maxValue});
+        }
+        errors += reportPresetProblems(out, QDir(packDir).dirName(), info.presets, lintParams);
+    }
+
     // ── metadata lints ──
     QStringList lints;
     QHash<QString, QString> claimedLane; // "pool#slot" → first param id, for collision detection

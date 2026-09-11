@@ -149,6 +149,13 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
     if (const auto action = resolved.slot(shaderSlotFor(eventPath))) {
         profile.effectId = action->params.value(ActionParam::EffectId).toString();
         profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
+        // A rule can name a preset its own params are deltas against, exactly
+        // as a tree node can. Flattened by the same call below, so the two
+        // routes cannot drift apart on what "preset plus edits" means.
+        const QString rulePreset = action->params.value(ActionParam::PresetId).toString();
+        if (!rulePreset.isEmpty()) {
+            profile.presetId = rulePreset;
+        }
         shaderSlotFromRule = true;
     } else {
         profile = tree.resolve(eventPath);
@@ -423,6 +430,10 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     // ordinary packs in a rule chain, so a rule that names one must be able to
     // set its params too.
     out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
+    // Same nested shape, same reasoning: a rule chain can point one layer at a
+    // preset while tuning the next by hand. Resolved against each pack by the
+    // consumer, so an id belonging to another pack is inert rather than wrong.
+    out.presetIds = action->params.value(PhosphorRules::ActionParam::PresetId).toObject().toVariantMap();
     return out;
 }
 

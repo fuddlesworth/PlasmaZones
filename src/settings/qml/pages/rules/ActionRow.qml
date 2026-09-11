@@ -133,6 +133,11 @@ ColumnLayout {
     /// re-publish the schema on each uniform write even though both sources
     /// above are now stable.
     readonly property string _shaderActionType: (row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") ? row.action.type : ""
+    /// Which of the row's params names the PACK a preset would belong to. The
+    /// two shader actions spell it the same way today, but naming it once here
+    /// keeps the preset combo from re-deriving the action-type ladder.
+    readonly property string _shaderPresetPackKey: "effectId"
+
     readonly property var _activeShaderParamSchema: {
         if (row._shaderActionType === "overrideAnimationShader")
             return row._shaderParamSchema;
@@ -507,6 +512,9 @@ ColumnLayout {
 
                     if (modelData.kind === "overlayShader")
                         return paramEditors._overlayShaderEditor;
+
+                    if (modelData.kind === "shaderPreset")
+                        return paramEditors._shaderPresetEditor;
 
                     if (modelData.kind === "curveEditor")
                         return paramEditors._curveEditorEditor;

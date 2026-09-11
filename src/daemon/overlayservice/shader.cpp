@@ -118,7 +118,18 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     // the rule's "no shader" sentinel and resolves to no shader below, the
     // same way an empty tree override suppresses the baseline.
     if (overlayOverride.shaderId) {
-        return {*overlayOverride.shaderId, overlayOverride.shaderParams};
+        OverlayShaderProfile ruleProfile{*overlayOverride.shaderId, overlayOverride.shaderParams};
+        ruleProfile.presetId = overlayOverride.shaderPresetId;
+        // Flattened by the same block below that handles a tree node, so the
+        // rule route and the tree route cannot drift on what a preset plus its
+        // deltas means.
+        if (m_presetRegistry && !ruleProfile.presetId.isEmpty()) {
+            ruleProfile.parameters =
+                m_presetRegistry->resolveParams(PhosphorShaders::ShaderFamily::Overlay, ruleProfile.shaderId,
+                                                ruleProfile.presetId, ruleProfile.parameters);
+            ruleProfile.presetId.clear();
+        }
+        return ruleProfile;
     }
     if (!screenLayout) {
         return {};

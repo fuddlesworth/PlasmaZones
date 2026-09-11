@@ -16,8 +16,11 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QMap>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
+#include <QVariantMap>
 
 #include <rhi/qshader.h>
 
@@ -139,6 +142,31 @@ QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShader
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on
 /// PATH. Resolved once per run.
+/// One declared parameter, reduced to what a preset lint needs: its id, its
+/// type token, and whatever range it declares. The four families spell their
+/// ParameterInfo differently (slot vs step, image vs no image), so the lint
+/// takes this instead of any one of them and each arm projects into it.
+struct PresetLintParam
+{
+    QString id;
+    QString type;
+    QVariant minValue;
+    QVariant maxValue;
+};
+
+/// Lint a pack's `presets` block against what the pack declares.
+///
+/// Checks three things, which is everything decidable without rendering:
+/// every preset key names a declared parameter, every value matches that
+/// parameter's declared type, and a numeric value sits inside any declared
+/// range. Reports to @p out and returns the number of problems found.
+///
+/// Deliberately NOT an error for a preset to omit parameters: a preset is a
+/// partial tuning by design, and the ones it says nothing about fall back to
+/// their defaults.
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PresetLintParam>& declared);
+
 QString glslangValidatorPath();
 
 /// Compile @p source as @p stage through `glslangValidator` at @p toolPath and

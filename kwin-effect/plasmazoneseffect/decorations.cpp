@@ -445,6 +445,21 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         for (auto it = ruleChain->params.constBegin(); it != ruleChain->params.constEnd(); ++it) {
             allPackParams.insert(it.key(), it.value());
         }
+        // A rule's preset is resolved AFTER its params are merged in, so the
+        // params it carries read as deltas on top of the preset — the same
+        // order, and the same meaning, a tree node's do. The resolved profile
+        // was already flattened upstream, so only the rule's own layers need
+        // this.
+        for (auto it = ruleChain->presetIds.constBegin(); it != ruleChain->presetIds.constEnd(); ++it) {
+            const QString presetId = it.value().toString();
+            if (presetId.isEmpty()) {
+                continue;
+            }
+            allPackParams.insert(it.key(),
+                                 m_shaderManager.presetRegistry().resolveParams(PhosphorShaders::ShaderFamily::Surface,
+                                                                                it.key(), presetId,
+                                                                                allPackParams.value(it.key()).toMap()));
+        }
     }
     // Shared accent fallback for the plain layers below: the live system
     // accent when the daemon has delivered one, else the Breeze default.

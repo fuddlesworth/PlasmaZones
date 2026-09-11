@@ -362,6 +362,78 @@ int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::
 }
 
 // Build the `p_<id>` name list a pack declares, for the did-you-mean hint.
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PresetLintParam>& declared)
+{
+    if (presets.isEmpty()) {
+        return 0;
+    }
+
+    QHash<QString, PresetLintParam> byId;
+    byId.reserve(declared.size());
+    for (const PresetLintParam& p : declared) {
+        byId.insert(p.id, p);
+    }
+
+    int problems = 0;
+    for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
+        const QString& presetName = it.key();
+        const QVariantMap& values = it.value();
+        for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
+            const auto found = byId.constFind(vit.key());
+            if (found == byId.constEnd()) {
+                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key()
+                    << "', which the pack does not declare\n";
+                ++problems;
+                continue;
+            }
+
+            const PresetLintParam& param = *found;
+            const QVariant& value = vit.value();
+
+            if (param.type == QLatin1String("bool")) {
+                if (value.typeId() != QMetaType::Bool) {
+                    out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key()
+                        << "' to a non-boolean\n";
+                    ++problems;
+                }
+                continue;
+            }
+            if (param.type == QLatin1String("color") || param.type == QLatin1String("image")) {
+                if (value.typeId() != QMetaType::QString) {
+                    out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key() << "' to a non-"
+                        << param.type << " value\n";
+                    ++problems;
+                }
+                continue;
+            }
+
+            // float / int: numeric, and inside the declared range when there
+            // is one. A missing bound is not a problem — plenty of parameters
+            // legitimately declare only one, or neither.
+            if (!value.canConvert<double>() || value.typeId() == QMetaType::QString
+                || value.typeId() == QMetaType::Bool) {
+                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key()
+                    << "' to a non-numeric value\n";
+                ++problems;
+                continue;
+            }
+            const double v = value.toDouble();
+            if (param.minValue.isValid() && v < param.minValue.toDouble()) {
+                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key() << "' to " << v
+                    << ", below its declared minimum " << param.minValue.toDouble() << "\n";
+                ++problems;
+            }
+            if (param.maxValue.isValid() && v > param.maxValue.toDouble()) {
+                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key() << "' to " << v
+                    << ", above its declared maximum " << param.maxValue.toDouble() << "\n";
+                ++problems;
+            }
+        }
+    }
+    return problems;
+}
+
 QStringList declaredParamNames(const QList<ShaderRegistry::ParameterInfo>& params)
 {
     QStringList declared;

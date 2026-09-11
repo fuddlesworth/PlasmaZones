@@ -341,7 +341,10 @@ void ActionRegistry::registerBuiltinsAppearance()
                 return p.contains(ActionParam::Chain) && p.value(ActionParam::Chain).isArray();
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params)},
+        // PresetId is nested here, `{packId: presetId}`, mirroring how Params is
+        // already nested per pack: one chain can carry a preset on one layer
+        // and hand-tuned values on the next.
+        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params), QString(ActionParam::PresetId)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")}},
         .category = QStringLiteral("borderAppearance"),

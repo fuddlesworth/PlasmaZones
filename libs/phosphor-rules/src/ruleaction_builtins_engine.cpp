@@ -457,10 +457,12 @@ void ActionRegistry::registerBuiltinsEngine()
                 return hasNonEmptyString(p, ActionParam::Event);
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params)},
+        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params),
+                        QString(ActionParam::PresetId)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Event), .kind = QString(ParamKind::AnimationEvent)},
-                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("shaderEffect")}},
+                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("shaderEffect")},
+                   P{.key = QString(ActionParam::PresetId), .kind = QStringLiteral("shaderPreset")}},
         .category = QStringLiteral("animation"),
         .displayOrder = 0,
         .tags = {QString(Tag::Animation), QString(Tag::Effect)},
@@ -603,12 +605,15 @@ void ActionRegistry::registerBuiltinsEngine()
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring
         // OverrideAnimationShader; the inline ParameterEditor writes it.
-        .allowedKeys = {QString(ActionParam::LayoutId), QString(ActionParam::EffectId), QString(ActionParam::Params)},
+        .allowedKeys = {QString(ActionParam::LayoutId), QString(ActionParam::EffectId), QString(ActionParam::Params),
+                        QString(ActionParam::PresetId)},
         .domain = ActionDomain::Context,
-        // Node first, shader second: the node decides what the shader applies
-        // to, the same order the animation action lists Event before EffectId.
+        // Node first, shader second, preset third: the node decides what the
+        // shader applies to and the preset tunes the shader, the same order the
+        // animation action lists Event before EffectId.
         .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("overlayLayout")},
-                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")}},
+                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")},
+                   P{.key = QString(ActionParam::PresetId), .kind = QStringLiteral("shaderPreset")}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 0,
         .tags = {QString(Tag::Overlay)},

@@ -586,6 +586,115 @@ private Q_SLOTS:
             QVERIFY2(r.report.contains(QStringLiteral("bufferWrap value 'tile'")), qPrintable(r.report));
         }
     }
+
+    // ── Preset lints ────────────────────────────────────────────────────
+    //
+    // A preset is a partial tuning stored against a pack, so the only things
+    // decidable offline are that its keys name declared parameters and that
+    // its values fit those parameters' declared types and ranges. Everything
+    // below asserts exactly one of those, plus the two cases that must NOT
+    // draw a diagnostic.
+
+    void presetNamingAnUndeclaredParameterIsRejected()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-unknown"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Odd"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-unknown"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    void presetValueOutsideTheDeclaredRangeIsRejected()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject param = animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0);
+        param.insert(QStringLiteral("min"), 0.0);
+        param.insert(QStringLiteral("max"), 2.0);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-range"));
+        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("TooFast"), QJsonObject{{QStringLiteral("speed"), 9.0}});
+        presets.insert(QStringLiteral("TooSlow"), QJsonObject{{QStringLiteral("speed"), -1.0}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-range"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("below its declared minimum")), qPrintable(r.report));
+    }
+
+    void presetValueOfTheWrongTypeIsRejected()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-type"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 1),
+                              animationParam(QStringLiteral("on"), QStringLiteral("bool"), true)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Bad"),
+                       QJsonObject{{QStringLiteral("count"), QStringLiteral("lots")},
+                                   {QStringLiteral("on"), QStringLiteral("yes")}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-type"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("non-numeric value")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("non-boolean")), qPrintable(r.report));
+    }
+
+    void aValidPresetDrawsNoDiagnostic()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject param = animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0);
+        param.insert(QStringLiteral("min"), 0.0);
+        param.insert(QStringLiteral("max"), 2.0);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-good"));
+        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Gentle"), QJsonObject{{QStringLiteral("speed"), 0.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-good"), obj);
+        // "preset '" is the diagnostic prefix; a bare "preset" would also match
+        // the pack name in the report header.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
+    }
+
+    void aPresetMayOmitParameters()
+    {
+        // A preset is a PARTIAL tuning by design: what it says nothing about
+        // falls back to the parameter's default. Demanding completeness would
+        // make the common case (retune one slider, save) impossible to express.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-partial"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0),
+                              animationParam(QStringLiteral("glow"), QStringLiteral("float"), 0.5)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("OnlySpeed"), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-partial"), obj);
+        // "preset '" is the diagnostic prefix; a bare "preset" would also match
+        // the pack name in the report header.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
+    }
 };
 
 QTEST_MAIN(TestPackValidators)

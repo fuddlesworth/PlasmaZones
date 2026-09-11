@@ -39,6 +39,17 @@ namespace ActionParam {
 inline constexpr QLatin1StringView Event{"event"};
 inline constexpr QLatin1StringView EffectId{"effectId"};
 inline constexpr QLatin1StringView Params{"params"};
+// The named parameter preset an action's `Params` are deltas against, shared by
+// every action that carries a uniform blob: OverrideAnimationShader,
+// OverrideOverlayShader and OverrideDecorationChain. Absent or empty means the
+// action's own params are the whole tuning.
+//
+// Resolved against the pack the action names, so an id belonging to another
+// pack resolves to nothing and the action falls back to its own params — the
+// same degradation an assignment tree gets. For the decoration chain it is a
+// nested `{packId: presetId}` object, mirroring how that action's `Params` is
+// already nested per pack.
+inline constexpr QLatin1StringView PresetId{"presetId"};
 inline constexpr QLatin1StringView Curve{"curve"};
 inline constexpr QLatin1StringView DurationMs{"durationMs"};
 // The shared SINGLE-PAYLOAD key: any action whose whole payload is one scalar

@@ -831,6 +831,9 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                 // Optional shader uniform overrides — empty when the rule
                 // overrides only the shader id (shader defaults apply).
                 overlay.shaderParams = shaderAction->params.value(PWR::ActionParam::Params).toObject().toVariantMap();
+                // Optional preset the params above are deltas against, the same
+                // shape a tree node carries.
+                overlay.shaderPresetId = shaderAction->params.value(PWR::ActionParam::PresetId).toString();
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayStyle))) {
                 // Wire token → OverlayDisplayMode int so consumers compare against

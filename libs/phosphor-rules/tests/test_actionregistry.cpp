@@ -434,6 +434,7 @@ private Q_SLOTS:
             QStringLiteral("screenId"),
             QStringLiteral("virtualDesktop"),
             QStringLiteral("decorationChain"),
+            QStringLiteral("shaderPreset"),
         };
         const ActionRegistry& reg = ActionRegistry::instance();
         QStringList offenders;
