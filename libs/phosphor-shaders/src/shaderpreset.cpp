@@ -54,14 +54,48 @@ QJsonObject ShaderPreset::toJson() const
     return obj;
 }
 
+bool ShaderPreset::isUsableId(const QString& id)
+{
+    // A preset id becomes a FILENAME on the write side (`<dir>/<id>.json`), so
+    // an id carrying a separator, a parent-directory hop or a NUL escapes the
+    // preset directory the moment the user renames or updates that preset. The
+    // id arrives from a hand-editable file, so this is a system boundary.
+    //
+    // Checked here rather than only at the write site so a malformed id never
+    // reaches the registry at all, and again at the write site, because the
+    // bridge must not depend on an invariant it cannot see.
+    if (id.isEmpty() || id.size() > MaxIdChars) {
+        return false;
+    }
+    if (id == QLatin1String(".") || id == QLatin1String("..")) {
+        return false;
+    }
+    return !id.contains(QLatin1Char('/')) && !id.contains(QLatin1Char('\\')) && !id.contains(QLatin1Char('\0'));
+}
+
 ShaderPreset ShaderPreset::fromJson(const QJsonObject& obj, const QString& fallbackId)
 {
     ShaderPreset preset;
     preset.id = obj.value(QLatin1String(JsonFieldId)).toString();
-    if (preset.id.isEmpty()) {
+    if (!isUsableId(preset.id)) {
+        // Fall back to the filename stem rather than refusing the file: the stem
+        // is a real path component by construction, so it cannot escape, and the
+        // preset stays loadable instead of vanishing over a bad `id` field.
         preset.id = fallbackId;
     }
+    if (!isUsableId(preset.id)) {
+        // Neither the declared id nor the fallback is usable. Leave the id empty
+        // so isValid() refuses it and the caller logs and skips.
+        preset.id.clear();
+        return preset;
+    }
     preset.name = obj.value(QLatin1String(JsonFieldName)).toString();
+    // Bound the name the way the settings app's own rename dialog does. Without
+    // it a hand-written file could put an arbitrarily long single-line name into
+    // every picker row; the UI validator only ever saw names the user typed.
+    if (preset.name.size() > MaxNameChars) {
+        preset.name.truncate(MaxNameChars);
+    }
     preset.packId = obj.value(QLatin1String(JsonFieldPackId)).toString();
     // A present-but-non-object `params` is a corrupt or hand-mangled file. Take
     // it as empty rather than as "no parameters": the caller checks isValid()

@@ -71,6 +71,12 @@ int migrateLegacyOverlayPresets(const QString& root)
     }
 
     const QString targetDir = userPresetDirectory(root, ShaderFamily::Overlay);
+    // Hoisted: the whole migration aborts if this fails, so nothing depended on
+    // it running once per candidate file.
+    if (!QDir().mkpath(targetDir)) {
+        qCWarning(lcPresetLoader) << "Cannot create the overlay preset directory, aborting migration:" << targetDir;
+        return 0;
+    }
     int migrated = 0;
 
     for (const QString& fileName : candidates) {
@@ -80,6 +86,15 @@ int migrateLegacyOverlayPresets(const QString& root)
         if (!source.open(QIODevice::ReadOnly | QIODevice::Text)) {
             qCWarning(lcPresetLoader) << "Legacy preset will not open, leaving it:" << sourcePath
                                       << source.errorString();
+            continue;
+        }
+        // Same per-file cap the rest of the preset path inherits from
+        // DirectoryLoader. This scan runs at startup in three processes over a
+        // user-writable directory, and read-all had no bound at all.
+        if (source.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
+            qCWarning(lcPresetLoader) << "Legacy preset is larger than"
+                                      << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes
+                                      << "bytes, leaving it:" << sourcePath;
             continue;
         }
         QJsonParseError parseError{};
@@ -101,7 +116,12 @@ int migrateLegacyOverlayPresets(const QString& root)
         ShaderPreset preset;
         // Derived, not random: two processes racing this migration must land on
         // the same target path, or the user ends up with the preset twice.
-        preset.id = QUuid::createUuidV5(legacyPresetNamespaceUuid(), fileName).toString();
+        //
+        // WithoutBraces because this id becomes a filename below, and CLAUDE.md
+        // reserves the braced spelling for everything that is not a filesystem
+        // path. It also makes the id identical to the file's stem, so the
+        // loader's stem fallback and the declared `id` field agree.
+        preset.id = QUuid::createUuidV5(legacyPresetNamespaceUuid(), fileName).toString(QUuid::WithoutBraces);
         preset.name = obj.value(QLatin1String(LegacyFieldName)).toString();
         if (preset.name.isEmpty()) {
             preset.name = QFileInfo(fileName).completeBaseName();

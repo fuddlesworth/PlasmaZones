@@ -83,6 +83,22 @@ QString ShaderPresetBridge::presetDirectory() const
 
 bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
 {
+    // Guard the id here as well as at the parse boundary. The id reaching this
+    // point came from the registry, which means it came from a file the user can
+    // hand-edit, and the next line concatenates it into a filesystem path — so
+    // `"id": "../../../../.config/plasmazones/config"` would have written preset
+    // JSON over an arbitrary file the moment the user pressed Rename. The
+    // library refuses such an id on load now, but this bridge must not depend on
+    // an invariant it cannot see, the same reason acceptableShaderEffectId()
+    // exists alongside the schema's own bound.
+    if (!PhosphorShaders::ShaderPreset::isUsableId(preset.id)) {
+        const QString error = PhosphorI18n::tr("That preset has an unusable name on disk.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to write a preset whose id is not a safe path component:"
+                            << preset.id;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+
     const QString dir = presetDirectory();
     if (!QDir().mkpath(dir)) {
         const QString error = PhosphorI18n::tr("Could not create the preset folder.", "@info");
@@ -133,7 +149,12 @@ QString ShaderPresetBridge::savePreset(const QString& packId, const QString& nam
     // A fresh UUID, never derived from the name: renaming must not break the
     // assignments pointing at this preset, so the identity cannot come from
     // anything the user can edit.
-    preset.id = QUuid::createUuid().toString();
+    //
+    // WithoutBraces because this id is also the filename `commit()` builds, and
+    // CLAUDE.md reserves the braced spelling for everything that is not a
+    // filesystem path. It also makes the id equal the file's stem, so the
+    // loader's stem fallback and the declared `id` field cannot disagree.
+    preset.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     preset.name = name.trimmed();
     preset.packId = packId;
     preset.params = params;

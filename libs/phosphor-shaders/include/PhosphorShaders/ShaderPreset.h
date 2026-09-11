@@ -116,6 +116,23 @@ struct PHOSPHORSHADERS_EXPORT ShaderPreset
     /// pack-declared one, which has no file of its own.
     QString sourcePath;
 
+    /// Longest display name `fromJson` keeps, matching the cap the settings
+    /// app's rename dialog applies to a typed name. Counted in UTF-16 units,
+    /// the same unit `QString::size()` and that dialog use.
+    static constexpr qsizetype MaxNameChars = 128;
+
+    /// Longest id `isUsableId` accepts. An id becomes a path component, so this
+    /// also keeps a pathological one out of a filename.
+    static constexpr qsizetype MaxIdChars = 256;
+
+    /// Whether @p id is safe to use as both an identity and a path component.
+    ///
+    /// Rejects empty, over-long, `.`, `..`, and anything containing a path
+    /// separator or a NUL. The write side builds `<dir>/<id>.json`, so an id
+    /// from a hand-editable file is a traversal vector; this is the check that
+    /// closes it at the parse boundary.
+    static bool isUsableId(const QString& id);
+
     bool isValid() const
     {
         return !id.isEmpty() && !packId.isEmpty();
