@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The pointer trail disappeared when you shook the mouse**: shaking the pointer is the gesture that ought to draw the longest trail, and instead the whole trail blinked out in a single frame and stayed out until the shake ended. Plasma magnifies the pointer during a shake by hiding the system cursor and drawing its own larger copy, and PlasmaZones read that hidden system cursor as "there is no pointer here to decorate", so it threw the trail away on every mouse move for as long as the magnification lasted. It now looks at whether there is a cursor image at all, which is the signal that separates a pointer that has genuinely gone from one that another effect is drawing. Under Plasma's zoom the trail still follows the unmagnified pointer rather than the magnified copy, which needs a fix of its own. ([#1097](https://github.com/fuddlesworth/PlasmaZones/pull/1097))
+
 ## [3.4.17] - 2026-09-10
 
 ### Added
