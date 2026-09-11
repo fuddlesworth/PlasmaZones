@@ -344,23 +344,34 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     {
         auto& presets = m_shaderManager.presetStore().registry();
 
-        const auto syncAnimationPresets = [this, &presets]() {
-            const auto effects = m_shaderManager.m_animationShaderRegistry.availableEffects();
+        // Whole-family replace, so a pack uninstalled mid-session has its
+        // presets retracted. A per-pack loop over the packs that still exist
+        // cannot name one that has gone. The declared parameter ranges ride
+        // along; `resolveParams` clamps to them, which is what keeps a preset
+        // value out of a pack's GLSL loop bound unchecked.
+        const auto seed = [&presets](PhosphorShaders::ShaderFamily family, const auto& effects) {
+            QHash<QString, PhosphorShaders::PackPresets> byPack;
+            QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
             for (const auto& effect : effects) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Animation, effect.id, effect.presets);
+                byPack.insert(effect.id, effect.presets);
+                bounds.insert(effect.id, PhosphorShaders::presetBoundsFrom(effect.parameters));
             }
+            presets.setPackPresetsForFamily(family, byPack, bounds);
         };
-        const auto syncSurfacePresets = [this, &presets]() {
-            const auto effects = m_surfaceShaderRegistry.availableEffects();
-            for (const auto& effect : effects) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Surface, effect.id, effect.presets);
-            }
+
+        // `seed` is captured BY VALUE: these three are connected to registry
+        // signals below and outlive this block, so a reference to it would
+        // dangle. Its own capture of `presets` is a reference to the store's
+        // registry, which outlives the effect's wiring.
+        const auto syncAnimationPresets = [this, seed]() {
+            seed(PhosphorShaders::ShaderFamily::Animation,
+                 m_shaderManager.m_animationShaderRegistry.availableEffects());
         };
-        const auto syncPointerPresets = [this, &presets]() {
-            const auto effects = m_pointerPass.registry().availableEffects();
-            for (const auto& effect : effects) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Pointer, effect.id, effect.presets);
-            }
+        const auto syncSurfacePresets = [this, seed]() {
+            seed(PhosphorShaders::ShaderFamily::Surface, m_surfaceShaderRegistry.availableEffects());
+        };
+        const auto syncPointerPresets = [this, seed]() {
+            seed(PhosphorShaders::ShaderFamily::Pointer, m_pointerPass.registry().availableEffects());
         };
 
         syncAnimationPresets();

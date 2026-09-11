@@ -72,11 +72,16 @@ public:
 
     /// The preset @p presetId names, searched across every pack in @p family.
     ///
-    /// Ids are unique within a family (a user preset is a UUID, a pack-declared
-    /// one is namespaced by its pack), so the pack is recoverable from the
-    /// preset rather than required to find it. The WRITE side needs this: it
-    /// acts on a preset the user picked by id and has to learn which pack it
-    /// belongs to in order to write it back.
+    /// Ids are MEANT to be unique within a family — the settings app mints a
+    /// UUID for each user preset, and a pack-declared id is namespaced by its
+    /// pack. Nothing enforces it, though: a user preset's id comes from a
+    /// hand-editable file, so two packs can carry the same id. The search is
+    /// therefore over sorted keys, so the answer is at least the SAME one on
+    /// every run rather than whichever bucket QHash happened to yield first;
+    /// `setUserPresets` warns when it sees a duplicate.
+    ///
+    /// The WRITE side needs this: it acts on a preset the user picked by id and
+    /// has to learn which pack it belongs to in order to write it back.
     ///
     /// Prefer the pack-scoped `preset()` for RESOLUTION, which must not match a
     /// preset belonging to a different pack than the assignment resolved to.
@@ -88,6 +93,13 @@ public:
     /// With an empty @p presetId, or one naming no preset, this is just
     /// @p deltas — so a consumer can route EVERY assignment through here and
     /// stop special-casing "has a preset".
+    ///
+    /// Every value returned is clamped to the pack's declared range when the
+    /// seeding consumer supplied one (see `setPackPresets`). This is the single
+    /// funnel preset values leave by, so clamping here covers a pack-declared
+    /// preset, a hand-written user preset file and an assignment's own deltas
+    /// alike. Unclamped, any of the three could drive a pack's GLSL loop bound
+    /// past what the shader can afford.
     QVariantMap resolveParams(ShaderFamily family, const QString& packId, const QString& presetId,
                               const QVariantMap& deltas) const;
 
@@ -99,7 +111,28 @@ public:
     /// when the resulting set actually differs, because that signal drops the
     /// compiled-pack caches in the compositor and a reload that changed nothing
     /// must not cost a recompile.
-    void setPackPresets(ShaderFamily family, const QString& packId, const PackPresets& presets);
+    ///
+    /// @p bounds are the pack's declared parameter ranges, which `resolveParams`
+    /// clamps every value to. Build it with `presetBoundsFrom(info.parameters)`
+    /// at the call site — the caller already has the declared parameter list,
+    /// and this library deliberately does not depend on the four pack
+    /// registries. Passing an empty map leaves that pack's values unclamped.
+    void setPackPresets(ShaderFamily family, const QString& packId, const PackPresets& presets,
+                        const PresetValueBounds& bounds = {});
+
+    /// Replace every pack-declared preset for EVERY pack in @p family at once.
+    ///
+    /// Prefer this over looping `setPackPresets`, because a loop driven by the
+    /// packs that currently exist can never name a pack that has GONE: it
+    /// simply does not visit it, so an uninstalled pack's presets survive for
+    /// the process lifetime and keep being offered by `presetsFor` and returned
+    /// by `presetById`. This overload diffs against everything already held for
+    /// the family, so a vanished pack is retracted by construction — the same
+    /// property `setUserPresets` has, and for the same reason.
+    ///
+    /// Emits `presetsChanged` once per pack whose set actually changed.
+    void setPackPresetsForFamily(ShaderFamily family, const QHash<QString, PackPresets>& byPackId,
+                                 const QHash<QString, PresetValueBounds>& boundsByPackId = {});
 
     /// Replace every user preset in @p family with @p presets.
     ///
@@ -125,9 +158,19 @@ private:
     /// disturb pack-declared ones.
     QHash<QString, QHash<QString, ShaderPreset>> m_packDeclared;
     QHash<QString, QHash<QString, ShaderPreset>> m_userDefined;
+    /// (family, packId) -> the pack's declared parameter ranges, which
+    /// `resolveParams` clamps to. Seeded beside the pack-declared presets,
+    /// because the consumer doing that already holds the declarations.
+    QHash<QString, PresetValueBounds> m_packBounds;
 
     static QString scopeKey(ShaderFamily family, const QString& packId);
     QList<ShaderPreset> mergedFor(ShaderFamily family, const QString& packId) const;
+    /// Apply one pack's declared ranges to @p values in place.
+    void clampToBounds(const QString& key, QVariantMap& values) const;
+    /// Replace one pack's bucket, returning whether anything changed. Shared by
+    /// the per-pack and whole-family seeding paths so they cannot diverge.
+    bool applyPackBucket(const QString& key, const QString& packId, const PackPresets& presets,
+                         const PresetValueBounds& bounds);
 };
 
 } // namespace PhosphorShaders

@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUuid>
@@ -162,7 +163,14 @@ public:
     {
     }
 
-    ShaderPresetRegistry* registry;
+    // QPointer, not a raw pointer: the registry can be destroyed before this
+    // sink's owning loader is. `ShaderPresetStore` parents both to itself, and
+    // QObject frees children in insertion order, so the registry — constructed
+    // first — dies first. A raw pointer left the destructor below dereferencing
+    // freed memory, and a null check could not see it, because a freed pointer
+    // is not a null one. The store now deletes its loaders up front, so the
+    // ordering is no longer the only thing holding this up.
+    QPointer<ShaderPresetRegistry> registry;
     ShaderFamily family;
 
     std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
@@ -252,10 +260,18 @@ ShaderPresetLoader::~ShaderPresetLoader()
     // Hand the registry an empty set for this family, so tearing a loader down
     // retracts what it published rather than leaving presets behind that no
     // file backs any more. Sequential loaders (tests, a settings window opened
-    // twice) therefore never inherit a prior loader's entries — the
-    // owner-tag problem `CurveLoader` solves with a UUID tag does not arise
-    // here, because a family has exactly one publisher.
-    if (m_sink && m_sink->registry) {
+    // twice) therefore never inherit a prior loader's entries.
+    //
+    // The retraction is whole-family rather than owner-scoped the way
+    // `CurveLoader`'s is, so it is only correct while a family has exactly one
+    // publisher. `ShaderPresetStore::load()` is what guarantees that: it builds
+    // one loader per family and refuses to build a second set. A caller that
+    // constructs its own second loader for a family that already has one would
+    // have the first one's teardown wipe the second one's presets.
+    //
+    // `registry` is a QPointer, so a registry already destroyed reads as null
+    // here instead of being dereferenced.
+    if (m_sink && !m_sink->registry.isNull()) {
         m_sink->registry->setUserPresets(m_sink->family, {});
     }
 }

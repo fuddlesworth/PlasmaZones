@@ -5,9 +5,12 @@
 
 #include <PhosphorShaders/phosphorshaders_export.h>
 
+#include <QHash>
 #include <QJsonObject>
+#include <QPair>
 #include <QString>
 #include <QStringView>
+#include <QVariant>
 #include <QVariantMap>
 
 #include <optional>
@@ -30,6 +33,38 @@ enum class ShaderFamily {
 
 /// Wire token for @p family: "animation" / "surface" / "pointer" / "overlay".
 PHOSPHORSHADERS_EXPORT QLatin1StringView shaderFamilyToken(ShaderFamily family);
+
+/// A pack's declared numeric range for one parameter: `{ min, max }`, either of
+/// which may be an invalid QVariant when the pack declares only one side.
+using PresetValueRange = QPair<QVariant, QVariant>;
+
+/// The declared ranges for a pack's parameters, by parameter id.
+///
+/// Preset values are clamped to these before they reach a consumer. A pack's
+/// declared `min`/`max` used to be enforced only by the settings slider, so a
+/// hand-written preset file could put any number into a uniform — and at least
+/// six bundled overlay packs derive a GLSL loop bound from one
+/// (`int octaves = int(p_octaves ...)` feeding `for (i < octaves)`), which makes
+/// an out-of-range value a GPU stall rather than a cosmetic mistake.
+using PresetValueBounds = QHash<QString, PresetValueRange>;
+
+/// Collect `PresetValueBounds` from any family's declared parameter list.
+///
+/// A template because the four families each have their own `ParameterInfo`
+/// type in their own library; all four carry `id`, `minValue` and `maxValue`,
+/// which is all this needs. Lets a caller seeding presets pass the bounds in
+/// the same breath without this library depending on four pack registries.
+template<typename ParameterList>
+PresetValueBounds presetBoundsFrom(const ParameterList& parameters)
+{
+    PresetValueBounds bounds;
+    for (const auto& parameter : parameters) {
+        if (parameter.minValue.isValid() || parameter.maxValue.isValid()) {
+            bounds.insert(parameter.id, PresetValueRange(parameter.minValue, parameter.maxValue));
+        }
+    }
+    return bounds;
+}
 
 /// Inverse of `shaderFamilyToken`, or `std::nullopt` for an unknown token.
 /// A preset file naming a family this build does not know is skipped rather

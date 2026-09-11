@@ -762,38 +762,42 @@ SettingsController::SettingsController(QObject* parent)
         // Push each family's pack-declared presets now, and again on every
         // reload, so a pack dropped in while the window is open brings its
         // presets with it.
-        const auto syncAnimation = [this, &presets]() {
-            const auto effects = m_animationShaderRegistry->availableEffects();
-            for (const auto& effect : effects) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Animation, effect.id, effect.presets);
+        // Whole-family replace, so a pack uninstalled while the window is open
+        // has its presets retracted rather than left on offer. The declared
+        // parameter ranges ride along, because this is the one place holding
+        // both, and `resolveParams` clamps every value it returns to them.
+        //
+        // Captured BY VALUE below: these are connected to registry signals and
+        // outlive this block. `presets` is a reference to the store's registry,
+        // which outlives the controller's wiring.
+        const auto seed = [&presets](PhosphorShaders::ShaderFamily family, const auto& packs) {
+            QHash<QString, PhosphorShaders::PackPresets> byPack;
+            QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
+            for (const auto& pack : packs) {
+                byPack.insert(pack.id, pack.presets);
+                bounds.insert(pack.id, PhosphorShaders::presetBoundsFrom(pack.parameters));
             }
+            presets.setPackPresetsForFamily(family, byPack, bounds);
         };
-        const auto syncSurface = [this, &presets]() {
-            const auto effects = m_surfaceShaderRegistry->availableEffects();
-            for (const auto& effect : effects) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Surface, effect.id, effect.presets);
-            }
+
+        const auto syncAnimation = [this, seed]() {
+            seed(PhosphorShaders::ShaderFamily::Animation, m_animationShaderRegistry->availableEffects());
         };
-        const auto syncPointer = [this, &presets]() {
-            const auto effects = m_pointerShaderRegistry->availableEffects();
-            for (const auto& effect : effects) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Pointer, effect.id, effect.presets);
-            }
+        const auto syncSurface = [this, seed]() {
+            seed(PhosphorShaders::ShaderFamily::Surface, m_surfaceShaderRegistry->availableEffects());
         };
-        const auto syncOverlay = [this, &presets]() {
-            if (!m_overlayShaderRegistry) {
-                return;
-            }
-            const auto shaders = m_overlayShaderRegistry->availableShaders();
-            for (const auto& info : shaders) {
-                presets.setPackPresets(PhosphorShaders::ShaderFamily::Overlay, info.id, info.presets);
-            }
+        const auto syncPointer = [this, seed]() {
+            seed(PhosphorShaders::ShaderFamily::Pointer, m_pointerShaderRegistry->availableEffects());
         };
 
         syncAnimation();
         syncSurface();
         syncPointer();
-        syncOverlay();
+        // Overlay is NOT seeded here: m_overlayShaderRegistry does not exist
+        // yet. It is built roughly a hundred lines below, so seeding it from
+        // this block only ever hit its own null guard and every overlay pack's
+        // shipped presets stayed invisible to the settings UI. It is seeded, and
+        // its reload edge connected, immediately after that registry is built.
 
         connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
                 syncAnimation);
@@ -910,6 +914,30 @@ SettingsController::SettingsController(QObject* parent)
     // the registry is built after that call).
     connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
             &SettingsController::refreshRuleLabels);
+
+    // Seed the overlay family's pack-declared presets, and re-seed on every
+    // rescan. This lives here rather than with the other three families because
+    // the registry it reads did not exist at that point — seeding it there only
+    // ever hit a null guard, which is why an overlay pack's shipped presets
+    // never appeared in the picker even though overlay packs were the one family
+    // that could declare them before this feature existed.
+    if (m_presetStore) {
+        auto& presets = m_presetStore->registry();
+        const auto syncOverlay = [this, &presets]() {
+            if (!m_overlayShaderRegistry) {
+                return;
+            }
+            QHash<QString, PhosphorShaders::PackPresets> byPack;
+            QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
+            for (const auto& info : m_overlayShaderRegistry->availableShaders()) {
+                byPack.insert(info.id, info.presets);
+                bounds.insert(info.id, PhosphorShaders::presetBoundsFrom(info.parameters));
+            }
+            presets.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Overlay, byPack, bounds);
+        };
+        syncOverlay();
+        connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, syncOverlay);
+    }
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject

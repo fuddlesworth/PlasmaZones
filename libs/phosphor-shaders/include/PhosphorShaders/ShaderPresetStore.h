@@ -57,8 +57,15 @@ public:
      * the migration derives its target ids from the old filenames, so two
      * processes racing it agree on the result instead of importing twice.
      *
+     * Calling it twice on the same store is a no-op. The second call does NOT
+     * rebuild: one loader per family is an invariant the loaders depend on,
+     * because their teardown retracts a whole family rather than only what they
+     * themselves published.
+     *
      * @param root  The preset root, defaulting to `standardUserPresetRoot()`.
-     *              Tests pass a temporary directory.
+     *              Tests pass a temporary directory. Must be an absolute path —
+     *              an empty or relative root would resolve against the process
+     *              working directory, and is refused with a warning.
      */
     void load(const QString& root = standardUserPresetRoot());
 
@@ -81,6 +88,11 @@ private:
     // Parent-based ownership: both are QObjects parented to this, so Qt frees
     // them with it. No smart pointer on top, which would be a second owner for
     // the same object.
+    //
+    // The destructor deletes m_loaders explicitly first. Qt's own child
+    // destruction runs in insertion order, which would free this registry —
+    // child #0, built in the init list — before the loaders whose teardown
+    // still talks to it.
     ShaderPresetRegistry* m_registry;
     QHash<int, ShaderPresetLoader*> m_loaders;
     QString m_root;
