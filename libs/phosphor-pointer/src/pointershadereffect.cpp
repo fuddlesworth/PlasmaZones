@@ -181,6 +181,21 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
         e.parameters.append(std::move(p));
     }
 
+    // Pack-declared presets. The image-id set is derived from the declared
+    // parameters rather than hard-coded empty, so if this family ever gains an
+    // `image` parameter type the containment check starts applying on its own
+    // instead of silently trusting pack-declared paths. It is empty today: the
+    // loop above rejects `type: "image"` outright, and pointer packs carry
+    // textures in a separate top-level `textures` array. Unlike the animation
+    // and surface twins this call HAS a real pack directory to anchor against,
+    // because fromJson takes `sourceDir` as an argument.
+    QSet<QString> imageParamIds;
+    for (const ParameterInfo& p : std::as_const(e.parameters)) {
+        if (p.type == QLatin1String("image"))
+            imageParamIds.insert(p.id);
+    }
+    e.presets = PhosphorShaders::parsePackPresets(QDir(sourceDir), imageParamIds, obj, lcPointerEffect());
+
     // Textures: an empty path maps to nothing and is dropped (which shifts
     // later slots, so it is logged), then the survivors are capped at the
     // contract budget. The cap warning counts survivors, not raw entries, so

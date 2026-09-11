@@ -6,9 +6,11 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QSet>
 
 namespace PhosphorAnimationShaders {
 
@@ -189,6 +191,12 @@ QJsonObject AnimationShaderEffect::toJson() const
         }
         if (!texArr.isEmpty())
             obj.insert(QLatin1String("textures"), texArr);
+    }
+    if (!presets.isEmpty()) {
+        QJsonObject presetsObj;
+        for (auto it = presets.constBegin(); it != presets.constEnd(); ++it)
+            presetsObj.insert(it.key(), QJsonObject::fromVariantMap(it.value()));
+        obj.insert(QLatin1String("presets"), presetsObj);
     }
 
     return obj;
@@ -386,6 +394,24 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         e.parameters.append(std::move(p));
     }
 
+    // Pack-declared presets. The image-id set is derived from the declared
+    // parameters rather than hard-coded empty, so if this family ever gains an
+    // `image` parameter type the containment check starts applying on its own
+    // instead of silently trusting pack-declared paths. It is empty today —
+    // animation packs carry textures in a separate top-level `textures` array,
+    // and the schema's parameter `type` enum has no `image` member.
+    //
+    // `sourceDir` is stamped by the registry loader AFTER fromJson returns, so
+    // there is no pack directory to anchor against here. That is harmless while
+    // the set is empty, and fails CLOSED if it ever is not: an unanchored path
+    // is refused and warned about rather than bound.
+    QSet<QString> imageParamIds;
+    for (const ParameterInfo& p : std::as_const(e.parameters)) {
+        if (p.type == QLatin1String("image"))
+            imageParamIds.insert(p.id);
+    }
+    e.presets = PhosphorShaders::parsePackPresets(QDir(e.sourceDir), imageParamIds, obj, lcAnimationShader());
+
     // Cap the texture list at the contract budget. Surplus entries are
     // silently dropped — the canonical UBO only declares uTexture1..3
     // and exposing more would require both runtimes to grow more
@@ -513,6 +539,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
             return false;
     }
     if (textures != other.textures)
+        return false;
+    if (presets != other.presets)
         return false;
     return true;
 }

@@ -26,4 +26,5 @@ endfunction()
 
 phosphorshaders_add_test(test_baseuniformprofile)
 phosphorshaders_add_test(test_pixelunits)
+phosphorshaders_add_test(test_shaderpresets)
 phosphorshaders_add_test(test_shaderregistry)

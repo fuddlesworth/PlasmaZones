@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorShaders/ShaderPresetParse.h>
 
 #include <QJsonObject>
 #include <QList>
@@ -286,6 +287,14 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
         }
     };
     QList<TextureSlot> textures;
+
+    /// Pack-declared named parameter presets: preset name -> { paramId -> value }.
+    /// Read-only tunings the pack author ships, offered in the same picker as
+    /// the user's own presets and resolved through the shared preset registry.
+    /// A preset names a subset of `parameters`; ids this effect does not
+    /// declare are inert at resolve time, so parsing keeps them and the offline
+    /// pack validator is where an author hears about a typo.
+    PhosphorShaders::PackPresets presets;
 
     bool isValid() const
     {

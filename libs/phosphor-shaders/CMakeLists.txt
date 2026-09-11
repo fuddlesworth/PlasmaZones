@@ -78,6 +78,10 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/ShaderEntryPoint.h
     include/PhosphorShaders/ShaderIncludeResolver.h
     include/PhosphorShaders/ShaderParamPreamble.h
+    include/PhosphorShaders/ShaderPreset.h
+    include/PhosphorShaders/ShaderPresetLoader.h
+    include/PhosphorShaders/ShaderPresetParse.h
+    include/PhosphorShaders/ShaderPresetRegistry.h
     include/PhosphorShaders/ShaderRegistry.h
 )
 
@@ -93,6 +97,10 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
     include/PhosphorShaders/ShaderParamPreamble
+    include/PhosphorShaders/ShaderPreset
+    include/PhosphorShaders/ShaderPresetLoader
+    include/PhosphorShaders/ShaderPresetParse
+    include/PhosphorShaders/ShaderPresetRegistry
     include/PhosphorShaders/ShaderRegistry
 )
 
@@ -102,6 +110,10 @@ set(phosphorshaders_SRCS
     src/shaderentrypoint.cpp
     src/shaderincluderesolver.cpp
     src/shaderparampreamble.cpp
+    src/shaderpreset.cpp
+    src/shaderpresetloader.cpp
+    src/shaderpresetparse.cpp
+    src/shaderpresetregistry.cpp
     src/shaderregistry.cpp
     src/shaderregistry_params.cpp
     src/shaderregistry_parse.cpp
