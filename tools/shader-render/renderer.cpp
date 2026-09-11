@@ -621,8 +621,13 @@ int Renderer::render(const RenderOptions& opts)
     window->contentItem()->setSize(QSizeF(size));
 
     const QStringList includePaths = shaderIncludePaths();
-    const QString vertexShaderPath = resolveZoneVertexShader(opts.metadata.vertexShader, includePaths);
-    if (vertexShaderPath.isEmpty()) {
+    // A pointer pack does not use zone.vert: it either declares its own vertex
+    // stage or takes the runtime's built-in fullscreen quad, and installPointerPack
+    // below sets whichever applies. Probing for zone.vert here would only emit a
+    // warning about a file the pack never wanted.
+    const QString vertexShaderPath =
+        opts.pointer.enabled ? QString() : resolveZoneVertexShader(opts.metadata.vertexShader, includePaths);
+    if (!opts.pointer.enabled && vertexShaderPath.isEmpty()) {
         qCWarning(lcRenderer) << "no zone.vert found for shader" << opts.metadata.id
                               << "— neither in the pack dir nor in any include path; previews will fail to link";
     }
@@ -700,6 +705,42 @@ int Renderer::render(const RenderOptions& opts)
             runtimeZones[z].isHighlighted = (z == stillIdx);
     }
 
+    // ── Pointer mode ─────────────────────────────────────────────
+    // A pointer pack reads the POINTER uniform tail and nothing from the zone
+    // extension, and the two cannot both be installed: setUniformExtension
+    // holds one. Built before the zone extension is pushed so the branch below
+    // installs exactly one of them.
+    std::shared_ptr<PhosphorPointerShaders::PointerUniformExtension> pointerExt;
+    std::unique_ptr<PointerDriver> pointerDriver;
+    if (opts.pointer.enabled) {
+        // Re-assemble the fragment the POINTER way, replacing the zone scaffold,
+        // include paths, parameter preamble and vertex stage installed above. Done
+        // before the uniform extension so a parse failure leaves the zone path
+        // standing rather than half-swapping the two.
+        PointerShaderEffectRef parsed;
+        if (!installPointerPack(*effect, opts.metadataPath, parsed)) {
+            qCWarning(lcRenderer) << "pointer pack" << opts.metadata.id
+                                  << "could not be installed; refusing to render it as an overlay pack";
+            return 1;
+        }
+        pointerExt = std::make_shared<PhosphorPointerShaders::PointerUniformExtension>();
+        pointerDriver = std::make_unique<PointerDriver>(opts.pointer, physicalSize, dpr);
+        pointerDriver->loadPackContract(opts.metadataPath);
+        if (pointerDriver->needsCursor()) {
+            // SRB binding 7 is uTexture0 for the other families and
+            // uCursorSprite for this one, so slot 0 is where the sprite goes.
+            // Bound only for a pack that asked for it, because the contract ties
+            // uPointerFlags.x to the sampler actually being bound.
+            const QImage sprite = pointerDriver->cursorSprite();
+            if (!sprite.isNull()) {
+                effect->setUserTexture(0, sprite);
+            } else {
+                qCWarning(lcRenderer) << "pack declares needsCursor but no cursor sprite was built;"
+                                      << "it will render its no-sprite fallback";
+            }
+        }
+    }
+
     zoneExt->updateFromZones(runtimeZones);
     // Push the same scale the daemon's ZoneShaderItem does. It is provably
     // 1.0 today because the render target's DPR is pinned to 1.0 above, which
@@ -711,7 +752,11 @@ int Renderer::render(const RenderOptions& opts)
     if (!zoneExt->setScale(static_cast<float>(dpr))) {
         qCWarning(lcRenderer) << "zone scale" << dpr << "was rejected; previews will use the default 1.0 scale";
     }
-    effect->setUniformExtension(zoneExt);
+    if (pointerExt) {
+        effect->setUniformExtension(pointerExt);
+    } else {
+        effect->setUniformExtension(zoneExt);
+    }
 
     // Initial zone counts. For the cycling schedule, highlightedCount and
     // per-zone isHighlighted flags are updated inside the frame loop — see
@@ -723,7 +768,14 @@ int Renderer::render(const RenderOptions& opts)
     // halo/chroma/text effects — an empty binding makes them silently absent.
     effect->setLabelsImage(buildLabelsImage(opts.zones, size));
 
-    seedShaderEffect(*effect, opts.metadata);
+    // Overlay seeding only. In pointer mode installPointerPack has already set the
+    // source, the buffers and the parameters through the pointer registry's own
+    // slot allocation, and this would overwrite all three with the overlay
+    // spelling — the fragment would come back with no pointer main() and every
+    // p_<id> would read a lane nothing was written to.
+    if (!opts.pointer.enabled) {
+        seedShaderEffect(*effect, opts.metadata);
+    }
 
     // Surface compile failures so a silent empty-frame loop isn't the first
     // sign something went wrong.
@@ -754,6 +806,12 @@ int Renderer::render(const RenderOptions& opts)
             applyHighlightSchedule(i, opts.frameCount, runtimeZones, *zoneExt, *effect, lastSlice);
         }
 
+        if (pointerDriver && pointerExt) {
+            QPointF iMouseLogical;
+            pointerDriver->applyFrame(i, opts.fps, *pointerExt, iMouseLogical);
+            effect->setIMouse(iMouseLogical);
+        }
+
         if (opts.audio) {
             opts.audio->fillFrame(i, opts.fps, spectrum);
             effect->setAudioSpectrum(spectrum);
@@ -771,9 +829,21 @@ int Renderer::render(const RenderOptions& opts)
         control->sync();
         control->render();
 
-        const QImage flipped = captureFrame(control.get(), rhi, colorTex, physicalSize, i);
+        QImage flipped = captureFrame(control.get(), rhi, colorTex, physicalSize, i);
         if (flipped.isNull()) {
             return 1;
+        }
+        // POINTER RENDERS GET ONE MORE FLIP. This path's fragment stage receives
+        // a `uv` whose y runs opposite to the pointer contract's top-down canvas,
+        // so a pack draws its whole world mirrored: positions, and equally its
+        // own sense of up (a sweep that starts at twelve o'clock, a light from
+        // the upper left). Correcting the uniforms on the way in fixes only the
+        // positions and leaves every intrinsic direction inverted, which makes
+        // the render a mirror image that is easy to read as correct. Flipping the
+        // finished frame corrects all of it at once, and the pack is judged the
+        // way the compositor will draw it. Zone renders are unaffected.
+        if (opts.pointer.enabled) {
+            flipped = flipVertical(flipped);
         }
         // Hand the unscaled frame at --resolution to the sink; the sink's
         // writeFrame() resizes to --output-size in one pass (PNG and ffmpeg

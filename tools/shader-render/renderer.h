@@ -7,6 +7,7 @@
 #include "encoder.h"
 #include "layoutloader.h"
 #include "metadataloader.h"
+#include "pointerdriver.h"
 
 #include <QSize>
 #include <QString>
@@ -41,6 +42,14 @@ struct RenderOptions
     /// driving thumbnail capture and the caller wants a deterministic hero
     /// shot. A number that matches nothing warns and falls back to cycling.
     int stillHighlightZone = 0;
+
+    /// Pointer-pack mode. When `pointer.enabled`, the renderer drives a
+    /// synthetic pointer and binds the POINTER uniform tail instead of the zone
+    /// one: a pointer pack reads nothing from the zone extension, and with no
+    /// pointer tail every position uniform is zero, so a click pack correctly
+    /// paints nothing and the render comes out empty. Zones are still loaded and
+    /// drawn under it, so a pack can be judged against real content.
+    PointerDriveOptions pointer;
 };
 
 /**
