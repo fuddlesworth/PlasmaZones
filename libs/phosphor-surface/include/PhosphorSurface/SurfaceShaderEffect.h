@@ -331,9 +331,12 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// Pack-declared named parameter presets: preset name -> { paramId -> value }.
     /// Read-only tunings the pack author ships, offered in the same picker as
     /// the user's own presets and resolved through the shared preset registry.
-    /// A preset names a subset of `parameters`; ids this effect does not
-    /// declare are inert at resolve time, so parsing keeps them and the offline
-    /// pack validator is where an author hears about a typo.
+    /// A preset names a subset of `parameters`; ids this effect does not declare
+    /// are inert at resolve time, so parsing keeps them and the offline pack
+    /// validator is where an author hears about a typo. That holds for a typo'd
+    /// id specifically — the validator lints this already-parsed struct, so it can
+    /// only report what parsing kept. A preset parsing drops outright (every value
+    /// a refused texture path) is reported in the runtime log instead.
     PhosphorShaders::PackPresets presets;
 
     bool isValid() const

@@ -14,15 +14,15 @@ namespace PlasmaZones {
  * @file
  * @brief Shared persistence bounds for the three shader-assignment trees.
  *
- * The zone-overlay tree grew these bounds first, and for a while it was the
- * only one that had them: the animation shader tree bounded its writes at the
- * settings controller instead, and the decoration tree bounded nowhere. A
- * controller-side bound covers the settings UI and nothing else — not a
- * settings profile applied through `Store::importFromJson`, not a hand-edited
+ * The zone-overlay tree grew these bounds first, and for a while it was the only
+ * one that had them: the DECORATION tree bounded its writes in its typed setter
+ * instead, and the animation shader tree bounded size nowhere at all. A
+ * setter-side bound covers the settings UI and nothing else — not a settings
+ * profile applied through `Store::importFromJson`, not a hand-edited
  * `config.json`, not a migration writing outside the store — which are exactly
  * the three doors the overlay sanitizer exists for. Three trees with the same
  * shape and three different answers is drift, so the bounds live here once and
- * every tree's sanitizer composes them.
+ * every tree's sanitizer composes them, the overlay one included.
  *
  * What these do NOT do is judge CONTENT. A pack id is never checked against
  * the installed packs and a parameter is never checked against the type its

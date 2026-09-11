@@ -806,10 +806,14 @@ SettingsController::SettingsController(QObject* parent)
         connect(m_pointerShaderRegistry, &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
                 syncPointer);
 
-        m_animationPresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Animation, this);
-        m_surfacePresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Surface, this);
-        m_pointerPresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Pointer, this);
-        m_overlayPresets = new ShaderPresetBridge(*m_presetStore, PhosphorShaders::ShaderFamily::Overlay, this);
+        m_animationPresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Animation, this);
+        m_surfacePresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Surface, this);
+        m_pointerPresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Pointer, this);
+        m_overlayPresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Overlay, this);
     }
 
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
@@ -1094,22 +1098,22 @@ TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
 
 ShaderPresetBridge* SettingsController::animationPresets() const
 {
-    return m_animationPresets;
+    return m_animationPresets.get();
 }
 
 ShaderPresetBridge* SettingsController::surfacePresets() const
 {
-    return m_surfacePresets;
+    return m_surfacePresets.get();
 }
 
 ShaderPresetBridge* SettingsController::pointerPresets() const
 {
-    return m_pointerPresets;
+    return m_pointerPresets.get();
 }
 
 ShaderPresetBridge* SettingsController::overlayPresets() const
 {
-    return m_overlayPresets;
+    return m_overlayPresets.get();
 }
 
 } // namespace PlasmaZones

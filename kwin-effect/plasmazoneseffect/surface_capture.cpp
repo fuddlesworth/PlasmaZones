@@ -812,11 +812,12 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
                 // this function), and the registry lookup copies a
                 // whole SurfaceShaderEffect by value, which this
                 // per-frame path must not pay per pack. The cached
-                // value is the multiplier-folded PRODUCT, so it has
-                // three invalidators: the two m_compiledPacks clears
-                // (a registry hot-reload can change the metadata) and
-                // the blur-scale-multiplier loader in
-                // daemon_settings.cpp.
+                // value is the multiplier-folded PRODUCT, so it is
+                // invalidated by EVERY m_compiledPacks clear (a
+                // registry hot-reload or a preset retune can change
+                // what it folds) plus the blur-scale-multiplier loader
+                // in daemon_settings.cpp. No count is quoted: the set
+                // of clear sites grows.
                 qreal packScale = 0.0;
                 if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
                     packScale = bsIt->second;

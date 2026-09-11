@@ -10,6 +10,7 @@
 // OverlayShaderTree, so this is its only consumer.
 
 #include "settingsschema.h"
+#include "settingsschema_shaderbounds.h"
 
 #include "configdefaults.h"
 #include "core/types/overlayshadertree.h"
@@ -23,21 +24,14 @@ namespace PlasmaZones {
 namespace {
 
 /// A shaderId, a parameter name, and a colour or image-path parameter value
-/// are all short. Well above anything a pack can legitimately declare, and far
-/// below the cost of letting an unbounded string reach the key.
-constexpr int kMaxStringChars = 1024;
-/// A pack's parameters are UBO lanes, and data/schemas/shader-metadata.schema.json
-/// caps a slot at 31 — 32 scalar lanes, 16 colour, 4 image. Comfortably above
-/// any pack that can exist.
-constexpr int kMaxParameters = 64;
-/// One override per layout. Above any plausible layout collection; the point
-/// is that the count is bounded at all.
-constexpr int kMaxOverrides = 1024;
-
-bool overLongString(const QVariant& value)
-{
-    return value.typeId() == QMetaType::QString && value.toString().size() > kMaxStringChars;
-}
+/// are all short. The caps themselves live in settingsschema_shaderbounds.h, shared
+/// with the animation and decoration sanitizers — this file used to keep its own
+/// copies of the same three numbers plus its own over-long-string predicate and
+/// parameter loop, which is the duplication the shared header exists to remove. The
+/// numbers agreed, which is the only reason the duplication was invisible.
+constexpr int kMaxStringChars = kMaxShaderStringChars;
+constexpr int kMaxParameters = kMaxShaderParameters;
+constexpr int kMaxOverrides = kMaxShaderOverrides;
 
 OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
 {
@@ -55,19 +49,9 @@ OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
     // id naming no preset already resolves to.
     if (profile.presetId.size() <= kMaxStringChars)
         out.presetId = profile.presetId;
-    for (auto it = profile.parameters.cbegin(); it != profile.parameters.cend(); ++it) {
-        if (out.parameters.size() >= kMaxParameters)
-            break;
-        if (it.key().size() > kMaxStringChars || overLongString(it.value()))
-            continue;
-        // Every parameter type a pack can declare is one scalar value: float,
-        // int, bool, a colour string, an image path. A map or a list is
-        // nesting no pack produces, so it can only have come from a hand-edit
-        // or a foreign writer.
-        if (it.value().typeId() == QMetaType::QVariantMap || it.value().typeId() == QMetaType::QVariantList)
-            continue;
-        out.parameters.insert(it.key(), it.value());
-    }
+    // The shared bounder, not a fourth copy of the same loop: over-long keys and
+    // values dropped, non-scalar values dropped, the map capped.
+    out.parameters = boundedShaderParams(profile.parameters);
     return out;
 }
 
@@ -130,9 +114,10 @@ QVariant sanitizeOverlayShaderTree(const QVariant& v)
 // ─── Overlays ────────────────────────────────────────────────
 // Zone-overlay shader assignments — one nested JSON blob (baseline +
 // per-layout overrides), persisted as a QVariantMap like the animation
-// ShaderProfileTree entry. Unlike that one it CAN be sanitized: the animation
-// tree cannot round-trip without a CurveRegistry to re-resolve its curves,
-// whereas OverlayShaderTree's own fromJson/toJson needs no registry at all.
+// ShaderProfileTree entry, which is sanitized the same way — both types round-trip
+// with no registry. (The CurveRegistry argument that used to appear here belongs to
+// the MOTION tree, not the animation shader tree, and is not what stops that one
+// being covered; see settingsschema_shadertrees.cpp.)
 void appendOverlayShadersSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;

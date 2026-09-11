@@ -1122,14 +1122,14 @@ private:
     /// invariant block below.
     PlasmaZones::ShaderRegistry* m_overlayShaderRegistry = nullptr;
 
-    /// Preset store plus one QML-facing CRUD bridge per family. The store
-    /// scans with live reload and is seeded from each pack registry, so it is
-    /// declared AFTER those and BEFORE the pages that hand a bridge to QML.
+    /// Preset store plus one QML-facing bridge per family, after the pack registries
+    /// that seed it and before the pages that hand a bridge to QML. Each bridge
+    /// BORROWS the store, hence unique_ptr: a raw child's ~QObject runs after reset.
     std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
-    ShaderPresetBridge* m_animationPresets = nullptr;
-    ShaderPresetBridge* m_surfacePresets = nullptr;
-    ShaderPresetBridge* m_pointerPresets = nullptr;
-    ShaderPresetBridge* m_overlayPresets = nullptr;
+    std::unique_ptr<ShaderPresetBridge> m_animationPresets;
+    std::unique_ptr<ShaderPresetBridge> m_surfacePresets;
+    std::unique_ptr<ShaderPresetBridge> m_pointerPresets;
+    std::unique_ptr<ShaderPresetBridge> m_overlayPresets;
 
     // Shared zone-shader live-preview feed for the overlay-shader browser
     // (T3.1). The backend borrows m_overlayShaderRegistry + m_settings; the

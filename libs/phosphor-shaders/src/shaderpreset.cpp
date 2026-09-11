@@ -26,8 +26,11 @@ QLatin1StringView shaderFamilyToken(ShaderFamily family)
     case ShaderFamily::Overlay:
         return QLatin1StringView("overlay");
     }
-    // Unreachable for a value of the enum; no default label, so adding a
-    // family is a compile error here rather than a silent empty token.
+    // Unreachable for a value of the enum. No `default:` label, so adding a family
+    // makes the switch non-exhaustive — which is a -Wswitch WARNING, not an error:
+    // this project does not build with warnings-as-errors. The trailing return is
+    // what the compiler needs, and it is also the silent empty token a missed
+    // family would get, so treat the warning as the real signal.
     return QLatin1StringView("");
 }
 

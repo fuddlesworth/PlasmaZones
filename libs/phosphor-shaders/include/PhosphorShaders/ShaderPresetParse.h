@@ -40,10 +40,11 @@ using PackPresets = QMap<QString, QVariantMap>;
 /// pack referencing a file it does not ship is rejected later by the existence
 /// checks rather than here.
 ///
-/// @p policy defaults to `Reject`, which is right for everything a PACK FILE
-/// declares: a pack ships its own assets, so an absolute path can only be a
-/// mistake or an escape. Only a value the USER supplied at runtime (a file
-/// picker, D-Bus) may pass `Trust`.
+/// @p policy is REQUIRED here, deliberately — there is no default on this
+/// declaration, so every family has to state its own. `Reject` is right for
+/// everything a PACK FILE declares: a pack ships its own assets, so an absolute
+/// path can only be a mistake or an escape. Only a value the USER supplied at
+/// runtime (a file picker, D-Bus) may pass `Trust`.
 ///
 /// Returns an empty string when the path is refused, and when @p declaredName
 /// is itself empty — an empty declared name is ABSENT, not an escape, and

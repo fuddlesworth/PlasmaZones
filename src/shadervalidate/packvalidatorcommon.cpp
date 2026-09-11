@@ -503,6 +503,7 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
     return reportPresetProblems(out, packDir, presets, toLintParams(declared));
 }
 
+// Build the `p_<id>` name list a pack declares, for the did-you-mean hint.
 QStringList declaredParamNames(const QList<ShaderRegistry::ParameterInfo>& params)
 {
     QStringList declared;

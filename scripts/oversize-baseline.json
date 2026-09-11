@@ -5,7 +5,7 @@
     "data/overlays/nixos-drift/effect.frag": 1358,
     "kwin-effect/handlers/snaphandler.cpp": 1426,
     "kwin-effect/plasmazoneseffect/paint_pipeline.cpp": 2197,
-    "kwin-effect/plasmazoneseffect/plasmazoneseffect.h": 3912,
+    "kwin-effect/plasmazoneseffect/plasmazoneseffect.h": 3914,
     "kwin-effect/plasmazoneseffect/shader_config_dbus.cpp": 1399,
     "kwin-effect/plasmazoneseffect/window_connections.cpp": 1507,
     "kwin-effect/tilinghandler/screenschanged.cpp": 1216,

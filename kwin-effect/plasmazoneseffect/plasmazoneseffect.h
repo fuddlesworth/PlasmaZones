@@ -1610,9 +1610,10 @@ private:
     /// live animation is drawing from (the compositeTexId-0 class of bug). @p target
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
-    /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map, because every
-    ///     compiled pack is about to be recompiled and no composite survives it;
+    /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
+    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map: every compiled
+    ///     pack is about to be recompiled (its PRESET sibling invalidates the fold flags
+    ///     instead, so a corpse keeps the frozen frame its close leg needs);
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
@@ -2047,8 +2048,9 @@ private:
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
 
     /// `m_decorationTree.resolve(path)` with each layer's preset flattened in.
-    /// Every decoration consumer goes through here, so "what does this surface
-    /// render with" has one answer; reading the tree raw skips the preset.
+    /// Every consumer that reads PARAMETERS goes through here, so "what does this
+    /// surface render with" has one answer; reading the tree raw skips the preset.
+    /// (hasDecorationTreeContent reads raw, correctly: no preset gates a chain.)
     /// @p family is `Pointer` for the cursor chain, `Surface` for the rest.
     PhosphorSurfaceShaders::DecorationProfile
     resolveDecorationProfile(const QString& path,

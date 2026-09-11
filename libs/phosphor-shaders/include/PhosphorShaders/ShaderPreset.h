@@ -89,9 +89,14 @@ PHOSPHORSHADERS_EXPORT std::optional<ShaderFamily> shaderFamilyFromToken(QString
  */
 struct PHOSPHORSHADERS_EXPORT ShaderPreset
 {
-    /// Stable id, unique within (family, packId). A user preset uses a UUID
-    /// so a rename never breaks an assignment that points at it; a
-    /// pack-declared preset uses its key in the metadata `presets` block.
+    /// Stable id, MEANT to be unique within (family, packId) — the settings app
+    /// mints a UUID for each user preset so a rename never breaks an assignment
+    /// pointing at it, and a pack-declared preset uses its key in the metadata
+    /// `presets` block. Nothing enforces it, though: a hand-written preset file may
+    /// declare any id, or none, in which case the loader falls back to the
+    /// filename stem. So an id is a UUID when the app created it and arbitrary text
+    /// otherwise; `isUsableId` is what keeps the arbitrary case safe, and
+    /// `setUserPresets` warns when two files claim one id.
     QString id;
 
     /// Display name. Free-form, and NOT an identity — two presets may share

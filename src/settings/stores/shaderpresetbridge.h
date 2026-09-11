@@ -24,9 +24,12 @@ namespace PlasmaZones {
  * exposes the merged list to QML. One instance per family, handed to QML as
  * the `presetBridge` of whichever editor is showing that family's packs.
  *
- * Deliberately shaped like `ShaderSetStore`, its sibling: same slug-and-atomic
- * write discipline, same "name is not identity" rule, same refusal predicate
- * for a rename dialog to gate its Ok button on. The two are different things
+ * Shaped after `ShaderSetStore`, its sibling: same atomic write discipline, same
+ * "name is not identity" rule, same refusal predicate for a rename dialog to gate
+ * its Ok button on. NOT the same on two counts worth knowing — there is no slug
+ * step here (a preset's file is named after its id, which is a minted UUID), and
+ * each set store is parented to the controller owning its domain while these four
+ * are parented to the root controller. The two are different things
  * though, and the distinction is worth keeping straight — a SET is which packs
  * are assigned where across a whole tree, a PRESET is how one pack is tuned.
  * They compose: a set can name assignments that reference presets.
@@ -56,8 +59,9 @@ public:
     ~ShaderPresetBridge() override;
 
     /// Every preset offered for @p packId, user presets first, as
-    /// `{ id, name, readOnly, modified }` rows. `modified` is always false
-    /// here; the editor fills it from its own live values.
+    /// `{ id, name, readOnly }` rows. Whether a preset is MODIFIED is not a
+    /// property of the preset — it depends on what the asking assignment stores —
+    /// so the editor answers that itself from its own delta map.
     Q_INVOKABLE QVariantList presetsFor(const QString& packId) const;
 
     /// The parameters @p presetId stands for, or an empty map when it names
@@ -66,7 +70,9 @@ public:
     Q_INVOKABLE QVariantMap presetParams(const QString& packId, const QString& presetId) const;
 
     /// True when @p name is one `savePreset` / `renamePreset` will accept:
-    /// non-empty, slugifiable, and within the length cap.
+    /// non-empty after trimming, within the length cap, and free of control or
+    /// formatting characters (the name is rendered in a combo row, where a newline
+    /// or a bidi override mangles the row rather than merely looking odd).
     ///
     /// A rename dialog gates its Ok button on this, because an AcceptRole
     /// button dismisses the dialog before the refusal is known. Names are NOT

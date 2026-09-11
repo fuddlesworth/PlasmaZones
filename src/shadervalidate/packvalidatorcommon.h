@@ -139,9 +139,6 @@ QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShader
 // direct libglslang dependency for one code path is a heavier build cost than
 // a tool the GLSL toolchain already ships.
 
-/// Absolute path to a usable glslang binary (`glslangValidator`, else the
-/// `glslang` the project renamed it to), or an empty string when neither is on
-/// PATH. Resolved once per run.
 /// One declared parameter, reduced to what a preset lint needs: its id, its
 /// type token, and whatever range it declares. The four families spell their
 /// ParameterInfo differently (slot vs step, image vs no image), so the lint
@@ -189,6 +186,9 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
 int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
 
+/// Absolute path to a usable glslang binary (`glslangValidator`, else the
+/// `glslang` the project renamed it to), or an empty string when neither is on
+/// PATH. Resolved once per run.
 QString glslangValidatorPath();
 
 /// Compile @p source as @p stage through `glslangValidator` at @p toolPath and

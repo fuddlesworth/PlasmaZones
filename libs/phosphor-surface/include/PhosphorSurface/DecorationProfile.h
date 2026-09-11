@@ -18,10 +18,12 @@
 namespace PhosphorSurfaceShaders {
 
 /// Hard cap on a decoration chain's outer padding, in device-independent px.
-/// Both decoration composers clamp to this — the compositor's window-decoration
-/// builder and the daemon's overlay decoration builder — so a runaway per-pack
-/// padding request can't inflate the render canvas without bound. Shared here so
-/// the two binaries cannot drift onto different caps.
+/// EVERY consumer that composes a decoration chain clamps to this, so a runaway
+/// per-pack padding request cannot inflate the render canvas without bound. Shared
+/// here so they cannot drift onto different caps — and there are more of them than
+/// the two this used to name: the compositor's window-decoration builder, the
+/// daemon's overlay decoration builder, the settings app's decoration preview, and
+/// the shell's own chrome. No count is quoted on purpose; the set grows.
 inline constexpr int kMaxDecorationOuterPaddingPx = 128;
 
 /**

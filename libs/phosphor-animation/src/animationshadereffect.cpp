@@ -402,9 +402,14 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     // and the schema's parameter `type` enum has no `image` member.
     //
     // `sourceDir` is stamped by the registry loader AFTER fromJson returns, so
-    // there is no pack directory to anchor against here. That is harmless while
-    // the set is empty, and fails CLOSED if it ever is not: an unanchored path
-    // is refused and warned about rather than bound.
+    // there is no pack directory to anchor against here. Harmless only while the
+    // set is empty, and NOT fail-closed if it ever is not: `QDir(QString())`
+    // behaves as `QDir(".")`, so `absolutePath()` answers the process working
+    // directory and a relative path would be confined to THAT rather than refused.
+    // `..` and absolute paths are still rejected by the Reject policy, but the
+    // warning would name the CWD as the pack directory. If this family gains an
+    // image parameter type, `fromJson` has to take a `sourceDir` the way the
+    // pointer twin already does.
     QSet<QString> imageParamIds;
     for (const ParameterInfo& p : std::as_const(e.parameters)) {
         if (p.type == QLatin1String("image"))
