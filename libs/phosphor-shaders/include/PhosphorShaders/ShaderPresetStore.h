@@ -77,10 +77,6 @@ public:
     /// Null before `load()`.
     ShaderPresetLoader* loader(ShaderFamily family) const;
 
-    /// The root `load()` was called with, so the write side can compute where
-    /// to put a new preset file without re-deriving the layout.
-    QString root() const;
-
     /// Where a new user preset for @p family belongs.
     QString directoryFor(ShaderFamily family) const;
 

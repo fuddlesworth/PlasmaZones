@@ -98,11 +98,6 @@ ShaderPresetLoader* ShaderPresetStore::loader(ShaderFamily family) const
     return m_loaders.value(static_cast<int>(family), nullptr);
 }
 
-QString ShaderPresetStore::root() const
-{
-    return m_root;
-}
-
 QString ShaderPresetStore::directoryFor(ShaderFamily family) const
 {
     return userPresetDirectory(m_root, family);

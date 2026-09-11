@@ -3,6 +3,10 @@
 
 #include <PhosphorAnimation/ShaderProfile.h>
 
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
+#include <QJsonObject>
+
 #include <QJsonDocument>
 #include <QTest>
 #include <QVariantMap>
@@ -211,6 +215,96 @@ private Q_SLOTS:
         const ShaderProfile filled = ShaderProfile().withDefaults();
         QVERIFY(filled.presetId.has_value());
         QVERIFY(filled.presetId->isEmpty());
+    }
+
+    // ─────── withPresetsResolved ───────
+    //
+    // The animation flatten had no test anywhere: it lived as two hand-written
+    // copies in the daemon and the compositor, so neither tree could reach it.
+    // Now that it is a library function, these pin its contract.
+
+    void testFlattenAppliesThePresetUnderOwnEdits()
+    {
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::ShaderPreset soft;
+        soft.id = QStringLiteral("soft");
+        soft.name = QStringLiteral("Soft");
+        soft.packId = QStringLiteral("dissolve");
+        soft.params = QVariantMap{{QStringLiteral("speed"), 1.0}, {QStringLiteral("glow"), 0.2}};
+        registry.setUserPresets(PhosphorShaders::ShaderFamily::Animation, {soft});
+
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.presetId = QStringLiteral("soft");
+        p.parameters = QVariantMap{{QStringLiteral("speed"), 9.0}};
+
+        const ShaderProfile flat = withPresetsResolved(p, registry);
+        // The preset supplies what the assignment did not touch...
+        QCOMPARE(flat.effectiveParameters().value(QStringLiteral("glow")).toDouble(), 0.2);
+        // ...and the assignment's own edit wins where it did.
+        QCOMPARE(flat.effectiveParameters().value(QStringLiteral("speed")).toDouble(), 9.0);
+        // The reference is CLEARED, which is what makes a second pass a no-op.
+        QVERIFY(!flat.presetId.has_value());
+        QCOMPARE(withPresetsResolved(flat, registry), flat);
+    }
+
+    void testFlattenResolvesAgainstTheWalkedUpPack()
+    {
+        // The pack comes from effectiveEffectId(), which the tree walk-up has
+        // already filled in. A preset is keyed by (family, packId, presetId), so
+        // flattening before the walk-up would look it up against an empty pack id
+        // and resolve nothing — which is why this runs after it, never per node.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::ShaderPreset soft;
+        soft.id = QStringLiteral("soft");
+        soft.name = QStringLiteral("Soft");
+        soft.packId = QStringLiteral("dissolve");
+        soft.params = QVariantMap{{QStringLiteral("glow"), 0.5}};
+        registry.setUserPresets(PhosphorShaders::ShaderFamily::Animation, {soft});
+
+        ShaderProfile inherited;
+        inherited.presetId = QStringLiteral("soft"); // no effectId: pack not resolved yet
+        QVERIFY(withPresetsResolved(inherited, registry).effectiveParameters().isEmpty());
+
+        inherited.effectId = QStringLiteral("dissolve");
+        QCOMPARE(
+            withPresetsResolved(inherited, registry).effectiveParameters().value(QStringLiteral("glow")).toDouble(),
+            0.5);
+    }
+
+    void testFlattenWithAnUnknownPresetKeepsOwnParameters()
+    {
+        // An assignment can outlive the preset it points at. It then renders the
+        // way it did before it pointed at one, rather than losing its own values.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.presetId = QStringLiteral("gone");
+        p.parameters = QVariantMap{{QStringLiteral("speed"), 2.0}};
+
+        const ShaderProfile flat = withPresetsResolved(p, registry);
+        QCOMPARE(flat.effectiveParameters().value(QStringLiteral("speed")).toDouble(), 2.0);
+        QVERIFY(!flat.presetId.has_value());
+    }
+
+    void testFlattenLeavesAProfileWithNoPresetAlone()
+    {
+        PhosphorShaders::ShaderPresetRegistry registry;
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.parameters = QVariantMap{{QStringLiteral("speed"), 2.0}};
+        QCOMPARE(withPresetsResolved(p, registry), p);
+    }
+
+    void testNonStringPresetIdIsDropped()
+    {
+        // Mirror of the decoration twin: a hand-edited config carrying a
+        // non-string presetId must not coerce to the string "42".
+        const QJsonObject obj{{QStringLiteral("effectId"), QStringLiteral("dissolve")},
+                              {QStringLiteral("presetId"), 42}};
+        const ShaderProfile p = ShaderProfile::fromJson(obj);
+        QCOMPARE(*p.effectId, QStringLiteral("dissolve"));
+        QVERIFY(!p.presetId.has_value());
     }
 };
 

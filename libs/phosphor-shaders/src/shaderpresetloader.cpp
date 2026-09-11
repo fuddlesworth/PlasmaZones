@@ -297,25 +297,9 @@ int ShaderPresetLoader::loadFromDirectory(const QString& directory, LiveReload l
     return m_loader->loadFromDirectory(directory, liveReload);
 }
 
-int ShaderPresetLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload,
-                                            PhosphorFsLoader::RegistrationOrder order)
-{
-    return m_loader->loadFromDirectories(directories, liveReload, order);
-}
-
-void ShaderPresetLoader::requestRescan()
-{
-    m_loader->requestRescan();
-}
-
 void ShaderPresetLoader::rescanNow()
 {
     m_loader->rescanNow();
-}
-
-ShaderFamily ShaderPresetLoader::family() const
-{
-    return m_sink->family;
 }
 
 } // namespace PhosphorShaders

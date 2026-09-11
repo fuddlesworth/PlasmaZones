@@ -894,6 +894,13 @@ private Q_SLOTS:
         const DecorationProfile once = withPresetsResolved(p, registry, PhosphorShaders::ShaderFamily::Surface);
         const DecorationProfile twice = withPresetsResolved(once, registry, PhosphorShaders::ShaderFamily::Surface);
         QCOMPARE(once, twice);
+        // The CLEARED reference is what makes a second pass a no-op, so assert it
+        // directly. `once == twice` alone does not: with the reset deleted, the
+        // second flatten re-applies the same preset under the same deltas and the
+        // two still compare equal field for field, so this test passed while the
+        // thing it is named for was gone.
+        QVERIFY(!once.presetIds.has_value());
+        QVERIFY(!twice.presetIds.has_value());
         // The layer's own edit wins over the preset, and stays won.
         QCOMPARE(
             once.effectiveParameters().value(QStringLiteral("border")).toMap().value(QStringLiteral("width")).toInt(),

@@ -7,7 +7,6 @@
 #include <QQuickWindow>
 
 #include "daemon/rendering/zonelabeltexturebuilder.h"
-#include "phosphor_i18n.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorShaders/PixelUnits.h>
@@ -17,14 +16,7 @@
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLoggingCategory>
-#include <QSet>
-#include <QStandardPaths>
 
 #include <algorithm>
 
@@ -35,13 +27,6 @@ Q_LOGGING_CATEGORY(lcShaderPreview, "plasmazones.shaderpreview")
 
 using ShaderInfo = PhosphorShaders::ShaderRegistry::ShaderInfo;
 using ParameterInfo = PhosphorShaders::ShaderRegistry::ParameterInfo;
-
-// Shader preset FILE format keys. These used to alias ZoneJsonKeys::ShaderId/
-// ShaderParams; those layout keys are gone (assignments live in the config
-// OverlayShaderTree now), but existing preset files on disk keep this shape,
-// so the spelling is pinned here.
-constexpr QLatin1String PresetShaderId{"shaderId"};
-constexpr QLatin1String PresetShaderParams{"shaderParams"};
 
 // Mirror ZoneManager::isFixedMode without depending on the editor service: a
 // zone is fixed-geometry when its GeometryMode key equals ZoneGeometryMode::Fixed.

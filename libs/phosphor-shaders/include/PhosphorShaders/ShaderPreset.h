@@ -66,11 +66,6 @@ PresetValueBounds presetBoundsFrom(const ParameterList& parameters)
     return bounds;
 }
 
-/// Inverse of `shaderFamilyToken`, or `std::nullopt` for an unknown token.
-/// A preset file naming a family this build does not know is skipped rather
-/// than guessed at.
-PHOSPHORSHADERS_EXPORT std::optional<ShaderFamily> shaderFamilyFromToken(QStringView token);
-
 /**
  * @brief One named parameter tuning for one shader pack.
  *

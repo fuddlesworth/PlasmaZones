@@ -249,6 +249,28 @@ RowLayout {
     }
 
     QQC2.ToolButton {
+        // The escape hatch from a read-only preset, and the reason a pack-declared
+        // one can be refused an in-place edit at all: copy it into one the user
+        // owns, then edit that. The bridge has always had `duplicatePreset` and the
+        // class doc pointed at this affordance, but no control offered it — so the
+        // refusal above was a dead end rather than a redirection.
+        visible: root._currentIsReadOnly && !root._presetMissing
+        icon.name: "edit-copy"
+        display: QQC2.AbstractButton.IconOnly
+        text: i18nc("@action:button", "Duplicate into an editable preset")
+        Accessible.name: text
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.text: text
+        onClicked: {
+            const i = root._indexOfId(root.presetId);
+            const sourceName = i >= 0 ? root._rows[i].name : "";
+            // Seeded with a "copy" name so the dialog opens in save-as mode rather
+            // than renaming the read-only original.
+            nameDialog.openFor(sourceName.length > 0 ? i18nc("@info default name for a duplicated preset, %1 is the original", "%1 copy", sourceName) : "", "duplicate");
+        }
+    }
+
+    QQC2.ToolButton {
         // Only for a preset the user owns: a pack-declared one belongs to its
         // pack, and the next pack update would overwrite the edit anyway.
         visible: root._modified && !root._currentIsReadOnly && !root._presetMissing
@@ -273,7 +295,7 @@ RowLayout {
         Accessible.name: text
         QQC2.ToolTip.visible: hovered
         QQC2.ToolTip.text: text
-        onClicked: nameDialog.openFor("")
+        onClicked: nameDialog.openFor("", "saveAs")
     }
 
     QQC2.ToolButton {
@@ -286,7 +308,7 @@ RowLayout {
         QQC2.ToolTip.text: text
         onClicked: {
             const i = root._indexOfId(root.presetId);
-            nameDialog.openFor(i >= 0 ? root._rows[i].name : "");
+            nameDialog.openFor(i >= 0 ? root._rows[i].name : "", "rename");
         }
     }
 
@@ -313,18 +335,29 @@ RowLayout {
         }
     }
 
-    // Save-as and rename share one dialog: both ask for exactly a name, and
-    // which one it is is decided by whether it opened with an existing one.
+    // Save-as, rename and duplicate share one dialog: each asks for exactly a
+    // name. Which one it is comes in as an explicit MODE rather than being inferred
+    // from whether the name is empty — that inference made renaming a preset whose
+    // name was somehow blank silently create a new one instead, and it cannot tell
+    // a duplicate (which has both a name and a selected preset) from a rename at
+    // all. Both call sites already know which gesture they are.
     Kirigami.PromptDialog {
         id: nameDialog
 
-        property bool renaming: false
+        /// "rename" | "saveAs" | "duplicate".
+        property string mode: "saveAs"
 
-        title: renaming ? i18nc("@title:window", "Rename Preset") : i18nc("@title:window", "Save Preset")
+        title: {
+            if (mode === "rename")
+                return i18nc("@title:window", "Rename Preset");
+            if (mode === "duplicate")
+                return i18nc("@title:window", "Duplicate Preset");
+            return i18nc("@title:window", "Save Preset");
+        }
         standardButtons: Kirigami.Dialog.NoButton
 
-        function openFor(existingName) {
-            renaming = existingName.length > 0 && root._hasPreset;
+        function openFor(existingName, forMode) {
+            mode = forMode;
             nameField.text = existingName;
             open();
             nameField.forceActiveFocus();
@@ -344,9 +377,18 @@ RowLayout {
         ]
 
         function commit() {
-            if (nameDialog.renaming) {
+            if (nameDialog.mode === "rename") {
                 if (root.presetBridge.renamePreset(root.presetId, nameField.text))
                     root.presetsChanged();
+            } else if (nameDialog.mode === "duplicate") {
+                // Copies the SOURCE preset's own values, not the live ones: the
+                // point is to get an editable copy of what the pack ships, and any
+                // local edits are already preserved as this assignment's deltas.
+                const copyId = root.presetBridge.duplicatePreset(root.packId, root.presetId, nameField.text);
+                if (copyId.length > 0) {
+                    root.presetSelected(copyId);
+                    root.presetsChanged();
+                }
             } else {
                 const id = root.presetBridge.savePreset(root.packId, nameField.text, root.currentValues);
                 if (id.length > 0) {

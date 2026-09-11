@@ -114,16 +114,6 @@ public:
     /// @return the number of presets registered.
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::On);
 
-    /// Scan several directories in caller-declared priority order, for a
-    /// consumer that layers a system preset directory under the user's.
-    int loadFromDirectories(
-        const QStringList& directories, LiveReload liveReload = LiveReload::On,
-        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
-
-    /// Ask for a rescan, coalesced through the 50 ms debounce. Use this when a
-    /// rescan is merely desirable soon; back-to-back calls collapse into one.
-    void requestRescan();
-
     /// Rescan every registered directory synchronously, so the registry
     /// reflects the new state before this returns.
     ///
@@ -132,8 +122,6 @@ public:
     /// and the caller usually wants to select what it just saved. GUI-thread
     /// only, like everything else here.
     void rescanNow();
-
-    ShaderFamily family() const;
 
 private:
     class Sink;

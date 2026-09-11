@@ -34,19 +34,6 @@ QLatin1StringView shaderFamilyToken(ShaderFamily family)
     return QLatin1StringView("");
 }
 
-std::optional<ShaderFamily> shaderFamilyFromToken(QStringView token)
-{
-    if (token == QLatin1StringView("animation"))
-        return ShaderFamily::Animation;
-    if (token == QLatin1StringView("surface"))
-        return ShaderFamily::Surface;
-    if (token == QLatin1StringView("pointer"))
-        return ShaderFamily::Pointer;
-    if (token == QLatin1StringView("overlay"))
-        return ShaderFamily::Overlay;
-    return std::nullopt;
-}
-
 QJsonObject ShaderPreset::toJson() const
 {
     QJsonObject obj;
