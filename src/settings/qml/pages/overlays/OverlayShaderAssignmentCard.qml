@@ -388,28 +388,6 @@ Item {
                     }
                 }
 
-                // Overlays embed the params editor directly rather than going
-                // through PackEditorBody (there is no preview here), so the
-                // preset row is added alongside instead of riding in with it.
-                PresetRow {
-                    Layout.fillWidth: true
-                    visible: root._editShaderId.length > 0
-                    packId: root._editShaderId
-                    presetBridge: settingsController.overlayPresets
-                    presetId: root._editPresetId
-                    currentValues: root._effectiveParams
-                    onPresetSelected: function (id) {
-                        settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
-                        root.refresh();
-                    }
-                    onRevertRequested: {
-                        // Dropping the deltas is the whole revert: every value
-                        // then resolves from the preset again.
-                        root._dropPendingParams();
-                        root._writeNode(root._editShaderId, ({}));
-                    }
-                }
-
                 PZCommon.ShaderParamsEditor {
                     Layout.fillWidth: true
                     visible: root._editShaderId.length > 0
@@ -431,6 +409,31 @@ Item {
                     onResetRequested: function (defaults) {
                         root._dropPendingParams();
                         root._writeNode(root._editShaderId, defaults);
+                    }
+                }
+
+                // Below the parameters, matching the pack browser's detail
+                // dialog and the chain rows, so every place a pack is tuned
+                // agrees about where its presets live. Overlays embed the
+                // params editor directly rather than going through
+                // PackEditorBody (there is no preview here), so the row is
+                // placed alongside instead of riding in with it.
+                PresetRow {
+                    Layout.fillWidth: true
+                    visible: root._editShaderId.length > 0
+                    packId: root._editShaderId
+                    presetBridge: settingsController.overlayPresets
+                    presetId: root._editPresetId
+                    currentValues: root._effectiveParams
+                    onPresetSelected: function (id) {
+                        settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
+                        root.refresh();
+                    }
+                    onRevertRequested: {
+                        // Dropping the deltas is the whole revert: every value
+                        // then resolves from the preset again.
+                        root._dropPendingParams();
+                        root._writeNode(root._editShaderId, ({}));
                     }
                 }
             }

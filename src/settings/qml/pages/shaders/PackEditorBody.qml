@@ -147,22 +147,6 @@ GridLayout {
     columnSpacing: Kirigami.Units.largeSpacing
     rowSpacing: Kirigami.Units.smallSpacing
 
-    // Spans both columns and sits above them: the preset governs every
-    // parameter below it, so it reads as a heading for the editor rather than
-    // as one more control inside it.
-    PresetRow {
-        Layout.fillWidth: true
-        Layout.columnSpan: root.columns
-        packId: root.packId
-        presetBridge: root.presetBridge
-        presetId: root.presetId
-        currentValues: root._effectiveValues
-        onPresetSelected: function (id) {
-            root.presetSelected(id);
-        }
-        onRevertRequested: root.presetRevertRequested()
-    }
-
     PZCommon.ShaderParamsEditor {
         id: paramEditor
 
@@ -226,5 +210,24 @@ GridLayout {
             previewController: root.previewKind === "pointer" ? root.previewController : null
             packId: root.packId
         }
+    }
+
+    // Last child, so the grid places it in the next row's FIRST column: under
+    // the parameters and no wider than they are.
+    //
+    // Matches the pack browser's detail dialog, which puts the same row along
+    // the bottom of its params column. It used to sit above the editor and span
+    // both columns, which ran it under the preview and made one card disagree
+    // with the other about where presets live.
+    PresetRow {
+        Layout.fillWidth: true
+        packId: root.packId
+        presetBridge: root.presetBridge
+        presetId: root.presetId
+        currentValues: root._effectiveValues
+        onPresetSelected: function (id) {
+            root.presetSelected(id);
+        }
+        onRevertRequested: root.presetRevertRequested()
     }
 }
