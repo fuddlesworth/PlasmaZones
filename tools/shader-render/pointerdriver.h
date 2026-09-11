@@ -57,16 +57,20 @@ struct PointerDriveOptions
 
     /// Direction of travel, degrees clockwise from screen right (canvas y runs
     /// down, so 90 is downward). The path is a straight line through the canvas
-    /// centre along this heading, which is what makes the director's
-    /// heading-0-vs-135 comparison a one-flag change.
+    /// centre along this heading, so comparing a pack at two headings is a
+    /// one-flag change. That comparison is how a pack that claims to key off the
+    /// direction of travel is checked: render it at 0 and at 135, and the lit
+    /// pixels must differ materially rather than merely rotating a symmetric
+    /// shape.
     double headingDegrees = 0.0;
 
     /// Travel speed along that line, logical px per second.
     double speedPxPerSec = 900.0;
 
-    /// Hold the pointer still at the canvas centre instead of sweeping. This is
-    /// the case that proves a pack still has an axis with no motion to take one
-    /// from, rather than falling back to a circle.
+    /// Hold the pointer still at the canvas centre instead of sweeping, which is
+    /// how a pack is checked with no recent motion for it to read. A pack that
+    /// derives anything from the stroke takes its fallback path here, and a
+    /// hold-driven pack can be exercised without the pointer drifting.
     bool still = false;
 
     /// Seconds at which the button goes down, and comes back up. A negative
