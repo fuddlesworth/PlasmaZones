@@ -348,6 +348,24 @@ namespace {
 /// levels, and every string's length. Excess is dropped with one warning per
 /// field, and a tree written through here can never grow past these no
 /// matter which door it came in by.
+/// TWO bounders, deliberately, and the names repeat on purpose.
+///
+/// `settingsschema_shaderbounds.cpp` has a `boundedIdList` and a
+/// `boundedDecorationProfile` of its own, and the duplication is not drift left
+/// over from unifying them. They bound different DIRECTIONS: the schema
+/// sanitizer runs on every read and write of the key, which is what covers a
+/// hand-edited `config.json`, while these run inside the setter, which is what
+/// covers every writer reaching the tree through it with a per-field warning
+/// naming the path. Each needs context the other does not have (these take the
+/// path, to name it in the warning; that one takes none), which is why the
+/// signatures differ rather than one calling the other.
+///
+/// What MUST stay in step is the numbers, and only the numbers. A sanitizer that
+/// trimmed harder than the setter would rewrite a tree the setter had just
+/// accepted, so the value would vanish on the next read instead of at the write
+/// that produced it. These three are the authoritative pair of
+/// `kMaxChainPacks` / `kMaxShaderStringChars` over there; change one and change
+/// the other.
 constexpr int kMaxDecorationListEntries = 64;
 constexpr int kMaxDecorationMapKeys = 64;
 constexpr int kMaxDecorationStringChars = 1024;

@@ -319,15 +319,15 @@ private:
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
 
-    // init() phase methods, run in order from the thin init() (daemon.cpp); the
-    // order is load-bearing. Defined across daemon/init_*.cpp, shader_warmup.cpp
-    // and animation_profiles.cpp.
-    void setupShaderWarmBakes();
-
+    // init() phase methods, DECLARED in the order init() (daemon.cpp) calls them,
+    // because that order is load-bearing; each dependency is named at its call
+    // site there. Defined across daemon/init_*.cpp, shader_warmup.cpp and
+    // animation_profiles.cpp.
     /// Build the preset store, hand it to the overlay service, and connect each
     /// pack registry's reload edge. Runs AFTER those registries exist: it seeds
     /// from what they already found rather than waiting for a reload.
     void setupShaderPresets();
+    void setupShaderWarmBakes();
     void initLayoutAndSettingsWiring();
     void initCoreAdaptors();
     void initEnginesAndWiring();

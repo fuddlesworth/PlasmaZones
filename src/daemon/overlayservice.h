@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling (about
-// 1580 lines and still growing with each overlay surface). Treat the figure as
-// indicative only: it goes stale within a release of being written, and the
-// case below is what the exception rests on, not a number.
+// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling and grows
+// with each overlay surface. Deliberately no line count here: it goes stale
+// within a release of being written, and the case below is what the exception
+// rests on. scripts/oversize-baseline.json holds the authoritative figure.
 //
 // The case for it: OverlayService is the single façade every overlay surface
 // goes through — zone overlay, selector, snap assist, OSD, cheatsheet and the

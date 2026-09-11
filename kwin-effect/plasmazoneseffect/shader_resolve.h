@@ -6,8 +6,8 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorRules/WindowQuery.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 
 #include <QColor>
 #include <QString>

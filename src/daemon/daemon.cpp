@@ -321,6 +321,13 @@ bool Daemon::init()
     // registries have already discovered rather than waiting on a reload.
     setupShaderPresets();
     setupShaderWarmBakes();
+    // MUST stay after setupShaderPresets(): this phase hands the settings
+    // object to the overlay service, whose setSettings() is what first applies
+    // the animation shader tree, resolving each profile through the preset
+    // registry. The ctor-time pass runs with that registry null and an empty
+    // tree, so this call is the only one that lands a preset-carrying assignment
+    // at startup. Swap the two and animation presets silently do not apply until
+    // the user's first tree edit.
     initLayoutAndSettingsWiring();
     initCoreAdaptors();
     initEnginesAndWiring();

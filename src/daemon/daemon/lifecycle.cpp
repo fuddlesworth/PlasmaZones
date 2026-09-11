@@ -610,7 +610,7 @@ void Daemon::stop()
     // method dispatch to them before we begin tearing down, and Qt's
     // sender-destruction auto-disconnect cleans up signal wiring when the
     // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those nine would require null-guarding
+    // destruction. Adding detach() to those eleven would require null-guarding
     // every slot body (they currently rely on the "borrowed pointer is
     // always valid" invariant), which is a larger refactor than the
     // defense-in-depth buys. If a future adaptor grows a dtor body that

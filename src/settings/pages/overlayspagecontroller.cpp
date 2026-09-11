@@ -24,6 +24,12 @@ namespace PlasmaZones {
 
 namespace {
 
+/// An overlay preset id is a UUID or a pack-declared preset name. Bounded like
+/// every other string this controller lets reach disk; the schema sanitizer
+/// bounds it again on the way in, and an id naming no preset resolves to the
+/// node own parameters, so dropping one degrades rather than breaks.
+constexpr int kMaxOverlayPresetIdChars = 1024;
+
 QVariantMap profileToMap(const OverlayShaderProfile& profile)
 {
     QVariantMap map;
@@ -215,12 +221,6 @@ bool OverlaysPageController::acceptableShaderEffectId(const QString& effectId) c
     }
     return true;
 }
-
-/// An overlay preset id is a UUID or a pack-declared preset name. Bounded like
-/// every other string this controller lets reach disk; the schema sanitizer
-/// bounds it again on the way in, and an id naming no preset resolves to the
-/// node own parameters, so dropping one degrades rather than breaks.
-constexpr int kMaxOverlayPresetIdChars = 1024;
 
 void OverlaysPageController::setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params)
 {

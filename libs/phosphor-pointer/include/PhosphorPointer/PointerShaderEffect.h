@@ -27,6 +27,24 @@ namespace PhosphorPointerShaders {
  *
  * Field names of `ParameterInfo` and `TextureSlot` mirror the surface and
  * animation families so the settings app's ParameterEditor works unchanged.
+ *
+ * ## Where this type deliberately does NOT mirror its siblings
+ *
+ * No `operator==` and no `toJson`, unlike the animation and surface effects, and
+ * neither absence is a gap:
+ *
+ *  - Nothing compares two pointer effects. Reload change-detection is file-stat
+ *    based, through `effectContentSignature`, and the preset-change edge is
+ *    decided by `ShaderPreset::operator==` inside
+ *    `ShaderPresetRegistry::setPackPresets` — neither path needs effect equality.
+ *  - Nothing serializes one. The animation effect's `toJson` resolves image
+ *    parameters to ABSOLUTE paths while its `fromJson` re-reads them under
+ *    `AbsolutePathPolicy::Reject`, an asymmetry a pointer pack cannot hit because
+ *    it never makes the round trip.
+ *
+ * Adding either for symmetry alone would be churn with no consumer. Written down
+ * because a three-way asymmetry across otherwise parallel families reads as an
+ * omission until someone checks, and this is the record of that check.
  */
 struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
 {

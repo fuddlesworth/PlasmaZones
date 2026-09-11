@@ -107,6 +107,11 @@ public:
     }
     /// The preset chosen for @p packId, or an empty string when that layer
     /// uses none.
+    ///
+    /// Only tests call this today, and it stays anyway: it is one of the
+    /// `effective*` family every field on this value type carries, and the
+    /// alternative is tests reading `presetIds->value(...).toString()` by hand,
+    /// which re-spells the nullopt case at each site. Not dead code to prune.
     QString presetIdFor(const QString& packId) const
     {
         return presetIds ? presetIds->value(packId).toString() : QString();

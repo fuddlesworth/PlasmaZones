@@ -47,6 +47,15 @@ inline constexpr int kMaxShaderParameters = 64;
 
 /// One override per assignable node. Above any plausible layout collection or
 /// event/surface namespace; the point is that the count is bounded at all.
+///
+/// Only the ANIMATION tree can approach it, and only from a hand-edited file.
+/// The decoration tree's keys are surface dot-paths from a fixed, build-time
+/// namespace and `DecorationProfileTree::fromJson` drops every path this build
+/// does not support, so its override count is capped by that namespace long
+/// before this number. The cap is applied to both trees anyway rather than being
+/// made animation-only: the cost is one comparison per override, and a bound
+/// that exists on one of two structurally identical sanitizers is the kind of
+/// asymmetry that reads as an oversight.
 inline constexpr int kMaxShaderOverrides = 1024;
 
 /// Entries in one decoration chain, and keys in one per-pack map.

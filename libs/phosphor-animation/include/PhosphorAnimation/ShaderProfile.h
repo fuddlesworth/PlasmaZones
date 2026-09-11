@@ -83,6 +83,10 @@ public:
     {
         return parameters.value_or(QVariantMap());
     }
+    /// As with the decoration twin's `presetIdFor`, the callers are tests. It
+    /// stays for symmetry with the two accessors above: every field on this
+    /// value type answers the same way, and a reader who finds two of three is
+    /// left wondering which spelling is the intended one.
     QString effectivePresetId() const
     {
         return presetId.value_or(QString());
