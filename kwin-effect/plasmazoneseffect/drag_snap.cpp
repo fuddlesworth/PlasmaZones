@@ -739,8 +739,10 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // persisting it into config. Gated on `!shaderSlotFromRule`: a
                 // per-app rule that set "None" (engaged-empty effectId)
                 // is a deliberate opt-out and must NOT be overridden here.
-                shaderProfile =
-                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
+                // Flattened: REPLACES the flattened profile above.
+                shaderProfile = PhosphorAnimationShaders::withPresetsResolved(
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath),
+                    m_shaderManager.presetStore().registry());
             }
             // Runtime applicability gate — same canonical-predicate check
             // as tryBeginShaderForEvent (resolvedShaderAppliesToEvent): the

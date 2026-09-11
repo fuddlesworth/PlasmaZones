@@ -452,20 +452,22 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         for (auto it = ruleChain->params.constBegin(); it != ruleChain->params.constEnd(); ++it) {
             allPackParams.insert(it.key(), it.value());
         }
-        // A rule's preset is resolved AFTER its params are merged in, so the
-        // params it carries read as deltas on top of the preset — the same
-        // order, and the same meaning, a tree node's do. The resolved profile
-        // was already flattened upstream, so only the rule's own layers need
-        // this.
+        // A rule's preset resolves against the RULE's own params for that pack,
+        // not against the merged map. A tree node's presetId flattens against
+        // that node's own deltas; the merged map here holds the TREE's
+        // already-flattened values, so passing it as the deltas let the tree's
+        // values win every key and the rule's preset became a no-op. Using the
+        // rule's own params makes a rule layer replace the tree layer outright,
+        // which is the per-pack REPLACE semantics stated immediately above.
         for (auto it = ruleChain->presetIds.constBegin(); it != ruleChain->presetIds.constEnd(); ++it) {
             const QString presetId = it.value().toString();
             if (presetId.isEmpty()) {
                 continue;
             }
-            allPackParams.insert(it.key(),
-                                 m_shaderManager.presetRegistry().resolveParams(PhosphorShaders::ShaderFamily::Surface,
-                                                                                it.key(), presetId,
-                                                                                allPackParams.value(it.key()).toMap()));
+            allPackParams.insert(
+                it.key(),
+                m_shaderManager.presetRegistry().resolveParams(PhosphorShaders::ShaderFamily::Surface, it.key(),
+                                                               presetId, ruleChain->params.value(it.key()).toMap()));
         }
     }
     // Shared accent fallback for the plain layers below: the live system

@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimation/ShaderProfile.h>
 
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
 #include <QJsonValue>
 
 namespace PhosphorAnimationShaders {
@@ -78,6 +80,25 @@ void ShaderProfile::overlay(ShaderProfile& dst, const ShaderProfile& src)
 bool ShaderProfile::operator==(const ShaderProfile& other) const
 {
     return effectId == other.effectId && parameters == other.parameters && presetId == other.presetId;
+}
+
+ShaderProfile withPresetsResolved(const ShaderProfile& profile, const PhosphorShaders::ShaderPresetRegistry& presets)
+{
+    if (!profile.presetId || profile.presetId->isEmpty()) {
+        return profile;
+    }
+
+    ShaderProfile out = profile;
+    // The profile's own parameters are the DELTA set, so they are the second
+    // argument: preset values first, this assignment's edits on top. The pack is
+    // `effectiveEffectId()` — resolved by the walk-up before this runs, which is
+    // why flattening must not happen per node.
+    out.parameters = presets.resolveParams(PhosphorShaders::ShaderFamily::Animation, profile.effectiveEffectId(),
+                                           *profile.presetId, profile.effectiveParameters());
+    // Cleared so a second flatten is a no-op rather than a double application
+    // the moment anything overlays two already-flattened profiles.
+    out.presetId.reset();
+    return out;
 }
 
 } // namespace PhosphorAnimationShaders

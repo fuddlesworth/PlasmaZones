@@ -91,27 +91,17 @@ QString curveSlotFor(const QString& eventPath)
 } // namespace
 
 namespace {
-/// Flatten @p profile's preset reference into its parameters.
+/// In-place adaptor over `PhosphorAnimationShaders::withPresetsResolved`.
 ///
-/// Applied at the ONE place a profile leaves the resolver, so the dozen
-/// consumers downstream keep reading `effectiveParameters()` and stay unaware
-/// that presets exist. Clearing `presetId` afterwards is what says "already
-/// applied" — without it a second flatten would be a silent no-op today and a
-/// double application the moment anything overlays two profiles.
-///
-/// A presetId naming no preset for the resolved pack leaves the parameters
-/// untouched, which is the same look the assignment had before it pointed at a
-/// preset. That covers both an assignment outliving its preset and a presetId
-/// inherited across a node that changed the pack.
+/// The flatten itself lives in phosphor-animation beside `ShaderProfile`, so the
+/// daemon and this compositor cannot drift on what "flattened" means — they used
+/// to hold two independent hand-written copies of the same four steps. This
+/// wrapper exists only because the call sites here mutate a profile they already
+/// hold.
 void flattenPreset(PhosphorAnimationShaders::ShaderProfile& profile,
                    const PhosphorShaders::ShaderPresetRegistry& presets)
 {
-    if (!profile.presetId || profile.presetId->isEmpty()) {
-        return;
-    }
-    profile.parameters = presets.resolveParams(PhosphorShaders::ShaderFamily::Animation, profile.effectiveEffectId(),
-                                               *profile.presetId, profile.effectiveParameters());
-    profile.presetId.reset();
+    profile = PhosphorAnimationShaders::withPresetsResolved(profile, presets);
 }
 } // namespace
 

@@ -6,6 +6,7 @@
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -389,15 +390,22 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // that means dropping differs per family, because each bakes parameters
         // at a different point:
         //
-        //   • Animation bakes at transition BEGIN, and resolveAnimationShaderProfile
-        //     re-resolves per transition, so the next one picks the new values up
-        //     on its own. A transition already running keeps the values it began
-        //     with — they are sub-second, and tearing one down mid-flight to
-        //     restyle it would be a visible glitch for no gain.
+        //   • Animation params are baked at the start of each leg, and every leg
+        //     re-resolves its own, so the next transition, desktop switch, peek
+        //     or scroll picks a retuned preset up on its own. A leg already
+        //     running keeps the values it began with, deliberately — they are
+        //     sub-second, and tearing one down mid-blend to restyle it would be
+        //     a visible glitch for no gain. This holds only because every one of
+        //     those consumers flattens its preset at begin; a new animation
+        //     consumer that reads effectiveParameters() WITHOUT flattening
+        //     silently opts out of presets entirely, which is how four of them
+        //     came to ignore presets in the first place.
         //   • Surface bakes parameters INTO the compiled pack, cached in
         //     m_compiledPacks, so a preset change means the same cache drop a
         //     pack edit does.
-        //   • Pointer caches compiled packs the same way.
+        //   • Pointer caches compiled packs the same way, but ALSO holds an
+        //     already-flattened profile, so dropping its cache is not enough —
+        //     see the arm below.
         connect(&presets, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
                 [this](PhosphorShaders::ShaderFamily family, const QString&) {
                     switch (family) {
@@ -409,13 +417,38 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                         ensureGlContextCurrent();
                         m_compiledPacks.clear();
                         m_packBufferScaleCache.clear();
-                        m_surfaceMultipass.clear();
+                        // Invalidate the folds rather than ERASING the entries,
+                        // the way the decoration-tree loader does. A deleted
+                        // window's entry is the intended frame for its close
+                        // leg, and renderSurfaceChainComposite refuses to
+                        // re-capture a corpse — so erasing it left the close
+                        // animation undecorated with no path back. A live window
+                        // recovers on its next fold either way.
+                        for (auto& [windowId, state] : m_surfaceMultipass) {
+                            state.compositeValid = false;
+                            state.prefixValid = false;
+                            state.prefixChainEnd = 0;
+                        }
+                        // These two are stale-TRUE only, and the sibling clear
+                        // sites reset them for the same reason.
+                        m_anyCompiledPackReadsCursor = false;
+                        m_opacityTintFallbackWarned = false;
                         if (KWin::effects) {
                             KWin::effects->addRepaintFull();
                         }
                         updateAllDecorations();
                         break;
                     case PhosphorShaders::ShaderFamily::Pointer:
+                        // Re-push the profile BEFORE dropping the cache. The
+                        // pointer pass stores an ALREADY-FLATTENED profile and
+                        // rebuildChain re-reads that stored copy, so invalidating
+                        // the cache on its own just recompiled the pack from the
+                        // same stale parameter values and the retune never
+                        // reached the screen. Both calls are needed: setProfile
+                        // short-circuits when the flattened profile is unchanged,
+                        // which is exactly when the compiled pack still has to go.
+                        m_pointerPass.setProfile(resolveDecorationProfile(
+                            PhosphorSurfaceShaders::decorationPointerPath(), PhosphorShaders::ShaderFamily::Pointer));
                         m_pointerPass.invalidateShaderCache();
                         break;
                     case PhosphorShaders::ShaderFamily::Animation:
@@ -685,9 +718,16 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                 if (!m_windowAnimator->isEnabled()) {
                     return;
                 }
-                const PhosphorAnimationShaders::ShaderProfile profile =
+                // Flattened after the walk-up, like every other animation
+                // consumer. Without it a preset assigned to the desktop-switch
+                // event was silently ignored here while the daemon's twin
+                // applied it, so the two processes disagreed about the same
+                // assignment — the worst shape of bug for a .so that only
+                // reloads with the session.
+                const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::withPresetsResolved(
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
-                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch);
+                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch),
+                    m_shaderManager.presetStore().registry());
                 const QString effectId = profile.effectiveEffectId();
                 if (effectId.isEmpty()) {
                     return;
@@ -728,8 +768,12 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         QString effectId;
         PhosphorAnimationShaders::ShaderProfile profile;
         if (m_windowAnimator->isEnabled()) {
-            profile = PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
-                                                                         PhosphorAnimation::ProfilePaths::DesktopPeek);
+            // Flattened after the walk-up, for the same reason as the
+            // desktop-switch leg above.
+            profile = PhosphorAnimationShaders::withPresetsResolved(
+                PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                   PhosphorAnimation::ProfilePaths::DesktopPeek),
+                m_shaderManager.presetStore().registry());
             effectId = profile.effectiveEffectId();
         }
         if (effectId.isEmpty()) {

@@ -11,6 +11,10 @@
 
 #include <optional>
 
+namespace PhosphorShaders {
+class ShaderPresetRegistry;
+}
+
 namespace PhosphorAnimationShaders {
 
 /**
@@ -109,5 +113,30 @@ public:
         return !(*this == other);
     }
 };
+
+/// Flatten @p profile's preset reference into its `parameters`.
+///
+/// Returns a copy whose `parameters` hold the preset's values overlaid with the
+/// profile's own edits, and whose `presetId` is cleared to say the preset has
+/// already been applied. Consumers downstream keep reading
+/// `effectiveParameters()` and never have to know a preset was involved.
+///
+/// MUST be called AFTER the tree walk-up, never per node before it: a node can
+/// carry a preset while inheriting its pack from an ancestor, and presets are
+/// keyed by (family, packId, presetId), so flattening early would look the
+/// preset up against an empty pack id and silently resolve nothing. Because it
+/// clears the reference it applied, a second call is a no-op.
+///
+/// A preset id naming no preset keeps the profile's own parameters, which is the
+/// look it had before it pointed at one. That covers an assignment outliving its
+/// preset and an id inherited across a node that changed pack.
+///
+/// The surface family has had this since presets arrived; the animation family
+/// did not, so the same four steps were hand-written in the daemon and the
+/// compositor, and four further animation consumers never flattened at all.
+/// Anything resolving an animation profile should call this rather than
+/// re-deriving it.
+PHOSPHORANIMATION_EXPORT ShaderProfile withPresetsResolved(const ShaderProfile& profile,
+                                                           const PhosphorShaders::ShaderPresetRegistry& presets);
 
 } // namespace PhosphorAnimationShaders

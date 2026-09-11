@@ -97,12 +97,53 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     // updateOverlayWindow, which re-resolves through effectiveOverlayShader and
     // pushes the new uniforms.
     //
-    // Not filtered on the pack the signal names: an overlay window resolves its
-    // pack per screen through the layout, so deciding whether any visible
-    // window uses that pack costs the same walk the refresh does.
-    connect(m_presetRegistry, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this, [this]() {
-        refreshVisibleWindows();
-    });
+    // Not filtered on the PACK the signal names: an overlay window resolves its
+    // pack per screen through the layout, so deciding whether any visible window
+    // uses that pack costs the same walk the refresh does. It IS filtered on the
+    // FAMILY, which the signal also carries and which is free to test — and each
+    // family needs a different arm anyway, because each bakes its parameters
+    // somewhere else.
+    connect(m_presetRegistry, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+            [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                switch (family) {
+                case PhosphorShaders::ShaderFamily::Overlay:
+                    refreshVisibleWindows();
+                    break;
+                case PhosphorShaders::ShaderFamily::Animation:
+                    // The flattened parameters are baked into SurfaceAnimator's
+                    // per-role Config, which is only rebuilt here and on a
+                    // shaderProfileTree edit — so without this arm a retuned
+                    // animation preset never reached the OSD and popup show/hide
+                    // legs until the user happened to edit the tree. "The next
+                    // show re-resolves" is true of the effect, not of here.
+                    if (m_settings) {
+                        applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                    }
+                    break;
+                case PhosphorShaders::ShaderFamily::Surface:
+                    // Mirror of the decorationProfileTreeChanged arm in
+                    // setSettings: a visible popup's decoration chain is
+                    // resolved at show time, so a retune has to be pushed into
+                    // the slots that are already up. OSDs are omitted for the
+                    // same reason they are there — they auto-dismiss sub-second.
+                    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                        const auto& state = it.value();
+                        if (m_zoneSelectorVisible)
+                            applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
+                        if (m_snapAssistVisible)
+                            applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
+                        if (m_layoutPickerVisible)
+                            applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                        if (m_cheatsheetVisible)
+                            applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
+                    }
+                    break;
+                case PhosphorShaders::ShaderFamily::Pointer:
+                    // The daemon does not render the cursor chain; the
+                    // compositor owns it and has its own arm.
+                    break;
+                }
+            });
 }
 
 OverlayShaderProfile
