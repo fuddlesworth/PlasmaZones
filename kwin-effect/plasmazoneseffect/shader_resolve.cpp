@@ -423,7 +423,7 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     // Same nested shape, same reasoning: a rule chain can point one layer at a
     // preset while tuning the next by hand. Resolved against each pack by the
     // consumer, so an id belonging to another pack is inert rather than wrong.
-    out.presetIds = action->params.value(PhosphorRules::ActionParam::PresetId).toObject().toVariantMap();
+    out.presetIds = action->params.value(PhosphorRules::ActionParam::PresetIds).toObject().toVariantMap();
     return out;
 }
 

@@ -672,6 +672,12 @@ private Q_SLOTS:
         // "preset '" is the diagnostic prefix; a bare "preset" would also match
         // the pack name in the report header.
         QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
+        // And a POSITIVE assertion alongside it, because the negative above is
+        // satisfied just as well by the lint never running at all — which is how
+        // three of the four validator arms went unexercised without anyone
+        // noticing. A clean pack reports no errors and reaches metadata OK.
+        QCOMPARE(r.errors, 0);
+        QVERIFY2(r.report.contains(QStringLiteral("metadata       OK")), qPrintable(r.report));
     }
 
     void aPresetMayOmitParameters()
@@ -694,6 +700,62 @@ private Q_SLOTS:
         // "preset '" is the diagnostic prefix; a bare "preset" would also match
         // the pack name in the report header.
         QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
+        QCOMPARE(r.errors, 0);
+    }
+
+    void theOverlayArmLintsPresetsToo()
+    {
+        // The preset lint is wired into all four validator arms, but every test
+        // above drives the ANIMATION one — so deleting the call from the overlay,
+        // surface or pointer arm left the suite green. This covers the overlay arm
+        // through the harness that was already sitting in this file unused.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject param;
+        param.insert(QStringLiteral("id"), QStringLiteral("speed"));
+        // `name` is required by the overlay metadata schema, which the overlay arm
+        // validates before it reaches any lint — without it the pack fails schema
+        // validation and the preset lint is never consulted at all.
+        param.insert(QStringLiteral("name"), QStringLiteral("Speed"));
+        param.insert(QStringLiteral("type"), QStringLiteral("float"));
+        param.insert(QStringLiteral("default"), 1.0);
+        param.insert(QStringLiteral("min"), 0.0);
+        param.insert(QStringLiteral("max"), 2.0);
+
+        QJsonObject obj = overlayPack(QStringLiteral("ov-preset"));
+        obj.insert(QStringLiteral("multipass"), false);
+        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Undeclared"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
+        presets.insert(QStringLiteral("TooFast"), QJsonObject{{QStringLiteral("speed"), 99.0}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validateOverlay(tmp, QStringLiteral("ov-preset"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    void presetProblemsPrintUnderTheirOwnHeader()
+    {
+        // A preset fault used to print an unindented line and then leave the
+        // metadata section reporting OK directly below it, while still counting
+        // the error — a report that contradicted itself.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-header"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Odd"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-header"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("presets        ERROR")), qPrintable(r.report));
+        // Indented under that header, like every sibling lint.
+        QVERIFY2(r.report.contains(QStringLiteral("    preset 'Odd'")), qPrintable(r.report));
     }
 };
 

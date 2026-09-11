@@ -242,6 +242,10 @@ ColumnLayout {
     // keys once here keeps the two halves from drifting onto different literals.
     readonly property string _decorationChainKey: "chain"
     readonly property string _decorationParamsKey: "params"
+    /// Per-pack preset references on an OverrideDecorationChain action:
+    /// `{packId: presetId}`. Its own key rather than the scalar `presetId` the two
+    /// other shader actions carry, so one key never means two JSON types.
+    readonly property string _decorationPresetsKey: "presetIds"
     // The SnapToZone action payload has two target lists, ordinals under
     // "zones" and names under "zoneNames" (PhosphorRules::ActionParam). Each
     // editor's empty guard has to read the OTHER list to know whether clearing

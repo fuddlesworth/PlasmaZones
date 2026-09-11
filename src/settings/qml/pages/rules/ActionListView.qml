@@ -281,6 +281,37 @@ ColumnLayout {
             }
             return rawStr;
         }
+        if (kind === "shaderPreset") {
+            // Without this arm the value fell through to the raw string and the
+            // summary showed a machine id — a bare UUID for a user preset — in a
+            // view whose contract is that values resolve to the same labels the
+            // editor shows. Every sibling id-valued kind has an arm.
+            //
+            // The decoration chain's form is an OBJECT (`{packId: presetId}`), so
+            // it is reported as a count rather than a name: naming one layer's
+            // preset out of several would be arbitrary.
+            if (raw && typeof raw === "object") {
+                const packIds = Object.keys(raw);
+                if (packIds.length === 0)
+                    return "";
+                return i18ncp("@info:status number of decoration layers with a preset", "%1 layer with a preset", "%1 layers with a preset", packIds.length);
+            }
+            if (rawStr.length === 0)
+                return "";
+            // A scalar id belongs to one of the two shader actions, whose pack id
+            // lives beside it in the same payload.
+            const presetBridge = root.appSettings ? (action.type === "overrideOverlayShader" ? root.appSettings.overlayPresets : root.appSettings.animationPresets) : null;
+            const packForPreset = action.effectId || "";
+            if (presetBridge && packForPreset.length > 0) {
+                const rows = presetBridge.presetsFor(packForPreset) || [];
+                for (let pr = 0; pr < rows.length; ++pr) {
+                    if (rows[pr].id === rawStr)
+                        return rows[pr].name;
+                }
+            }
+            // A preset an assignment outlived: say so rather than showing its id.
+            return i18nc("@info:status preset that no longer exists", "Missing preset");
+        }
         if (kind === "curveEditor") {
             // CurvePresets.curveLabel is the single source of truth for the
             // spring (`spring:omega,zeta`) + easing display name, shared with

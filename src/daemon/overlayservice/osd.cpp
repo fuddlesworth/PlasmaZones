@@ -29,10 +29,10 @@
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
-#include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>

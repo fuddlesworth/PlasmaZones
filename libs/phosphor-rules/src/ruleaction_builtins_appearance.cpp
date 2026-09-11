@@ -357,24 +357,42 @@ void ActionRegistry::registerBuiltinsAppearance()
                         return false;
                     }
                 }
-                // PresetId is an OBJECT here, not the string the two scalar
-                // shader actions carry under the same key. Type-check it: the
-                // consumer does `.toObject()`, so a scalar written here was
-                // silently ignored with no warning at load or at resolve, which
-                // is the one payload in these three descriptors that could be
-                // wrong-typed and say nothing.
-                if (p.contains(ActionParam::PresetId) && !p.value(ActionParam::PresetId).isObject()) {
-                    return false;
+                // Its OWN key, `presetIds`, carrying `{packId: presetId}`. It used
+                // to reuse `presetId`, which the two scalar shader actions carry
+                // as a STRING — so one key meant two types across three actions in
+                // one vocabulary, the consumer's `.toObject()` silently swallowed a
+                // scalar written here, and the action could not declare a
+                // ParamSchema entry for it at all. Type-checked now, and of string
+                // values, so a wrong shape is refused at load rather than ignored
+                // at resolve.
+                if (p.contains(ActionParam::PresetIds)) {
+                    const QJsonValue presets = p.value(ActionParam::PresetIds);
+                    if (!presets.isObject()) {
+                        return false;
+                    }
+                    const QJsonObject byPack = presets.toObject();
+                    for (auto it = byPack.constBegin(); it != byPack.constEnd(); ++it) {
+                        if (!it.value().isString() || it.value().toString().size() > MaxShaderPresetIdLength) {
+                            return false;
+                        }
+                    }
                 }
                 return true;
             },
         .terminal = false,
-        // PresetId is nested here, `{packId: presetId}`, mirroring how Params is
-        // already nested per pack: one chain can carry a preset on one layer
-        // and hand-tuned values on the next.
-        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params), QString(ActionParam::PresetId)},
+        // PresetIds, not PresetId: nested `{packId: presetId}`, mirroring how
+        // Params is already nested per pack, so one chain can carry a preset on
+        // one layer and hand-tuned values on the next. A separate key because the
+        // scalar PresetId the other two shader actions use must keep one type.
+        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params), QString(ActionParam::PresetIds)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")}},
+        // The preset entry is declared too, so `paramKeyOfKind(type,
+        // "shaderPreset")` answers for this action the way it does for the two
+        // scalar shader ones. It could not be declared while the key's type varied
+        // by action, which left the one action carrying a nested preset invisible
+        // to the discovery API its siblings are visible through.
+        .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")},
+                   P{.key = QString(ActionParam::PresetIds), .kind = QStringLiteral("shaderPreset")}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 6,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},

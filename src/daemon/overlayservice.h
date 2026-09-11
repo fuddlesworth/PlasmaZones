@@ -975,7 +975,9 @@ private:
     /// slot. Same teardown contract as m_animShaderRegistry: Daemon::stop()
     /// nulls this borrow before the registry is reset.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
-    PhosphorShaders::ShaderPresetRegistry* m_presetRegistry = nullptr; ///< Borrowed; may be null
+    /// Borrowed; may be null. Daemon::stop() nulls it before the owning store is
+    /// reset, the clear-before-teardown contract the two siblings above state.
+    PhosphorShaders::ShaderPresetRegistry* m_presetRegistry = nullptr;
 
     /// Decoration pack refusals already reported, keyed "<packId>|<reason>".
     ///
