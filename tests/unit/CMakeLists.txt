@@ -2363,6 +2363,16 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 #                              authoring models
 #   test_pointer_pack_validator: the same for the pointer model, split out when
 #                              the shared file passed the size ceiling
+#   test_surface_pack_validator: the same for the surface model, which had NO
+#                              harness at all until this was added
+#
+# That topology is worth one honest sentence, because its shape caused a real
+# gap: the split above followed the file-size ceiling rather than the family
+# boundary, and since every executable here compiles all four arms, a lint
+# deleted from one family's arm broke no test and failed no link. Three of the
+# four arms were unexercised and nothing made that visible. One executable per
+# family over the shared helpers is the structure that would; until then, the
+# rule is that a new arm gets its own file here on the day it is written.
 #   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
 #                              multipass buffer passes
 #   test_pack_model_detection: the shared/ marker lookup and include roots
@@ -2387,8 +2397,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
-foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_animation_pack_bakes
-                          test_pack_model_detection)
+foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_surface_pack_validator
+                          test_animation_pack_bakes test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
                    ${_pack_validator_arms})

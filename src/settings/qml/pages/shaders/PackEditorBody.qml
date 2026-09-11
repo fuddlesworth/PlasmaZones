@@ -71,9 +71,15 @@ GridLayout {
     property bool enableImage: false
 
     // ── Presets ──────────────────────────────────────────────────────────
-    /// The family's `ShaderPresetBridge`. Null hides the preset row, which is
-    /// what a host with no preset support passes.
-    property QtObject presetBridge: null
+    /// The family's `ShaderPresetBridge`, REQUIRED, and forwarded to PresetRow.
+    ///
+    /// Required rather than defaulting to null, for the reason written up on
+    /// PresetRow's own copy: null was standing in for "this host has no preset
+    /// support", which made a forgotten binding look exactly like a deliberate
+    /// opt-out. A host that means to go without binds `supportsPresets: false`.
+    required property QtObject presetBridge
+    /// Whether this host has a preset axis at all; forwarded to PresetRow.
+    property bool supportsPresets: true
     /// The assignment's current preset id, or empty for none.
     property string presetId: ""
 
@@ -248,6 +254,7 @@ GridLayout {
         Layout.fillWidth: true
         packId: root.packId
         presetBridge: root.presetBridge
+        supportsPresets: root.supportsPresets
         presetId: root.presetId
         currentValues: root._effectiveValues
         // The assignment's own stored map, so the row can answer "does this carry

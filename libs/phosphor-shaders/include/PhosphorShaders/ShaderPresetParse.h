@@ -51,6 +51,25 @@ using PackPresets = QMap<QString, QVariantMap>;
 /// A refused image value is DROPPED from the preset, so that parameter falls
 /// back to its declared default rather than binding an arbitrary file. A preset
 /// left with no values at all is omitted entirely.
+///
+/// ## If a non-overlay family ever gains an image parameter, read this first
+///
+/// Two things are correct today ONLY because the other three families pass an
+/// empty @p imageParamIds, so their preset maps never hold a resolved path:
+///
+///  - `AnimationShaderEffect::toJson` writes its preset map out verbatim, while
+///    `fromJson` re-parses every path under `AbsolutePathPolicy::Reject`. The
+///    values here are ABSOLUTE once resolved, so the round trip would silently
+///    drop them and `fromJson(toJson(x)) != x`.
+///  - `PointerShaderRegistry::effectContentSignature` catches a preset edit
+///    because a pack's presets live inside its metadata.json, which the
+///    signature covers. A preset-declared TEXTURE is a different file, and only
+///    DECLARED texture paths reach `effectWatchPaths` — so retuning a preset's
+///    image would not re-register the pack.
+///
+/// Neither is reachable now, and neither is cheap to notice later: the first is
+/// a silent value loss and the second a stale pack. Handle both in the same
+/// change that widens the set, not afterwards.
 PHOSPHORSHADERS_EXPORT PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imageParamIds,
                                                     const QJsonObject& root, const QLoggingCategory& log);
 

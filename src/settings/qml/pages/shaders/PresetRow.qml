@@ -37,23 +37,48 @@ RowLayout {
     /// The pack whose presets these are. Presets are only ever offered for
     /// their own pack: parameter ids mean nothing across packs.
     required property string packId
-    /// The family's `ShaderPresetBridge`. Null disables the whole row, which
-    /// is what a host with no preset support passes.
-    property QtObject presetBridge: null
+    /// The family's `ShaderPresetBridge`, REQUIRED of every host.
+    ///
+    /// Required on purpose, and it is the one property here that used to default
+    /// to null. Null was doing double duty as "this host has no preset support",
+    /// which made a FORGOTTEN binding indistinguishable from a deliberate
+    /// opt-out — and that is precisely how the rules decoration chain ended up
+    /// with no preset UI while the compositor was already consuming the key. A
+    /// host that genuinely has no preset axis says so with `supportsPresets`
+    /// below; a host that simply has not wired the bridge now fails to build the
+    /// row instead of silently hiding it.
+    required property QtObject presetBridge
+    /// Whether this host HAS a preset axis at all.
+    ///
+    /// The deliberate opt-out, spelled out rather than inferred from a null
+    /// bridge. Defaults true, so a host that binds a bridge gets the row; a host
+    /// that means to go without sets this false and the row hides while the
+    /// binding stays visible in the source as a statement rather than an
+    /// omission.
+    property bool supportsPresets: true
     /// The assignment's current preset id, or empty for none.
     property string presetId: ""
     /// The assignment's live parameter values — preset ⊕ deltas — used to save a
     /// new preset and to update the current one. These are the values the rows
     /// show, so saving from them captures the whole tuning.
     property var currentValues: ({})
-    /// The assignment's OWN stored parameter map, if the host has one.
+    /// The assignment's OWN stored parameter map, REQUIRED, or `null` from a host
+    /// that has no assignment behind it.
     ///
-    /// Distinct from `currentValues`, which is the merged view. Supply it and the
-    /// modified state becomes "does this assignment store any delta", which is
-    /// the question the three-state model is actually about. Leave it undefined
-    /// in a host that has no assignment behind it (the pack browser's preview)
-    /// and the row falls back to comparing values.
-    property var deltas: undefined
+    /// Distinct from `currentValues`, which is the merged view. With a map, the
+    /// modified state is "does this assignment store any delta", which is the
+    /// question the three-state model is actually about. With `null` — the pack
+    /// browser's preview, where there is no assignment — the row falls back to
+    /// comparing values.
+    ///
+    /// Required, and `null` rather than left undefined, because the two answers
+    /// are not interchangeable and only the host knows which applies. A value
+    /// comparison cannot see a delta pinned at the preset's own value, nor one on
+    /// a parameter the preset says nothing about, so an ASSIGNMENT host that
+    /// forgot to bind this would silently report the wrong modified state — which
+    /// is a bug this row has already had once. Required makes that a build
+    /// failure instead.
+    required property var deltas
 
     /// Emitted when the user picks a different preset (or None). The host
     /// writes it to the assignment; this row does not persist anything itself.
@@ -143,7 +168,10 @@ RowLayout {
     Component.onCompleted: root.refresh()
 
     spacing: Kirigami.Units.smallSpacing
-    visible: root.presetBridge !== null && root.packId.length > 0
+    // supportsPresets is the opt-out; the bridge being null is now only the
+    // transient case where a host's own source is still resolving (a rules row
+    // whose appSettings has not arrived), not a statement about the host.
+    visible: root.supportsPresets && root.presetBridge !== null && root.packId.length > 0
 
     QQC2.Label {
         text: i18nc("@label:listbox", "Preset")

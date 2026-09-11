@@ -99,10 +99,18 @@ ColumnLayout {
     readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
 
     signal chainChangeRequested(var newChain)
-    /// The family's `ShaderPresetBridge`. Null hides every layer's preset row,
-    /// which is what the rules-action embed passes: a rule chain is edited
-    /// against no particular surface and has nowhere to persist a preset.
-    property QtObject presetBridge: null
+    /// The family's `ShaderPresetBridge`, REQUIRED, and forwarded to each layer.
+    ///
+    /// This is where the null-as-feature-flag habit cost something: the comment
+    /// here used to say the rules-action embed passes null because "a rule chain
+    /// is edited against no particular surface and has nowhere to persist a
+    /// preset". That stopped being true when the rule action gained its own
+    /// presetIds key, and nothing made the stale opt-out visible, because a
+    /// deliberate null and a forgotten binding look identical. Required now, with
+    /// `supportsPresets` carrying the opt-out a host actually means.
+    required property QtObject presetBridge
+    /// Whether this host has a preset axis at all; forwarded to each layer.
+    property bool supportsPresets: true
     /// Per-pack preset ids for this chain, shaped `{ packId: presetId }`, the
     /// same shape `packParameters` already has.
     property var packPresetIds: ({})
@@ -350,6 +358,7 @@ ColumnLayout {
                         previewController: root.previewController
                         previewActive: packDelegate.expanded
                         presetBridge: root.presetBridge
+                        supportsPresets: root.supportsPresets
                         presetId: (root.packPresetIds && root.packPresetIds[packDelegate.packId]) ? root.packPresetIds[packDelegate.packId] : ""
                         onPresetSelected: function (id) {
                             root.presetChangeRequested(packDelegate.packId, id);

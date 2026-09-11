@@ -97,6 +97,19 @@ inline bool linkPointerSharedIncludes(const QTemporaryDir& tmp)
     return linkSharedInto(tmp, target);
 }
 
+/// The surface twin. Same reason as the pointer one: the surface validator bakes
+/// every pack's fragment through glslang and resolves includes from the pack's
+/// parent and its `shared/` sibling before the installed tree, so without this a
+/// fixture bakes against whatever is INSTALLED rather than the working tree.
+///
+/// Returns false when the source tree is not available, which is the caller's
+/// cue to skip rather than fail.
+inline bool linkSurfaceSharedIncludes(const QTemporaryDir& tmp)
+{
+    const QString target = QStringLiteral(P_SOURCE_DIR "/data/surface/shared");
+    return linkSharedInto(tmp, target);
+}
+
 /// Write @p body to @p file inside the pack directory @p dir. Returns false
 /// when the write fails or is short, for the caller to QVERIFY: a QVERIFY
 /// inside a lambda only returns from the lambda, so a failed fixture write
@@ -198,4 +211,19 @@ inline QJsonArray toArray(const QStringList& values)
     }                                                                                                                  \
     if (!PackValidatorTest::linkPointerSharedIncludes(tmp)) {                                                          \
         QSKIP("data/pointer/shared not found — running outside source tree");                                          \
+    }
+
+/// The surface twin, and the reason it did not exist until now is the finding it
+/// closes: the SURFACE arm of the validator had no test harness at all. Four
+/// production arms, three test executables, and each executable compiles all
+/// four arms — so a lint deleted from the surface arm alone broke no test and
+/// failed no link. The topology was an artifact of the file-size ceiling rather
+/// than of the family boundary, which is why the gap went unnoticed.
+#define REQUIRE_SURFACE_FIXTURE(tmp)                                                                                   \
+    QVERIFY((tmp).isValid());                                                                                          \
+    if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {                                               \
+        QSKIP("glslangValidator not on PATH");                                                                         \
+    }                                                                                                                  \
+    if (!PackValidatorTest::linkSurfaceSharedIncludes(tmp)) {                                                          \
+        QSKIP("data/surface/shared not found — running outside source tree");                                          \
     }

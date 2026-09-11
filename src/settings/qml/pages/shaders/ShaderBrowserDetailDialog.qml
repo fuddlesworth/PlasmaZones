@@ -472,6 +472,7 @@ Kirigami.Dialog {
                 presetBridge: root._presetBridge
                 presetId: root._browsePresetId
                 currentValues: root._liveParams
+                deltas: null // no assignment here; see PresetRow's `deltas` doc
                 // The browser tunes a PREVIEW, not an assignment, so picking a
                 // preset loads its values into the live map rather than storing
                 // a reference. Persisting one belongs to the pages that own an
@@ -680,10 +681,9 @@ Kirigami.Dialog {
 
                     // ── Parameters ────────────────────────────────────────
                     // Editable editor (live preview) carries its own toolbar +
-                    // "Parameters" header, so the read-only heading below is
-                    // shown only for a bridge without a previewController
-                    // (none shipped today; the fallback is the contract for
-                    // third-party bridges).
+                    // "Parameters" header, so the read-only heading below shows
+                    // only for a bridge without a previewController (none shipped
+                    // today; the fallback is the contract for third-party bridges).
                     Kirigami.Heading {
                         visible: root._hasParameters && !root._livePreview
                         text: i18nc("@title:group shader parameters section", "Parameters")
