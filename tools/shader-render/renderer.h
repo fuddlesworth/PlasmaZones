@@ -47,8 +47,9 @@ struct RenderOptions
     /// synthetic pointer and binds the POINTER uniform tail instead of the zone
     /// one: a pointer pack reads nothing from the zone extension, and with no
     /// pointer tail every position uniform is zero, so a click pack correctly
-    /// paints nothing and the render comes out empty. Zones are still loaded and
-    /// drawn under it, so a pack can be judged against real content.
+    /// paints nothing and the render comes out empty. The zone schedule, the
+    /// zone extension and the labels texture are all inert in this mode: the
+    /// pack is the only thing on the canvas, over the window's clear colour.
     PointerDriveOptions pointer;
 };
 

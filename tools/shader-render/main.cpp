@@ -193,7 +193,8 @@ int main(int argc, char* argv[])
 
     QCommandLineOption shaderDirOpt(QStringLiteral("shader-dir"),
                                     QStringLiteral("Directory containing <id>/metadata.json. "
-                                                   "Defaults to data/overlays/ in the cwd, then the XDG data dirs."),
+                                                   "Defaults to data/overlays/ in the cwd, then the XDG data dirs. "
+                                                   "With --pointer the default becomes data/pointer/ instead."),
                                     QStringLiteral("path"), defaultShaderDir());
     parser.addOption(shaderDirOpt);
 

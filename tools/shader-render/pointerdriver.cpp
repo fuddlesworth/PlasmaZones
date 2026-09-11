@@ -10,7 +10,6 @@
 #include <QFileInfo>
 #include <QUrl>
 #include <QVariantMap>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -48,7 +47,7 @@ Qt::MouseButtons buttonsFor(int code)
 } // namespace
 
 bool installPointerPack(PhosphorRendering::ShaderEffect& effect, const QString& metadataPath,
-                        PointerShaderEffectRef& parsedOut)
+                        PhosphorPointerShaders::PointerShaderEffect& parsedOut)
 {
     using Registry = PhosphorPointerShaders::PointerShaderRegistry;
 
@@ -101,8 +100,7 @@ bool installPointerPack(PhosphorRendering::ShaderEffect& effect, const QString& 
     }
     effect.setShaderParams(Registry::translatePointerParams(eff, friendly));
 
-    parsedOut.effect = eff;
-    parsedOut.valid = true;
+    parsedOut = eff;
     return true;
 }
 
@@ -111,56 +109,25 @@ PointerDriver::PointerDriver(const PointerDriveOptions& options, const QSize& ca
     , m_canvas(canvasDevicePx)
     , m_scale(scale > 0.0 ? scale : 1.0)
 {
-    m_history.setTrailSeconds(m_trailWindowSeconds);
 }
 
-bool PointerDriver::loadPackContract(const QString& metadataPath)
+void PointerDriver::applyPackContract(const PhosphorPointerShaders::PointerShaderEffect& effect)
 {
-    QFile file(metadataPath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcPointerDriver) << "cannot read" << metadataPath << "— using default reach and trail window";
-        return false;
-    }
-    QJsonParseError err{};
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qCWarning(lcPointerDriver) << metadataPath << "is not a JSON object —" << err.errorString();
-        return false;
-    }
-    const QJsonObject root = doc.object();
+    m_needsCursor = effect.needsCursor;
 
-    m_needsCursor = root.value(QLatin1String("needsCursor")).toBool(false);
-
-    // The liveness window, and separately how far back the pack READS. The
-    // history is spaced by the READ window, which is what the host does.
-    const double trailSeconds = root.value(QLatin1String("trailSeconds")).toDouble(1.0);
-    double window = root.value(QLatin1String("trailWindowSeconds")).toDouble(trailSeconds);
-
-    double reach = root.value(QLatin1String("reach")).toDouble(64.0);
-
-    // reachParam / trailWindowParam name a parameter whose value replaces the
-    // fixed figure. Nothing here overrides parameters, so the parameter's own
-    // default is the resolved value, which is exactly what the pack renders with.
-    const QString reachParam = root.value(QLatin1String("reachParam")).toString();
-    const QString windowParam = root.value(QLatin1String("trailWindowParam")).toString();
-    if (!reachParam.isEmpty() || !windowParam.isEmpty()) {
-        const QJsonArray params = root.value(QLatin1String("parameters")).toArray();
-        for (const QJsonValue& v : params) {
-            const QJsonObject p = v.toObject();
-            const QString id = p.value(QLatin1String("id")).toString();
-            if (!reachParam.isEmpty() && id == reachParam) {
-                reach = p.value(QLatin1String("default")).toDouble(reach);
-            }
-            if (!windowParam.isEmpty() && id == windowParam) {
-                window = p.value(QLatin1String("default")).toDouble(window);
-            }
-        }
-    }
-
-    m_reachLogicalPx = std::max(1.0, reach);
-    m_trailWindowSeconds = std::clamp(window, 0.01, 60.0);
-    m_history.setTrailSeconds(m_trailWindowSeconds);
-    return true;
+    // An EMPTY parameter map, deliberately. resolvedReach / resolvedTrailWindow
+    // fall back to each named parameter's own declared default when the map has
+    // no entry for it, and the declared defaults are exactly what
+    // installPointerPack seeds the shader with, so the figures below are the
+    // ones this render actually draws with.
+    //
+    // Both go through the pack's own resolvers rather than being re-derived
+    // here. They carry bounds a hand-rolled copy does not: the reach is capped
+    // at kMaxReach, and the read window is clamped to the pack's trailSeconds
+    // (a pack cannot read further back than the host keeps it alive) and is 0
+    // for a pack that does not sample the trail at all.
+    m_reachLogicalPx = effect.resolvedReach({});
+    m_history.setTrailSeconds(effect.resolvedTrailWindow({}));
 }
 
 QImage PointerDriver::cursorSprite() const
@@ -195,35 +162,6 @@ QImage PointerDriver::cursorSprite() const
     return img.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
 }
 
-// Contract space is TOP-DOWN, origin at the output's top-left, and every
-// position uniform is expressed in it. This tool's pointer path is not: the
-// offscreen target is bottom-up (which is why captureFrame flips the readback
-// before it reaches a sink), and the layered item the fragment runs through
-// carries that orientation into the `uv` the pack turns into canvas px. So a
-// position handed to the shader unchanged lands mirrored about the canvas's
-// middle, and the capture flip afterwards does NOT undo it, because only the
-// image is flipped and not the uniforms that were baked into it.
-//
-// Everything the driver pushes goes through here, so the pack sees one
-// self-consistent space and the captured frame shows what the compositor would.
-// The flip is confined to this seam deliberately: the synthetic path, the
-// headings and the CLI are all authored in the contract's own top-down terms.
-QPointF PointerDriver::toCanvas(const QPointF& topDown) const
-{
-    // IDENTITY, deliberately. An earlier version mirrored y here to make the
-    // painted geometry land where the contract says it should. It did, but it
-    // fixed only the POSITIONS: a pack's own sense of up and down lives in its
-    // source (a sweep that starts at twelve o'clock, a light from the upper
-    // left, gravity), and no amount of moving the uniforms corrects that. The
-    // captured frame came out mirrored and every judgement made from it was a
-    // judgement of a mirror image.
-    //
-    // The flip belongs at the END of the pipeline instead, where it corrects
-    // the whole rendered image at once. renderer.cpp applies it for pointer
-    // renders; see the note there.
-    return topDown;
-}
-
 QPointF PointerDriver::positionAt(double seconds) const
 {
     const QPointF centre(m_canvas.width() * 0.5, m_canvas.height() * 0.5);
@@ -248,7 +186,7 @@ void PointerDriver::applyFrame(int frame, double fps, PhosphorPointerShaders::Po
     if (!m_seeded) {
         // A ring with no samples would make the first frame's press a
         // buttons-only event with no position history behind it.
-        m_history.seedPosition(toCanvas(positionAt(now)), static_cast<qint64>(std::llround(now * 1000.0)));
+        m_history.seedPosition(positionAt(now), static_cast<qint64>(std::llround(now * 1000.0)));
         m_lastSeconds = now;
         m_seeded = true;
     }
@@ -260,7 +198,7 @@ void PointerDriver::applyFrame(int frame, double fps, PhosphorPointerShaders::Po
     for (int i = 1; i <= steps; ++i) {
         const double t = m_lastSeconds + span * (static_cast<double>(i) / static_cast<double>(steps));
         const auto ms = static_cast<qint64>(std::llround(t * 1000.0));
-        const QPointF pos = toCanvas(positionAt(t));
+        const QPointF pos = positionAt(t);
 
         if (!m_opts.still) {
             m_history.notePointer(pos, ms);
@@ -284,7 +222,7 @@ void PointerDriver::applyFrame(int frame, double fps, PhosphorPointerShaders::Po
     // where its cursor is drawn. Here the hotspot is the arrow's top-left, so
     // the rect starts at the pointer and spans the drawn size, in device px like
     // every other canvas position.
-    const QPointF pos = toCanvas(positionAt(now));
+    const QPointF pos = positionAt(now);
     const double side = m_opts.cursorSize * m_scale;
     // The rect spans downward from the hotspot, as the contract has it.
     state.cursorRect = QRectF(pos.x(), pos.y(), side, side);
@@ -295,8 +233,8 @@ void PointerDriver::applyFrame(int frame, double fps, PhosphorPointerShaders::Po
     ext.setReachLogicalPx(m_reachLogicalPx);
     ext.apply(state);
 
-    // `pos` is already in the flipped canvas space, so iMouse agrees with the
-    // trail and the press without a second conversion.
+    // The same top-down position the trail and the press were pushed in, so
+    // iMouse agrees with both without a second conversion.
     iMouseLogical = QPointF(pos.x() / m_scale, pos.y() / m_scale);
 }
 

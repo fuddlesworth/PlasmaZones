@@ -18,14 +18,6 @@ class ShaderEffect;
 
 namespace PlasmaZones::ShaderRender {
 
-/// The parsed pack, kept by the caller so the renderer can read back what the
-/// pack declared (its vertex stage, its buffers) after installation.
-struct PointerShaderEffectRef
-{
-    PhosphorPointerShaders::PointerShaderEffect effect;
-    bool valid = false;
-};
-
 /**
  * @brief Parse a pointer pack and install it on @p effect the way the settings
  *        preview does.
@@ -39,10 +31,12 @@ struct PointerShaderEffectRef
  * drawing nothing on a frame with no click.
  *
  * Returns false when the pack cannot be parsed, in which case @p effect is left
- * untouched.
+ * untouched. On success @p parsedOut carries the parsed pack, which is what the
+ * caller hands to PointerDriver::applyPackContract so the two agree about the
+ * same parse rather than reading metadata.json twice.
  */
 bool installPointerPack(PhosphorRendering::ShaderEffect& effect, const QString& metadataPath,
-                        PointerShaderEffectRef& parsedOut);
+                        PhosphorPointerShaders::PointerShaderEffect& parsedOut);
 
 /**
  * @brief How the synthetic pointer behaves for a `--pointer` render.
@@ -103,9 +97,10 @@ struct PointerDriveOptions
  * one event per frame would round the ring's spacing up to the frame interval
  * and the trail would not match what ships.
  *
- * The pack's own `reach`, trail window and `needsCursor` are read from its
- * metadata.json, so a render cannot silently disagree with the pack about the
- * damage radius the shader reads back through `pointerReach()`.
+ * The pack's own `reach`, trail window and `needsCursor` come from the parsed
+ * pack through `applyPackContract`, so a render cannot silently disagree with
+ * the pack about the damage radius the shader reads back through
+ * `pointerReach()`.
  */
 class PointerDriver
 {
@@ -114,23 +109,24 @@ public:
     /// logical-to-device ratio the pack will see through `pointerScale()`.
     PointerDriver(const PointerDriveOptions& options, const QSize& canvasDevicePx, double scale);
 
-    /// Read `reach` / `reachParam` / `trailSeconds` / `trailWindowSeconds` /
-    /// `needsCursor` out of the pack at @p metadataPath. Returns false and
-    /// leaves the defaults in place when the file cannot be read, so a render
-    /// still happens rather than aborting.
-    bool loadPackContract(const QString& metadataPath);
+    /// Take the pack's reach, trail window and `needsCursor` from @p effect.
+    ///
+    /// Resolution goes through the pack's own `resolvedReach` /
+    /// `resolvedTrailWindow`, which is what the compositor and the settings
+    /// preview call, so the render cannot disagree with either about the damage
+    /// radius the shader reads back through `pointerReach()` or about how far
+    /// back the ring is spaced. Re-deriving those here from the raw JSON is how
+    /// the two drift: the library caps the reach and clamps the window to the
+    /// pack's liveness, and a hand-rolled copy of that arithmetic silently does
+    /// not. An empty parameter map means every parameter takes its declared
+    /// default, which is exactly what installPointerPack seeds the shader with.
+    void applyPackContract(const PhosphorPointerShaders::PointerShaderEffect& effect);
 
     /// True when the pack asked for the cursor sprite. A caller binds the
     /// sprite image only then, to keep `uPointerFlags.x` honest.
     [[nodiscard]] bool needsCursor() const
     {
         return m_needsCursor;
-    }
-
-    /// The trail window the history was configured with, seconds.
-    [[nodiscard]] double trailWindowSeconds() const
-    {
-        return m_trailWindowSeconds;
     }
 
     /// The synthetic cursor sprite, premultiplied like the real one arrives.
@@ -145,19 +141,16 @@ public:
 
 private:
     /// Pointer position in DEVICE px at @p seconds, in the contract's TOP-DOWN
-    /// space. Pass it through `toCanvas` before it reaches the shader.
+    /// space, which is the space every uniform this driver pushes is expressed
+    /// in. The render target's y runs the other way, and renderer.cpp corrects
+    /// that by flipping the finished frame rather than the uniforms going in;
+    /// the note there says why.
     [[nodiscard]] QPointF positionAt(double seconds) const;
-
-    /// Contract space (top-down) to this tool's bottom-up render canvas. See the
-    /// comment on the definition for why the two differ and why the capture
-    /// flip does not reconcile them.
-    [[nodiscard]] QPointF toCanvas(const QPointF& topDown) const;
 
     PointerDriveOptions m_opts;
     QSize m_canvas;
     double m_scale = 1.0;
     double m_reachLogicalPx = 64.0;
-    double m_trailWindowSeconds = 1.0;
     bool m_needsCursor = false;
 
     PhosphorPointerShaders::PointerHistory m_history;

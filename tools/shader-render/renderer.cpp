@@ -645,7 +645,12 @@ int Renderer::render(const RenderOptions& opts)
     // (the whole bundled catalog) fails to compile — no #version, no p_
     // defines — and previews come out as empty frames.
     effect->setEntryScaffold(PlasmaZones::zoneEntryPrologue(), PlasmaZones::zoneEntryCandidates());
-    {
+    // Overlay preamble only. A pointer pack's slots are allocated by
+    // PointerShaderRegistry and installPointerPack pushes that preamble below;
+    // running the overlay parse for it would either warn about a pack it was
+    // never meant to read or compute a preamble that is replaced a few lines
+    // later. Same reason the zone.vert probe above is skipped.
+    if (!opts.pointer.enabled) {
         // Pack dir from the metadata path — NOT from the frag path, which a
         // pack may point into a subdirectory ("fragmentShader": "sub/x.frag"
         // would make the frag-derived dir miss metadata.json entirely).
@@ -717,7 +722,7 @@ int Renderer::render(const RenderOptions& opts)
         // include paths, parameter preamble and vertex stage installed above. Done
         // before the uniform extension so a parse failure leaves the zone path
         // standing rather than half-swapping the two.
-        PointerShaderEffectRef parsed;
+        PhosphorPointerShaders::PointerShaderEffect parsed;
         if (!installPointerPack(*effect, opts.metadataPath, parsed)) {
             qCWarning(lcRenderer) << "pointer pack" << opts.metadata.id
                                   << "could not be installed; refusing to render it as an overlay pack";
@@ -725,7 +730,7 @@ int Renderer::render(const RenderOptions& opts)
         }
         pointerExt = std::make_shared<PhosphorPointerShaders::PointerUniformExtension>();
         pointerDriver = std::make_unique<PointerDriver>(opts.pointer, physicalSize, dpr);
-        pointerDriver->loadPackContract(opts.metadataPath);
+        pointerDriver->applyPackContract(parsed);
         if (pointerDriver->needsCursor()) {
             // SRB binding 7 is uTexture0 for the other families and
             // uCursorSprite for this one, so slot 0 is where the sprite goes.
@@ -766,7 +771,12 @@ int Renderer::render(const RenderOptions& opts)
 
     // Pre-render the labels texture. Many shaders sample uZoneLabels for
     // halo/chroma/text effects — an empty binding makes them silently absent.
-    effect->setLabelsImage(buildLabelsImage(opts.zones, size));
+    // A pointer pack has no uZoneLabels at all (binding 1 is not in its
+    // contract), so it gets the node's 1x1 transparent fallback instead of a
+    // full-resolution image nothing samples.
+    if (!opts.pointer.enabled) {
+        effect->setLabelsImage(buildLabelsImage(opts.zones, size));
+    }
 
     // Overlay seeding only. In pointer mode installPointerPack has already set the
     // source, the buffers and the parameters through the pointer registry's own
@@ -802,7 +812,9 @@ int Renderer::render(const RenderOptions& opts)
         effect->setITime(static_cast<qreal>(i) / opts.fps);
         effect->setITimeDelta(frameInterval);
 
-        if (stillIdx < 0) {
+        // Zone schedule only. In pointer mode the zone extension is not the one
+        // installed, so pushing a new slice into it would reach no shader.
+        if (stillIdx < 0 && !opts.pointer.enabled) {
             applyHighlightSchedule(i, opts.frameCount, runtimeZones, *zoneExt, *effect, lastSlice);
         }
 
