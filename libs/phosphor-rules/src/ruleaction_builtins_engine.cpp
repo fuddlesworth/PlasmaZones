@@ -454,7 +454,14 @@ void ActionRegistry::registerBuiltinsEngine()
         },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Event);
+                if (!hasNonEmptyString(p, ActionParam::Event)) {
+                    return false;
+                }
+                // Bounded like every other free-form string in this vocabulary.
+                // An over-long id is inert rather than dangerous (it resolves to
+                // no preset), but rules.json is hand-editable and the asymmetry
+                // with MaxFontFamilyLength and friends is the kind that drifts.
+                return p.value(ActionParam::PresetId).toString().size() <= MaxShaderPresetIdLength;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params),
@@ -600,7 +607,11 @@ void ActionRegistry::registerBuiltinsEngine()
                     return false;
                 }
                 const QJsonValue node = p.value(ActionParam::LayoutId);
-                return node.isUndefined() || node.isString();
+                if (!node.isUndefined() && !node.isString()) {
+                    return false;
+                }
+                // Bounded on the same terms as the animation twin above.
+                return p.value(ActionParam::PresetId).toString().size() <= MaxShaderPresetIdLength;
             },
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring

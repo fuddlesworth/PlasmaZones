@@ -16,6 +16,7 @@
 #include <PhosphorShaders/ShaderPresetLoader.h>
 #include <PhosphorShaders/ShaderPresetParse.h>
 #include <PhosphorShaders/ShaderPresetRegistry.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 
 #include <QDir>
 #include <QJsonDocument>
@@ -94,6 +95,15 @@ private Q_SLOTS:
     void migrationLeavesForeignFilesAlone();
     void migrationFallsBackToFilenameForName();
     void migrationOnAbsentRootIsNoOp();
+
+    // ─────── store ───────
+
+    void storeDestructionDoesNotTouchAFreedRegistry();
+    void storeLoadIsIdempotent();
+    void storeRefusesANonAbsoluteRoot();
+    void anIdThatIsNotAPathComponentIsRefused();
+    void packPresetsAreRetractedForAVanishedPack();
+    void resolveParamsClampsToTheDeclaredRange();
 };
 
 // ═══════════════════════════ parsePackPresets ═══════════════════════════
@@ -208,9 +218,24 @@ void TestShaderPresets::deltaWinsEvenWhenEqual()
     // An explicit override whose value happens to equal the preset's is still
     // an override: the preset may change later, and the user's choice must not
     // silently start following it.
-    const QVariantMap base{{QStringLiteral("speed"), 1.0}};
+    //
+    // Asserting on the value alone could not fail — both sides are 1.0, so it
+    // held whether or not the overlay ran at all. What the contract is actually
+    // about is key RETENTION, so assert that: the delta key is present in the
+    // result, and the preset's own later value does NOT reach a key the
+    // assignment pinned.
+    const QVariantMap base{{QStringLiteral("speed"), 1.0}, {QStringLiteral("glow"), 0.2}};
     const QVariantMap deltas{{QStringLiteral("speed"), 1.0}};
-    QCOMPARE(overlayPresetDeltas(base, deltas).value(QStringLiteral("speed")).toDouble(), 1.0);
+    const QVariantMap merged = overlayPresetDeltas(base, deltas);
+    QVERIFY(merged.contains(QStringLiteral("speed")));
+    QCOMPARE(merged.value(QStringLiteral("speed")).toDouble(), 1.0);
+
+    // The pin is only observable against a RETUNED preset: the same delta over a
+    // preset that has since moved must still answer with the user's value.
+    const QVariantMap retuned{{QStringLiteral("speed"), 4.0}, {QStringLiteral("glow"), 0.2}};
+    QCOMPARE(overlayPresetDeltas(retuned, deltas).value(QStringLiteral("speed")).toDouble(), 1.0);
+    // ...while a key the user never touched does follow the retune.
+    QCOMPARE(overlayPresetDeltas(retuned, deltas).value(QStringLiteral("glow")).toDouble(), 0.2);
 }
 
 void TestShaderPresets::resolveWithNoPresetIsJustDeltas()
@@ -608,6 +633,163 @@ void TestShaderPresets::watcherSeesAPresetAddedToAFreshInstall()
                  .params.value(QStringLiteral("speed"))
                  .toDouble(),
              3.0);
+}
+
+// ─────── store ───────
+
+void TestShaderPresets::storeDestructionDoesNotTouchAFreedRegistry()
+{
+    // No test constructed a ShaderPresetStore at all, which is why a
+    // use-after-free on its teardown was invisible to a green suite: the store
+    // parents both the registry and the loaders to itself, and QObject frees
+    // children in insertion order, so the registry died first while each
+    // loader's destructor was still retracting through it.
+    //
+    // Under a normal build this asserts the destruction ORDER contract rather
+    // than proving the absence of the fault — freed-memory reuse is
+    // nondeterministic and there is no sanitizer configuration in this repo. Run
+    // it under ASAN to get the stronger answer.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir().mkpath(dir.filePath(QStringLiteral("animation"))));
+    QVERIFY(writeFile(dir.filePath(QStringLiteral("animation/a.json")), QStringLiteral(R"({
+        "id": "a", "name": "A", "packId": "dissolve", "params": { "speed": 2.0 }
+    })")));
+
+    {
+        ShaderPresetStore store;
+        store.load(dir.path());
+        QCOMPARE(store.registry().presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve")).size(), 1);
+    }
+    // Reaching here without faulting is the assertion. A second construct-and-
+    // destroy pass catches a teardown that corrupted process-wide state.
+    {
+        ShaderPresetStore store;
+        store.load(dir.path());
+        QCOMPARE(store.registry().presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve")).size(), 1);
+    }
+}
+
+void TestShaderPresets::storeLoadIsIdempotent()
+{
+    // A second load() used to build four more loaders, leak the first four with
+    // their watchers armed, and leave two publishers per family — which the
+    // loader destructor's whole-family retraction cannot survive.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir().mkpath(dir.filePath(QStringLiteral("animation"))));
+    QVERIFY(writeFile(dir.filePath(QStringLiteral("animation/a.json")), QStringLiteral(R"({
+        "id": "a", "name": "A", "packId": "dissolve", "params": { "speed": 2.0 }
+    })")));
+
+    ShaderPresetStore store;
+    store.load(dir.path());
+    ShaderPresetLoader* first = store.loader(ShaderFamily::Animation);
+    QVERIFY(first != nullptr);
+
+    store.load(dir.path());
+    // Same loader, not a second one layered over it.
+    QCOMPARE(store.loader(ShaderFamily::Animation), first);
+    QCOMPARE(store.registry().presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve")).size(), 1);
+}
+
+void TestShaderPresets::storeRefusesANonAbsoluteRoot()
+{
+    // An empty root resolves to the process working directory: QDir("") is
+    // QDir("."), whose exists() is true, so the migration would scan and read
+    // the CWD's *.json files and userPresetDirectory would hand out
+    // filesystem-root paths. A relative root is the same hazard.
+    ShaderPresetStore store;
+    store.load(QString());
+    QVERIFY(store.loader(ShaderFamily::Animation) == nullptr);
+
+    ShaderPresetStore relative;
+    relative.load(QStringLiteral("shader-presets"));
+    QVERIFY(relative.loader(ShaderFamily::Animation) == nullptr);
+}
+
+void TestShaderPresets::anIdThatIsNotAPathComponentIsRefused()
+{
+    // The id becomes a filename on the write side, so one carrying a separator
+    // or a parent hop escapes the preset directory the moment the user renames
+    // that preset.
+    QVERIFY(!ShaderPreset::isUsableId(QString()));
+    QVERIFY(!ShaderPreset::isUsableId(QStringLiteral(".")));
+    QVERIFY(!ShaderPreset::isUsableId(QStringLiteral("..")));
+    QVERIFY(!ShaderPreset::isUsableId(QStringLiteral("../../etc/passwd")));
+    QVERIFY(!ShaderPreset::isUsableId(QStringLiteral("a/b")));
+    QVERIFY(!ShaderPreset::isUsableId(QStringLiteral("a\\b")));
+    QVERIFY(ShaderPreset::isUsableId(QStringLiteral("6f2b8d51-4c3a-4e7f-9b10-2d8e4a5c7b63")));
+
+    // And the parse path falls back to the filename stem rather than carrying
+    // the escaping id through.
+    const ShaderPreset parsed = ShaderPreset::fromJson(jsonFrom(QStringLiteral(R"({
+        "id": "../../../../pwn", "name": "Bad", "packId": "dissolve"
+    })")),
+                                                       QStringLiteral("safe-stem"));
+    QCOMPARE(parsed.id, QStringLiteral("safe-stem"));
+}
+
+void TestShaderPresets::packPresetsAreRetractedForAVanishedPack()
+{
+    // A per-pack upsert driven by the packs that currently exist can never name
+    // a pack that has GONE, so an uninstalled pack's presets used to survive for
+    // the life of the process and keep being offered.
+    ShaderPresetRegistry registry;
+    QHash<QString, PackPresets> byPack;
+    byPack.insert(QStringLiteral("dissolve"), PackPresets{{QStringLiteral("Soft"), {{QStringLiteral("speed"), 1.0}}}});
+    byPack.insert(QStringLiteral("aurora"), PackPresets{{QStringLiteral("Bright"), {{QStringLiteral("glow"), 2.0}}}});
+    registry.setPackPresetsForFamily(ShaderFamily::Animation, byPack);
+    QCOMPARE(registry.presetsFor(ShaderFamily::Animation, QStringLiteral("aurora")).size(), 1);
+
+    QSignalSpy spy(&registry, &ShaderPresetRegistry::presetsChanged);
+    // `aurora` is uninstalled: it simply is not in the new set.
+    byPack.remove(QStringLiteral("aurora"));
+    registry.setPackPresetsForFamily(ShaderFamily::Animation, byPack);
+
+    QVERIFY(registry.presetsFor(ShaderFamily::Animation, QStringLiteral("aurora")).isEmpty());
+    // And the pack that did not change must not be re-signalled.
+    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("aurora"));
+    QCOMPARE(registry.presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve")).size(), 1);
+}
+
+void TestShaderPresets::resolveParamsClampsToTheDeclaredRange()
+{
+    // A pack's declared min/max was enforced only by the settings slider, so a
+    // hand-written preset file could drive a parameter anywhere — and several
+    // bundled overlay packs feed one straight into a GLSL loop bound.
+    ShaderPresetRegistry registry;
+    PresetValueBounds bounds;
+    bounds.insert(QStringLiteral("octaves"), PresetValueRange(2, 8));
+    QHash<QString, PackPresets> byPack;
+    byPack.insert(QStringLiteral("cosmic"), PackPresets{{QStringLiteral("Wild"), {{QStringLiteral("octaves"), 9999}}}});
+    QHash<QString, PresetValueBounds> boundsByPack;
+    boundsByPack.insert(QStringLiteral("cosmic"), bounds);
+    registry.setPackPresetsForFamily(ShaderFamily::Overlay, byPack, boundsByPack);
+
+    // The preset's own out-of-range value is clamped...
+    QCOMPARE(registry.resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QStringLiteral("Wild"), {})
+                 .value(QStringLiteral("octaves"))
+                 .toInt(),
+             8);
+    // ...and so is a delta, which never passes through a preset at all.
+    const QVariantMap deltas{{QStringLiteral("octaves"), 100000}};
+    QCOMPARE(registry.resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QStringLiteral("Wild"), deltas)
+                 .value(QStringLiteral("octaves"))
+                 .toInt(),
+             8);
+    // Below the floor too.
+    const QVariantMap low{{QStringLiteral("octaves"), -5}};
+    QCOMPARE(registry.resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QStringLiteral("Wild"), low)
+                 .value(QStringLiteral("octaves"))
+                 .toInt(),
+             2);
+    // An integral parameter stays integral rather than coming back as a double.
+    QCOMPARE(registry.resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QStringLiteral("Wild"), low)
+                 .value(QStringLiteral("octaves"))
+                 .typeId(),
+             QMetaType::LongLong);
 }
 
 QTEST_MAIN(TestShaderPresets)

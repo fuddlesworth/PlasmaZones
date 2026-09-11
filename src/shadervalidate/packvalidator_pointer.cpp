@@ -1044,7 +1044,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // plus the installed shared helpers.
     const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
     const QStringList paramNames = declaredParamNames(eff.parameters);
-    errors += reportPresetProblems(out, QDir(packDir).dirName(), eff.presets, eff.parameters);
+    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
     // A stage with no p_<id> preamble cannot use any, so no did-you-mean hint.
     const QStringList noParams;
 

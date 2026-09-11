@@ -158,26 +158,35 @@ struct PresetLintParam
 ///
 /// Checks three things, which is everything decidable without rendering:
 /// every preset key names a declared parameter, every value matches that
-/// parameter's declared type, and a numeric value sits inside any declared
-/// range. Reports to @p out and returns the number of problems found.
+/// parameter's declared type, a numeric value sits inside any declared range,
+/// and an image-typed value stays inside the pack.
+///
+/// Collects its findings and prints them under a `presets ERROR` header, then
+/// returns the number of problems found. Emitting straight to the stream as each
+/// problem was found meant a pack whose only fault was a bad preset printed an
+/// unindented error line and then `metadata OK` directly below it, while still
+/// returning a non-zero error count.
+///
+/// @p packDir is the pack's directory, used to containment-check an image-typed
+/// preset value. Pass an empty string to skip that check.
 ///
 /// Deliberately NOT an error for a preset to omit parameters: a preset is a
 /// partial tuning by design, and the ones it says nothing about fall back to
 /// their defaults.
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PresetLintParam>& declared);
 
 /// Per-family overloads, so each validator arm is one call rather than its own
 /// projection loop. The four ParameterInfo types spell themselves differently
 /// (slot vs step, image vs no image), which is why the lint takes the reduced
 /// PresetLintParam and these do the reducing.
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
 
 QString glslangValidatorPath();

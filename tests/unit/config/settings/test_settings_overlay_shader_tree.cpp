@@ -317,6 +317,7 @@ private Q_SLOTS:
         // The sanitizer rebuilds the profile field by field at the persistence
         // boundary, so a field it forgets is silently dropped on every save.
         // This is the regression guard for exactly that.
+        IsolatedConfigGuard guard;
         Settings a;
         OverlayShaderTree tree;
         OverlayShaderProfile node;
@@ -333,6 +334,7 @@ private Q_SLOTS:
         // Each field is bounded independently: an over-long preset id falls
         // back to the assignment's own parameters, which is the same thing a
         // preset id naming no preset already resolves to.
+        IsolatedConfigGuard guard;
         Settings a;
         OverlayShaderTree tree;
         OverlayShaderProfile node;

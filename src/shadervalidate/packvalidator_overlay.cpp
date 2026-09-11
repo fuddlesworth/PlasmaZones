@@ -127,7 +127,7 @@ int validatePack(const QString& packDir, QTextStream& out)
 
     // Preset lint: every preset key must name a declared parameter, and every
     // value must match that parameter's declared type and range.
-    errors += reportPresetProblems(out, QDir(packDir).dirName(), info.presets, info.parameters);
+    errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
 
     // ── metadata lints ──
     QStringList lints;

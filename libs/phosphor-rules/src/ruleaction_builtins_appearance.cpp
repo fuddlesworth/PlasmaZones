@@ -12,6 +12,7 @@
 
 #include "ruleaction_builtins_p.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 
@@ -338,7 +339,34 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::DecorationChain),
         .validate =
             [](const QJsonObject& p) {
-                return p.contains(ActionParam::Chain) && p.value(ActionParam::Chain).isArray();
+                if (!p.contains(ActionParam::Chain) || !p.value(ActionParam::Chain).isArray()) {
+                    return false;
+                }
+                // The rule chain REPLACES the config chain wholesale, after every
+                // config-side bound has been applied, and lands straight in the
+                // compositor's per-entry fold — where each entry costs a draw and
+                // a buffer slot every frame. Unbounded, a hand-edited rules.json
+                // could ask for thousands of folds on every matched window, while
+                // the config path capped the same list at kMaxChainEntries.
+                const QJsonArray chain = p.value(ActionParam::Chain).toArray();
+                if (chain.size() > MaxDecorationChainEntries) {
+                    return false;
+                }
+                for (const QJsonValue& entry : chain) {
+                    if (!entry.isString() || entry.toString().size() > MaxChainPackIdLength) {
+                        return false;
+                    }
+                }
+                // PresetId is an OBJECT here, not the string the two scalar
+                // shader actions carry under the same key. Type-check it: the
+                // consumer does `.toObject()`, so a scalar written here was
+                // silently ignored with no warning at load or at resolve, which
+                // is the one payload in these three descriptors that could be
+                // wrong-typed and say nothing.
+                if (p.contains(ActionParam::PresetId) && !p.value(ActionParam::PresetId).isObject()) {
+                    return false;
+                }
+                return true;
             },
         .terminal = false,
         // PresetId is nested here, `{packId: presetId}`, mirroring how Params is

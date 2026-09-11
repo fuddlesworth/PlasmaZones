@@ -672,7 +672,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // Preset lint: every preset key must name a declared parameter, and every
     // value must match that parameter's declared type and range.
-    errors += reportPresetProblems(out, QDir(packDir).dirName(), eff.presets, eff.parameters);
+    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
 
     // ── fragment stage ──
     // Read once for both arms; an unreadable or empty fragment is one error

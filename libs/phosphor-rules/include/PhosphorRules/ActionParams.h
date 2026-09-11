@@ -168,6 +168,24 @@ inline constexpr int MaxFontFamilyLength = 128;
 /// letting an unnamed group silently gather every matched window.
 inline constexpr int MaxTabGroupNameLength = 64;
 
+/// Caps on an `OverrideDecorationChain` payload, mirroring the config path's
+/// `kMaxChainPacks` / `kMaxShaderStringChars`. Hand-mirrored for the same reason
+/// as the border bounds below: phosphor-rules does not link the settings layer.
+///
+/// These matter more than the config twins they mirror. A rule chain REPLACES the
+/// config chain wholesale, AFTER every config-side bound has run, and lands in
+/// the compositor's per-entry fold where each entry costs a draw and a buffer
+/// slot every frame — so this validator is the only thing standing between a
+/// hand-edited `rules.json` and an unbounded per-frame cost on every matched
+/// window.
+inline constexpr int MaxDecorationChainEntries = 64;
+inline constexpr int MaxChainPackIdLength = 1024;
+
+/// Length cap on a shader preset id carried by a rule action. Every other
+/// free-form string in this vocabulary is bounded; an over-long id is inert
+/// (it resolves to no preset) but the asymmetry is the kind that drifts.
+inline constexpr int MaxShaderPresetIdLength = 1024;
+
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px, mirroring the
 /// PhosphorCompositor::DecorationDefaults BorderWidthMax / BorderRadiusMax

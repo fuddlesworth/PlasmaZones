@@ -96,8 +96,20 @@ void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfil
     // The getter is exactly "read + parse + prune", so reuse it instead of
     // duplicating its body inline. (fromJson({}) already yields the
     // default-constructed tree, so the old !isEmpty() guard was dead.)
+    //
+    // Both sides go through sanitizedThroughSchema, because this key gained a
+    // schema validator and the getter's value comes from a store READ, which the
+    // validator has already run on. Comparing the caller's unsanitized tree
+    // against a sanitized one means any input the validator alters — an
+    // over-long id or preset id, a 65th parameter, a map-valued parameter, more
+    // than 1024 overrides — can never compare equal, so the early return never
+    // fires and every repeat call writes and emits for a value that did not
+    // move. Same shape the decoration setter below already guards against.
+    const auto sanitized = PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(
+        sanitizedThroughSchema(m_store.get(), ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),
+                               pruned.toJson().toVariantMap())));
     const auto prevPruned = shaderProfileTree();
-    if (pruned == prevPruned)
+    if (sanitized == prevPruned)
         return;
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),
                    pruned.toJson().toVariantMap());

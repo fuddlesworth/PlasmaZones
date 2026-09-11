@@ -70,9 +70,21 @@ bool overLongShaderString(const QVariant& value);
 /// produces, so it can only have come from a hand-edit or a foreign writer.
 QVariantMap boundedShaderParams(const QVariantMap& in);
 
+/// Whether `boundedIdList` drops a repeated id.
+enum class IdListDuplicates {
+    Keep, ///< Leave repeats alone.
+    Drop, ///< Keep the first occurrence of each id only.
+};
+
 /// @p in with over-long entries dropped and the list capped at @p maxCount.
 /// Order is preserved, because a decoration chain folds in order.
-QStringList boundedIdList(const QStringList& in, int maxCount);
+///
+/// Pass `IdListDuplicates::Drop` for a decoration chain. The count cap is not
+/// the real resource there: the compositor folds per ENTRY with per-entry buffer
+/// textures and FBO slots indexed by position, so 64 copies of one animated pack
+/// costs 64 draws and 64 buffer slots every frame even though the shader is
+/// compiled once.
+QStringList boundedIdList(const QStringList& in, int maxCount, IdListDuplicates duplicates = IdListDuplicates::Keep);
 
 /// @p in with over-long keys and non-string or over-long values dropped, and
 /// the whole map capped at @p maxCount.

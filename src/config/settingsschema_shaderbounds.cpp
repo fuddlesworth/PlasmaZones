@@ -30,7 +30,7 @@ QVariantMap boundedShaderParams(const QVariantMap& in)
     return out;
 }
 
-QStringList boundedIdList(const QStringList& in, int maxCount)
+QStringList boundedIdList(const QStringList& in, int maxCount, IdListDuplicates duplicates)
 {
     QStringList out;
     out.reserve(qMin(in.size(), static_cast<qsizetype>(maxCount)));
@@ -39,6 +39,18 @@ QStringList boundedIdList(const QStringList& in, int maxCount)
             break;
         }
         if (id.size() > kMaxShaderStringChars) {
+            continue;
+        }
+        // De-duplication is order-preserving and keeps the FIRST occurrence, so
+        // a chain reads the way the user arranged it.
+        //
+        // It matters for a decoration chain specifically, where the count cap is
+        // not the real resource: the compositor folds the chain per ENTRY, with
+        // per-entry buffer textures and FBO slots indexed by position, so 64
+        // copies of one animated pack is 64 draws and 64 buffer slots per frame
+        // even though the shader compiles once. A disable set or a pack-id list
+        // is a set already and loses nothing by it either.
+        if (duplicates == IdListDuplicates::Drop && out.contains(id)) {
             continue;
         }
         out.append(id);

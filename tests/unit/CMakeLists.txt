@@ -2384,6 +2384,8 @@ foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_
             Qt6::ShaderToolsPrivate
     )
     target_compile_definitions(${_pv_test} PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    # No isolation call here on purpose: the directory-wide loop at the bottom of
+    # this file picks up every add_test registered above it, these included.
     add_test(NAME ${_pv_test} COMMAND ${_pv_test})
 endforeach()
 unset(_pack_validator_arms)

@@ -361,13 +361,16 @@ int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::
     return 1;
 }
 
-// Build the `p_<id>` name list a pack declares, for the did-you-mean hint.
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PresetLintParam>& declared)
 {
     if (presets.isEmpty()) {
         return 0;
     }
+    // Collected, then printed under its own header. Writing straight to the
+    // stream put an unindented error line above a "metadata OK" that
+    // contradicted it, while still returning a non-zero error count.
+    QStringList lints;
 
     QHash<QString, PresetLintParam> byId;
     byId.reserve(declared.size());
@@ -382,8 +385,8 @@ int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<
         for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
             const auto found = byId.constFind(vit.key());
             if (found == byId.constEnd()) {
-                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key()
-                    << "', which the pack does not declare\n";
+                lints << QStringLiteral("preset '%1' sets '%2', which the pack does not declare")
+                             .arg(presetName, vit.key());
                 ++problems;
                 continue;
             }
@@ -393,17 +396,35 @@ int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<
 
             if (param.type == QLatin1String("bool")) {
                 if (value.typeId() != QMetaType::Bool) {
-                    out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key()
-                        << "' to a non-boolean\n";
+                    lints << QStringLiteral("preset '%1' sets '%2' to a non-boolean").arg(presetName, vit.key());
                     ++problems;
                 }
                 continue;
             }
             if (param.type == QLatin1String("color") || param.type == QLatin1String("image")) {
                 if (value.typeId() != QMetaType::QString) {
-                    out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key() << "' to a non-"
-                        << param.type << " value\n";
+                    lints << QStringLiteral("preset '%1' sets '%2' to a non-%3 value")
+                                 .arg(presetName, vit.key(), param.type);
                     ++problems;
+                    continue;
+                }
+                // An image-typed preset value is a PATH, and the runtime refuses
+                // one that escapes the pack — dropping the entry with nothing but
+                // a log warning the pack author will never see. Checking it here
+                // is the whole point of an offline validator: surface what the
+                // runtime will refuse, at authoring time.
+                if (param.type == QLatin1String("image") && !packDir.isEmpty()) {
+                    const QString declaredPath = value.toString();
+                    // confinedPackPath, not the runtime's guard: this one is
+                    // deliberately the stricter of the two (it canonicalises when
+                    // both sides exist, and falls back to a lexical check when the
+                    // file is not written yet), which is what an authoring-time
+                    // gate should be.
+                    if (!declaredPath.isEmpty() && !confinedPackPath(packDir, declaredPath)) {
+                        lints << QStringLiteral("preset '%1' sets '%2' to a path outside the pack: %3")
+                                     .arg(presetName, vit.key(), declaredPath);
+                        ++problems;
+                    }
                 }
                 continue;
             }
@@ -413,22 +434,30 @@ int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<
             // legitimately declare only one, or neither.
             if (!value.canConvert<double>() || value.typeId() == QMetaType::QString
                 || value.typeId() == QMetaType::Bool) {
-                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key()
-                    << "' to a non-numeric value\n";
+                lints << QStringLiteral("preset '%1' sets '%2' to a non-numeric value").arg(presetName, vit.key());
                 ++problems;
                 continue;
             }
             const double v = value.toDouble();
             if (param.minValue.isValid() && v < param.minValue.toDouble()) {
-                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key() << "' to " << v
-                    << ", below its declared minimum " << param.minValue.toDouble() << "\n";
+                lints << QStringLiteral("preset '%1' sets '%2' to %3, below its declared minimum %4")
+                             .arg(presetName, vit.key(), QString::number(v),
+                                  QString::number(param.minValue.toDouble()));
                 ++problems;
             }
             if (param.maxValue.isValid() && v > param.maxValue.toDouble()) {
-                out << padLabel(packLabel) << "preset '" << presetName << "' sets '" << vit.key() << "' to " << v
-                    << ", above its declared maximum " << param.maxValue.toDouble() << "\n";
+                lints << QStringLiteral("preset '%1' sets '%2' to %3, above its declared maximum %4")
+                             .arg(presetName, vit.key(), QString::number(v),
+                                  QString::number(param.maxValue.toDouble()));
                 ++problems;
             }
+        }
+    }
+
+    if (!lints.isEmpty()) {
+        out << "  presets        ERROR\n";
+        for (const QString& l : lints) {
+            out << "    " << l << "\n";
         }
     }
     return problems;
@@ -450,28 +479,28 @@ QList<PresetLintParam> toLintParams(const QList<ParamInfo>& declared)
 }
 } // namespace
 
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<ShaderRegistry::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<AnimationShaderEffect::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<SurfaceShaderEffect::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PointerShaderEffect::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
 }
 
 QStringList declaredParamNames(const QList<ShaderRegistry::ParameterInfo>& params)
