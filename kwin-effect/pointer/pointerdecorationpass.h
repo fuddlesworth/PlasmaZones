@@ -52,7 +52,7 @@ namespace PlasmaZones {
 /// and, while live, the pass's own per-frame repaint request.
 ///
 /// A burst also ends early when the sprite it decorates goes away, whoever
-/// took it (cursorHiddenElsewhere). The trail is then DROPPED rather than
+/// took it (cursorSpriteGone). The trail is then DROPPED rather than
 /// merely left unpainted: dropTrail damages the band the last frame covered
 /// and empties the history, and it is the emptied history — not the hide —
 /// that ends liveness, so the pass is still in the paint chain for the cycle
@@ -418,7 +418,7 @@ private:
 
     // ── pointerdecorationpass.cpp ───────────────────────────────────────────
 
-    /// Is the compositor's cursor hidden by something other than this pass?
+    /// Is there no cursor sprite left to decorate?
     ///
     /// A pointer decoration decorates a pointer. When the sprite is gone the
     /// trail has nothing under it, and drawing one anyway paints a comet
@@ -428,14 +428,32 @@ private:
     /// desktop so the remote motion mirrors, so `cursorPos` stays live and
     /// every liveness test still passes.
     ///
-    /// Two mechanisms hide a cursor and both count. KWin's own hide is what
-    /// `isCursorHidden` reports, and this pass takes that same hide for an
-    /// `above` chain, hence the `m_cursorHidden` exclusion — our own hide must
-    /// not read as a reason to stop drawing. A client that installs a null
-    /// cursor surface leaves the hide counter alone and empties the image
-    /// instead, which is why the image is tested independently rather than as
-    /// a fallback: that one is legible even while we hold a hide of our own.
-    bool cursorHiddenElsewhere() const;
+    /// The test is the cursor IMAGE, and deliberately NOT
+    /// `EffectsHandler::isCursorHidden()`. That counter does not mean "the
+    /// user cannot see a pointer"; it means "KWin is not compositing the
+    /// pointer itself", which is equally what an effect that hides the cursor
+    /// in order to draw its OWN copy leaves behind. KWin ships two:
+    /// `shakecursor`, which magnifies the pointer while the user shakes it,
+    /// and `zoom` in its scaled-pointer mode. Reading the counter here meant
+    /// that shaking the mouse — the very gesture that draws the longest trail
+    /// — took `dropTrail` on every pointer event for as long as the
+    /// magnification lasted, so the whole trail blinked out mid-sweep and
+    /// stayed out for seconds while the pointer was, if anything, more visible
+    /// than usual. A client that installs a null cursor surface leaves the
+    /// counter alone and empties the image instead, so the image is the signal
+    /// that actually separates the two cases, and it stays legible while this
+    /// pass holds a hide of its own.
+    ///
+    /// This does NOT weaken the `above`-layer arbitration: `hideCursorForPass`
+    /// tests `isCursorHidden()` itself and refuses to take a second hide, so a
+    /// chain that would draw its own sprite still stands down for whoever
+    /// asked first.
+    ///
+    /// Known gap: under `zoom`'s scaled pointer the scene is transformed and
+    /// this pass's trail is not, so the stroke sits off the magnified cursor.
+    /// The counter used to mask that by accident. Fixing it properly needs a
+    /// screen-transform gate, not a cursor-visibility one.
+    bool cursorSpriteGone() const;
 
     /// Drop the live trail because the pointer stopped being a pointer worth
     /// decorating, repainting away what is still on screen first. @p next

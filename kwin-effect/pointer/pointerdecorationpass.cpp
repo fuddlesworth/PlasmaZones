@@ -227,7 +227,7 @@ void PointerDecorationPass::notePointer(const QPointF& pos, const QPointF& oldPo
         return;
     }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    if (cursorHiddenElsewhere()) {
+    if (cursorSpriteGone()) {
         // The sprite is gone but the pointer is still being driven (a software
         // KVM forwarding motion to another machine). Write no history and
         // request no repaint beyond the one that clears what is already
@@ -469,7 +469,7 @@ void PointerDecorationPass::scheduleRepaints()
         return;
     }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    if (cursorHiddenElsewhere()) {
+    if (cursorSpriteGone()) {
         // The sprite went while the pointer sat still, so no pointer event is
         // coming to notice it — a client that hides the cursor after an idle
         // timeout is the ordinary case, and it hides precisely because motion
@@ -509,22 +509,18 @@ bool PointerDecorationPass::cursorOnOutput(KWin::LogicalOutput* screen) const
     return screen && KWin::effects && KWin::effects->screenAt(KWin::effects->cursorPos().toPoint()) == screen;
 }
 
-bool PointerDecorationPass::cursorHiddenElsewhere() const
+bool PointerDecorationPass::cursorSpriteGone() const
 {
     if (!KWin::effects) {
         return false;
     }
-    // Two independent mechanisms, either of which counts, so the order below
-    // decides nothing but which read is skipped when the first already
-    // answered. A client-installed blank cursor empties the IMAGE and leaves
-    // the hide counter alone, which is why it is a test of its own rather
-    // than a fallback: it is the one signal still legible while this pass
-    // holds a hide, where the counter can only speak for an owner that is
-    // not us.
-    if (KWin::effects->cursorImage().isNull()) {
-        return true;
-    }
-    return KWin::effects->isCursorHidden() && !m_cursorHidden;
+    // The IMAGE, and only the image — see the header for why the hide counter
+    // is not consulted here. An empty image is a client-installed blank cursor
+    // (or a KVM that took the sprite away): nothing is on screen to decorate.
+    // A non-empty one may still be composited by another effect rather than by
+    // KWin, which is a pointer the user can see and so a pointer worth
+    // decorating.
+    return KWin::effects->cursorImage().isNull();
 }
 
 bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
@@ -548,9 +544,8 @@ void PointerDecorationPass::updateCursorHiding()
     if (!m_cursorHidden) {
         return;
     }
-    const bool stillLive = m_engaged && m_anyAboveLayer && m_output && !suppressedOn(m_output)
-        && !cursorHiddenElsewhere() && cursorOnOutput(m_output)
-        && m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
+    const bool stillLive = m_engaged && m_anyAboveLayer && m_output && !suppressedOn(m_output) && !cursorSpriteGone()
+        && cursorOnOutput(m_output) && m_history.isLive(ShaderInternal::shaderClockNowMs(), m_maxTrailSeconds);
     if (stillLive) {
         return;
     }
