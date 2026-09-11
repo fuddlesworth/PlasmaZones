@@ -97,6 +97,34 @@ PHOSPHORSHADERS_EXPORT int migrateLegacyOverlayPresets(const QString& root);
  * ## Thread safety
  *
  * GUI-thread only. Inherits the constraint from `DirectoryLoader`.
+ *
+ * ## The seam between this and ShaderPresetStore is the weakest one here
+ *
+ * Recorded because three separate teardown bugs lived in it, and the next person
+ * to touch either class should know the shape before they add to it.
+ *
+ * This class is a thin forwarder — four methods delegating to `DirectoryLoader`,
+ * plus a `Sink` and a destructor — and `ShaderPresetStore` is a composition root
+ * of about the same size. Between them sits one invariant with NO OWNER: **a
+ * family has exactly one publisher.** This class ASSUMES it (the destructor's
+ * retraction is whole-family, which is only correct under that assumption),
+ * `ShaderPresetRegistry` does not know about it, and the Store is the only class
+ * positioned to enforce it and merely happens to, by building one loader per
+ * family and refusing a second set.
+ *
+ * All three teardown faults came from that gap: the retraction exists only
+ * because this class cannot see whether anyone else publishes for its family, it
+ * is unscoped for the same reason, and the use-after-free happened because it ran
+ * during CHILD destruction rather than at a point the owner chose.
+ *
+ * Collapsing the two — the Store owning the four Sinks and DirectoryLoaders
+ * directly and retracting in its own destructor BODY — would put the invariant
+ * where it can be held, make `load()` idempotent by construction rather than by
+ * an early return, and remove the destructor retraction altogether, which would
+ * kill that use-after-free with no QPointer involved at all. That is the right
+ * long-term shape and it is deliberately NOT the fix that was applied: applying a
+ * library restructure as the remedy for a crash is how a fix pass manufactures
+ * the next one.
  */
 class PHOSPHORSHADERS_EXPORT ShaderPresetLoader : public QObject
 {

@@ -101,6 +101,34 @@ public:
  * `{ "baseline": {node}, "overrides": { "{uuid}": {node} } }`.
  *
  * Value type, not internally synchronized. Same as the sibling trees.
+ *
+ * ## Why there are four of these, and what should be shared
+ *
+ * Recorded here because this audit found the four trees had already diverged in
+ * ways nobody intended, and the next person to add a fifth should know which half
+ * of the duplication is deliberate.
+ *
+ * One fully GENERIC tree would be the wrong target. The four genuinely differ in
+ * key space (layout UUIDs here, dot-paths there), inheritance model (one step here,
+ * a full walk-up there), payload shape and parse dependency — and collapsing them
+ * would force optionals onto this type, which deliberately has none, or cost the
+ * other two their per-field inheritance.
+ *
+ * The CONTAINER is a different matter, and it is written out three times:
+ * setOverride / clearOverride / overriddenPaths, the insertion-order bookkeeping,
+ * the toJson array loop, the order-sensitive equality, the empty-path guard. Those
+ * copies HAVE drifted: this type dropped its insertion-order list entirely in
+ * 46ed8cdef while the other two kept theirs, it normalises keys at the schema
+ * while the decoration tree normalises inside fromJson, and the empty-path guard
+ * exists three times over. A `PathKeyedTree<Payload>` carrying baseline,
+ * overrides, insertion order, serialisation and equality — with the payload
+ * supplying only fromJson / toJson / bounded() — is the abstraction all four
+ * re-derive.
+ *
+ * The lesson of this audit's sanitizer work is the reason it is worth doing: the
+ * bound CONSTANTS were lifted into a shared header while four hand-written
+ * traversals stayed, and the SHAPE rules diverged anyway. The numbers were never
+ * the hard part.
  */
 class PLASMAZONES_EXPORT OverlayShaderTree
 {
