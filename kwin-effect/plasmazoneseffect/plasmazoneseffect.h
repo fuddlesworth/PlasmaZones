@@ -2026,13 +2026,13 @@ private:
 
     /// Surface-shader pack registry (the "surface" category: window border /
     /// rounded corners / glow / …). Discovers data/surface packs; the effect
-    /// compiles each pack a resolved decoration chain references. Search paths
-    /// populated lazily via ensureSurfaceRegistryPaths.
+    /// compiles each pack a resolved decoration chain references.
     PhosphorSurfaceShaders::SurfaceShaderRegistry m_surfaceShaderRegistry;
     bool m_surfaceRegistryPathsAdded = false; ///< one-shot guard for the search-path population
+    quint64 m_decorationSweepGeneration = 0; ///< updateAllDecorations re-entry counter; rationale at that call site
 
     /// Per-surface decoration profile tree, delivered by the daemon as
-    /// `decorationProfileTreeJson` (Settings::decorationProfileTree). resolve()
+    /// `decorationProfileTreeJson` (Settings::decorationProfileTree), whose resolve()
     /// over a window's surface path (window.tiled / window.snapped /
     /// window.floating) yields the DecorationProfile that drives the window's
     /// surface-pack chain and the per-pack parameters that style it (border

@@ -442,6 +442,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // membership change) because they ride the same updateWindowDecoration call.
     // A pack the registry cannot resolve gets no entry; consumers fall back
     // to the compiled pack's baked baseline.
+    //
+    // Kept here as well as at the top of updateAllDecorations, because this
+    // function has callers that do not come through the sweep. After the first
+    // call it is a bool test, and the re-entrancy the first one causes is handled
+    // by the generation check there.
     ensureSurfaceRegistryPaths();
     QVariantMap allPackParams = resolvedProfile.effectiveParameters();
     if (ruleChain) {
@@ -761,6 +766,28 @@ void PlasmaZonesEffect::updateAllDecorations()
     // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
     // walk below would deref the null.
     if (!KWin::effects) {
+        return;
+    }
+
+    // Populate the surface registry's search paths HERE, before the sweep, and
+    // notice whether doing so re-entered this function.
+    //
+    // The first call scans synchronously and emits effectsChanged INLINE, which
+    // reaches the handler that drops the surface caches and runs a full nested
+    // updateAllDecorations. Called from inside the per-window path, as it used to
+    // be, that happened partway through the outer sweep: the nested call swept
+    // every window correctly and the outer call then walked every remaining
+    // window a second time, against caches the handler had just cleared. One
+    // redundant full sweep plus a cold capture cache, once per session.
+    //
+    // It did not CORRUPT anything, unlike the pointer pass's twin of this (the
+    // outer loop there resumed into a container the nested call had rebuilt), so
+    // the fix is only about the wasted sweep: if the nested call already ran, it
+    // reconciled every window against the same state this one would, and there is
+    // nothing left to do.
+    const quint64 sweepAtEntry = ++m_decorationSweepGeneration;
+    ensureSurfaceRegistryPaths();
+    if (m_decorationSweepGeneration != sweepAtEntry) {
         return;
     }
 

@@ -757,28 +757,43 @@ SettingsController::SettingsController(QObject* parent)
     m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
     m_presetStore->load();
     {
-        auto& presets = m_presetStore->registry();
-
         // Push each family's pack-declared presets now, and again on every
         // reload, so a pack dropped in while the window is open brings its
         // presets with it.
+        //
         // The projection is PhosphorShaders::seedPackPresets, shared with the
         // daemon and the compositor rather than written out here: all three
         // built the same two hashes from a pack list and whole-family replaced,
-        // so a fix to it had to land in all three. `presets` is a reference to
-        // the store's registry, which outlives the controller's wiring, so these
-        // lambdas may hold it past this block.
-        const auto syncAnimation = [this, &presets]() {
-            PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Animation,
-                                             m_animationShaderRegistry->availableEffects());
+        // so a fix to it had to land in all three.
+        //
+        // Each lambda reaches the store through `m_presetStore` and checks it,
+        // rather than capturing a reference into the registry. Every other
+        // late-bound dependency in this controller is hand-cleared in the
+        // destructor precisely so a deferred callback cannot reach a dangling
+        // one, and a captured `ShaderPresetRegistry&` could not join that
+        // discipline: these are connected with `this` as context, so Qt
+        // disconnects them in ~QObject, which runs AFTER the unique_ptr members
+        // are destroyed. An effectsChanged arriving in that window would have
+        // seeded freed memory. Asking the owning pointer each time puts this
+        // dependency back under the rule the destructor enforces for the other
+        // nine, with no extra teardown bookkeeping to forget.
+        const auto syncAnimation = [this]() {
+            if (m_presetStore && m_animationShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Animation,
+                                                 m_animationShaderRegistry->availableEffects());
+            }
         };
-        const auto syncSurface = [this, &presets]() {
-            PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Surface,
-                                             m_surfaceShaderRegistry->availableEffects());
+        const auto syncSurface = [this]() {
+            if (m_presetStore && m_surfaceShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Surface,
+                                                 m_surfaceShaderRegistry->availableEffects());
+            }
         };
-        const auto syncPointer = [this, &presets]() {
-            PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Pointer,
-                                             m_pointerShaderRegistry->availableEffects());
+        const auto syncPointer = [this]() {
+            if (m_presetStore && m_pointerShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Pointer,
+                                                 m_pointerShaderRegistry->availableEffects());
+            }
         };
 
         syncAnimation();
@@ -917,10 +932,11 @@ SettingsController::SettingsController(QObject* parent)
     // never appeared in the picker even though overlay packs were the one family
     // that could declare them before this feature existed.
     if (m_presetStore) {
-        auto& presets = m_presetStore->registry();
-        const auto syncOverlay = [this, &presets]() {
-            if (m_overlayShaderRegistry) {
-                PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Overlay,
+        // Through m_presetStore, not a captured registry reference, for the
+        // teardown reason given on the three-family block above.
+        const auto syncOverlay = [this]() {
+            if (m_presetStore && m_overlayShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Overlay,
                                                  m_overlayShaderRegistry->availableShaders());
             }
         };

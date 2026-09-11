@@ -121,16 +121,41 @@ void PointerDecorationPass::setSuppressedOutputs(const QSet<KWin::LogicalOutput*
 
 void PointerDecorationPass::rebuildChain()
 {
+    // enabledChain() is effectiveChain() minus the per-layer disable toggles,
+    // which is exactly the set of layers the renderer should paint. An empty
+    // one is the "off" state: there is no separate master switch.
+    const QStringList chain = m_profile.enabledChain();
+
+    // BEFORE the clear below, and that order is the whole point.
+    //
+    // Populating the search paths is what makes the registry scan the pack dirs
+    // at all, so it has to happen before the first resolve — but the first call
+    // scans SYNCHRONOUSLY and emits effectsChanged INLINE, which reaches the
+    // handler that calls invalidateShaderCache and re-enters this function. With
+    // the clear first, the nested call fully repopulated m_engagedLayers and the
+    // outer call then resumed and push_backed a SECOND copy of every layer: the
+    // main draw ran twice per layer (the ranBufferPasses dedupe suppresses only
+    // buffer stages), so a trail composited its own alpha twice. Visible, not
+    // merely wasteful.
+    //
+    // Hoisting it above the clear makes the re-entry harmless rather than
+    // deferring the handler: the nested call builds whatever it builds, and the
+    // clear below then discards it and rebuilds from scratch. Deferring would
+    // leave the real fault in place — an outer function resuming into a
+    // container something else rebuilt underneath it.
+    //
+    // Still gated on the user having actually enabled a chain, so a disabled
+    // feature pays for neither the scan nor the file watcher.
+    if (!chain.isEmpty()) {
+        ensureRegistryPaths();
+    }
+
     m_engagedLayers.clear();
     m_anyAboveLayer = false;
     m_maxReachLogical = 0.0;
     m_maxTrailSeconds = 0.0;
     m_sampleWindowSeconds = 0.0;
 
-    // enabledChain() is effectiveChain() minus the per-layer disable toggles,
-    // which is exactly the set of layers the renderer should paint. An empty
-    // one is the "off" state: there is no separate master switch.
-    const QStringList chain = m_profile.enabledChain();
     if (chain.isEmpty()) {
         m_engaged = false;
         // Kept in step on this path too, so the sampler never carries a
@@ -138,11 +163,6 @@ void PointerDecorationPass::rebuildChain()
         m_history.setTrailSeconds(m_sampleWindowSeconds);
         return;
     }
-    // Populating the search paths is what makes the registry scan the pack
-    // dirs at all, so it has to happen before the first resolve — but only
-    // once the user has actually enabled a chain, so a disabled feature never
-    // pays for the scan or the file watcher.
-    ensureRegistryPaths();
 
     const QVariantMap allParameters = m_profile.effectiveParameters();
     m_engagedLayers.reserve(static_cast<size_t>(chain.size()));
