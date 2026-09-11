@@ -5,6 +5,7 @@
 
 #include <QJsonDocument>
 #include <QTest>
+#include <QVariantMap>
 
 using PhosphorAnimationShaders::ShaderProfile;
 
@@ -130,6 +131,86 @@ private Q_SLOTS:
 
         b.effectId = QStringLiteral("slide");
         QVERIFY(a != b);
+    }
+
+    // ─────── Preset reference ───────
+
+    void testPresetIdDefaultsUnset()
+    {
+        // A config written before presets existed must load with the field
+        // INHERIT, not "explicitly no preset" — different statements in the
+        // cascade, exactly like effectId and parameters.
+        ShaderProfile p;
+        QVERIFY(!p.presetId.has_value());
+        QVERIFY(p.effectivePresetId().isEmpty());
+    }
+
+    void testPresetIdRoundTrips()
+    {
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.presetId = QStringLiteral("{neon}");
+        p.parameters = QVariantMap{{QStringLiteral("glow"), 0.8}};
+
+        const ShaderProfile back = ShaderProfile::fromJson(p.toJson());
+        QCOMPARE(back, p);
+        QCOMPARE(back.effectivePresetId(), QStringLiteral("{neon}"));
+    }
+
+    void testAbsentPresetIdStaysUnsetThroughJson()
+    {
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        const ShaderProfile back = ShaderProfile::fromJson(p.toJson());
+        QVERIFY(!back.presetId.has_value());
+        QCOMPARE(back, p);
+    }
+
+    void testEngagedEmptyPresetIdSurvives()
+    {
+        // Engaged-but-empty is "explicitly no preset", which a leaf uses to
+        // stop inheriting an ancestor's. It has to round-trip distinctly from
+        // absent or that statement is unwritable.
+        ShaderProfile p;
+        p.presetId = QString();
+        const ShaderProfile back = ShaderProfile::fromJson(p.toJson());
+        QVERIFY(back.presetId.has_value());
+        QVERIFY(back.presetId->isEmpty());
+        QCOMPARE(back, p);
+    }
+
+    void testOverlayInheritsAndOverridesPresetId()
+    {
+        ShaderProfile parent;
+        parent.presetId = QStringLiteral("{from-parent}");
+        ShaderProfile child;
+        child.effectId = QStringLiteral("dissolve");
+
+        ShaderProfile merged = parent;
+        ShaderProfile::overlay(merged, child);
+        QCOMPARE(merged.effectivePresetId(), QStringLiteral("{from-parent}"));
+
+        child.presetId = QStringLiteral("{from-child}");
+        merged = parent;
+        ShaderProfile::overlay(merged, child);
+        QCOMPARE(merged.effectivePresetId(), QStringLiteral("{from-child}"));
+    }
+
+    void testPresetIdParticipatesInEquality()
+    {
+        ShaderProfile a;
+        a.effectId = QStringLiteral("dissolve");
+        ShaderProfile b = a;
+        QCOMPARE(a, b);
+        b.presetId = QStringLiteral("{neon}");
+        QVERIFY(a != b);
+    }
+
+    void testWithDefaultsEngagesPresetId()
+    {
+        const ShaderProfile filled = ShaderProfile().withDefaults();
+        QVERIFY(filled.presetId.has_value());
+        QVERIFY(filled.presetId->isEmpty());
     }
 };
 

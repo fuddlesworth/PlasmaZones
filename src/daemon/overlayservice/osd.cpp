@@ -32,6 +32,7 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -542,7 +543,14 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // baseline → category → leaf and returns a DecorationProfile carrying an
     // effective CHAIN (ordered pack ids) plus a per-pack parameters map.
     const PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings->decorationProfileTree();
-    const PhosphorSurfaceShaders::DecorationProfile profile = tree.resolve(surfacePath);
+    // Flatten each layer's preset reference into its parameters, after the
+    // walk-up rather than before it — see withPresetsResolved for why the order
+    // matters. With no preset registry injected this is the resolved profile
+    // unchanged.
+    const PhosphorSurfaceShaders::DecorationProfile profile = m_presetRegistry
+        ? PhosphorSurfaceShaders::withPresetsResolved(tree.resolve(surfacePath), *m_presetRegistry,
+                                                      PhosphorShaders::ShaderFamily::Surface)
+        : tree.resolve(surfacePath);
     // enabledChain(): a pack the user toggled off must not render here either.
     const QStringList chain = profile.enabledChain();
     if (chain.isEmpty()) {

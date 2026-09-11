@@ -88,6 +88,10 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorShaders {
+class ShaderPresetRegistry;
+}
+
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
@@ -162,6 +166,16 @@ public:
     /// BEFORE resetting the registry — the explicit teardown, not declaration
     /// order, is what prevents a dangling pointer during shutdown.
     void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
+    /// Borrowed Daemon-owned preset registry, used to turn an assignment's
+    /// `presetId` into the parameters it stands for. Same lifetime contract as
+    /// the two registries above: Daemon::stop() nulls this borrow before
+    /// tearing the store down.
+    ///
+    /// Optional, unlike the shader registries. With none injected every
+    /// assignment resolves to its own parameters, which is exactly what an
+    /// assignment carrying no preset already does, so the overlay path
+    /// degrades instead of failing.
+    void setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry);
     void updateGeometries() override;
 
     // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
@@ -965,6 +979,7 @@ private:
     /// slot. Same teardown contract as m_animShaderRegistry: Daemon::stop()
     /// nulls this borrow before the registry is reset.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
+    PhosphorShaders::ShaderPresetRegistry* m_presetRegistry = nullptr; ///< Borrowed; may be null
 
     /// Decoration pack refusals already reported, keyed "<packId>|<reason>".
     ///

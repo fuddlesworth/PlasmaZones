@@ -317,6 +317,9 @@ bool Daemon::init()
     // precede setupShaderWarmBakes(), which borrows both.
     setupAnimationShaderEffects();
     setupSurfaceShaderEffects();
+    // After both, because it seeds pack-declared presets from what those
+    // registries have already discovered rather than waiting on a reload.
+    setupShaderPresets();
     setupShaderWarmBakes();
     initLayoutAndSettingsWiring();
     initCoreAdaptors();

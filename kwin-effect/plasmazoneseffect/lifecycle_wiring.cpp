@@ -333,6 +333,88 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // under the same discipline as the sibling handlers here.
         m_pointerPass.invalidateShaderCache();
     });
+
+    // ── Shader presets ────────────────────────────────────────────────────
+    //
+    // Scan the user preset directories with live reload, seed what the three
+    // pack registries already declare, and re-seed whenever one reloads. This
+    // runs after the registry connections above so a reload that arrives mid
+    // setup is not missed.
+    m_shaderManager.presetStore().load();
+    {
+        auto& presets = m_shaderManager.presetStore().registry();
+
+        const auto syncAnimationPresets = [this, &presets]() {
+            const auto effects = m_shaderManager.m_animationShaderRegistry.availableEffects();
+            for (const auto& effect : effects) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Animation, effect.id, effect.presets);
+            }
+        };
+        const auto syncSurfacePresets = [this, &presets]() {
+            const auto effects = m_surfaceShaderRegistry.availableEffects();
+            for (const auto& effect : effects) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Surface, effect.id, effect.presets);
+            }
+        };
+        const auto syncPointerPresets = [this, &presets]() {
+            const auto effects = m_pointerPass.registry().availableEffects();
+            for (const auto& effect : effects) {
+                presets.setPackPresets(PhosphorShaders::ShaderFamily::Pointer, effect.id, effect.presets);
+            }
+        };
+
+        syncAnimationPresets();
+        syncSurfacePresets();
+        syncPointerPresets();
+
+        connect(&m_shaderManager.m_animationShaderRegistry,
+                &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, syncAnimationPresets);
+        connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                syncSurfacePresets);
+        connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
+                syncPointerPresets);
+
+        // A retuned preset has to reach what is already on screen. Which caches
+        // that means dropping differs per family, because each bakes parameters
+        // at a different point:
+        //
+        //   • Animation bakes at transition BEGIN, and resolveAnimationShaderProfile
+        //     re-resolves per transition, so the next one picks the new values up
+        //     on its own. A transition already running keeps the values it began
+        //     with — they are sub-second, and tearing one down mid-flight to
+        //     restyle it would be a visible glitch for no gain.
+        //   • Surface bakes parameters INTO the compiled pack, cached in
+        //     m_compiledPacks, so a preset change means the same cache drop a
+        //     pack edit does.
+        //   • Pointer caches compiled packs the same way.
+        connect(&presets, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+                [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                    switch (family) {
+                    case PhosphorShaders::ShaderFamily::Surface:
+                        // Same GL discipline as the surface effectsChanged
+                        // handler above: this arrives from a file watcher
+                        // between frames, with no current context, and the
+                        // caches own GLShaders and GLTextures.
+                        ensureGlContextCurrent();
+                        m_compiledPacks.clear();
+                        m_packBufferScaleCache.clear();
+                        m_surfaceMultipass.clear();
+                        if (KWin::effects) {
+                            KWin::effects->addRepaintFull();
+                        }
+                        updateAllDecorations();
+                        break;
+                    case PhosphorShaders::ShaderFamily::Pointer:
+                        m_pointerPass.invalidateShaderCache();
+                        break;
+                    case PhosphorShaders::ShaderFamily::Animation:
+                    case PhosphorShaders::ShaderFamily::Overlay:
+                        // Animation re-resolves per transition; overlay is the
+                        // daemon's to render, and the effect never reads it.
+                        break;
+                    }
+                });
+    }
 }
 
 void PlasmaZonesEffect::initTimers()

@@ -14,6 +14,7 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -105,6 +106,81 @@ void Daemon::setupSurfaceShaderEffects()
     // registry's teardown.
     if (m_overlayService) {
         m_overlayService->setSurfaceShaderRegistry(m_surfaceShaderRegistry.get());
+    }
+}
+
+void Daemon::setupShaderPresets()
+{
+    m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
+    // Scans the user preset directories with live reload, and imports any
+    // presets left by the old zone-only save path on the way past.
+    m_presetStore->load();
+
+    auto& registry = m_presetStore->registry();
+
+    // Pack-declared presets are not the store's to scan — they live in each
+    // pack's metadata.json, which only that family's pack registry parses. Push
+    // what each registry has now, and again whenever it reloads, so a pack
+    // dropped in or updated on disk brings its presets with it.
+    //
+    // Seeded immediately rather than waiting for the first reload signal: the
+    // registries have already scanned by the time this runs, and a signal that
+    // never comes would leave every pack-declared preset invisible until the
+    // user happened to edit a pack.
+    const auto syncOverlayPresets = [this, &registry]() {
+        if (!m_shaderRegistry) {
+            return;
+        }
+        const QList<ShaderRegistry::ShaderInfo> shaders = m_shaderRegistry->availableShaders();
+        for (const ShaderRegistry::ShaderInfo& info : shaders) {
+            registry.setPackPresets(PhosphorShaders::ShaderFamily::Overlay, info.id, info.presets);
+        }
+    };
+    const auto syncAnimationPresets = [this, &registry]() {
+        if (!m_animationShaderRegistry) {
+            return;
+        }
+        const QList<PhosphorAnimationShaders::AnimationShaderEffect> effects =
+            m_animationShaderRegistry->availableEffects();
+        for (const PhosphorAnimationShaders::AnimationShaderEffect& effect : effects) {
+            registry.setPackPresets(PhosphorShaders::ShaderFamily::Animation, effect.id, effect.presets);
+        }
+    };
+    const auto syncSurfacePresets = [this, &registry]() {
+        if (!m_surfaceShaderRegistry) {
+            return;
+        }
+        const QList<PhosphorSurfaceShaders::SurfaceShaderEffect> effects = m_surfaceShaderRegistry->availableEffects();
+        for (const PhosphorSurfaceShaders::SurfaceShaderEffect& effect : effects) {
+            registry.setPackPresets(PhosphorShaders::ShaderFamily::Surface, effect.id, effect.presets);
+        }
+    };
+
+    syncOverlayPresets();
+    syncAnimationPresets();
+    syncSurfacePresets();
+
+    // A pack REMOVED from disk keeps its entry here until something replaces
+    // it. That is deliberate and harmless: presets are looked up by (family,
+    // packId), so a preset for a pack nobody can assign any more is never
+    // reached. Pruning would mean diffing the registry's pack list on every
+    // reload for no observable gain.
+    if (m_shaderRegistry) {
+        connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, syncOverlayPresets);
+    }
+    if (m_animationShaderRegistry) {
+        connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
+                this, syncAnimationPresets);
+    }
+    if (m_surfaceShaderRegistry) {
+        connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                syncSurfacePresets);
+    }
+
+    // The overlay service resolves an assignment's presetId through this, and
+    // refreshes visible windows when a preset changes.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(&registry);
     }
 }
 

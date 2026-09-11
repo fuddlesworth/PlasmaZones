@@ -277,6 +277,73 @@ private Q_SLOTS:
         Settings second;
         QCOMPARE(second.overlayShaderTree(), read);
     }
+
+    // ─────── Preset reference ───────
+
+    void testPresetIdRoundTrips()
+    {
+        OverlayShaderProfile p;
+        p.shaderId = QStringLiteral("cosmic-flow");
+        p.presetId = QStringLiteral("{teal}");
+        p.parameters = QVariantMap{{QStringLiteral("speed"), 2.0}};
+
+        const OverlayShaderProfile back = OverlayShaderProfile::fromJson(p.toJson());
+        QCOMPARE(back, p);
+        QCOMPARE(back.presetId, QStringLiteral("{teal}"));
+    }
+
+    void testProfileCarryingOnlyAPresetIsNotEmpty()
+    {
+        // isEmpty() gates persistence, so a node carrying nothing but a preset
+        // reference still has to be written — otherwise picking a preset
+        // without touching a parameter would not survive a restart.
+        OverlayShaderProfile p;
+        p.presetId = QStringLiteral("{teal}");
+        QVERIFY(!p.isEmpty());
+    }
+
+    void testPresetIdParticipatesInEquality()
+    {
+        OverlayShaderProfile a;
+        a.shaderId = QStringLiteral("cosmic-flow");
+        OverlayShaderProfile b = a;
+        QCOMPARE(a, b);
+        b.presetId = QStringLiteral("{teal}");
+        QVERIFY(a != b);
+    }
+
+    void testPresetIdSurvivesTheSchemaSanitizer()
+    {
+        // The sanitizer rebuilds the profile field by field at the persistence
+        // boundary, so a field it forgets is silently dropped on every save.
+        // This is the regression guard for exactly that.
+        Settings a;
+        OverlayShaderTree tree;
+        OverlayShaderProfile node;
+        node.shaderId = QStringLiteral("cosmic-flow");
+        node.presetId = QStringLiteral("{teal}");
+        tree.setBaseline(node);
+        a.setOverlayShaderTree(tree);
+
+        QCOMPARE(a.overlayShaderTree().baseline().presetId, QStringLiteral("{teal}"));
+    }
+
+    void testOverLongPresetIdIsDroppedButShaderSurvives()
+    {
+        // Each field is bounded independently: an over-long preset id falls
+        // back to the assignment's own parameters, which is the same thing a
+        // preset id naming no preset already resolves to.
+        Settings a;
+        OverlayShaderTree tree;
+        OverlayShaderProfile node;
+        node.shaderId = QStringLiteral("cosmic-flow");
+        node.presetId = QString(4096, QLatin1Char('x'));
+        tree.setBaseline(node);
+        a.setOverlayShaderTree(tree);
+
+        QCOMPARE(a.overlayShaderTree().baseline().shaderId, QStringLiteral("cosmic-flow"));
+        QVERIFY(a.overlayShaderTree().baseline().presetId.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestSettingsOverlayShaderTree)

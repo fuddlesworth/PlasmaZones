@@ -27,6 +27,7 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 
 #include <PhosphorOverlay/ShellHost.h>
 
@@ -109,18 +110,32 @@ namespace PAS = PhosphorAnimationShaders;
 /// but a settings-edit signal storm multiplies it. Resolving once here also keeps
 /// the `resolveShaderWithDefault` knowledge in ONE place instead of two helpers
 /// that must agree.
-PAS::ShaderProfile resolveShaderLeg(const PAS::ShaderProfileTree& tree, const QString& path)
+PAS::ShaderProfile resolveShaderLeg(const PAS::ShaderProfileTree& tree,
+                                    const PhosphorShaders::ShaderPresetRegistry* presets, const QString& path)
 {
-    return PAS::resolveShaderWithDefault(tree, path);
+    PAS::ShaderProfile resolved = PAS::resolveShaderWithDefault(tree, path);
+    // AFTER the walk-up, never before it. A node can carry a preset while
+    // inheriting its pack from an ancestor, and the registry keys presets by
+    // (family, packId, presetId) — so flattening per node, before inheritance
+    // has supplied the pack, would look the preset up against an empty pack id
+    // and silently resolve nothing.
+    if (presets && resolved.presetId && !resolved.presetId->isEmpty()) {
+        resolved.parameters =
+            presets->resolveParams(PhosphorShaders::ShaderFamily::Animation, resolved.effectiveEffectId(),
+                                   *resolved.presetId, resolved.effectiveParameters());
+        resolved.presetId.reset();
+    }
+    return resolved;
 }
 
-QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)
+QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const PhosphorShaders::ShaderPresetRegistry* presets,
+                            const QString& path)
 {
     // Route through resolveShaderLeg so the `resolveShaderWithDefault`
     // knowledge genuinely lives in one place (this helper is debug-log-only
     // today; keeping it a thin forwarder means it cannot drift from the
     // build*Config resolution).
-    return resolveShaderLeg(tree, path).effectiveEffectId();
+    return resolveShaderLeg(tree, presets, path).effectiveEffectId();
 }
 
 /// Extract the per-event parameter overrides from an already-resolved leg
@@ -176,7 +191,8 @@ PAL::SurfaceAnimator::Config buildDefaultConfig()
 /// `osd.*`. A JSON edit to `osd.hide` affects OSDs and ONLY OSDs -
 /// LayoutPicker / ZoneSelector / SnapAssist live in the
 /// `popup.*` family.
-PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
+PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree,
+                                            const PhosphorShaders::ShaderPresetRegistry* presets)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     // Scale envelope, shared by the C++ scale-leg fallback (showScaleFrom /
@@ -185,8 +201,8 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
     constexpr double kShowScaleFrom = 0.92;
     constexpr double kHideScaleTo = 0.96;
     // ONE resolve per leg, read twice below.
-    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::OsdShow);
-    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::OsdHide);
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::OsdShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::OsdHide);
     return PAL::SurfaceAnimator::Config{
         .showProfile = PP::OsdShow,
         .hideProfile = PP::OsdHide,
@@ -218,7 +234,8 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 /// up to `popup.layoutPicker` and on to `popup`, so a user
 /// who wants symmetric treatment overrides the surface path once and
 /// skips the leaves.
-PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree)
+PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree,
+                                                     const PhosphorShaders::ShaderPresetRegistry* presets)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     // Scale envelope (softer than the OSD's 0.92→1 since the picker is larger),
@@ -226,8 +243,8 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
     constexpr double kShowScaleFrom = 0.94;
     constexpr double kHideScaleTo = 0.97;
     // ONE resolve per leg, read twice below.
-    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupLayoutPickerShow);
-    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupLayoutPickerHide);
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupLayoutPickerShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupLayoutPickerHide);
     return PAL::SurfaceAnimator::Config{
         .showProfile = PP::PopupLayoutPickerShow,
         .hideProfile = PP::PopupLayoutPickerHide,
@@ -248,14 +265,15 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
 /// cheatsheet; with no override set, resolution walks up to `popup` and
 /// finally library defaults. The scale envelope matches the picker's
 /// (large centered card, softer than the OSD pop).
-PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree& tree)
+PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree& tree,
+                                                   const PhosphorShaders::ShaderPresetRegistry* presets)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     constexpr double kShowScaleFrom = 0.94;
     constexpr double kHideScaleTo = 0.97;
     // ONE resolve per leg, read twice below.
-    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupCheatsheetShow);
-    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupCheatsheetHide);
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupCheatsheetShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupCheatsheetHide);
     return PAL::SurfaceAnimator::Config{
         .showProfile = PP::PopupCheatsheetShow,
         .hideProfile = PP::PopupCheatsheetHide,
@@ -281,12 +299,13 @@ PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree&
 /// affects ONLY the zone selector. With no override set,
 /// `resolveWithInheritance` walks up to `popup` then library
 /// defaults.
-PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree)
+PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree,
+                                                     const PhosphorShaders::ShaderPresetRegistry* presets)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     // ONE resolve per leg, read twice below.
-    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupZoneSelectorShow);
-    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupZoneSelectorHide);
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupZoneSelectorShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupZoneSelectorHide);
     return PAL::SurfaceAnimator::Config{
         .showProfile = PP::PopupZoneSelectorShow,
         .hideProfile = PP::PopupZoneSelectorHide,
@@ -318,12 +337,13 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
 /// `popup.<surface>` → `popup` → `global`. The genuine OSD
 /// (`osd.show`/`osd.hide`) is in a separate subtree and is NOT touched
 /// by `popup` overrides regardless.
-PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
+PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree,
+                                                   const PhosphorShaders::ShaderPresetRegistry* presets)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     // ONE resolve per leg, read twice below.
-    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupSnapAssistShow);
-    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupSnapAssistHide);
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupSnapAssistShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupSnapAssistHide);
     return PAL::SurfaceAnimator::Config{
         // Popup surface family - dedicated path. A user editing
         // `popup.snapAssist.show.json` affects ONLY the snap
@@ -434,6 +454,10 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 
 void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree& tree)
 {
+    // May be null (no preset registry injected, or a test double). Every leg
+    // below then resolves to its own parameters, which is what an assignment
+    // carrying no preset already does.
+    const PhosphorShaders::ShaderPresetRegistry* presets = m_presetRegistry;
     // The m_shellHost check backs up the setupSurfaceAnimator qFatal for the
     // one lifetime window where its invariant no longer holds: ~OverlayService
     // resets m_shellHost while the shaderProfileTreeChanged live-reload
@@ -451,17 +475,18 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     // this is wasted work the explicit gate eliminates.
     if (lcOverlay().isDebugEnabled()) {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        qCDebug(lcOverlay).nospace() << "applyShaderProfilesToAnimator: overrides=" << tree.overriddenPaths().size()
-                                     << " resolved: osd.show=" << resolveShaderEffect(tree, PP::OsdShow)
-                                     << " osd.hide=" << resolveShaderEffect(tree, PP::OsdHide)
-                                     << " zoneSelector.show=" << resolveShaderEffect(tree, PP::PopupZoneSelectorShow)
-                                     << " zoneSelector.hide=" << resolveShaderEffect(tree, PP::PopupZoneSelectorHide)
-                                     << " layoutPicker.show=" << resolveShaderEffect(tree, PP::PopupLayoutPickerShow)
-                                     << " layoutPicker.hide=" << resolveShaderEffect(tree, PP::PopupLayoutPickerHide)
-                                     << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow)
-                                     << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide)
-                                     << " cheatsheet.show=" << resolveShaderEffect(tree, PP::PopupCheatsheetShow)
-                                     << " cheatsheet.hide=" << resolveShaderEffect(tree, PP::PopupCheatsheetHide);
+        qCDebug(lcOverlay).nospace()
+            << "applyShaderProfilesToAnimator: overrides=" << tree.overriddenPaths().size()
+            << " resolved: osd.show=" << resolveShaderEffect(tree, presets, PP::OsdShow)
+            << " osd.hide=" << resolveShaderEffect(tree, presets, PP::OsdHide)
+            << " zoneSelector.show=" << resolveShaderEffect(tree, presets, PP::PopupZoneSelectorShow)
+            << " zoneSelector.hide=" << resolveShaderEffect(tree, presets, PP::PopupZoneSelectorHide)
+            << " layoutPicker.show=" << resolveShaderEffect(tree, presets, PP::PopupLayoutPickerShow)
+            << " layoutPicker.hide=" << resolveShaderEffect(tree, presets, PP::PopupLayoutPickerHide)
+            << " snapAssist.show=" << resolveShaderEffect(tree, presets, PP::PopupSnapAssistShow)
+            << " snapAssist.hide=" << resolveShaderEffect(tree, presets, PP::PopupSnapAssistHide)
+            << " cheatsheet.show=" << resolveShaderEffect(tree, presets, PP::PopupCheatsheetShow)
+            << " cheatsheet.hide=" << resolveShaderEffect(tree, presets, PP::PopupCheatsheetHide);
     }
     // Route through the lib so animator-config writes share the same
     // host that owns slot lifecycle (3.x) and surface lifecycle (2.x).
@@ -469,11 +494,11 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     // hides and per-role config registration; the daemon retains the
     // SHAPE of each config (curves, durations, shader paths) via the
     // build*Config helpers above.
-    m_shellHost->registerConfigForRole(PhosphorRoles::Osd, buildOsdConfig(tree));
-    m_shellHost->registerConfigForRole(PhosphorRoles::LayoutPicker, buildLayoutPickerConfig(tree));
-    m_shellHost->registerConfigForRole(PhosphorRoles::ZoneSelector, buildZoneSelectorConfig(tree));
-    m_shellHost->registerConfigForRole(PhosphorRoles::SnapAssist, buildSnapAssistConfig(tree));
-    m_shellHost->registerConfigForRole(PhosphorRoles::Cheatsheet, buildCheatsheetConfig(tree));
+    m_shellHost->registerConfigForRole(PhosphorRoles::Osd, buildOsdConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::LayoutPicker, buildLayoutPickerConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::ZoneSelector, buildZoneSelectorConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::SnapAssist, buildSnapAssistConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::Cheatsheet, buildCheatsheetConfig(tree, presets));
 }
 
 } // namespace PlasmaZones

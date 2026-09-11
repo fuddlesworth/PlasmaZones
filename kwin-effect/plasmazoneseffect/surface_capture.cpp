@@ -790,7 +790,7 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
                 // findWindowByIdExact, which is a wasted lookup when the
                 // caller already holds the very window it would find. Same
                 // form the surfacelayers.cpp sibling uses.
-                profile = m_decorationTree.resolve(resolveSurfacePathFor(decoWindowId, w));
+                profile = resolveDecorationProfile(resolveSurfacePathFor(decoWindowId, w));
             }
             pk = compiledPack(packId, *profile);
         }

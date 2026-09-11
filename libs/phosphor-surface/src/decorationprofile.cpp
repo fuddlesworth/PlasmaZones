@@ -17,6 +17,8 @@ DecorationProfile DecorationProfile::withDefaults() const
         out.parameters = QVariantMap();
     if (!out.disabledPacks)
         out.disabledPacks = QStringList();
+    if (!out.presetIds)
+        out.presetIds = QVariantMap();
     return out;
 }
 
@@ -40,6 +42,12 @@ QJsonObject DecorationProfile::toJson() const
         for (const QString& packId : *disabledPacks)
             disabledArr.append(packId);
         obj.insert(QLatin1String(JsonFieldDisabledPacks), disabledArr);
+    }
+    if (presetIds) {
+        QJsonObject presetsObj;
+        for (auto it = presetIds->constBegin(); it != presetIds->constEnd(); ++it)
+            presetsObj.insert(it.key(), QJsonValue::fromVariant(it.value()));
+        obj.insert(QLatin1String(JsonFieldPresetIds), presetsObj);
     }
     return obj;
 }
@@ -104,6 +112,25 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
         }
     }
 
+    // Absent field = nullopt = "inherit / no presets", so a config written
+    // before presets existed loads with every layer on its own parameters.
+    // Non-string values are skipped rather than coerced: a preset id is a
+    // lookup key, and "" would mean "no preset" — a different statement from
+    // the malformed entry the author actually wrote.
+    if (obj.contains(QLatin1String(JsonFieldPresetIds))) {
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldPresetIds));
+        if (v.isObject()) {
+            QVariantMap presets;
+            const QJsonObject presetsObj = v.toObject();
+            for (auto it = presetsObj.constBegin(); it != presetsObj.constEnd(); ++it) {
+                if (!it.value().isString())
+                    continue;
+                presets.insert(it.key(), it.value().toString());
+            }
+            p.presetIds = std::move(presets);
+        }
+    }
+
     return p;
 }
 
@@ -115,11 +142,41 @@ void DecorationProfile::overlay(DecorationProfile& dst, const DecorationProfile&
         dst.parameters = src.parameters;
     if (src.disabledPacks)
         dst.disabledPacks = src.disabledPacks;
+    if (src.presetIds)
+        dst.presetIds = src.presetIds;
 }
 
 bool DecorationProfile::operator==(const DecorationProfile& other) const
 {
-    return chain == other.chain && parameters == other.parameters && disabledPacks == other.disabledPacks;
+    return chain == other.chain && parameters == other.parameters && disabledPacks == other.disabledPacks
+        && presetIds == other.presetIds;
+}
+
+DecorationProfile withPresetsResolved(const DecorationProfile& profile,
+                                      const PhosphorShaders::ShaderPresetRegistry& presets,
+                                      PhosphorShaders::ShaderFamily family)
+{
+    if (!profile.presetIds || profile.presetIds->isEmpty()) {
+        return profile;
+    }
+
+    DecorationProfile out = profile;
+    QVariantMap params = out.effectiveParameters();
+    for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
+        const QString packId = it.key();
+        const QString presetId = it.value().toString();
+        if (presetId.isEmpty()) {
+            continue;
+        }
+        // The pack's own entry in `parameters` is the DELTA set, so it is the
+        // second argument: preset values first, this layer's edits on top.
+        params.insert(packId, presets.resolveParams(family, packId, presetId, params.value(packId).toMap()));
+    }
+    out.parameters = params;
+    // Cleared so a second flatten is a no-op rather than a double application
+    // the moment anything overlays two already-flattened profiles.
+    out.presetIds.reset();
+    return out;
 }
 
 } // namespace PhosphorSurfaceShaders

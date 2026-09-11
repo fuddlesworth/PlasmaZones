@@ -309,7 +309,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
     const QString surfacePath = resolveSurfacePathFor(windowId, w);
-    const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
+    const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = resolveDecorationProfile(surfacePath);
     QStringList userPacks = resolvedProfile.enabledChain();
 
     // Rule-resolved decoration-chain override: a matched

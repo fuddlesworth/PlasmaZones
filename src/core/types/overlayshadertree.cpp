@@ -17,6 +17,8 @@ QJsonObject OverlayShaderProfile::toJson() const
         obj[QLatin1String(JsonFieldShaderId)] = shaderId;
     if (!parameters.isEmpty())
         obj[QLatin1String(JsonFieldParameters)] = QJsonObject::fromVariantMap(parameters);
+    if (!presetId.isEmpty())
+        obj[QLatin1String(JsonFieldPresetId)] = presetId;
     return obj;
 }
 
@@ -25,6 +27,7 @@ OverlayShaderProfile OverlayShaderProfile::fromJson(const QJsonObject& obj)
     OverlayShaderProfile profile;
     profile.shaderId = obj.value(QLatin1String(JsonFieldShaderId)).toString();
     profile.parameters = obj.value(QLatin1String(JsonFieldParameters)).toObject().toVariantMap();
+    profile.presetId = obj.value(QLatin1String(JsonFieldPresetId)).toString();
     return profile;
 }
 

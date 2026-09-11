@@ -47,7 +47,27 @@ public:
     /// ids declared in the effect's `AnimationShaderEffect::parameters`.
     /// `std::nullopt` = inherit. Engaged-but-empty map = explicitly use
     /// all defaults.
+    ///
+    /// When `presetId` is engaged these are DELTAS on top of the preset
+    /// rather than the whole tuning: a key present here overrides the
+    /// preset's value for it, and every key absent here follows the preset.
+    /// That is what lets a retuned preset move an assignment that has its
+    /// own edits without discarding them.
     std::optional<QVariantMap> parameters;
+
+    /// The preset `parameters` are deltas against, resolved by id from
+    /// `PhosphorShaders::ShaderPresetRegistry` against the RESOLVED effect.
+    /// `std::nullopt` = inherit. Engaged-but-empty string = explicitly no
+    /// preset, so `parameters` is the whole tuning.
+    ///
+    /// Independent of `effectId`, exactly as `parameters` already is, so a
+    /// preset-only override rides the cascade instead of severing it. A
+    /// presetId inherited across a node that changed the pack is INERT, not
+    /// wrong: the registry keys presets by (family, packId, presetId), so a
+    /// preset belonging to another pack simply does not resolve and the
+    /// assignment falls back to its own parameters — the same shape a
+    /// parameter id the resolved pack does not declare already has.
+    std::optional<QString> presetId;
 
     // ─────── Effective getters ───────
 
@@ -59,6 +79,10 @@ public:
     {
         return parameters.value_or(QVariantMap());
     }
+    QString effectivePresetId() const
+    {
+        return presetId.value_or(QString());
+    }
 
     ShaderProfile withDefaults() const;
 
@@ -66,6 +90,7 @@ public:
 
     static constexpr auto JsonFieldEffectId = "effectId";
     static constexpr auto JsonFieldParameters = "parameters";
+    static constexpr auto JsonFieldPresetId = "presetId";
 
     QJsonObject toJson() const;
     static ShaderProfile fromJson(const QJsonObject& obj);

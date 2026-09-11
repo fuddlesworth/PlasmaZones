@@ -5,6 +5,8 @@
 
 #include <PhosphorSurface/phosphorsurface_export.h>
 
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -69,6 +71,20 @@ public:
     /// inherit. Engaged-but-empty list = explicitly nothing disabled.
     std::optional<QStringList> disabledPacks;
 
+    /// Per-pack preset selection. Shape: { packId -> presetId }, resolved by
+    /// id from `PhosphorShaders::ShaderPresetRegistry` against that pack.
+    /// `std::nullopt` = inherit. Engaged-but-empty map = explicitly no
+    /// presets, so `parameters` is the whole tuning for every layer.
+    ///
+    /// Naturally pack-keyed, like `parameters`, so a chain can carry a preset
+    /// on one layer and hand-tuned values on the next. Where a pack appears
+    /// here, its entry in `parameters` holds DELTAS on top of the preset: a
+    /// parameter present there overrides the preset's value, and every
+    /// parameter absent follows the preset. An entry naming a pack the
+    /// resolved chain does not contain is inert, the same as a `parameters`
+    /// entry for such a pack.
+    std::optional<QVariantMap> presetIds;
+
     // ─────── Effective getters ───────
 
     QStringList effectiveChain() const
@@ -82,6 +98,16 @@ public:
     QStringList effectiveDisabledPacks() const
     {
         return disabledPacks.value_or(QStringList());
+    }
+    QVariantMap effectivePresetIds() const
+    {
+        return presetIds.value_or(QVariantMap());
+    }
+    /// The preset chosen for @p packId, or an empty string when that layer
+    /// uses none.
+    QString presetIdFor(const QString& packId) const
+    {
+        return presetIds ? presetIds->value(packId).toString() : QString();
     }
 
     /// The chain the RENDERERS consume: `effectiveChain()` minus the disabled
@@ -107,6 +133,7 @@ public:
     static constexpr auto JsonFieldChain = "chain";
     static constexpr auto JsonFieldParameters = "parameters";
     static constexpr auto JsonFieldDisabledPacks = "disabledPacks";
+    static constexpr auto JsonFieldPresetIds = "presetIds";
 
     QJsonObject toJson() const;
     static DecorationProfile fromJson(const QJsonObject& obj);
@@ -125,5 +152,27 @@ public:
         return !(*this == other);
     }
 };
+
+/// Flatten @p profile's per-pack preset references into its `parameters`.
+///
+/// Returns a copy whose `parameters` hold, for every pack that named a preset,
+/// the preset's values overlaid with that pack's own edits — and whose
+/// `presetIds` is cleared to say the presets have already been applied.
+/// Consumers downstream therefore keep reading `effectiveParameters()` and
+/// never have to know a preset was involved.
+///
+/// @p family selects the preset namespace, because a decoration chain is
+/// resolved for two different pack families: `surface` for the window and
+/// popup surfaces, `pointer` for the cursor chain. Passing the wrong one
+/// resolves nothing rather than resolving the wrong thing, since the registry
+/// keys presets by (family, packId, presetId).
+///
+/// A pack whose preset id names no preset keeps its own parameters, which is
+/// the look it had before it pointed at one. That covers an assignment
+/// outliving its preset and a presetIds entry for a pack the resolved chain no
+/// longer contains.
+PHOSPHORSURFACE_EXPORT DecorationProfile withPresetsResolved(const DecorationProfile& profile,
+                                                             const PhosphorShaders::ShaderPresetRegistry& presets,
+                                                             PhosphorShaders::ShaderFamily family);
 
 } // namespace PhosphorSurfaceShaders

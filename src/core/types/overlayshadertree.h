@@ -27,15 +27,39 @@ class PLASMAZONES_EXPORT OverlayShaderProfile
 {
 public:
     QString shaderId;
+
+    /// The shader's tuning. When `presetId` is set these are DELTAS on top of
+    /// the preset: a parameter present here overrides the preset's value for
+    /// it, and every parameter absent here follows the preset. That is what
+    /// lets a retuned preset move this assignment without discarding the
+    /// edits made on top of it.
     QVariantMap parameters;
+
+    /// The preset `parameters` are deltas against, resolved by id from
+    /// `PhosphorShaders::ShaderPresetRegistry` against `shaderId`. Empty
+    /// means no preset, so `parameters` is the whole tuning.
+    ///
+    /// A preset id naming no preset for `shaderId` is inert rather than
+    /// wrong — the registry misses and the assignment falls back to its own
+    /// parameters, which is the look it would have had with no preset at all.
+    /// That is what an assignment outliving its preset degrades to.
+    ///
+    /// The default member initializer is load-bearing rather than decorative:
+    /// this is an aggregate, and a good many call sites brace-initialize it
+    /// positionally as `{shaderId, parameters}`. Without the initializer every
+    /// one of those becomes a -Wmissing-field-initializers warning, and making
+    /// them all spell out an empty third field would be churn for a value that
+    /// already means exactly what they intend — no preset.
+    QString presetId{};
 
     bool isEmpty() const
     {
-        return shaderId.isEmpty() && parameters.isEmpty();
+        return shaderId.isEmpty() && parameters.isEmpty() && presetId.isEmpty();
     }
 
     static constexpr auto JsonFieldShaderId = "shaderId";
     static constexpr auto JsonFieldParameters = "parameters";
+    static constexpr auto JsonFieldPresetId = "presetId";
 
     QJsonObject toJson() const;
     static OverlayShaderProfile fromJson(const QJsonObject& obj);
@@ -46,7 +70,7 @@ public:
         // (int variants) must compare equal to the same values read back
         // from disk (doubles), or a re-applied identical assignment would
         // defeat the settings setters' value-equality no-op gates.
-        return shaderId == other.shaderId
+        return shaderId == other.shaderId && presetId == other.presetId
             && QJsonObject::fromVariantMap(parameters) == QJsonObject::fromVariantMap(other.parameters);
     }
     bool operator!=(const OverlayShaderProfile& other) const

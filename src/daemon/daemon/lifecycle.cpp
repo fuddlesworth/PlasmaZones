@@ -32,6 +32,7 @@
 #include <array>
 
 #include <PhosphorServiceIdle/IdleService.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -656,6 +657,14 @@ void Daemon::stop()
         m_overlayService->setSurfaceShaderRegistry(nullptr);
     }
     m_surfaceShaderRegistry.reset();
+    // Same order for the preset store: null the overlay service's borrow
+    // before the store (and the registry inside it) goes away, so no queued
+    // presetsChanged can reach a dangling pointer while the event loop spins
+    // during shutdown.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(nullptr);
+    }
+    m_presetStore.reset();
     // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every
     // pack (the registries are rebuilt, so a remembered fingerprint would
     // wrongly suppress the fresh bake), and the hash does not grow unbounded

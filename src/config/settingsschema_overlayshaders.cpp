@@ -50,6 +50,11 @@ OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
     // test_settings_overlay_shader_tree.cpp pins this.
     if (profile.shaderId.size() <= kMaxStringChars)
         out.shaderId = profile.shaderId;
+    // Same independent bound. An over-long preset id is dropped and the
+    // assignment falls back to its own parameters, which is exactly what an
+    // id naming no preset already resolves to.
+    if (profile.presetId.size() <= kMaxStringChars)
+        out.presetId = profile.presetId;
     for (auto it = profile.parameters.cbegin(); it != profile.parameters.cend(); ++it) {
         if (out.parameters.size() >= kMaxParameters)
             break;

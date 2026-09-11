@@ -323,6 +323,14 @@ private:
     // order is load-bearing. Defined across daemon/init_*.cpp, shader_warmup.cpp
     // and animation_profiles.cpp.
     void setupShaderWarmBakes();
+
+    /// Build the preset store, hand it to the overlay service, and connect
+    /// each pack registry's reload edge so pack-declared presets stay current.
+    ///
+    /// Runs AFTER the three pack registries exist, because it seeds the store
+    /// from what they already discovered rather than waiting for a reload that
+    /// may never come.
+    void setupShaderPresets();
     void initLayoutAndSettingsWiring();
     void initCoreAdaptors();
     void initEnginesAndWiring();
@@ -1255,6 +1263,20 @@ private:
     /// Declared AFTER m_overlayService: stop() nulls the overlay's borrow
     /// before resetting this registry.
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
+
+    /// Named parameter presets for every shader family: the user's own, scanned
+    /// with live reload from `plasmazones/shader-presets`, plus the ones packs
+    /// declare, fed in from each pack registry's reload edge.
+    ///
+    /// An assignment stores a preset id and its own edits rather than a copy of
+    /// the preset's values, so this is what turns that reference into the
+    /// parameters a surface actually renders with. Editing a preset therefore
+    /// moves every assignment bound to it, with no restart.
+    ///
+    /// Declared AFTER m_overlayService, like the two registries above: stop()
+    /// nulls the overlay's borrow (setPresetRegistry(nullptr)) before this is
+    /// reset.
+    std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
 
     /// User-authored curve scanner. Scans `plasmazones/curves` from the XDG
     /// data dirs and registers what it finds with `CurveRegistry`, with

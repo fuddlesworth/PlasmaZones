@@ -90,8 +90,34 @@ QString curveSlotFor(const QString& eventPath)
 
 } // namespace
 
+namespace {
+/// Flatten @p profile's preset reference into its parameters.
+///
+/// Applied at the ONE place a profile leaves the resolver, so the dozen
+/// consumers downstream keep reading `effectiveParameters()` and stay unaware
+/// that presets exist. Clearing `presetId` afterwards is what says "already
+/// applied" — without it a second flatten would be a silent no-op today and a
+/// double application the moment anything overlays two profiles.
+///
+/// A presetId naming no preset for the resolved pack leaves the parameters
+/// untouched, which is the same look the assignment had before it pointed at a
+/// preset. That covers both an assignment outliving its preset and a presetId
+/// inherited across a node that changed the pack.
+void flattenPreset(PhosphorAnimationShaders::ShaderProfile& profile,
+                   const PhosphorShaders::ShaderPresetRegistry& presets)
+{
+    if (!profile.presetId || profile.presetId->isEmpty()) {
+        return;
+    }
+    profile.parameters = presets.resolveParams(PhosphorShaders::ShaderFamily::Animation, profile.effectiveEffectId(),
+                                               *profile.presetId, profile.effectiveParameters());
+    profile.presetId.reset();
+}
+} // namespace
+
 ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
                                                     const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const PhosphorShaders::ShaderPresetRegistry& presets,
                                                     const QString& windowId, const PhosphorRules::WindowQuery& query,
                                                     const QString& eventPath)
 {
@@ -100,7 +126,9 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
     // avoids consuming a cache slot for an evaluator walk that cannot match
     // anything (no window attribute can satisfy any rule predicate).
     if (!query.hasWindow() || eventPath.isEmpty()) {
-        return ResolvedShaderProfile{tree.resolve(eventPath)};
+        PhosphorAnimationShaders::ShaderProfile bare = tree.resolve(eventPath);
+        flattenPreset(bare, presets);
+        return ResolvedShaderProfile{std::move(bare)};
     }
     // ONE cached evaluator walk feeds both slot lookups. The historical
     // pair of standalone shader-profile + duration resolvers did two
@@ -131,6 +159,7 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
     // legs of the same rule. Reading it again here (as this used to) worked only
     // because both sites spelled an identical qBound; change one envelope and the
     // two legs of one user-facing rule would silently run different durations.
+    flattenPreset(profile, presets);
     return ResolvedShaderProfile{std::move(profile), shaderSlotFromRule};
 }
 

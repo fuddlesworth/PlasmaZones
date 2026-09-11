@@ -14,6 +14,8 @@ ShaderProfile ShaderProfile::withDefaults() const
         out.effectId = QString();
     if (!out.parameters)
         out.parameters = QVariantMap();
+    if (!out.presetId)
+        out.presetId = QString();
     return out;
 }
 
@@ -28,6 +30,8 @@ QJsonObject ShaderProfile::toJson() const
             paramsObj.insert(it.key(), QJsonValue::fromVariant(it.value()));
         obj.insert(QLatin1String(JsonFieldParameters), paramsObj);
     }
+    if (presetId)
+        obj.insert(QLatin1String(JsonFieldPresetId), *presetId);
     return obj;
 }
 
@@ -52,6 +56,12 @@ ShaderProfile ShaderProfile::fromJson(const QJsonObject& obj)
         }
     }
 
+    if (obj.contains(QLatin1String(JsonFieldPresetId))) {
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldPresetId));
+        if (v.isString())
+            p.presetId = v.toString();
+    }
+
     return p;
 }
 
@@ -61,11 +71,13 @@ void ShaderProfile::overlay(ShaderProfile& dst, const ShaderProfile& src)
         dst.effectId = src.effectId;
     if (src.parameters)
         dst.parameters = src.parameters;
+    if (src.presetId)
+        dst.presetId = src.presetId;
 }
 
 bool ShaderProfile::operator==(const ShaderProfile& other) const
 {
-    return effectId == other.effectId && parameters == other.parameters;
+    return effectId == other.effectId && parameters == other.parameters && presetId == other.presetId;
 }
 
 } // namespace PhosphorAnimationShaders

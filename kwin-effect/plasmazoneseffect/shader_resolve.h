@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 #include <PhosphorRules/WindowQuery.h>
 
 #include <QColor>
@@ -86,8 +87,14 @@ struct ResolvedShaderProfile
 /// shader leg. This function used to read and clamp the SAME slot a second time —
 /// idempotent only because both sites happened to spell an identical qBound, and
 /// a silent desync waiting for one of them to change. One read, one clamp.
+///
+/// @p presets resolves the profile's `presetId` into the parameters it stands
+/// for, overlaid with the profile's own edits, so every caller downstream sees
+/// one flat parameter map and never has to know a preset was involved. The
+/// returned profile's `presetId` is cleared to say it has already been applied.
 ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
                                                     const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const PhosphorShaders::ShaderPresetRegistry& presets,
                                                     const QString& windowId, const PhosphorRules::WindowQuery& query,
                                                     const QString& eventPath);
 

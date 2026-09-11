@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 
 #include <QQuickItem>
 #include <PhosphorSurfaces/SurfaceManager.h>
@@ -72,6 +73,38 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     return useShaderForScreen(physId);
 }
 
+void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry)
+{
+    if (m_presetRegistry == registry) {
+        return;
+    }
+    // Disconnect from the outgoing registry before the borrow is overwritten,
+    // or a re-set would leave a second connection behind. The daemon nulls this
+    // borrow before tearing the store down, so the old pointer is still alive
+    // here. Same discipline as setSurfaceShaderRegistry.
+    if (m_presetRegistry) {
+        disconnect(m_presetRegistry, nullptr, this, nullptr);
+    }
+    m_presetRegistry = registry;
+    if (!m_presetRegistry) {
+        return;
+    }
+
+    // A retuned preset changes the PARAMETERS of assignments already on screen,
+    // never which pack they use, so a plain refresh is enough — no
+    // recreate-on-type-mismatch, which only matters when an assignment flips
+    // between rectangle and shader overlays. refreshVisibleWindows re-runs
+    // updateOverlayWindow, which re-resolves through effectiveOverlayShader and
+    // pushes the new uniforms.
+    //
+    // Not filtered on the pack the signal names: an overlay window resolves its
+    // pack per screen through the layout, so deciding whether any visible
+    // window uses that pack costs the same walk the refresh does.
+    connect(m_presetRegistry, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this, [this]() {
+        refreshVisibleWindows();
+    });
+}
+
 OverlayShaderProfile
 OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                        const PhosphorZones::Layout* screenLayout) const
@@ -96,7 +129,22 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     // setSettings clears the cache when settings detach, so a detached service
     // resolves through an empty tree to the same empty profile a null check
     // would have returned.
-    return m_overlayShaderTree.resolve(screenLayout->id().toString());
+    OverlayShaderProfile profile = m_overlayShaderTree.resolve(screenLayout->id().toString());
+    // Flatten the preset here, once, rather than at each consumer: the returned
+    // profile's `parameters` are the EFFECTIVE tuning (the preset overlaid with
+    // this assignment's own edits) and `presetId` is cleared to say the preset
+    // has already been applied. Callers therefore never have to know a preset
+    // was involved — which is what keeps `useShaderForScreen` and the two
+    // window-update sites from each needing their own resolve step.
+    //
+    // With no preset registry injected, or a presetId naming no preset, this
+    // leaves `parameters` exactly as stored.
+    if (m_presetRegistry && !profile.presetId.isEmpty()) {
+        profile.parameters = m_presetRegistry->resolveParams(PhosphorShaders::ShaderFamily::Overlay, profile.shaderId,
+                                                             profile.presetId, profile.parameters);
+        profile.presetId.clear();
+    }
+    return profile;
 }
 
 bool OverlayService::anyScreenUsesShader() const
