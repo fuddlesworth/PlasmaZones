@@ -146,6 +146,19 @@ message(STATUS "RenderNode shaders ENABLED (raw GLSL, no qsb compilation)")
 set(PLASMAZONES_SHADERS_ENABLED ON)
 add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 
+# Make the Qt6 string-literal rule real. Without this, `const char*` converts
+# implicitly to QString, so the CLAUDE.md rule ("QLatin1String for JSON keys
+# and comparisons, QStringLiteral for constants, never a raw literal") was
+# enforced only by reviewer attention and a raw literal compiled happily.
+# With it, the conversion is gone and a violation is a compile error naming
+# the exact line, which no pattern-matching linter can do as precisely.
+#
+# Verified clean before enabling: every TU in the compile database (1776, with
+# BUILD_PHOSPHOR_SHELL=ON and BUILD_TOOLS=ON) was recompiled with the define
+# and none reported a conversion error, so this fixed no existing code and can
+# only catch new violations.
+add_compile_definitions(QT_NO_CAST_FROM_ASCII)
+
 # KDE Frameworks integration.
 # ON (default): full KDE integration - KWin effect, KCM, KGlobalAccel shortcuts,
 #               PlasmaActivities, KConfigXT for KCM defaults.

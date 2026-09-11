@@ -497,6 +497,30 @@ jobs:
       - name: Validate bundled data against schemas
         run: python3 scripts/validate-json-schemas.py
 
+  # ─── Conventions: the CLAUDE.md rules that are decidable by inspection
+  # (SPDX headers, the GPL-3 app / LGPL-2.1 libs split, the file-size ceiling,
+  # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over
+  # inline config paths, and the plain-prose rules on user-facing strings).
+  # These were previously enforced only by reviewer attention, so a violation
+  # surfaced during an audit rather than at the moment it was written. The tree
+  # passes today, which makes every failure here a genuine regression.
+  # Pure stdlib Python, no dependencies, whole-tree on every run.
+  conventions:
+    name: Conventions
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Check CLAUDE.md conventions
+        run: python3 scripts/check-conventions.py
+
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as

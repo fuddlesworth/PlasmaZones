@@ -65,7 +65,7 @@ Shared placement policy lives in `libs/phosphor-engine`. A verdict from one mode
 ### Qt6 String Literals (CRITICAL)
 - `QLatin1String()` for JSON keys and string comparisons
 - `QStringLiteral()` for constants, MIME types, paths
-- NEVER use raw `"string"` with QString/QJsonObject (deleted constructor in Qt6)
+- NEVER use raw `"string"` with QString/QJsonObject. The top-level CMakeLists defines `QT_NO_CAST_FROM_ASCII`, so this is a compile error, not a convention
 
 ### QUuid Convention
 - `toString()` (with braces) everywhere — EXCEPT filesystem paths use `WithoutBraces`
@@ -111,10 +111,16 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 - Editor settings: separate, in `EditorController` (separate process)
 
 ### Adding a Setting
-1. `src/config/configdefaults.h` — static default accessor + `xxxKey()` accessor for the config key string
-2. `src/core/interfaces/isettings.h` — signal in ISettings
-3. `src/config/settings.h` — Q_PROPERTY + getter + setter + member
-4. The matching `src/config/settings/*.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`. Setters live in that directory split by concern (`setters.cpp`, `shortcuts.cpp`, `storescalars.cpp`, `scrolling.cpp`, `triggers.cpp`, `perscreen.cpp`, `disable.cpp`, and so on), NOT in `src/config/settings.cpp`. Pick the file matching the setting's concern; `loadsave.cpp` holds the load/save/reset arms. Note three different files in the tree are named `settings.cpp` (`src/config/`, `src/daemon/overlayservice/`, `src/editor/controller/`), so always use the full path.
+Use the `pz-add-setting` skill, which carries the full worked example. Summary:
+
+1. `src/config/configdefaults_<area>.h` — static default accessor (plus `constexpr` Min/Max for a clamped numeric). `configdefaults.h` is split by area (`_appearance`, `_gaps`, `_limits`, `_screens`, `_scrolling`, `_scrolling_behavior`, `_scrolling_shortcuts`, `_shaders`).
+2. `src/config/configdefaults.h` — group and `xxxKey()` accessors, if new.
+3. `src/config/settingsschema*.cpp` — register the `{key, default, QMetaType, description, coercion}` KeyDef in its group. **The store takes its default, type and clamping from the schema, not from the getter.** Skip this and the setting silently reads back as the type-default. The description field is user-facing prose and is held to the plain-prose rules below.
+4. `src/core/interfaces/isettings.h` — signal in ISettings.
+5. `src/config/settings.h` — Q_PROPERTY + getter + setter declarations (`override`). **No member variable.**
+6. The matching `src/config/settings/*.cpp` — store-backed getter (`m_store->read<T>(group, key)`) and setter. There is **no** load/save/reset arm to write; persistence goes through the store. Setters live in that directory split by concern (`setters.cpp`, `shortcuts.cpp`, `storescalars.cpp`, `scrolling.cpp`, `triggers.cpp`, `perscreen.cpp`, `disable.cpp`, `uienums.cpp`, and so on), NOT in `src/config/settings.cpp`. Note three different files in the tree are named `settings.cpp` (`src/config/`, `src/daemon/overlayservice/`, `src/editor/controller/`), so always use the full path.
+
+An unclamped setter compares, early-returns, writes, then emits. A **clamped** setter must write first and compare after, because the schema's coercion runs on the write and the stored value may differ from the value passed in.
 
 ### Config Key Strings
 - ALL config group names and key strings MUST use `ConfigDefaults::` accessors — never inline `QStringLiteral("...")`
@@ -141,6 +147,14 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 ### Shortcuts
 - `PhosphorShortcuts::IBackend` (KGlobalAccel / XDG Portal / D-Bus fallback) — never use KGlobalAccel directly
 - Register via `ShortcutManager`; dynamic updates via settings signals
+
+## Skills
+In-repo skills under `.claude/skills/` (symlinked into `.agents/skills/`). Invoke them rather than reconstructing the procedure:
+- `pz-build` — configure, build and test. Carries the two `OFF`-by-default flags that make a suite silently run nothing, the warning-vs-error grep, the ctest D-Bus isolation, and the non-unity gate.
+- `pz-add-setting` — the six files a setting touches, in the store-backed shape.
+- `pz-verify-live` — nested-KWin harness for verifying placement and effect changes against a real compositor.
+- `code-audit` — multi-pass audit-and-fix loop.
+- `shader-theme` — build a cohesive shader theme.
 
 ## Build & Test
 
@@ -188,6 +202,15 @@ cmake --build build --parallel $(nproc)
 ctest --test-dir build --output-on-failure
 
 # Lint (pre-commit hooks handle clang-format + qmlformat)
+
+# Conventions. Machine-checks the rules in this file that are decidable by
+# inspection: SPDX headers, the GPL-3 app / LGPL-2.1 libs split, the file-size
+# ceiling (growth-only, baselined in scripts/oversize-baseline.json),
+# PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over inline
+# config paths, and the plain-prose rules on user-facing strings. Stdlib only.
+# Also runs on pre-commit (staged files) and in CI (whole tree).
+python3 scripts/check-conventions.py
+python3 scripts/check-conventions.py --list-rules
 ```
 
 - CMake with `CMAKE_AUTOMOC/AUTORCC/AUTOUIC ON`

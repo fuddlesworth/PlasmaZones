@@ -6,9 +6,15 @@
 # spurious "QObject file not found" / incomplete-type errors.
 #
 # Refresh the database after changing CMake targets/deps with:
-#   cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+#   cmake -S . -B build-nounity -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+#
+# The database MUST come from a non-unity build dir. With CMAKE_UNITY_BUILD=ON
+# (which `build/` uses) every entry names a generated unity_*.cxx blob rather
+# than a real source file, so clangd finds no entry for the file you are
+# editing and falls back to flagless parsing - the same spurious errors this
+# config exists to prevent.
 CompileFlags:
-  CompilationDatabase: build
+  CompilationDatabase: build-nounity
   # GCC-only codegen flags clang's driver doesn't recognize (the build uses
   # /usr/bin/c++). Harmless to compilation but clangd logs them as errors.
   Remove:
