@@ -18,6 +18,8 @@ Three placement modes in one daemon. Snap windows into zones you drew, let an al
 
 **Docs and screenshots: [phosphor-works.github.io/plasmazones](https://phosphor-works.github.io/plasmazones/)**
 
+**Questions, ideas or bug reports: [join the Discord](https://discord.gg/9CQzAptdJ5)**
+
 </div>
 
 ---

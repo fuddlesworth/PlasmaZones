@@ -51,6 +51,23 @@ pre-commit:
       # always runs; it only exits non-zero if validation fails or the
       # validator genuinely can't be obtained (e.g. offline first run).
       run: python3 scripts/validate-json-schemas.py
+    conventions:
+      # The CLAUDE.md rules that are decidable by inspection: SPDX headers,
+      # the GPL-3 app / LGPL-2.1 libs/phosphor-* split, the file-size ceiling
+      # (growth-only, against scripts/oversize-baseline.json), i18n() in C++,
+      # inline config paths that should be ConfigDefaults:: accessors, and the
+      # plain-prose rules on user-facing strings. Only the staged files are
+      # checked so the hook stays instant; CI runs the whole tree.
+      #
+      # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
+      # and this is always a hard gate.
+      glob:
+        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl}"
+        - "data/**/*.json"
+        - "*.desktop*"
+        - "*.metainfo.xml*"
+        - "packaging/**"
+      run: python3 scripts/check-conventions.py {staged_files}
     shader-validate:
       glob: "data/overlays/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set

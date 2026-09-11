@@ -437,9 +437,12 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     if (!m_engaged || !screen || screen != m_output || suppressedOn(screen) || !KWin::effects) {
         return;
     }
-    if (cursorHiddenElsewhere()) {
-        // Someone else hid the sprite (a software KVM forwarding this desktop's
-        // pointer to another machine, a client that installed a null cursor).
+    if (cursorSpriteGone()) {
+        // There is no sprite left to decorate (a software KVM forwarding this
+        // desktop's pointer to another machine, a client that installed a null
+        // cursor). An effect that merely hides KWin's cursor to composite its
+        // own — shakecursor, zoom — does NOT come through here; see the
+        // header on cursorSpriteGone.
         // Drawing nothing here IS the erase: the compositor is already
         // repainting this region, so the previous frame's trail goes with it.
         // Tested after the output identity check rather than beside it so the
