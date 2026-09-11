@@ -113,19 +113,19 @@ namespace PAS = PhosphorAnimationShaders;
 PAS::ShaderProfile resolveShaderLeg(const PAS::ShaderProfileTree& tree,
                                     const PhosphorShaders::ShaderPresetRegistry* presets, const QString& path)
 {
-    PAS::ShaderProfile resolved = PAS::resolveShaderWithDefault(tree, path);
+    const PAS::ShaderProfile resolved = PAS::resolveShaderWithDefault(tree, path);
     // AFTER the walk-up, never before it. A node can carry a preset while
     // inheriting its pack from an ancestor, and the registry keys presets by
     // (family, packId, presetId) — so flattening per node, before inheritance
     // has supplied the pack, would look the preset up against an empty pack id
     // and silently resolve nothing.
-    if (presets && resolved.presetId && !resolved.presetId->isEmpty()) {
-        resolved.parameters =
-            presets->resolveParams(PhosphorShaders::ShaderFamily::Animation, resolved.effectiveEffectId(),
-                                   *resolved.presetId, resolved.effectiveParameters());
-        resolved.presetId.reset();
-    }
-    return resolved;
+    //
+    // Through the library's own `withPresetsResolved` rather than open-coded here.
+    // This was the same three lines written out again, and they had already drifted
+    // from the library's: the library does not ENGAGE an empty parameter map it had
+    // nothing to put in, because nullopt and engaged-empty are different statements
+    // on that type and one of them blocks inheritance.
+    return presets ? PAS::withPresetsResolved(resolved, *presets) : resolved;
 }
 
 QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const PhosphorShaders::ShaderPresetRegistry* presets,

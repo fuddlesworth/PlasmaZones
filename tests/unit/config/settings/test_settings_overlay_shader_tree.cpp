@@ -25,6 +25,9 @@
 #include <QTest>
 #include <QUuid>
 
+#include <PhosphorShaders/ShaderPreset.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
 #include "config/configdefaults.h"
 #include "config/configmigration.h"
 #include "config/settings.h"
@@ -345,6 +348,52 @@ private Q_SLOTS:
 
         QCOMPARE(a.overlayShaderTree().baseline().shaderId, QStringLiteral("cosmic-flow"));
         QVERIFY(a.overlayShaderTree().baseline().presetId.isEmpty());
+    }
+
+    /// The flatten, which now lives beside this profile type rather than being
+    /// open-coded inside OverlayService at two call sites.
+    ///
+    /// The overlay twin of the animation and surface `withPresetsResolved`, and
+    /// the same three properties are what matter: the assignment's own values win
+    /// over the preset's, the reference is CLEARED so a second flatten is a no-op,
+    /// and a reference that resolves to nothing leaves the stored values alone.
+    void testWithPresetsResolvedFlattensOnceAndDegradesCleanly()
+    {
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::ShaderPreset teal;
+        teal.id = QStringLiteral("{teal}");
+        teal.name = QStringLiteral("Teal");
+        teal.packId = QStringLiteral("cosmic-flow");
+        teal.params = QVariantMap{{QStringLiteral("speed"), 0.5}, {QStringLiteral("glow"), 0.2}};
+        registry.setUserPresets(PhosphorShaders::ShaderFamily::Overlay, {teal});
+
+        OverlayShaderProfile node;
+        node.shaderId = QStringLiteral("cosmic-flow");
+        node.presetId = QStringLiteral("{teal}");
+        node.parameters = QVariantMap{{QStringLiteral("glow"), 0.9}};
+
+        const OverlayShaderProfile flat = withPresetsResolved(node, registry);
+        // Untouched parameter follows the preset; the edited one stays edited.
+        QCOMPARE(flat.parameters.value(QStringLiteral("speed")).toDouble(), 0.5);
+        QCOMPARE(flat.parameters.value(QStringLiteral("glow")).toDouble(), 0.9);
+        // Cleared, which is what says "already applied" — and makes a second pass
+        // a no-op rather than a double application.
+        QVERIFY(flat.presetId.isEmpty());
+        QCOMPARE(withPresetsResolved(flat, registry), flat);
+
+        // An assignment can outlive the preset it points at, and then renders the
+        // way it did before it pointed at one.
+        OverlayShaderProfile orphan = node;
+        orphan.presetId = QStringLiteral("{gone}");
+        const OverlayShaderProfile degraded = withPresetsResolved(orphan, registry);
+        QCOMPARE(degraded.parameters.value(QStringLiteral("glow")).toDouble(), 0.9);
+        QVERIFY(!degraded.parameters.contains(QStringLiteral("speed")));
+
+        // A profile naming no preset comes back untouched, reference included.
+        OverlayShaderProfile plain;
+        plain.shaderId = QStringLiteral("cosmic-flow");
+        plain.parameters = QVariantMap{{QStringLiteral("speed"), 2.0}};
+        QCOMPARE(withPresetsResolved(plain, registry), plain);
     }
 };
 

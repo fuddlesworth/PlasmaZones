@@ -79,8 +79,47 @@ public:
     {
         return effectId.value_or(QString());
     }
+    /// The stored parameter map, without judgement.
+    ///
+    /// For the two callers that legitimately want the RAW values while a preset is
+    /// still engaged: the flatten itself, which needs them as the delta set, and an
+    /// editor showing the user what this assignment stores of its own. Named so
+    /// those reads state their intent instead of sharing a spelling with the reads
+    /// that want the effective answer.
+    QVariantMap storedParameters() const
+    {
+        return parameters.value_or(QVariantMap());
+    }
+
+    /// The parameter map a CONSUMER should render.
+    ///
+    /// Identical to `storedParameters()` once the preset has been applied, and a
+    /// loud warning when it has not. "Flattened" is a convention here rather than a
+    /// type — the only marker is that `presetId` was reset() — so nothing in the
+    /// type system stops a consumer from reading this on a RAW profile, where the
+    /// answer is plausible and wrong because the preset's values are simply
+    /// missing. Four of nine animation and surface consumers did exactly that, on
+    /// an invariant documented in three places.
+    ///
+    /// So the getter says so itself, in BOTH builds. A debug-only assert would have
+    /// caught none of those four in a user session, which is the whole reason they
+    /// survived review. It warns rather than refusing because the result is
+    /// degraded, not dangerous, and a hard failure on a render path is worse than a
+    /// wrong colour.
+    ///
+    /// What would make this impossible rather than merely loud is moving the getter
+    /// off the raw profile so a missed site fails to compile. That is a bigger
+    /// change than a remediation pass should make to a library with four consumers,
+    /// and it is recorded as the follow-up rather than attempted here.
     QVariantMap effectiveParameters() const
     {
+        if (presetId && !presetId->isEmpty()) {
+            qWarning(
+                "PhosphorAnimation: ShaderProfile::effectiveParameters() read on a profile whose preset is NOT "
+                "yet applied (effectId=%s presetId=%s). The preset's values are missing from the result — flatten "
+                "with withPresetsResolved() after the tree walk-up, never per node.",
+                qUtf8Printable(effectId.value_or(QString())), qUtf8Printable(*presetId));
+        }
         return parameters.value_or(QVariantMap());
     }
     /// As with the decoration twin's `presetIdFor`, the callers are tests. It

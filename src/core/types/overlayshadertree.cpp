@@ -3,6 +3,8 @@
 
 #include "overlayshadertree.h"
 
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
 #include <QJsonValue>
 #include <QLatin1String>
 
@@ -121,6 +123,23 @@ bool OverlayShaderTree::operator==(const OverlayShaderTree& other) const
     // tree, whose operator== also compares order; see the order-insensitive
     // compare the decoration setter had to build around that).
     return m_baseline == other.m_baseline && m_overrides == other.m_overrides;
+}
+
+OverlayShaderProfile withPresetsResolved(const OverlayShaderProfile& profile,
+                                         const PhosphorShaders::ShaderPresetRegistry& presets)
+{
+    if (profile.presetId.isEmpty()) {
+        return profile;
+    }
+    OverlayShaderProfile out = profile;
+    // The profile's own parameters are the DELTA set, so they are the last
+    // argument: preset values first, this assignment's edits on top.
+    out.parameters = presets.resolveParams(PhosphorShaders::ShaderFamily::Overlay, profile.shaderId, profile.presetId,
+                                           profile.parameters);
+    // Cleared so a second flatten is a no-op rather than a double application
+    // the moment anything overlays two already-flattened profiles.
+    out.presetId.clear();
+    return out;
 }
 
 } // namespace PlasmaZones

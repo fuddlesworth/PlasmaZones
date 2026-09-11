@@ -184,16 +184,11 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     if (overlayOverride.shaderId) {
         OverlayShaderProfile ruleProfile{*overlayOverride.shaderId, overlayOverride.shaderParams};
         ruleProfile.presetId = overlayOverride.shaderPresetId;
-        // Flattened by the same block below that handles a tree node, so the
-        // rule route and the tree route cannot drift on what a preset plus its
-        // deltas means.
-        if (m_presetRegistry && !ruleProfile.presetId.isEmpty()) {
-            ruleProfile.parameters =
-                m_presetRegistry->resolveParams(PhosphorShaders::ShaderFamily::Overlay, ruleProfile.shaderId,
-                                                ruleProfile.presetId, ruleProfile.parameters);
-            ruleProfile.presetId.clear();
-        }
-        return ruleProfile;
+        // Flattened through the same function as the tree node below, so the rule
+        // route and the tree route cannot drift on what a preset plus its deltas
+        // means. That function lives beside the profile type, not here: the
+        // flatten is a property of the profile rather than of this service.
+        return m_presetRegistry ? withPresetsResolved(ruleProfile, *m_presetRegistry) : ruleProfile;
     }
     if (!screenLayout) {
         return {};
@@ -204,7 +199,7 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     // setSettings clears the cache when settings detach, so a detached service
     // resolves through an empty tree to the same empty profile a null check
     // would have returned.
-    OverlayShaderProfile profile = m_overlayShaderTree.resolve(screenLayout->id().toString());
+    const OverlayShaderProfile profile = m_overlayShaderTree.resolve(screenLayout->id().toString());
     // Flatten the preset here, once, rather than at each consumer: the returned
     // profile's `parameters` are the EFFECTIVE tuning (the preset overlaid with
     // this assignment's own edits) and `presetId` is cleared to say the preset
@@ -214,12 +209,7 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     //
     // With no preset registry injected, or a presetId naming no preset, this
     // leaves `parameters` exactly as stored.
-    if (m_presetRegistry && !profile.presetId.isEmpty()) {
-        profile.parameters = m_presetRegistry->resolveParams(PhosphorShaders::ShaderFamily::Overlay, profile.shaderId,
-                                                             profile.presetId, profile.parameters);
-        profile.presetId.clear();
-    }
-    return profile;
+    return m_presetRegistry ? withPresetsResolved(profile, *m_presetRegistry) : profile;
 }
 
 bool OverlayService::anyScreenUsesShader() const

@@ -7,6 +7,12 @@
 
 #include <QHash>
 #include <QJsonObject>
+// Forward-declared rather than included: only a const reference to it appears in
+// this header (withPresetsResolved), so the definition is a .cpp concern.
+namespace PhosphorShaders {
+class ShaderPresetRegistry;
+}
+
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
@@ -147,5 +153,29 @@ private:
     OverlayShaderProfile m_baseline;
     QHash<QString, OverlayShaderProfile> m_overrides;
 };
+
+/// Flatten @p profile's preset reference into its `parameters`.
+///
+/// Returns a copy whose `parameters` are the EFFECTIVE tuning (the preset's
+/// values with this assignment's own edits laid over the top, clamped to the
+/// pack's declared ranges) and whose `presetId` is cleared to say the preset has
+/// already been applied. Consumers keep reading `parameters` and never have to
+/// know a preset was involved.
+///
+/// The overlay twin of `PhosphorAnimationShaders::withPresetsResolved` and
+/// `PhosphorSurfaceShaders::withPresetsResolved`, and it lives HERE, beside the
+/// type, for the reason they do: the flatten is a property of the profile, not of
+/// whichever service happens to resolve one. OverlayService had it open-coded at
+/// two call sites, which made the service carry preset-resolution knowledge for
+/// three of four families — growing a class its own file-size exception note
+/// concedes is already under god-object pressure — and meant the rule route and
+/// the tree route each had their own copy of the same three lines.
+///
+/// A profile naming no preset, and a @p presets that resolves it to nothing, both
+/// come back with `parameters` exactly as stored. That is the documented miss
+/// behaviour: an assignment can outlive the preset it points at, and it then
+/// renders the way it did before it pointed at one.
+PLASMAZONES_EXPORT OverlayShaderProfile withPresetsResolved(const OverlayShaderProfile& profile,
+                                                            const PhosphorShaders::ShaderPresetRegistry& presets);
 
 } // namespace PlasmaZones

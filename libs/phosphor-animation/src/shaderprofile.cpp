@@ -119,9 +119,12 @@ ShaderProfile withPresetsResolved(const ShaderProfile& profile, const PhosphorSh
     // argument: preset values first, this assignment's edits on top. The pack is
     // `effectiveEffectId()` — resolved by the walk-up before this runs, which is
     // why flattening must not happen per node.
+    // `storedParameters()`, not `effectiveParameters()`: this IS the flatten, so
+    // reading the raw map while the preset is still engaged is exactly right, and
+    // the effective getter would warn about the one read that is not a mistake.
     const QVariantMap resolved =
         presets.resolveParams(PhosphorShaders::ShaderFamily::Animation, profile.effectiveEffectId(), *profile.presetId,
-                              profile.effectiveParameters());
+                              profile.storedParameters());
     // Engaged only when there is something to engage it WITH, the same rule the
     // decoration twin applies. nullopt and engaged-empty are different
     // statements — engaged-empty is "no parameters, and do not inherit any" —

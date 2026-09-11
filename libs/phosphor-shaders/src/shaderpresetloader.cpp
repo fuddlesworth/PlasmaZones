@@ -286,7 +286,14 @@ ShaderPresetLoader::~ShaderPresetLoader()
     // have the first one's teardown wipe the second one's presets.
     //
     // `registry` is a QPointer, so a registry already destroyed reads as null
-    // here instead of being dereferenced.
+    // here instead of being dereferenced. MEASURED, not assumed: with the store
+    // destructor's `qDeleteAll` pre-empt removed so the children die in Qt's own
+    // insertion order, every loader's destructor sees this null and skips the
+    // retraction — `~QObject` invalidates weak pointers before `deleteChildren`
+    // runs. So the guard is a real backstop and not merely a tidy-looking one,
+    // which matters because the raw pointer this replaced could NOT tell a freed
+    // registry from a live one, and that is the crash it caused on every daemon
+    // shutdown before 063609592.
     if (m_sink && !m_sink->registry.isNull()) {
         m_sink->registry->setUserPresets(m_sink->family, {});
     }
