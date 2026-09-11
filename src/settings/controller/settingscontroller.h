@@ -190,10 +190,8 @@ class SettingsController : public QObject
     // resolved through a DecorationProfileTree. QML reads
     // `settingsController.decorationPage.<invokable>()`.
     Q_PROPERTY(DecorationPageController* decorationPage READ decorationPage CONSTANT)
-    // Named parameter presets, one bridge per shader family. A pack editor is
-    // generic over its family, so its host passes the matching bridge in
-    // rather than the editor reaching for a specific one:
-    // `settingsController.animationPresets` and friends.
+    // Named parameter presets, one bridge per shader family: a pack editor is
+    // generic over its family, so its host passes the matching bridge in.
     Q_PROPERTY(ShaderPresetBridge* animationPresets READ animationPresets CONSTANT)
     Q_PROPERTY(ShaderPresetBridge* surfacePresets READ surfacePresets CONSTANT)
     Q_PROPERTY(ShaderPresetBridge* pointerPresets READ pointerPresets CONSTANT)
@@ -574,22 +572,12 @@ public:
     {
         return m_rulesPage;
     }
-    ShaderPresetBridge* animationPresets() const
-    {
-        return m_animationPresets;
-    }
-    ShaderPresetBridge* surfacePresets() const
-    {
-        return m_surfacePresets;
-    }
-    ShaderPresetBridge* pointerPresets() const
-    {
-        return m_pointerPresets;
-    }
-    ShaderPresetBridge* overlayPresets() const
-    {
-        return m_overlayPresets;
-    }
+    // Defined out of line: this header is past the size ceiling, and four
+    // one-line getters are not worth pushing it further over.
+    ShaderPresetBridge* animationPresets() const;
+    ShaderPresetBridge* surfacePresets() const;
+    ShaderPresetBridge* pointerPresets() const;
+    ShaderPresetBridge* overlayPresets() const;
     ProfilePageController* profilesPage() const
     {
         return m_profilesPage.get();
@@ -1134,14 +1122,9 @@ private:
     /// invariant block below.
     PlasmaZones::ShaderRegistry* m_overlayShaderRegistry = nullptr;
 
-    /// Named parameter presets for every shader family, plus one QML-facing
-    /// CRUD bridge per family.
-    ///
-    /// The store scans the user preset directories with live reload and is
-    /// seeded with each pack registry's declared presets; the bridges are what
-    /// the editors call to save, rename and delete. Declared AFTER the four
-    /// pack registries because it is seeded from what they have already
-    /// discovered, and BEFORE the page controllers that hand a bridge to QML.
+    /// Preset store plus one QML-facing CRUD bridge per family. The store
+    /// scans with live reload and is seeded from each pack registry, so it is
+    /// declared AFTER those and BEFORE the pages that hand a bridge to QML.
     std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
     ShaderPresetBridge* m_animationPresets = nullptr;
     ShaderPresetBridge* m_surfacePresets = nullptr;

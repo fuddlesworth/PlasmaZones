@@ -84,6 +84,13 @@ inline FoldInputs foldInputsOf(const WindowDecoration& wb)
 
 } // namespace
 
+PhosphorSurfaceShaders::DecorationProfile
+PlasmaZonesEffect::resolveDecorationProfile(const QString& path, PhosphorShaders::ShaderFamily family) const
+{
+    return PhosphorSurfaceShaders::withPresetsResolved(m_decorationTree.resolve(path), m_shaderManager.presetRegistry(),
+                                                       family);
+}
+
 void PlasmaZonesEffect::setupDecorationManager()
 {
     connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,

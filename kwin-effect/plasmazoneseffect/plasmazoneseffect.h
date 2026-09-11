@@ -2046,24 +2046,13 @@ private:
     /// consult it.
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
 
-    /// `m_decorationTree.resolve(path)` with each layer's preset reference
-    /// already flattened into its parameters.
-    ///
-    /// Every decoration consumer goes through here rather than through the
-    /// tree directly, so "what parameters does this surface actually render
-    /// with" has one answer in one place. Reading the tree raw would silently
-    /// skip the preset an assignment points at.
-    ///
-    /// @p family is `Surface` for window and popup surfaces and `Pointer` for
-    /// the cursor chain, whose path takes pointer packs rather than surface
-    /// ones.
+    /// `m_decorationTree.resolve(path)` with each layer's preset flattened in.
+    /// Every decoration consumer goes through here, so "what does this surface
+    /// render with" has one answer; reading the tree raw skips the preset.
+    /// @p family is `Pointer` for the cursor chain, `Surface` for the rest.
     PhosphorSurfaceShaders::DecorationProfile
     resolveDecorationProfile(const QString& path,
-                             PhosphorShaders::ShaderFamily family = PhosphorShaders::ShaderFamily::Surface) const
-    {
-        return PhosphorSurfaceShaders::withPresetsResolved(m_decorationTree.resolve(path),
-                                                           m_shaderManager.presetRegistry(), family);
-    }
+                             PhosphorShaders::ShaderFamily family = PhosphorShaders::ShaderFamily::Surface) const;
 
     /// Compiled surface-shader packs keyed by pack id (CompiledSurfacePack holds
     /// the main MapTexture shader, contract uniform locations, pack-declared

@@ -1064,4 +1064,24 @@ TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
 // setActivePage / dirty-tracking / external-edit methods live in
 // settingscontroller_pagestate.cpp.
 
+ShaderPresetBridge* SettingsController::animationPresets() const
+{
+    return m_animationPresets;
+}
+
+ShaderPresetBridge* SettingsController::surfacePresets() const
+{
+    return m_surfacePresets;
+}
+
+ShaderPresetBridge* SettingsController::pointerPresets() const
+{
+    return m_pointerPresets;
+}
+
+ShaderPresetBridge* SettingsController::overlayPresets() const
+{
+    return m_overlayPresets;
+}
+
 } // namespace PlasmaZones

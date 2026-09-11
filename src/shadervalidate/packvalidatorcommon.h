@@ -167,6 +167,19 @@ struct PresetLintParam
 int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
                          const QList<PresetLintParam>& declared);
 
+/// Per-family overloads, so each validator arm is one call rather than its own
+/// projection loop. The four ParameterInfo types spell themselves differently
+/// (slot vs step, image vs no image), which is why the lint takes the reduced
+/// PresetLintParam and these do the reducing.
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
+
 QString glslangValidatorPath();
 
 /// Compile @p source as @p stage through `glslangValidator` at @p toolPath and

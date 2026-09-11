@@ -434,6 +434,46 @@ int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<
     return problems;
 }
 
+namespace {
+/// The projection every overload below shares. Templated on the family's
+/// ParameterInfo rather than written four times, because all four carry the
+/// three fields the lint reads under the same names.
+template<typename ParamInfo>
+QList<PresetLintParam> toLintParams(const QList<ParamInfo>& declared)
+{
+    QList<PresetLintParam> out;
+    out.reserve(declared.size());
+    for (const ParamInfo& p : declared) {
+        out.append(PresetLintParam{p.id, p.type, p.minValue, p.maxValue});
+    }
+    return out;
+}
+} // namespace
+
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<ShaderRegistry::ParameterInfo>& declared)
+{
+    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+}
+
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<AnimationShaderEffect::ParameterInfo>& declared)
+{
+    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+}
+
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<SurfaceShaderEffect::ParameterInfo>& declared)
+{
+    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+}
+
+int reportPresetProblems(QTextStream& out, const QString& packLabel, const QMap<QString, QVariantMap>& presets,
+                         const QList<PointerShaderEffect::ParameterInfo>& declared)
+{
+    return reportPresetProblems(out, packLabel, presets, toLintParams(declared));
+}
+
 QStringList declaredParamNames(const QList<ShaderRegistry::ParameterInfo>& params)
 {
     QStringList declared;

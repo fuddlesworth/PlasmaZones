@@ -138,6 +138,19 @@ ColumnLayout {
     /// keeps the preset combo from re-deriving the action-type ladder.
     readonly property string _shaderPresetPackKey: "effectId"
 
+    // The preset editor is its own type (ActionPresetEditor.qml) rather than one
+    // more Component inside ActionParamEditors.qml, which is past the size
+    // ceiling. Its one-line adapter lives here, next to the dispatch that uses
+    // it, instead of pushing that file further over.
+    Component {
+        id: shaderPresetEditorComponent
+
+        ActionPresetEditor {
+            row: row
+            modelData: parent.modelData
+        }
+    }
+
     readonly property var _activeShaderParamSchema: {
         if (row._shaderActionType === "overrideAnimationShader")
             return row._shaderParamSchema;
@@ -514,7 +527,7 @@ ColumnLayout {
                         return paramEditors._overlayShaderEditor;
 
                     if (modelData.kind === "shaderPreset")
-                        return paramEditors._shaderPresetEditor;
+                        return shaderPresetEditorComponent;
 
                     if (modelData.kind === "curveEditor")
                         return paramEditors._curveEditorEditor;

@@ -1201,12 +1201,9 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
 // shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
 // JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
-// entry above and the animation ShaderProfileTree blob. Both of those are now
-// bounded at this boundary too (settingsschema_shadertrees.cpp), which is what
-// covers a hand-edited config.json that never reaches the typed setter this
-// key's own size bounds live in. Not knowing the per-pack override schema is
-// no obstacle there: the bounds are on string lengths, map sizes, value shapes
-// and entry counts, none of which need a registry. The blob is a
+// entry above and the animation ShaderProfileTree blob. Both are bounded here
+// too (settingsschema_shadertrees.cpp), which covers a hand-edited config.json
+// that never reaches this key's typed setter. The blob is a
 // leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
 // Decorations.WindowFiltering sub-group is registered separately.
 

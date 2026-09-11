@@ -657,10 +657,8 @@ void Daemon::stop()
         m_overlayService->setSurfaceShaderRegistry(nullptr);
     }
     m_surfaceShaderRegistry.reset();
-    // Same order for the preset store: null the overlay service's borrow
-    // before the store (and the registry inside it) goes away, so no queued
-    // presetsChanged can reach a dangling pointer while the event loop spins
-    // during shutdown.
+    // Same order for the preset store, so no queued presetsChanged reaches a
+    // dangling registry while the event loop spins during shutdown.
     if (m_overlayService) {
         m_overlayService->setPresetRegistry(nullptr);
     }

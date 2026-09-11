@@ -166,15 +166,11 @@ public:
     /// BEFORE resetting the registry — the explicit teardown, not declaration
     /// order, is what prevents a dangling pointer during shutdown.
     void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
-    /// Borrowed Daemon-owned preset registry, used to turn an assignment's
-    /// `presetId` into the parameters it stands for. Same lifetime contract as
-    /// the two registries above: Daemon::stop() nulls this borrow before
-    /// tearing the store down.
-    ///
-    /// Optional, unlike the shader registries. With none injected every
-    /// assignment resolves to its own parameters, which is exactly what an
-    /// assignment carrying no preset already does, so the overlay path
-    /// degrades instead of failing.
+    /// Borrowed preset registry, turning an assignment's `presetId` into the
+    /// parameters it stands for. Same lifetime contract as the two registries
+    /// above. OPTIONAL, unlike them: with none injected every assignment
+    /// resolves to its own parameters, which is what one carrying no preset
+    /// already does, so the path degrades rather than failing.
     void setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry);
     void updateGeometries() override;
 

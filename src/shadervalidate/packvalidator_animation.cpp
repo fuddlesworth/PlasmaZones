@@ -672,14 +672,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // Preset lint: every preset key must name a declared parameter, and every
     // value must match that parameter's declared type and range.
-    {
-        QList<PresetLintParam> lintParams;
-        lintParams.reserve(eff.parameters.size());
-        for (const auto& p : eff.parameters) {
-            lintParams.append(PresetLintParam{p.id, p.type, p.minValue, p.maxValue});
-        }
-        errors += reportPresetProblems(out, QDir(packDir).dirName(), eff.presets, lintParams);
-    }
+    errors += reportPresetProblems(out, QDir(packDir).dirName(), eff.presets, eff.parameters);
 
     // ── fragment stage ──
     // Read once for both arms; an unreadable or empty fragment is one error

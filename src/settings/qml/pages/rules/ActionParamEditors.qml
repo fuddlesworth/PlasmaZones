@@ -1091,59 +1091,6 @@ QtObject {
         }
     }
 
-    property Component _shaderPresetEditor: Component {
-        // The named preset this action's `params` are deltas against. Offered
-        // for whichever pack the row's OTHER param names, because a preset only
-        // means anything against its own pack: the animation action names an
-        // animation pack, the overlay action an overlay one.
-        //
-        // A plain combo rather than the full PresetRow used on the assignment
-        // pages: a rule row has no live preview to revert to and no place to
-        // save a new preset from, so the maintenance actions would all be dead.
-        // Presets are created where a pack is actually being tuned.
-        ComboBox {
-            readonly property var _param: parent.modelData
-            readonly property string _packId: row.action[row._shaderPresetPackKey] || ""
-            readonly property var _bridge: {
-                if (!row.appSettings)
-                    return null;
-                return row._shaderActionType === "overrideOverlayShader" ? row.appSettings.overlayPresets : row.appSettings.animationPresets;
-            }
-
-            readonly property var _entries: {
-                const out = [
-                    {
-                        id: "",
-                        name: i18nc("@item:inlistbox no shader preset", "None")
-                    }
-                ];
-                if (_bridge && _packId.length > 0) {
-                    const rows = _bridge.presetsFor(_packId);
-                    for (const r of rows)
-                        out.push(r);
-                }
-                return out;
-            }
-
-            enabled: _packId.length > 0
-            model: _entries
-            textRole: "name"
-            valueRole: "id"
-            Accessible.description: _param.label
-            currentIndex: {
-                const want = row.action[_param.key] || "";
-                for (let i = 0; i < _entries.length; ++i) {
-                    if (_entries[i].id === want)
-                        return i;
-                }
-                return 0;
-            }
-            onActivated: function (index) {
-                row.actionEdited(row._withParam(_param.key, _entries[index].id));
-            }
-        }
-    }
-
     // Inline shader-uniform editor shared by both shader-override actions
     // (OverrideAnimationShader and OverrideOverlayShader) — bound to
     // `_activeShaderParamSchema`, which selects the matching registry's schema
