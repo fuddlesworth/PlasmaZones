@@ -44,7 +44,7 @@ ShaderPresetStore::~ShaderPresetStore()
     m_loaders.clear();
 }
 
-void ShaderPresetStore::load(const QString& root)
+void ShaderPresetStore::load(const QString& root, const QList<ShaderFamily>& families)
 {
     // Idempotent by refusal rather than by rebuild. A second call used to build
     // four more loaders, leak the first four with their watchers still armed,
@@ -71,7 +71,14 @@ void ShaderPresetStore::load(const QString& root)
     // next rescan. Idempotent, so calling it on every startup is free.
     migrateLegacyOverlayPresets(root);
 
-    for (const ShaderFamily family : kAllFamilies) {
+    // An empty list means every family, so an existing caller keeps the old
+    // behaviour and a new one opts in to less.
+    const QList<ShaderFamily> wanted =
+        families.isEmpty() ? QList<ShaderFamily>(kAllFamilies.cbegin(), kAllFamilies.cend()) : families;
+    for (const ShaderFamily family : wanted) {
+        if (m_loaders.contains(static_cast<int>(family))) {
+            continue; // a caller listing one family twice
+        }
         auto* loader = new ShaderPresetLoader(*m_registry, family, this);
         // LiveReload::On is the point of the whole design: a preset retuned on
         // disk has to reach every process without a restart. The watcher

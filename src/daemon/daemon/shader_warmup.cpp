@@ -123,7 +123,13 @@ void Daemon::setupShaderPresets()
     m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
     // Scans the user preset directories with live reload, and imports any
     // presets left by the old zone-only save path on the way past.
-    m_presetStore->load();
+    // The three families the daemon resolves, named for the reason the
+    // compositor names its own: an unlisted family costs a watcher and a
+    // directory re-parse on every preset the user saves. The daemon serves
+    // animation, surface and overlay; pointer is compositor-only.
+    m_presetStore->load(PhosphorShaders::standardUserPresetRoot(),
+                        {PhosphorShaders::ShaderFamily::Animation, PhosphorShaders::ShaderFamily::Surface,
+                         PhosphorShaders::ShaderFamily::Overlay});
 
     auto& registry = m_presetStore->registry();
 

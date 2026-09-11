@@ -287,6 +287,65 @@ private Q_SLOTS:
         QVERIFY(!flat.presetId.has_value());
     }
 
+    void testEqualityNormalisesParameterValuesButNotEngagement()
+    {
+        // The settings setters gate their write and their signal on this
+        // operator, comparing a map BUILT in C++ against one read back from
+        // disk. Normalised through JSON, the same way the overlay profile does,
+        // so a value whose type changed on the way through still compares equal
+        // and the no-op gate does not fail open — the signal behind it reaches
+        // the daemon and the compositor.
+        ShaderProfile built;
+        built.effectId = QStringLiteral("dissolve");
+        built.parameters = QVariantMap{{QStringLiteral("count"), 3}};
+
+        ShaderProfile readBack = built;
+        readBack.parameters = QVariantMap{{QStringLiteral("count"), 3.0}};
+        QVERIFY(built == readBack);
+
+        // A different VALUE still differs, so the normalisation is not simply
+        // making everything equal.
+        ShaderProfile other = built;
+        other.parameters = QVariantMap{{QStringLiteral("count"), 4}};
+        QVERIFY(built != other);
+
+        // ENGAGEMENT is not normalised away: nullopt and engaged-empty are
+        // different statements on this type, and JSON-normalising an absent map
+        // would flatten both to {}.
+        ShaderProfile absent;
+        absent.effectId = QStringLiteral("dissolve");
+        ShaderProfile engagedEmpty = absent;
+        engagedEmpty.parameters = QVariantMap{};
+        QVERIFY(absent != engagedEmpty);
+        QVERIFY(absent == ShaderProfile{.effectId = QStringLiteral("dissolve")});
+    }
+
+    void testFlattenDoesNotEngageParametersItHasNothingToPutIn()
+    {
+        // nullopt and engaged-empty are different statements: engaged-empty is
+        // "no parameters here, and do not inherit any". A flatten that turned
+        // one into the other would invent a block the user never wrote, and it
+        // reached this exact case — an assignment naming a preset that no longer
+        // exists, with no parameters of its own, resolves to an empty map.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.presetId = QStringLiteral("gone");
+        QVERIFY(!p.parameters.has_value());
+
+        const ShaderProfile flat = withPresetsResolved(p, registry);
+        QVERIFY(!flat.parameters.has_value());
+        QVERIFY(!flat.presetId.has_value());
+
+        // An assignment that DID engage an empty map keeps it engaged: that one
+        // is the user's statement and the flatten must not revoke it either.
+        ShaderProfile blocking = p;
+        blocking.parameters = QVariantMap{};
+        const ShaderProfile flatBlocking = withPresetsResolved(blocking, registry);
+        QVERIFY(flatBlocking.parameters.has_value());
+        QVERIFY(flatBlocking.parameters->isEmpty());
+    }
+
     void testFlattenLeavesAProfileWithNoPresetAlone()
     {
         PhosphorShaders::ShaderPresetRegistry registry;

@@ -108,6 +108,7 @@ private Q_SLOTS:
     void anIdThatIsNotAPathComponentIsRefused();
     void packPresetsAreRetractedForAVanishedPack();
     void resolveParamsClampsToTheDeclaredRange();
+    void storeLoadsOnlyTheFamiliesTheConsumerNames();
 };
 
 // ═══════════════════════════ parsePackPresets ═══════════════════════════
@@ -841,6 +842,45 @@ void TestShaderPresets::packPresetsAreRetractedForAVanishedPack()
     QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("aurora"));
     QCOMPARE(registry.presetsFor(ShaderFamily::Animation, QStringLiteral("dissolve")).size(), 1);
+}
+
+void TestShaderPresets::storeLoadsOnlyTheFamiliesTheConsumerNames()
+{
+    // A loader is not one startup scan: it holds a QFileSystemWatcher and
+    // re-parses its whole directory every time the user saves a preset there.
+    // The compositor paid that on its own thread for the overlay family it
+    // cannot consult at all, so a consumer can now name what it resolves.
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+
+    // A preset file in each of two families, so "no loader" is distinguishable
+    // from "nothing on disk".
+    for (const ShaderFamily family : {ShaderFamily::Animation, ShaderFamily::Overlay}) {
+        const QString dir = userPresetDirectory(root.path(), family);
+        QVERIFY(QDir().mkpath(dir));
+        QVERIFY(writeFile(dir + QStringLiteral("/p.json"), QStringLiteral(R"({
+            "id": "p", "name": "P", "packId": "pack", "params": { "speed": 1.0 }
+        })")));
+    }
+
+    ShaderPresetStore store;
+    store.load(root.path(), {ShaderFamily::Animation, ShaderFamily::Surface});
+
+    QVERIFY(store.loader(ShaderFamily::Animation) != nullptr);
+    QVERIFY(store.loader(ShaderFamily::Surface) != nullptr);
+    QVERIFY(store.loader(ShaderFamily::Pointer) == nullptr);
+    QVERIFY(store.loader(ShaderFamily::Overlay) == nullptr);
+
+    // The named family's preset is loaded; the unnamed one's is simply absent,
+    // which is the registry's documented miss case rather than an error.
+    QCOMPARE(store.registry().presetsFor(ShaderFamily::Animation, QStringLiteral("pack")).size(), 1);
+    QVERIFY(store.registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("pack")).isEmpty());
+
+    // The default is still every family, so an existing caller is unchanged.
+    ShaderPresetStore all;
+    all.load(root.path());
+    QVERIFY(all.loader(ShaderFamily::Overlay) != nullptr);
+    QCOMPARE(all.registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("pack")).size(), 1);
 }
 
 void TestShaderPresets::resolveParamsClampsToTheDeclaredRange()

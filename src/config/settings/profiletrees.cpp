@@ -111,8 +111,9 @@ void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfil
     const auto prevPruned = shaderProfileTree();
     if (sanitized == prevPruned)
         return;
+    // The sanitized tree, for the reason given on the overlay setter below.
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),
-                   pruned.toJson().toVariantMap());
+                   sanitized.toJson().toVariantMap());
     Q_EMIT shaderProfileTreeChanged();
     Q_EMIT settingsChanged();
 }
@@ -587,8 +588,8 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     if (PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(prunedMap))
         == PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(storedMap)))
         return;
-    m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(),
-                   pruned.toJson().toVariantMap());
+    // The sanitized map, for the reason given on the overlay setter below.
+    m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(), prunedMap);
     Q_EMIT decorationProfileTreeChanged();
     Q_EMIT settingsChanged();
 }
@@ -649,13 +650,16 @@ void Settings::setOverlayShaderTree(const OverlayShaderTree& tree)
     // changed signal (discard-changes writes back the tree it just read).
     // Sanitized first, because the read side already is: see
     // sanitizedThroughSchema above.
-    const OverlayShaderTree sanitized = OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(
+    const QVariantMap sanitizedMap =
         sanitizedThroughSchema(m_store.get(), ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey(),
-                               tree.toJson().toVariantMap())));
-    if (sanitized == overlayShaderTree())
+                               tree.toJson().toVariantMap());
+    if (OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(sanitizedMap)) == overlayShaderTree())
         return;
-    m_store->write(ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey(),
-                   tree.toJson().toVariantMap());
+    // The SANITIZED map, not the caller's. Writing the raw one worked only
+    // because Store::write runs the same validator again, so the value that
+    // landed matched what was compared — by repetition rather than by
+    // construction. Two lines apart and one of them would have to be noticed.
+    m_store->write(ConfigDefaults::overlaysGroup(), ConfigDefaults::overlayShaderTreeKey(), sanitizedMap);
     Q_EMIT overlayShaderTreeChanged();
     Q_EMIT settingsChanged();
 }

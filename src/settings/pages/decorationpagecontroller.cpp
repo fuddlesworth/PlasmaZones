@@ -33,6 +33,14 @@ using PhosphorSurfaceShaders::DecorationProfileTree;
 
 namespace {
 
+/// A decoration preset id is a UUID or a pack-declared preset name. Bounded on
+/// the way in like its two siblings (`kMaxOverlayPresetIdChars` on the overlay
+/// page, `MaxShaderPresetIdLength` in the rules vocabulary). The schema
+/// sanitizer bounds it again on the read path, and an id naming no preset
+/// resolves to the layer's own parameters, so dropping one degrades rather than
+/// breaks.
+constexpr int kMaxChainPresetIdChars = 1024;
+
 /// The built-in seed layer `Settings::decorationProfileTree()` overlays on
 /// every read. Built once: it is a pure function of compiled-in literals, and
 /// the readers below run for every visible card on every tree write (each
@@ -688,6 +696,11 @@ void DecorationPageController::setChainPreset(const QString& path, const QString
     // wholesale, so a first preset pick at an inheriting path would otherwise
     // materialize an override naming only this pack and drop every other
     // layer's inherited preset.
+    if (presetId.size() > kMaxChainPresetIdChars) {
+        qCWarning(lcConfig) << "DecorationPageController: refusing an over-long preset id for pack" << packId
+                            << "at path" << path;
+        return;
+    }
     QVariantMap presets = profile.presetIds ? *profile.presetIds : inheritedPresetIdsForChain(tree, path);
     if (presetId.isEmpty())
         presets.remove(packId);

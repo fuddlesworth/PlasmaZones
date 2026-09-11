@@ -162,6 +162,7 @@ DecorationProfile withPresetsResolved(const DecorationProfile& profile,
 
     DecorationProfile out = profile;
     QVariantMap params = out.effectiveParameters();
+    bool resolvedAny = false;
     for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
         const QString packId = it.key();
         const QString presetId = it.value().toString();
@@ -171,8 +172,19 @@ DecorationProfile withPresetsResolved(const DecorationProfile& profile,
         // The pack's own entry in `parameters` is the DELTA set, so it is the
         // second argument: preset values first, this layer's edits on top.
         params.insert(packId, presets.resolveParams(family, packId, presetId, params.value(packId).toMap()));
+        resolvedAny = true;
     }
-    out.parameters = params;
+    // Only ENGAGE parameters when something was actually resolved into them.
+    // Assigning unconditionally turned a nullopt map into an engaged-empty one,
+    // and the two are not the same statement: engaged-empty is "no parameters
+    // here, and do not inherit any", which this function has no business
+    // inventing. Reachable whenever every entry in presetIds holds an empty
+    // string, which is the sentinel an assignment writes to BLOCK an inherited
+    // preset without naming one of its own — so the flatten of a
+    // blocking-only profile used to silently also block inherited parameters.
+    if (resolvedAny) {
+        out.parameters = params;
+    }
     // Cleared so a second flatten is a no-op rather than a double application
     // the moment anything overlays two already-flattened profiles.
     out.presetIds.reset();

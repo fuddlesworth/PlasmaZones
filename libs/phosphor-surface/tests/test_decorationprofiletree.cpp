@@ -957,6 +957,34 @@ private Q_SLOTS:
             flat.effectiveParameters().value(QStringLiteral("border")).toMap().value(QStringLiteral("width")).toInt(),
             3);
     }
+
+    void testFlattenDoesNotEngageParametersItHasNothingToPutIn()
+    {
+        // nullopt and engaged-empty are different statements: engaged-empty is
+        // "no parameters here, and do not inherit any". Reachable whenever every
+        // entry in presetIds holds an empty string, which is the sentinel an
+        // assignment writes to BLOCK an inherited preset without naming one of
+        // its own — so the flatten of a blocking-only profile silently also
+        // blocked inherited parameters.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        DecorationProfile p;
+        p.chain = QStringList{QStringLiteral("border")};
+        p.presetIds = QVariantMap{{QStringLiteral("border"), QString()}};
+        QVERIFY(!p.parameters.has_value());
+
+        const DecorationProfile flat = withPresetsResolved(p, registry, PhosphorShaders::ShaderFamily::Surface);
+        QVERIFY(!flat.parameters.has_value());
+        QVERIFY(!flat.presetIds.has_value());
+
+        // A profile that DID engage an empty map keeps it: that one is the
+        // user's statement and the flatten must not revoke it either.
+        DecorationProfile blocking = p;
+        blocking.parameters = QVariantMap{};
+        const DecorationProfile flatBlocking =
+            withPresetsResolved(blocking, registry, PhosphorShaders::ShaderFamily::Surface);
+        QVERIFY(flatBlocking.parameters.has_value());
+        QVERIFY(flatBlocking.parameters->isEmpty());
+    }
 };
 
 QTEST_MAIN(TestDecorationProfileTree)

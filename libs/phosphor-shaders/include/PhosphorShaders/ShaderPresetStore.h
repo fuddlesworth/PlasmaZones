@@ -9,6 +9,7 @@
 #include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QString>
 
@@ -66,8 +67,18 @@ public:
      *              Tests pass a temporary directory. Must be an absolute path —
      *              an empty or relative root would resolve against the process
      *              working directory, and is refused with a warning.
+     * @param families  Which families to build a loader for. Empty (the default)
+     *              means all four. A consumer that resolves only some of them
+     *              should name them: a loader is not just one startup scan, it
+     *              holds a QFileSystemWatcher and RE-PARSES every file in its
+     *              directory each time the user saves a preset there. The
+     *              compositor paid that on its own thread for the overlay family
+     *              it cannot consult at all. Naming a subset is the only thing
+     *              this costs: an unlisted family simply has no presets, and
+     *              `resolveParams` on it falls back to the assignment's own
+     *              values, which is its documented miss behaviour.
      */
-    void load(const QString& root = standardUserPresetRoot());
+    void load(const QString& root = standardUserPresetRoot(), const QList<ShaderFamily>& families = {});
 
     /// The registry every consumer resolves through.
     ShaderPresetRegistry& registry();
