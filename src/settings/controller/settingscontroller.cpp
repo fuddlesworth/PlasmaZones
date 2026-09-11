@@ -762,32 +762,23 @@ SettingsController::SettingsController(QObject* parent)
         // Push each family's pack-declared presets now, and again on every
         // reload, so a pack dropped in while the window is open brings its
         // presets with it.
-        // Whole-family replace, so a pack uninstalled while the window is open
-        // has its presets retracted rather than left on offer. The declared
-        // parameter ranges ride along, because this is the one place holding
-        // both, and `resolveParams` clamps every value it returns to them.
-        //
-        // Captured BY VALUE below: these are connected to registry signals and
-        // outlive this block. `presets` is a reference to the store's registry,
-        // which outlives the controller's wiring.
-        const auto seed = [&presets](PhosphorShaders::ShaderFamily family, const auto& packs) {
-            QHash<QString, PhosphorShaders::PackPresets> byPack;
-            QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
-            for (const auto& pack : packs) {
-                byPack.insert(pack.id, pack.presets);
-                bounds.insert(pack.id, PhosphorShaders::presetBoundsFrom(pack.parameters));
-            }
-            presets.setPackPresetsForFamily(family, byPack, bounds);
+        // The projection is PhosphorShaders::seedPackPresets, shared with the
+        // daemon and the compositor rather than written out here: all three
+        // built the same two hashes from a pack list and whole-family replaced,
+        // so a fix to it had to land in all three. `presets` is a reference to
+        // the store's registry, which outlives the controller's wiring, so these
+        // lambdas may hold it past this block.
+        const auto syncAnimation = [this, &presets]() {
+            PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Animation,
+                                             m_animationShaderRegistry->availableEffects());
         };
-
-        const auto syncAnimation = [this, seed]() {
-            seed(PhosphorShaders::ShaderFamily::Animation, m_animationShaderRegistry->availableEffects());
+        const auto syncSurface = [this, &presets]() {
+            PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Surface,
+                                             m_surfaceShaderRegistry->availableEffects());
         };
-        const auto syncSurface = [this, seed]() {
-            seed(PhosphorShaders::ShaderFamily::Surface, m_surfaceShaderRegistry->availableEffects());
-        };
-        const auto syncPointer = [this, seed]() {
-            seed(PhosphorShaders::ShaderFamily::Pointer, m_pointerShaderRegistry->availableEffects());
+        const auto syncPointer = [this, &presets]() {
+            PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Pointer,
+                                             m_pointerShaderRegistry->availableEffects());
         };
 
         syncAnimation();
@@ -928,16 +919,10 @@ SettingsController::SettingsController(QObject* parent)
     if (m_presetStore) {
         auto& presets = m_presetStore->registry();
         const auto syncOverlay = [this, &presets]() {
-            if (!m_overlayShaderRegistry) {
-                return;
+            if (m_overlayShaderRegistry) {
+                PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Overlay,
+                                                 m_overlayShaderRegistry->availableShaders());
             }
-            QHash<QString, PhosphorShaders::PackPresets> byPack;
-            QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
-            for (const auto& info : m_overlayShaderRegistry->availableShaders()) {
-                byPack.insert(info.id, info.presets);
-                bounds.insert(info.id, PhosphorShaders::presetBoundsFrom(info.parameters));
-            }
-            presets.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Overlay, byPack, bounds);
         };
         syncOverlay();
         connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, syncOverlay);

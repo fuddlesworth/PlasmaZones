@@ -173,6 +173,38 @@ private:
                          const PresetValueBounds& bounds);
 };
 
+/// Seed @p registry with every pack-declared preset in @p effects, for @p family.
+///
+/// The projection every consumer of this library performed by hand. Three
+/// processes each wrote the same loop — build `{packId -> presets}` and
+/// `{packId -> bounds}` from a pack registry's effect list, then whole-family
+/// replace — and the daemon wrote it three more times, once per family, so a
+/// fourth family meant a fourth copy. A fix to the projection had to land in
+/// every one of them.
+///
+/// A template because the four families each keep their own effect type in their
+/// own library; all four carry `id`, `presets` and `parameters`, which is all
+/// this reads. That is also why it lives here rather than on the STORE: the store
+/// deliberately knows nothing about the four pack registries, and this knows
+/// nothing about them either — only about the three fields their effects share.
+///
+/// Whole-family replace, not a per-pack loop, and that is the point: a loop over
+/// the packs that still exist cannot name one that has GONE, so an uninstalled
+/// pack's presets would survive for the process lifetime. The declared parameter
+/// ranges ride along, because `resolveParams` clamps to them, which is what keeps
+/// a hand-written preset value out of a pack's GLSL loop bound unchecked.
+template<typename EffectList>
+void seedPackPresets(ShaderPresetRegistry& registry, ShaderFamily family, const EffectList& effects)
+{
+    QHash<QString, PackPresets> byPack;
+    QHash<QString, PresetValueBounds> bounds;
+    for (const auto& effect : effects) {
+        byPack.insert(effect.id, effect.presets);
+        bounds.insert(effect.id, presetBoundsFrom(effect.parameters));
+    }
+    registry.setPackPresetsForFamily(family, byPack, bounds);
+}
+
 } // namespace PhosphorShaders
 
 Q_DECLARE_METATYPE(PhosphorShaders::ShaderFamily)

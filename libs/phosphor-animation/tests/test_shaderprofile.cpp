@@ -317,7 +317,9 @@ private Q_SLOTS:
         ShaderProfile engagedEmpty = absent;
         engagedEmpty.parameters = QVariantMap{};
         QVERIFY(absent != engagedEmpty);
-        QVERIFY(absent == ShaderProfile{.effectId = QStringLiteral("dissolve")});
+        ShaderProfile twin;
+        twin.effectId = QStringLiteral("dissolve");
+        QVERIFY(absent == twin);
     }
 
     void testFlattenDoesNotEngageParametersItHasNothingToPutIn()

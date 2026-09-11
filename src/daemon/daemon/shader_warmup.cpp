@@ -142,48 +142,31 @@ void Daemon::setupShaderPresets()
     // registries have already scanned by the time this runs, and a signal that
     // never comes would leave every pack-declared preset invisible until the
     // user happened to edit a pack.
-    // Whole-family replace, not a per-pack loop. A loop driven by the packs that
-    // currently exist can never name a pack that has been UNINSTALLED — it just
-    // does not visit it — so its presets used to survive for the life of the
-    // process and keep being offered. The bounds ride along because this is the
-    // one place that holds both the presets and the declared parameter ranges
-    // `resolveParams` clamps to.
+    // The projection is PhosphorShaders::seedPackPresets, shared with the
+    // compositor and the settings app. These three were the same loop written
+    // three times over, differing only in registry pointer, element type and
+    // family enum — so a fourth family meant a fourth copy, and a fix to the
+    // projection meant three edits here plus two elsewhere. What is left per
+    // family is the only thing that genuinely differs: which registry to ask,
+    // and the null guard, because each of these registries is nullable at a
+    // different point in the daemon's lifecycle.
     const auto syncOverlayPresets = [this, &registry]() {
-        if (!m_shaderRegistry) {
-            return;
+        if (m_shaderRegistry) {
+            PhosphorShaders::seedPackPresets(registry, PhosphorShaders::ShaderFamily::Overlay,
+                                             m_shaderRegistry->availableShaders());
         }
-        QHash<QString, PhosphorShaders::PackPresets> byPack;
-        QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
-        for (const ShaderRegistry::ShaderInfo& info : m_shaderRegistry->availableShaders()) {
-            byPack.insert(info.id, info.presets);
-            bounds.insert(info.id, PhosphorShaders::presetBoundsFrom(info.parameters));
-        }
-        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Overlay, byPack, bounds);
     };
     const auto syncAnimationPresets = [this, &registry]() {
-        if (!m_animationShaderRegistry) {
-            return;
+        if (m_animationShaderRegistry) {
+            PhosphorShaders::seedPackPresets(registry, PhosphorShaders::ShaderFamily::Animation,
+                                             m_animationShaderRegistry->availableEffects());
         }
-        QHash<QString, PhosphorShaders::PackPresets> byPack;
-        QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
-        for (const PhosphorAnimationShaders::AnimationShaderEffect& effect :
-             m_animationShaderRegistry->availableEffects()) {
-            byPack.insert(effect.id, effect.presets);
-            bounds.insert(effect.id, PhosphorShaders::presetBoundsFrom(effect.parameters));
-        }
-        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Animation, byPack, bounds);
     };
     const auto syncSurfacePresets = [this, &registry]() {
-        if (!m_surfaceShaderRegistry) {
-            return;
+        if (m_surfaceShaderRegistry) {
+            PhosphorShaders::seedPackPresets(registry, PhosphorShaders::ShaderFamily::Surface,
+                                             m_surfaceShaderRegistry->availableEffects());
         }
-        QHash<QString, PhosphorShaders::PackPresets> byPack;
-        QHash<QString, PhosphorShaders::PresetValueBounds> bounds;
-        for (const PhosphorSurfaceShaders::SurfaceShaderEffect& effect : m_surfaceShaderRegistry->availableEffects()) {
-            byPack.insert(effect.id, effect.presets);
-            bounds.insert(effect.id, PhosphorShaders::presetBoundsFrom(effect.parameters));
-        }
-        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Surface, byPack, bounds);
     };
 
     syncOverlayPresets();
