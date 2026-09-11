@@ -129,10 +129,6 @@ int migrateLegacyOverlayPresets(const QString& root)
         preset.packId = packId;
         preset.params = obj.value(QLatin1String(LegacyFieldShaderParams)).toObject().toVariantMap();
 
-        if (!QDir().mkpath(targetDir)) {
-            qCWarning(lcPresetLoader) << "Cannot create the overlay preset directory, aborting migration:" << targetDir;
-            return migrated;
-        }
         const QString targetPath = targetDir + QLatin1Char('/') + preset.id + QStringLiteral(".json");
 
         if (!QFile::exists(targetPath)) {

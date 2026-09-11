@@ -596,13 +596,25 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
             return acceptableShaderEffectId(effectId, QLatin1String("setShaderOverrideOnPaths"));
         },
         [&, bounded = boundedWrittenMap(parameters, QLatin1String("setShaderOverrideOnPaths"))](
-            const ShaderProfile&, bool) -> std::optional<ShaderProfile> {
+            const ShaderProfile& stored, bool) -> std::optional<ShaderProfile> {
             ShaderProfile profile;
             profile.effectId = effectId;
             // Bounded for the same reason the id is gated: this is the only
             // path QML uses, and the map rides to disk beside the id.
             if (!bounded.isEmpty())
                 profile.parameters = bounded;
+            // Carry the preset reference across a PROMOTION — the same pack the
+            // path already resolved to, becoming owned rather than inherited.
+            // This builds a fresh profile rather than copying `stored`, so
+            // without this the preset was silently dropped every time the user
+            // promoted an inherited pack, which is the case the parameters were
+            // already carefully carried through for. A genuine pack SWITCH must
+            // still drop it, because presets are keyed by pack.
+            //
+            // Same predicate the overlay writer uses (OverlaysPageController::
+            // setShaderOverride), so the two trees cannot drift again.
+            if (stored.effectId.has_value() && *stored.effectId == effectId)
+                profile.presetId = stored.presetId;
             return profile;
         });
 }
@@ -650,8 +662,16 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                          profile.parameters = bounded;
                                      // Nothing engaged means there is no override left to store, so
                                      // the entry goes rather than becoming an empty one. This is also
-                                     // how "revert my parameters to inherited" lands.
-                                     if (!profile.effectId.has_value() && !profile.parameters.has_value())
+                                     // how "revert my parameters to inherited" lands, and how
+                                     // "revert to preset" lands — which is why `presetId` has to be
+                                     // in this test. Without it, reverting the parameters on an event
+                                     // that inherits its pack cleared the whole entry and took the
+                                     // preset reference with it, so the obvious button unassigned the
+                                     // preset instead of dropping the edits made on top of it. All
+                                     // three slots are independently engaged; the sibling
+                                     // setShaderPresetOnPaths tests all three.
+                                     if (!profile.effectId.has_value() && !profile.parameters.has_value()
+                                         && !profile.presetId.has_value())
                                          return std::nullopt;
                                      return profile;
                                  });

@@ -29,6 +29,12 @@ QVariantMap profileToMap(const OverlayShaderProfile& profile)
     QVariantMap map;
     map.insert(QLatin1String("shaderId"), profile.shaderId);
     map.insert(QLatin1String("parameters"), profile.parameters);
+    // The preset reference, without which the whole overlay preset row was
+    // inert: the card derives its selected preset from this map, so picking one
+    // persisted correctly and then snapped straight back to "None", with Revert,
+    // Update, Rename and Delete all hidden because the row believed no preset
+    // was set. Emitted unconditionally, like `parameters`.
+    map.insert(QLatin1String("presetId"), profile.presetId);
     return map;
 }
 
