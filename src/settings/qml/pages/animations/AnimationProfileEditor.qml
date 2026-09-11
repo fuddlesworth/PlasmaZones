@@ -125,6 +125,16 @@ ColumnLayout {
     /// value" understated what the event owns, which is the same class of
     /// mistake the remove button's label made.
     property bool shaderOwnsParamsOnly: false
+    /// True when this event stores only a PRESET of its own, still following its
+    /// pack and holding no parameters.
+    ///
+    /// The third independent axis. `setShaderPresetOnPaths` deliberately stores a
+    /// preset on an event that inherits its pack, and that IS an override which
+    /// changes what renders, so the caption has to say so rather than reporting
+    /// pure inheritance. Supplied by the host, like its two siblings, because
+    /// this editor is fed the RESOLVED preset id and cannot tell an inherited one
+    /// from the event's own.
+    property bool shaderOwnsPresetOnly: false
     /// True when this event stores a shader override of ANY shape, including
     /// the engaged-empty sentinel. Gates the revert affordance, which has to
     /// stay reachable in exactly the state where the pack row is hidden:
@@ -262,14 +272,22 @@ ColumnLayout {
     /// visible Label and the row's `Accessible.description` render it and a
     /// second spelling would drift.
     ///
-    /// Three states, because the storage has three. The first two reuse the
-    /// wording the curve and duration captions already use, so the axes read
-    /// as one convention. The third has no timing counterpart: only the shader
-    /// slot can own its values while still inheriting the thing those values
-    /// configure.
+    /// FOUR states, because the storage has four. The first reuses the wording
+    /// the curve and duration captions already use, so the axes read as one
+    /// convention. The other three have no timing counterpart: only the shader
+    /// slot can own something while still inheriting the thing it configures.
+    ///
+    /// The preset arm was missing while the storage already had it, so an event
+    /// that inherits its pack and stores only a preset reported "Following the
+    /// inherited value" — which is false, because the preset is changing what
+    /// renders. The Override toggle counted that case and this caption did not,
+    /// so the card contradicted itself on the same screen.
     readonly property string _shaderOwnershipCaption: {
         if (shaderOwnsPack)
             return i18n("Overridden for this event");
+
+        if (shaderOwnsPresetOnly)
+            return i18n("Following the inherited pack, with a preset of its own");
 
         if (shaderOwnsParamsOnly) {
             // Its own settings, but for a pack that is no longer the one

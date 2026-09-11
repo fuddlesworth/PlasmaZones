@@ -889,6 +889,7 @@ Item {
                 // predicates on purpose. See `_anyWritePathOwnsShaderPack`.
                 shaderOwnsPack: root._ownsShaderPack
                 shaderOwnsParamsOnly: root._ownsShaderParamsOnly
+                shaderOwnsPresetOnly: root._ownsShaderPresetOnly
                 shaderParamsStale: root._shaderParamsStale
                 shaderOverrideStored: root._storesShaderOverride
                 shaderBlocksInherited: root._shaderBlocksInherited
