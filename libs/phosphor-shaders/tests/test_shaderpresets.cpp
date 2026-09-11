@@ -76,6 +76,10 @@ private Q_SLOTS:
     void packReloadWithNoChangeDoesNotSignal();
     void deletingLastUserPresetSignalsThatPack();
     void familiesAreSeparateNamespaces();
+    void presetByIdFindsAUserPresetInAnyPack();
+    void presetByIdPrefersTheUserPresetOverAPackDeclaredId();
+    void presetByIdIsDeterministicWhenTwoPacksShareAnId();
+    void presetByIdIsEmptyForAnEmptyOrUnknownId();
 
     // ─────── loader ───────
 
@@ -322,6 +326,91 @@ void TestShaderPresets::familiesAreSeparateNamespaces()
                             PackPresets{{QStringLiteral("A"), {{QStringLiteral("x"), 1}}}});
     QVERIFY(registry.presetsFor(ShaderFamily::Surface, QStringLiteral("glow")).isEmpty());
     QCOMPARE(registry.presetsFor(ShaderFamily::Animation, QStringLiteral("glow")).size(), 1);
+}
+
+// `presetById` is the lookup the whole write side routes through: rename,
+// update and delete each resolve the stored record by id alone, because the
+// editor knows the id it is acting on and not which pack declared it.
+
+void TestShaderPresets::presetByIdFindsAUserPresetInAnyPack()
+{
+    ShaderPresetRegistry registry;
+    ShaderPreset mine;
+    mine.id = QStringLiteral("{a}");
+    mine.name = QStringLiteral("Mine");
+    mine.packId = QStringLiteral("dissolve");
+    mine.params = {{QStringLiteral("speed"), 2.0}};
+    registry.setUserPresets(ShaderFamily::Animation, {mine});
+
+    const ShaderPreset found = registry.presetById(ShaderFamily::Animation, QStringLiteral("{a}"));
+    QVERIFY(found.isValid());
+    QCOMPARE(found.packId, QStringLiteral("dissolve"));
+    QCOMPARE(found.params.value(QStringLiteral("speed")).toDouble(), 2.0);
+
+    // Family-scoped, like every other lookup here: the same id in another
+    // family is another preset.
+    QVERIFY(!registry.presetById(ShaderFamily::Surface, QStringLiteral("{a}")).isValid());
+}
+
+void TestShaderPresets::presetByIdPrefersTheUserPresetOverAPackDeclaredId()
+{
+    // Same precedence as the pack-scoped lookup, and it matters more here: an
+    // update resolving to the read-only pack record would write the pack's
+    // values back out under the user's id.
+    ShaderPresetRegistry registry;
+    registry.setPackPresets(ShaderFamily::Surface, QStringLiteral("border"),
+                            PackPresets{{QStringLiteral("Soft"), {{QStringLiteral("width"), 1}}}});
+
+    ShaderPreset mine;
+    mine.id = QStringLiteral("Soft");
+    mine.name = QStringLiteral("Soft");
+    mine.packId = QStringLiteral("border");
+    mine.params = {{QStringLiteral("width"), 8}};
+    registry.setUserPresets(ShaderFamily::Surface, {mine});
+
+    const ShaderPreset found = registry.presetById(ShaderFamily::Surface, QStringLiteral("Soft"));
+    QVERIFY(!found.readOnly);
+    QCOMPARE(found.params.value(QStringLiteral("width")).toInt(), 8);
+}
+
+void TestShaderPresets::presetByIdIsDeterministicWhenTwoPacksShareAnId()
+{
+    // Ids are supposed to be unique within a family, but a user preset's id
+    // comes from a hand-editable file, so a collision is reachable. Which
+    // record answers must not depend on QHash iteration order, or a rename
+    // would move a different preset between two runs of the same binary.
+    ShaderPresetRegistry registry;
+    ShaderPreset first;
+    first.id = QStringLiteral("{dup}");
+    first.name = QStringLiteral("First");
+    first.packId = QStringLiteral("aaa-pack");
+    first.params = {{QStringLiteral("speed"), 1.0}};
+    ShaderPreset second = first;
+    second.name = QStringLiteral("Second");
+    second.packId = QStringLiteral("zzz-pack");
+    second.params = {{QStringLiteral("speed"), 9.0}};
+    registry.setUserPresets(ShaderFamily::Animation, {first, second});
+
+    // Sorted scope keys, so the lowest pack id answers, every time.
+    for (int run = 0; run < 4; ++run) {
+        const ShaderPreset found = registry.presetById(ShaderFamily::Animation, QStringLiteral("{dup}"));
+        QCOMPARE(found.packId, QStringLiteral("aaa-pack"));
+        QCOMPARE(found.params.value(QStringLiteral("speed")).toDouble(), 1.0);
+    }
+}
+
+void TestShaderPresets::presetByIdIsEmptyForAnEmptyOrUnknownId()
+{
+    ShaderPresetRegistry registry;
+    registry.setPackPresets(ShaderFamily::Animation, QStringLiteral("dissolve"),
+                            PackPresets{{QStringLiteral("Soft"), {{QStringLiteral("speed"), 1.0}}}});
+    QVERIFY(!registry.presetById(ShaderFamily::Animation, QString()).isValid());
+    QVERIFY(!registry.presetById(ShaderFamily::Animation, QStringLiteral("nope")).isValid());
+    // The pack-declared one IS reachable by id, and carries its read-only mark
+    // so the write side can refuse it.
+    const ShaderPreset packed = registry.presetById(ShaderFamily::Animation, QStringLiteral("Soft"));
+    QVERIFY(packed.isValid());
+    QVERIFY(packed.readOnly);
 }
 
 // ═══════════════════════ loader ═══════════════════════

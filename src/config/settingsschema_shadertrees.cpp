@@ -29,10 +29,21 @@
  * these close that side for both trees and close the animation tree's missing
  * size bounds outright.
  *
- * The caps here deliberately MATCH the setters' rather than tightening them. A
- * sanitizer that trimmed harder than the setter would rewrite a tree the setter
- * had just accepted, and the value would vanish on the next read instead of at
- * the write that produced it.
+ * The numeric caps here deliberately MATCH the setters' rather than tightening
+ * them (64 entries, 1024 characters, on both sides). A sanitizer that trimmed
+ * harder than the setter would rewrite a tree the setter had just accepted, and
+ * the value would vanish on the next read instead of at the write that produced
+ * it.
+ *
+ * The SHAPE rules are not a mirror, and the asymmetry is deliberate rather than
+ * an oversight. On the decoration tree this sanitizer additionally drops a
+ * duplicate chain entry and a non-map value at the pack-id level of
+ * `parameters`, neither of which the setter judges. Both are values that can
+ * only misbehave: the compositor folds the chain per entry, so a repeated pack
+ * id costs a draw and a buffer slot for nothing, and a scalar where a pack's
+ * parameter map belongs resolves to no parameters at all. Dropping them is
+ * therefore not "trimming harder than the setter accepted" in the sense the
+ * paragraph above warns about — nothing a user can see is being taken away.
  *
  * ## What cannot be covered here
  *

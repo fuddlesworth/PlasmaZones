@@ -2079,6 +2079,28 @@ target_link_libraries(test_decoration_sets_validation
 )
 add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
 
+# The WRITE half of the shader-preset feature: ShaderPresetBridge, the
+# `presetBridge` every pack editor binds. The library half (parse, resolve,
+# loader, store) is covered by phosphor-shaders' own test_shaderpresets. Links
+# only the bridge source, which needs no controller and no config store.
+add_executable(test_shaderpresetbridge
+    settings/stores/test_shaderpresetbridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shaderpresetbridge.cpp
+)
+target_link_libraries(test_shaderpresetbridge
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        plasmazones_core
+)
+# P_SOURCE_DIR for the presetBridge QML-reachability guard, which scrapes the
+# settings QML tree the way the decoration preview's previewController guard
+# scrapes its own.
+target_compile_definitions(test_shaderpresetbridge PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_shaderpresetbridge COMMAND test_shaderpresetbridge)
+
 # Settings profiles: the ProfileStore delta / inheritance-resolution engine
 # behind ProfilePageController::bridge. Driven with stub config closures, so it
 # links only the store itself (no PhosphorConfig::Store needed).

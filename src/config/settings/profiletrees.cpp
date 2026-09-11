@@ -415,6 +415,40 @@ QVariantMap boundedParameterMap(const QVariantMap& map, const QString& path, int
     return out;
 }
 
+/// `presetIds`, which is `{packId -> presetId}` and so is flat and
+/// string-valued at both levels, unlike `parameters`.
+///
+/// Not routed through boundedParameterMap, which would accept a nested map and
+/// a numeric value here. Every value is a preset id the resolver calls
+/// `.toString()` on, so anything else is inert, and keeping a key whose value
+/// can never resolve only preserves a hand-edit that does nothing.
+QVariantMap boundedPresetIdMap(const QVariantMap& map, const QString& path)
+{
+    QVariantMap out;
+    bool warnedCount = false;
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        if (it.key().size() > kMaxDecorationStringChars) {
+            qCWarning(lcConfig) << "setDecorationProfileTree: dropping over-long presetIds pack id at" << path;
+            continue;
+        }
+        if (out.size() >= kMaxDecorationMapKeys) {
+            if (!warnedCount) {
+                qCWarning(lcConfig) << "setDecorationProfileTree: dropping presetIds entries past"
+                                    << kMaxDecorationMapKeys << "at" << path;
+                warnedCount = true;
+            }
+            continue;
+        }
+        if (it.value().typeId() != QMetaType::QString || it.value().toString().size() > kMaxDecorationStringChars) {
+            qCWarning(lcConfig) << "setDecorationProfileTree: dropping unusable presetIds value for" << it.key() << "at"
+                                << path;
+            continue;
+        }
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
 PhosphorSurfaceShaders::DecorationProfile boundedDecorationProfile(const PhosphorSurfaceShaders::DecorationProfile& p,
                                                                    const QString& path)
 {
@@ -423,6 +457,13 @@ PhosphorSurfaceShaders::DecorationProfile boundedDecorationProfile(const Phospho
         out.chain = boundedIdList(*out.chain, "chain", path);
     if (out.disabledPacks)
         out.disabledPacks = boundedIdList(*out.disabledPacks, "disabledPacks", path);
+    // Bounded here as well as in the schema sanitizer, for the reason the whole
+    // function exists: the schema runs on read and write of THIS key, and the
+    // setter covers every writer reaching the tree through it. A field bounded
+    // on only one of the two is a field whose bound depends on which door the
+    // write came in by.
+    if (out.presetIds)
+        out.presetIds = boundedPresetIdMap(*out.presetIds, path);
     if (out.parameters)
         out.parameters = boundedParameterMap(*out.parameters, path, 0);
     return out;
