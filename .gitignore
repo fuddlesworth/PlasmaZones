@@ -305,7 +305,7 @@ result-*
 PlasmaZones.wiki/
 
 # -----------------------------------------------------------------------------
-# Claude Flow / AI Development Tools
+# Claude Code
 # -----------------------------------------------------------------------------
 # .claude/ is ignored except the checked-in review/theme agents and the code-audit
 # and shader-theme skills
@@ -320,15 +320,6 @@ PlasmaZones.wiki/
 !.claude/skills/shader-theme/
 !.claude/settings.json
 .mcp.json
-claude-flow.config.json
-.swarm/
-.hive-mind/
-.claude-flow/
-memory/
-coordination/
-claude-flow
-claude.*
-hive-mind-prompt-*.txt
 
 
 # -----------------------------------------------------------------------------
