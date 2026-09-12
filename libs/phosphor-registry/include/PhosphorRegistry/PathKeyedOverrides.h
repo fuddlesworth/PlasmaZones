@@ -157,12 +157,12 @@ public:
 
     /// Invoke `fn(key, payload)` for every override, in insertion order.
     ///
-    /// The shared half of serialisation, and deliberately only this half. Two of
-    /// the three trees write their overrides as a JSON ARRAY of `{path, profile}`
+    /// The shared half of serialisation, and deliberately only this half. Three of
+    /// the four trees write their overrides as a JSON ARRAY of `{path, profile}`
     /// entries — which is why insertion order is part of their identity, it is
-    /// observable on the wire — while the third writes a key-addressed object. A
+    /// observable on the wire — while the fourth writes a key-addressed object. A
     /// shared `overridesToJson` would have to take the field names as parameters
-    /// and still only fit two of three: a knob pretending to be an abstraction.
+    /// and still only fit three of four: a knob pretending to be an abstraction.
     ///
     /// What they genuinely share is this walk and the guard inside it, which each
     /// had written out with the same comment attached. The entry shape stays with
@@ -186,10 +186,13 @@ public:
     // ─────── Equality pieces ───────
     //
     // Deliberately not an operator==. The trees disagree about whether insertion
-    // ORDER is part of identity: the animation tree compares it, the overlay tree
-    // is order-free by construction because every ordered view it exposes is
-    // sorted. Handing each of them the piece it needs keeps that a stated
-    // decision rather than something a shared operator quietly picks.
+    // ORDER is part of identity: the three ARRAY-form trees (the motion and shader
+    // trees in phosphor-animation, and the decoration one) compare it, because the
+    // order is observable on their wire format; the overlay tree is order-free by
+    // construction, because every ordered view it exposes is sorted and its overrides
+    // serialise as a key-addressed object. Handing each of them the piece it needs
+    // keeps that a stated decision rather than something a shared operator quietly
+    // picks for all four.
 
     bool sameBaseline(const PathKeyedOverrides& other) const
     {

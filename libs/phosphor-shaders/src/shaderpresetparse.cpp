@@ -4,10 +4,6 @@
 #include <PhosphorShaders/ShaderPresetParse.h>
 
 #include <PhosphorShaders/ShaderPackPaths.h>
-// For ShaderPreset::isUsableId / MaxNameChars: a pack-declared preset KEY is
-// both the id an assignment stores and the name the picker renders, so it is
-// screened against the same rules a user preset file's id is.
-#include <PhosphorShaders/ShaderPreset.h>
 
 #include <QJsonValue>
 #include <QLoggingCategory>

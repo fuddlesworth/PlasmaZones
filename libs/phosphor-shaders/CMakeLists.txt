@@ -112,8 +112,8 @@ set(phosphorshaders_SRCS
     src/shaderentrypoint.cpp
     src/shaderincluderesolver.cpp
     src/shaderparampreamble.cpp
-    src/shaderpreset.cpp
     src/shaderpackpaths.cpp
+    src/shaderpreset.cpp
     src/shaderpresetparse.cpp
     src/shaderpresetregistry.cpp
     src/shaderpresetstore.cpp

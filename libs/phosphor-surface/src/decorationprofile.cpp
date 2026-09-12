@@ -85,8 +85,19 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
         if (v.isObject()) {
             QVariantMap params;
             const QJsonObject paramsObj = v.toObject();
-            for (auto it = paramsObj.constBegin(); it != paramsObj.constEnd(); ++it)
+            for (auto it = paramsObj.constBegin(); it != paramsObj.constEnd(); ++it) {
+                // A JSON null is NOT "leave this at its default". It converts to an
+                // INVALID QVariant, every numeric consumer reads that as 0, and
+                // clampToBounds skips it as non-numeric — so it survives the flatten
+                // and PINS the parameter to zero, overriding the pack's declared
+                // default. Dropping the key is what actually means "say nothing about
+                // this one". `parsePackPresets` drops nulls for exactly this reason;
+                // these two parsers were the remaining door.
+                if (it.value().isNull()) {
+                    continue;
+                }
                 params.insert(it.key(), it.value().toVariant());
+            }
             p.parameters = std::move(params);
         }
     }
@@ -246,10 +257,17 @@ DecorationProfile withPresetsResolved(const DecorationProfile& profile,
             blocking.insert(it.key(), QString());
         }
     }
-    if (blocking.isEmpty()) {
-        out.presetIds.reset();
-    } else {
+    if (!blocking.isEmpty()) {
         out.presetIds = blocking;
+    } else if (profile.presetIds.has_value() && profile.presetIds->isEmpty()) {
+        // ENGAGED-EMPTY in, engaged-empty out. `{}` is the user's explicit "no presets
+        // for any pack here", and resetting it to nullopt revoked that statement —
+        // while the early return above preserves it for the same input when
+        // `parameters` happens to be empty too, so the answer depended on an unrelated
+        // field.
+        out.presetIds = QVariantMap();
+    } else {
+        out.presetIds.reset();
     }
     return out;
 }

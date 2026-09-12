@@ -94,7 +94,7 @@ void ShaderProfileTree::setOverride(const QString& path, const ShaderProfile& pr
 {
     // The empty-path refusal lives in PathKeyedOverrides now: the empty string is
     // how this tree spells "the baseline", so an override keyed on it would
-    // shadow the thing it is supposed to be. All three trees guarded that
+    // shadow the thing it is supposed to be. All four trees guarded that
     // separately.
     m_store.setOverride(path, profile);
 }
@@ -168,7 +168,7 @@ bool ShaderProfileTree::operator==(const ShaderProfileTree& other) const
     // overrides as an array, so their order is observable and is therefore part
     // of what it means for two of these to be the same value. That disagreement
     // between the trees is why PathKeyedOverrides hands out the comparison pieces
-    // rather than an operator== that would quietly pick one policy for all three.
+    // rather than an operator== that would quietly pick one policy for all four.
     return m_store.sameBaseline(other.m_store) && m_store.sameKeyOrder(other.m_store)
         && m_store.sameOverrides(other.m_store);
 }

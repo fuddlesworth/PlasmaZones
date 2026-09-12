@@ -403,12 +403,14 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         }
     }
 
-    // Presets. Overlay is the one family whose parameters can be image-typed, so
-    // it is the one family that passes a non-empty image-id set to the shared
-    // parser. The animation and surface schemas enumerate no image type, and the
-    // pointer loader refuses one outright. Why those values have to be
-    // containment-checked HERE rather than at translate time is written up on
-    // `parsePackPresets`.
+    // Presets. Overlay is the one family whose parameters are SUPPORTED as
+    // image-typed, which is not the same as the one family that can reach the shared
+    // parser with a non-empty image-id set: `type` is read raw from a hand-editable
+    // metadata.json with no enum validation, so a pack in ANY family can declare one
+    // and the set below is never statically empty. That is exactly what
+    // `parsePackPresets`' fail-closed guard covers. Why those values have to be
+    // containment-checked HERE rather than at translate time is written up there
+    // too.
     QSet<QString> imageParamIds;
     for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
         if (p.type == QLatin1String("image")) {

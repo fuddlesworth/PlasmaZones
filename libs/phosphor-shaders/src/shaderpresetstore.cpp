@@ -216,9 +216,10 @@ public:
     /// used to be a QPointer guarding against the registry being destroyed
     /// first, because both it and the owning loader were QObject children of the
     /// store and Qt frees children in insertion order. The store now owns the
-    /// registry as a by-value member declared BEFORE these sinks and retracts
-    /// them in its own destructor body, so "destroyed first" is not reachable
-    /// and there is nothing for a weak pointer to catch.
+    /// registry as a by-value member declared BEFORE these sinks, so ordinary
+    /// member-destruction order makes "destroyed first" unreachable and there is
+    /// nothing for a weak pointer to catch. The destructor retracts nothing, so that
+    /// declaration order is the whole guarantee.
     ShaderPresetRegistry& registry;
     ShaderFamily family;
 
@@ -434,6 +435,15 @@ bool ShaderPresetStore::rescanNow(ShaderFamily family)
 
 QString ShaderPresetStore::directoryFor(ShaderFamily family) const
 {
+    // EMPTY when load() never ran, or refused a non-absolute root. Without this the
+    // answer was `userPresetDirectory("", family)` — a filesystem-root path like
+    // "/animation" — so load()'s refusal was invisible to the one caller that turns
+    // this into a write (ShaderPresetBridge::commit, through presetDirectory). It
+    // failed loudly on mkpath rather than writing anywhere bad, but a refusal the
+    // caller cannot see is the asymmetric half of a defensive pair.
+    if (m_root.isEmpty()) {
+        return QString();
+    }
     return userPresetDirectory(m_root, family);
 }
 

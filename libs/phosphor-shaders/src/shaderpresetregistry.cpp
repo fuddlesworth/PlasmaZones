@@ -317,7 +317,9 @@ void ShaderPresetRegistry::setUserPresets(ShaderFamily family, const QList<Shade
     // Once per clash, not once per rescan. The watcher re-reads the whole family
     // on every save and on every external edit, so one hand-written duplicate used
     // to emit an identical line for the life of the process.
-    const QString clashPrefix = QString(shaderFamilyToken(family)) + QLatin1Char('/');
+    // One spelling of the family prefix for the whole function: the clash bookkeeping
+    // below and the touched-pack sweep further down both key on it.
+    const QString familyPrefix = QString(shaderFamilyToken(family)) + QLatin1Char('/');
     QSet<QString> clashingNow;
     for (const ShaderPreset& preset : presets) {
         if (!preset.isValid()) {
@@ -325,7 +327,7 @@ void ShaderPresetRegistry::setUserPresets(ShaderFamily family, const QList<Shade
         }
         const auto clash = seenIdSource.constFind(preset.id);
         if (clash != seenIdSource.constEnd()) {
-            const QString clashKey = clashPrefix + preset.id;
+            const QString clashKey = familyPrefix + preset.id;
             clashingNow.insert(clashKey);
             if (!m_reportedIdClashes.contains(clashKey)) {
                 m_reportedIdClashes.insert(clashKey);
@@ -342,13 +344,12 @@ void ShaderPresetRegistry::setUserPresets(ShaderFamily family, const QList<Shade
     // Forget this family's resolved clashes, so fixing one and then re-introducing
     // it warns again rather than staying silent for the rest of the process.
     for (auto it = m_reportedIdClashes.begin(); it != m_reportedIdClashes.end();) {
-        it = (it->startsWith(clashPrefix) && !clashingNow.contains(*it)) ? m_reportedIdClashes.erase(it) : ++it;
+        it = (it->startsWith(familyPrefix) && !clashingNow.contains(*it)) ? m_reportedIdClashes.erase(it) : ++it;
     }
 
     // Every pack that had user presets before OR has them now, so a pack whose
     // last preset was just deleted still gets told.
     QSet<QString> touched;
-    const QString familyPrefix = QString(shaderFamilyToken(family)) + QLatin1Char('/');
     for (auto it = m_userDefined.constBegin(); it != m_userDefined.constEnd(); ++it) {
         if (it.key().startsWith(familyPrefix)) {
             touched.insert(it.key());

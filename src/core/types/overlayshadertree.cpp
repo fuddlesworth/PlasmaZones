@@ -37,11 +37,17 @@ OverlayShaderProfile OverlayShaderProfile::fromJson(const QJsonObject& obj)
 
 OverlayShaderProfile OverlayShaderTree::resolve(const QString& layoutId) const
 {
-    // ONE step, not a walk-up: an override or the baseline, nothing between. That
-    // is the difference from the other two trees, and it is why this one does not
-    // share `resolve()` with them.
-    if (m_store.hasOverride(layoutId))
-        return m_store.directOverride(layoutId);
+    // ONE step, not a walk-up: an override or the baseline, nothing between. That is
+    // the difference from the other three trees, and it is why this one does not share
+    // `resolve()` with them.
+    //
+    // findOverride, not hasOverride + directOverride: one hash lookup and no payload
+    // copy, the same conversion the other three trees' walks took. The pointer is read
+    // and returned by value inside this expression, so the invalidation contract on
+    // PathKeyedOverrides::findOverride holds.
+    if (const OverlayShaderProfile* own = m_store.findOverride(layoutId)) {
+        return *own;
+    }
     return m_store.baseline();
 }
 
@@ -74,7 +80,7 @@ bool OverlayShaderTree::isEmpty() const
 
 void OverlayShaderTree::setOverride(const QString& layoutId, const OverlayShaderProfile& profile)
 {
-    // The empty-key refusal lives in PathKeyedOverrides now, where all three
+    // The empty-key refusal lives in PathKeyedOverrides now, where all four
     // trees' copies of it collapsed into one. The reason is unchanged and was
     // the same for each of them: "" is the BASELINE's path everywhere else in
     // these APIs, so an override keyed on it would be one `resolve()` could
@@ -129,11 +135,11 @@ bool OverlayShaderTree::operator==(const OverlayShaderTree& other) const
     // Order-free by construction: every ordered view this tree exposes
     // (overriddenLayouts, toJson via QJsonObject) is sorted, so the insertion
     // order PathKeyedOverrides tracks is invisible here and must not be compared.
-    // That is the disagreement between the three trees — the other two DO compare
+    // That is the disagreement between the four trees — the other three DO compare
     // it, because their overrides are an array on the wire — and it is exactly
     // why the shared container hands out `sameBaseline` / `sameOverrides` /
     // `sameKeyOrder` separately instead of an operator== that would pick one
-    // policy for all three.
+    // policy for all four.
     return m_store.sameBaseline(other.m_store) && m_store.sameOverrides(other.m_store);
 }
 

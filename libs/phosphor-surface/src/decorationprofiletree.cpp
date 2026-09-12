@@ -160,7 +160,7 @@ QStringList DecorationProfileTree::overriddenPaths() const
 
 void DecorationProfileTree::setOverride(const QString& surfacePath, const DecorationProfile& profile)
 {
-    // The empty-path refusal lives in PathKeyedOverrides now. All three trees
+    // The empty-path refusal lives in PathKeyedOverrides now. All four trees
     // guarded it separately, each for the same reason: the empty string is how
     // they spell "the baseline".
     m_store.setOverride(surfacePath, profile);
@@ -193,7 +193,7 @@ QJsonObject DecorationProfileTree::toJson() const
     // The ARRAY form, same as the animation tree and for the same reason: the
     // order is observable on the wire, which is why it is part of identity below.
     // The ordered walk and the desync guard that used to sit here now live in
-    // PathKeyedOverrides, which is where all three trees had written them out.
+    // PathKeyedOverrides, which is where all four trees had written them out.
     QJsonArray overrides;
     m_store.forEachInOrder([&overrides](const QString& path, const DecorationProfile& profile) {
         QJsonObject entry;
@@ -257,7 +257,7 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
 
 bool DecorationProfileTree::operator==(const DecorationProfileTree& other) const
 {
-    // Order-SENSITIVE, like the animation tree's and unlike the overlay tree's:
+    // Order-SENSITIVE, like both animation trees' and unlike the overlay tree's:
     // this tree's overrides are an array on the wire, so their order is part of
     // the value. The settings setter works around that with its own
     // order-insensitive merged compare, which is why that helper exists there.

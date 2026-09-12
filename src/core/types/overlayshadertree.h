@@ -8,15 +8,15 @@
 #include <PhosphorRegistry/PathKeyedOverrides.h>
 
 #include <QJsonObject>
+#include <QString>
+#include <QStringList>
+#include <QVariantMap>
+
 // Forward-declared rather than included: only a const reference to it appears in
 // this header (withPresetsResolved), so the definition is a .cpp concern.
 namespace PhosphorShaders {
 class ShaderPresetRegistry;
 }
-
-#include <QString>
-#include <QStringList>
-#include <QVariantMap>
 
 namespace PlasmaZones {
 

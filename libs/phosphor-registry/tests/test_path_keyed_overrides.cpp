@@ -58,6 +58,15 @@ private Q_SLOTS:
         QVERIFY(store.hasNoOverrides());
         QVERIFY(!store.hasOverride(QString()));
         QVERIFY(store.keys().isEmpty());
+
+        // And on a NON-empty store, which is what makes this resistant: exercising the
+        // guard only on a fresh one leaves `if (key.isEmpty() && m_overrides.isEmpty())`
+        // passing, and that mutation refuses the empty key exactly once.
+        store.setOverride(QStringLiteral("real"), Value{1});
+        store.setOverride(QString(), Value{7});
+        QCOMPARE(store.keys().size(), 1);
+        QCOMPARE(store.keys().constFirst(), QStringLiteral("real"));
+        QVERIFY(!store.hasOverride(QString()));
     }
 
     void keysAreInInsertionOrderNotSortedOrder()

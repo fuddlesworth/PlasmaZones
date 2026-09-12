@@ -67,8 +67,11 @@ PHOSPHORSHADERS_EXPORT int migrateLegacyOverlayPresets(const QString& root);
  * user presets, which is the registry's documented miss behaviour.
  *
  * Pack-declared presets are NOT loaded here — they arrive from each family's
- * pack registry, whose reload edge the consumer connects to
- * `ShaderPresetRegistry::setPackPresets`. This object owns the user side and
+ * pack registry, whose reload edge the consumer feeds through
+ * `PhosphorShaders::seedPackPresets`. That helper goes through
+ * `setPackPresetsForFamily`, which diffs the whole family and so retracts a pack
+ * that has gone; the per-pack `setPackPresets` overload cannot, which is why no
+ * production consumer uses it. This object owns the user side and
  * the directory layout; it deliberately knows nothing about pack registries,
  * which live in four different libraries.
  *
@@ -196,11 +199,13 @@ private:
         return static_cast<std::size_t>(family);
     }
 
-    /// DECLARED FIRST, so reverse member-destruction order destroys it LAST —
-    /// after every publisher below. Belt and braces either way: the destructor
-    /// body retracts and clears the publishers explicitly before this is
-    /// touched. By value rather than a QObject child, because child destruction
-    /// order is exactly what produced the use-after-free this shape removes.
+    /// DECLARED FIRST, so reverse member-destruction order destroys it LAST — after
+    /// every publisher below. That order is LOAD-BEARING, not belt and braces: the
+    /// destructor body resets each publisher loader-then-sink and deliberately
+    /// retracts NOTHING (see ~ShaderPresetStore), so nothing else protects the
+    /// registry from a sink outliving it. By value rather than a QObject child,
+    /// because child destruction order is exactly what produced the use-after-free
+    /// this shape removes.
     ShaderPresetRegistry m_registry;
 
     /// One slot per family, so "two publishers for one family" is not

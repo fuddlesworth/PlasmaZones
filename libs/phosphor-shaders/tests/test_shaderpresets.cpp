@@ -82,6 +82,8 @@ private Q_SLOTS:
     void keepsUndeclaredParamIds();
     void refusesEscapingImagePathAndDropsIt();
     void carriesEmptyImageValueThrough();
+    void keepsAnAuthorDeclaredEmptyPreset();
+    void refusesEveryImageValueWithNoPackDirectory();
     void dropsPresetLeftWithNothing();
 
     // ─────── overlayPresetDeltas / resolveParams ───────
@@ -205,6 +207,50 @@ void TestShaderPresets::carriesEmptyImageValueThrough()
     const PackPresets presets = parsePackPresets(QDir(), {QStringLiteral("tex")}, root, lcTest());
     QVERIFY(presets.value(QStringLiteral("Bare")).contains(QStringLiteral("tex")));
     QVERIFY(presets.value(QStringLiteral("Bare")).value(QStringLiteral("tex")).toString().isEmpty());
+}
+
+void TestShaderPresets::keepsAnAuthorDeclaredEmptyPreset()
+{
+    // `"Default": {}` legitimately means "this preset is the pack's declared
+    // defaults", and it is KEPT while a preset emptied by refusals is dropped. The
+    // two look identical at the point of the test below and mean opposite things, so
+    // only covering the dropped half left the asymmetry unpinned — and the header
+    // claimed a test for it existed.
+    const QJsonObject root = jsonFrom(QStringLiteral(R"({
+        "presets": { "Default": {}, "Tuned": { "speed": 2.0 } }
+    })"));
+    const PackPresets presets = parsePackPresets(QDir(), {}, root, lcTest());
+    QVERIFY(presets.contains(QStringLiteral("Default")));
+    QVERIFY(presets.value(QStringLiteral("Default")).isEmpty());
+    // The neighbour is unaffected, so this is not "everything survives".
+    QCOMPARE(presets.value(QStringLiteral("Tuned")).value(QStringLiteral("speed")).toDouble(), 2.0);
+}
+
+void TestShaderPresets::refusesEveryImageValueWithNoPackDirectory()
+{
+    // The fail-closed guard, which had no test at all. `QDir(QString())` behaves as
+    // `QDir(".")`, so `absolutePath()` answers the process WORKING DIRECTORY — which
+    // is non-empty, so resolveWithinDirectory's own empty-directory refusal never
+    // fires and a relative preset texture gets confined to the CWD subtree and
+    // ACCEPTED. With a compositor CWD of "/" that is most of the filesystem.
+    //
+    // The existing empty-value case cannot cover this: `"tex": ""` returns at the
+    // no-texture branch BEFORE the guard is consulted, so it proves nothing about it.
+    // This one passes a RELATIVE path, which is the value that would otherwise
+    // resolve.
+    const QJsonObject root = jsonFrom(QStringLiteral(R"({
+        "presets": { "Textured": { "tex": "noise.png", "speed": 3.0 } }
+    })"));
+
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing every image-typed preset value")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("texture path\\(s\\) outside the pack")));
+
+    const PackPresets presets = parsePackPresets(QDir(), {QStringLiteral("tex")}, root, lcTest());
+    // The image value is refused...
+    QVERIFY(!presets.value(QStringLiteral("Textured")).contains(QStringLiteral("tex")));
+    // ...and the rest of the preset still loads, which is the point of refusing the
+    // value rather than the preset.
+    QCOMPARE(presets.value(QStringLiteral("Textured")).value(QStringLiteral("speed")).toDouble(), 3.0);
 }
 
 void TestShaderPresets::dropsPresetLeftWithNothing()
@@ -748,10 +794,10 @@ void TestShaderPresets::storeDestructionDoesNotTouchAFreedRegistry()
     //
     // The fault is now STRUCTURALLY unreachable rather than ordered-around. The
     // registry is a by-value member declared before the publisher slots, so it
-    // outlives them under ordinary member-destruction rules, and the retraction
-    // happens in the store's own destructor body while it is provably alive.
-    // There is no QObject child destruction in the path at all, and nothing for
-    // a QPointer to catch — which is why there is no longer a QPointer.
+    // outlives them under ordinary member-destruction rules, and the destructor
+    // retracts NOTHING — it only resets each publisher, loader before sink. There is
+    // no QObject child destruction in the path at all, and nothing for a QPointer to
+    // catch, which is why there is no longer a QPointer.
     //
     // What this test can still only do weakly is PROVE the absence: freed-memory
     // reuse is nondeterministic and this repo has no sanitizer configuration.
@@ -781,9 +827,9 @@ void TestShaderPresets::storeDestructionDoesNotTouchAFreedRegistry()
 
 void TestShaderPresets::storeLoadIsIdempotent()
 {
-    // A second load() used to build four more loaders, leak the first four with
-    // their watchers armed, and leave two publishers per family — which the
-    // loader destructor's whole-family retraction cannot survive.
+    // A second load() used to build four more loaders, leak the first four with their
+    // watchers armed, and leave two publishers per family. The slot IS the publisher
+    // now, so there is nowhere for a second one to go.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QVERIFY(QDir().mkpath(dir.filePath(QStringLiteral("animation"))));
@@ -942,6 +988,20 @@ void TestShaderPresets::resolveParamsClampsToTheDeclaredRange()
                  .value(QStringLiteral("octaves"))
                  .typeId(),
              QMetaType::LongLong);
+
+    // The NO-PRESET branch clamps too, and it is the one the three flatteners reach
+    // when an assignment names no preset — every assertion above passes an existing
+    // preset id, so that branch was never entered. An unknown id takes the same path
+    // as an empty one: the deltas are the whole answer, bounded.
+    const QVariantMap wild{{QStringLiteral("octaves"), 9999}};
+    QCOMPARE(registry.resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QString(), wild)
+                 .value(QStringLiteral("octaves"))
+                 .toInt(),
+             8);
+    QCOMPARE(registry.resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QStringLiteral("GoneAway"), wild)
+                 .value(QStringLiteral("octaves"))
+                 .toInt(),
+             8);
 }
 
 QTEST_MAIN(TestShaderPresets)
