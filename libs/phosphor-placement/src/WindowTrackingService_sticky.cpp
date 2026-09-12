@@ -42,4 +42,22 @@ bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
     return m_windowStickyStates.value(canonicalizeForLookup(rawWindowId), false);
 }
 
+void WindowTrackingService::forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop)
+{
+    if (windowId.isEmpty() || engineId.isEmpty() || desktop < 1) {
+        return;
+    }
+    // A wrapper, not a direct store call from the engines, for the reason
+    // releaseEngineSlot gives: the store has no dirty concept. Called from the
+    // engines' per-desktop membership pass when a window's span stops covering
+    // a desktop — which is why it lives beside the sticky state that pass
+    // hangs off. The first cut reached into the store directly and the forget
+    // never reached disk: the in-memory record dropped the desktop, nothing
+    // marked the placements dirty, and the next restart resurrected the
+    // window onto a desktop it had left.
+    if (m_placementStore.forgetDesktopZones(windowId, engineId, desktop)) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
 } // namespace PhosphorPlacement

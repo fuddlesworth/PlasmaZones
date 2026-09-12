@@ -445,6 +445,8 @@ public:
     /// WindowPlacementStore::releaseEngineSlot for what the downgrade means
     /// and why it is not a removal.
     void releaseEngineSlot(const QString& windowId, const QString& engineId) override;
+    /// Dirty-marking wrapper for WindowPlacementStore::forgetDesktopZones.
+    void forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State

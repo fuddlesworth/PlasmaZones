@@ -17,7 +17,7 @@
     "libs/phosphor-animation/src/surfaceanimator_tracks.cpp": 1161,
     "libs/phosphor-animation/tests/test_surface_animator.cpp": 1296,
     "libs/phosphor-engine/include/PhosphorEngine/IPlacementEngine.h": 1319,
-    "libs/phosphor-placement/include/PhosphorPlacement/WindowTrackingService.h": 1288,
+    "libs/phosphor-placement/include/PhosphorPlacement/WindowTrackingService.h": 1290,
     "libs/phosphor-placement/src/WindowTrackingService.cpp": 1237,
     "libs/phosphor-scroll-engine/include/PhosphorScrollEngine/ScrollEngine.h": 1959,
     "libs/phosphor-scroll-engine/src/scrollengine/engine_core.cpp": 1461,

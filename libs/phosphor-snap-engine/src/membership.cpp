@@ -126,8 +126,11 @@ void SnapEngine::reconcileDesktopMemberships(const QString& screenId, const Phos
             // zonesByDesktop, so a capture that simply stops naming this
             // desktop leaves the old zone on disk forever and a later restart
             // would resurrect the window onto a desktop it no longer occupies.
+            // Through the tracker's wrapper, not the store: only the wrapper
+            // marks the placements dirty, and a forget that stays in memory
+            // never reaches disk — which is where this one has to land.
             if (m_windowTracker) {
-                m_windowTracker->placementStore().forgetDesktopZones(entry.windowId, engineId(), stale.desktop);
+                m_windowTracker->forgetDesktopZones(entry.windowId, engineId(), stale.desktop);
             }
             qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: released" << entry.windowId << "from desktop"
                                  << stale.desktop << "of" << stale.screenId << "— its span no longer covers it";
