@@ -8,7 +8,6 @@
 
 #include <PhosphorRegistry/PathKeyedOverrides.h>
 
-#include <QHash>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>

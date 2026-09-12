@@ -206,9 +206,20 @@ private Q_SLOTS:
         original.setOverride(PP::Editor, ShaderProfile());
         original.setOverride(PP::Osd, ShaderProfile());
 
-        const QStringList before = original.overriddenPaths();
+        // The expected order is written out LITERALLY rather than taken from
+        // `original.overriddenPaths()`. Comparing the restored list against the
+        // original's made this test self-referential: drop the insertion-order
+        // tracking entirely and both sides fall back to the same QHash iteration
+        // order, which within one process is identical, so the test stayed green
+        // while the ordering guarantee was gone. The decoration sibling pins a
+        // literal for the same reason.
+        //
+        // Non-alphabetical on purpose: an implementation that sorted instead of
+        // preserving insertion order would pass an alphabetical expectation.
+        const QStringList expected{PP::Window, PP::Editor, PP::Osd};
+        QCOMPARE(original.overriddenPaths(), expected);
         const ShaderProfileTree restored = ShaderProfileTree::fromJson(original.toJson());
-        QCOMPARE(restored.overriddenPaths(), before);
+        QCOMPARE(restored.overriddenPaths(), expected);
     }
 
     // ─── Plugin-defined paths ───

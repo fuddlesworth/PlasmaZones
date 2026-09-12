@@ -7,7 +7,6 @@
 
 #include <PhosphorRegistry/PathKeyedOverrides.h>
 
-#include <QHash>
 #include <QJsonObject>
 // Forward-declared rather than included: only a const reference to it appears in
 // this header (withPresetsResolved), so the definition is a .cpp concern.

@@ -214,6 +214,37 @@ private Q_SLOTS:
         QVERIFY2(r.report.contains(QStringLiteral("wrap not in {clamp,repeat,mirror}")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
+
+    /// The preset lint runs on THIS arm too.
+    ///
+    /// `reportPresetProblems` is wired into all four validator arms and every test
+    /// that exercised it drove the animation or overlay one, so deleting the call from
+    /// the surface arm left the whole suite green — the same family-blindness this
+    /// file exists to end.
+    void theSurfaceArmLintsPresetsToo()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj =
+            surfacePack(QStringLiteral("sf-presets"),
+                        QJsonArray{surfaceParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0, 0.0, 2.0)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Undeclared"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
+        presets.insert(QStringLiteral("TooFast"), QJsonObject{{QStringLiteral("speed"), 99.0}});
+        presets.insert(QStringLiteral("Tidy"), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-presets"), obj, surfaceBodyReading({QStringLiteral("speed")}));
+        QVERIFY2(r.report.contains(QStringLiteral("presets        ERROR")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
+        // The well-formed preset beside them is silent, so neither check is firing on
+        // every value it sees.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
+        QVERIFY(r.errors >= 2);
+    }
 };
 
 QTEST_MAIN(TestSurfacePackValidator)

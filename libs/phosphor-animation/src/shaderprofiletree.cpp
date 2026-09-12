@@ -25,8 +25,10 @@ ShaderProfile ShaderProfileTree::resolve(const QString& path) const
     // so the definitions cannot drift.
     if (shaderPathResolvesInIsolation(path)) {
         ShaderProfile effective;
-        if (m_store.hasOverride(path))
-            ShaderProfile::overlay(effective, m_store.directOverride(path));
+        // findOverride, not hasOverride + directOverride: one hash lookup and no
+        // payload copy. Same reason in the walk below.
+        if (const ShaderProfile* own = m_store.findOverride(path))
+            ShaderProfile::overlay(effective, *own);
         return effective.withDefaults();
     }
 
@@ -62,9 +64,8 @@ ShaderProfile ShaderProfileTree::resolve(const QString& path) const
     }
 
     for (const QString& step : chain) {
-        if (!m_store.hasOverride(step))
-            continue;
-        ShaderProfile::overlay(effective, m_store.directOverride(step));
+        if (const ShaderProfile* own = m_store.findOverride(step))
+            ShaderProfile::overlay(effective, *own);
     }
 
     return effective.withDefaults();

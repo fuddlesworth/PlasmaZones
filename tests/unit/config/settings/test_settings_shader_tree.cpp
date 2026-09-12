@@ -455,6 +455,79 @@ private Q_SLOTS:
         QVERIFY(stored.presetId.has_value());
         QVERIFY(stored.presetId->isEmpty());
     }
+
+    /// Writing the SAME tree twice must emit once.
+    ///
+    /// setShaderProfileTree early-returns when the sanitized tree equals what is
+    /// already stored, and deleting that guard left this suite green: every other
+    /// test here writes once and asserts `spy.count() == 1`, which a setter that
+    /// emits on every call also satisfies. Both sibling tree suites pin the repeat
+    /// explicitly. It matters because the signal on the other side reaches the
+    /// daemon and the compositor, and the settings UI writes this tree at
+    /// slider-drag rate.
+    void testShaderProfileTree_repeatWriteOfTheSameTreeEmitsOnce()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile profile;
+        profile.effectId = QStringLiteral("pixelate");
+        profile.parameters = QVariantMap{{QStringLiteral("amount"), 3}};
+        tree.setOverride(QStringLiteral("osd.show"), profile);
+
+        QSignalSpy spy(&a, &Settings::shaderProfileTreeChanged);
+        a.setShaderProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+        a.setShaderProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+        // And a tree rebuilt from scratch with the same contents, not just the same
+        // object: the comparison has to be by VALUE, through the sanitizer.
+        PhosphorAnimationShaders::ShaderProfileTree again;
+        again.setOverride(QStringLiteral("osd.show"), profile);
+        a.setShaderProfileTree(again);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /// The sanitizer must be IDEMPOTENT and ORDER-STABLE on the array-form tree.
+    ///
+    /// This tree serialises its overrides as a JSON array, so insertion order is
+    /// observable and round-trips — unlike the overlay tree, whose object keys are
+    /// sorted either way. Only the overlay suite pinned a second sanitizer pass, and
+    /// it is blind to the mutation that matters here for exactly that reason: making
+    /// `forEachInOrder` iterate the underlying hash, or `overriddenPaths()` sort,
+    /// would leave both sanitizers order-unstable and fire the change signal on every
+    /// repeat write, at drag rate, while staying green.
+    void testShaderProfileTree_sanitizerIsIdempotentAndOrderStable()
+    {
+        IsolatedConfigGuard guard;
+
+        // Non-alphabetical insertion order, so a sort would be visible.
+        const QStringList inserted{QStringLiteral("osd.show"), QStringLiteral("osd.hide"),
+                                   QStringLiteral("window.appearance.open")};
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        for (const QString& path : inserted) {
+            PhosphorAnimationShaders::ShaderProfile p;
+            p.effectId = QStringLiteral("pixelate");
+            tree.setOverride(path, p);
+        }
+
+        Settings a;
+        QSignalSpy spy(&a, &Settings::shaderProfileTreeChanged);
+        a.setShaderProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+
+        const auto firstPass = a.shaderProfileTree();
+        QCOMPARE(firstPass.overriddenPaths(), inserted);
+
+        // The second pass over the sanitizer's OWN output must change nothing, which
+        // is what makes the equality gate above reachable at all.
+        a.setShaderProfileTree(firstPass);
+        QCOMPARE(spy.count(), 1);
+        const auto secondPass = a.shaderProfileTree();
+        QCOMPARE(secondPass.overriddenPaths(), inserted);
+        QCOMPARE(secondPass, firstPass);
+    }
 };
 
 QTEST_MAIN(TestSettingsShaderTree)

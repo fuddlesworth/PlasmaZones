@@ -20,7 +20,9 @@ namespace PhosphorRegistry {
  *
  * ## What this deliberately does NOT do
  *
- * It is not an attempt to make the four assignment trees one type. They
+ * It is not an attempt to make the four assignment trees — the three named above
+ * plus `PhosphorAnimation::ProfileTree`, the motion tree, which still hand-writes
+ * this container — one type. They
  * genuinely differ in key space (dot-paths against layout UUIDs), inheritance
  * model (a full walk-up against a single override-or-baseline step), payload
  * shape (per-field optionals against a plain struct) and parse dependency, and
@@ -80,6 +82,25 @@ public:
         return m_overrides.value(key);
     }
 
+    /// A POINTER to the override at @p key, or nullptr when there is none.
+    ///
+    /// For the walk-up loops, which ask about a key and then read it: one hash
+    /// lookup instead of `hasOverride` plus `directOverride`, and no payload copy
+    /// per step. A resolve over a four-segment dot-path was paying four extra
+    /// lookups and up to sixteen container ref-count operations for an answer it
+    /// already had. Not a regression anyone would see — these paths are
+    /// event-driven, never per frame — which is exactly why it is worth taking for
+    /// free rather than arguing about.
+    ///
+    /// The pointer is into this container's storage, so it is invalidated by any
+    /// mutation. Every caller reads it and moves on within one expression; a caller
+    /// that wants to keep the value takes `directOverride` instead.
+    const Payload* findOverride(const QString& key) const
+    {
+        const auto it = m_overrides.constFind(key);
+        return it == m_overrides.constEnd() ? nullptr : &it.value();
+    }
+
     /// Every overridden key, in the order it was first set.
     const QStringList& keys() const
     {
@@ -104,6 +125,13 @@ public:
     }
 
     /// @return true when an override was actually removed.
+    ///
+    /// `removeAll`, not `removeOne`, and the two are equivalent only because
+    /// `setOverride` above is the sole writer of `m_insertionOrder` and appends only
+    /// on a `!contains` miss — so a key can appear at most once. Stating the
+    /// invariant here rather than relying on it silently: if a second writer ever
+    /// appends, `removeAll` still leaves the list consistent with the hash, which
+    /// `removeOne` would not.
     bool clearOverride(const QString& key)
     {
         if (m_overrides.remove(key) == 0) {

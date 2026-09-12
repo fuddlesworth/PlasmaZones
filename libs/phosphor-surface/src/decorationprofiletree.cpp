@@ -46,9 +46,11 @@ DecorationProfile DecorationProfileTree::resolve(const QString& surfacePath) con
         decorationPathIsBaselineIsolated(surfacePath) ? DecorationProfile{} : m_store.baseline();
 
     for (const QString& step : chain) {
-        if (!m_store.hasOverride(step))
-            continue;
-        DecorationProfile::overlay(effective, m_store.directOverride(step));
+        // findOverride, not hasOverride + directOverride: one hash lookup per step
+        // and no payload copy, which on a four-segment path is four lookups and up
+        // to sixteen container ref-count operations saved.
+        if (const DecorationProfile* own = m_store.findOverride(step))
+            DecorationProfile::overlay(effective, *own);
     }
 
     return effective.withDefaults();
@@ -72,9 +74,8 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
             return true;
         QString cursor = surfacePath;
         while (!cursor.isEmpty()) {
-            if (m_store.hasOverride(cursor)) {
-                const DecorationProfile at = m_store.directOverride(cursor);
-                if ((at.*member).has_value())
+            if (const DecorationProfile* at = m_store.findOverride(cursor)) {
+                if (((*at).*member).has_value())
                     return true;
             }
             cursor = decorationParentPath(cursor);

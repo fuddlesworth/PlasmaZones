@@ -778,6 +778,48 @@ private Q_SLOTS:
         QVERIFY(!stored.presetIds->contains(QStringLiteral("glow")));
         QVERIFY(!stored.presetIds->contains(QStringLiteral("shadow")));
     }
+
+    /// The sanitizer must be IDEMPOTENT and ORDER-STABLE.
+    ///
+    /// This tree serialises its overrides as a JSON ARRAY, so insertion order is
+    /// observable and round-trips — unlike the overlay tree, whose object keys are
+    /// sorted either way, which is why the overlay suite's existing second-pass test
+    /// cannot see the mutation that matters here. Making `forEachInOrder` iterate the
+    /// underlying hash, or `overriddenPaths()` sort, would leave this sanitizer
+    /// order-unstable and fire `decorationProfileTreeChanged` on every repeat write,
+    /// at slider-drag rate, while keeping every other test in this file green.
+    void testDecorationProfileTree_sanitizerIsIdempotentAndOrderStable()
+    {
+        IsolatedConfigGuard guard;
+
+        // Non-alphabetical on purpose, so an implementation that sorted instead of
+        // preserving insertion order would fail rather than coincide.
+        const QStringList inserted{QStringLiteral("window.tiled"), QStringLiteral("popup.zoneSelector"),
+                                   QStringLiteral("osd")};
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        for (const QString& path : inserted) {
+            PhosphorSurfaceShaders::DecorationProfile p;
+            p.chain = QStringList{QStringLiteral("glow")};
+            tree.setOverride(path, p);
+        }
+
+        Settings settings;
+        QSignalSpy spy(&settings, &Settings::decorationProfileTreeChanged);
+        settings.setDecorationProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+
+        const auto firstPass = settings.decorationProfileTree();
+        for (const QString& path : inserted) {
+            QVERIFY2(firstPass.overriddenPaths().contains(path), qPrintable(path));
+        }
+        const QStringList firstOrder = firstPass.overriddenPaths();
+
+        // A second pass over the sanitizer's OWN output must change nothing. That is
+        // what makes the setter's equality gate reachable at all.
+        settings.setDecorationProfileTree(firstPass);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(settings.decorationProfileTree().overriddenPaths(), firstOrder);
+    }
 };
 
 QTEST_MAIN(TestSettingsDecorationTree)

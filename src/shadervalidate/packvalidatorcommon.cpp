@@ -399,25 +399,28 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
         // others it was never consulted at all. One predicate, shared with the
         // runtime that enforces it, beats a schema keyword that works on neither
         // path.
-        // Matches what `parsePackPresets` now actually refuses, which is the
-        // point. This lint used to claim "the runtime will refuse it" while the
-        // runtime accepted anything, so a pack shipping `"Night / Day"` rendered
-        // perfectly and was failed here for nothing. The key is both the id an
-        // assignment stores AND the display name the picker renders, so it has to
-        // satisfy both rules.
-        bool unprintableId = false;
-        for (const QChar ch : presetName) {
-            if (ch.category() == QChar::Other_Control || ch.category() == QChar::Other_Format) {
-                unprintableId = true;
-                break;
-            }
-        }
-        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName) || presetName.trimmed().isEmpty()
-            || presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars || unprintableId) {
+        // An AUTHORING rule, and this is the ONLY place it is enforced. Said plainly
+        // because the previous wording claimed "the runtime will refuse it" and the
+        // runtime does not: `parsePackPresets` deliberately keeps a key it cannot
+        // love, because dropping one there would hide the preset from this very lint
+        // and the pack would ship green with a log line no author reads. A pack
+        // preset id also never becomes a filename — duplicating one mints a fresh
+        // UUID — so there is nothing to refuse at runtime for safety's sake.
+        //
+        // What the rule protects is the PICKER: `applyPackBucket` takes the key as
+        // both the id an assignment stores and the name rendered in every row, and
+        // MaxNameChars truncation only runs for user presets. A 250-character key or
+        // one carrying a bidi override mangles the row, unreported, for good.
+        //
+        // `isUsableId` covers the blank, control-character and separator cases;
+        // the length bound here is the stricter NAME one, not its own id bound.
+        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName)
+            || presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars) {
             lints << QStringLiteral(
-                         "preset '%1' has an unusable id: it must be a single safe path component, "
-                         "non-blank, at most %2 characters, and free of control or formatting characters. "
-                         "The id is also the name the picker renders, and it is what an assignment stores")
+                         "preset '%1' has an unusable id: it must be non-blank, at most %2 characters, free of "
+                         "control or formatting characters, and free of path separators. The id is also the name "
+                         "the picker renders, and it is what an assignment stores. The runtime does not refuse "
+                         "this — the pack would ship and render with an unreadable preset row")
                          .arg(presetName)
                          .arg(PhosphorShaders::ShaderPreset::MaxNameChars);
             ++problems;
@@ -462,30 +465,31 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                     ++problems;
                     continue;
                 }
-                // An image-typed preset value is a PATH, and the runtime refuses
-                // one that escapes the pack — dropping the entry with nothing but
-                // a log warning the pack author will never see. Checking it here
-                // is the whole point of an offline validator: surface what the
-                // runtime will refuse, at authoring time.
+                // An image-typed preset value is a PATH, and what this can and cannot
+                // check is worth stating, because the obvious check is unreachable.
+                //
+                // CONTAINMENT is deliberately NOT re-tested here, and the branch that
+                // used to do it was dead code claiming coverage it could not give.
+                // `parsePackPresets` resolves every image value under
+                // AbsolutePathPolicy::Reject and DROPS the ones that escape, so by the
+                // time this lint walks the PARSED map an escaping value is simply
+                // absent and there is nothing left to refuse. Verified: a pack with
+                // `"tex": "../../../etc/passwd"` reaches this loop with no `tex` entry
+                // at all.
+                //
+                // That is also the one real remaining gap for a pack author. The
+                // refusal is named in the log and nowhere in this report, because a
+                // dropped entry leaves no trace in the struct the validator lints.
+                // Closing it means surfacing refusals out of `parsePackPresets`, not
+                // re-deriving containment here where it cannot fire.
+                //
+                // EXISTENCE this can check, and nothing did: a value that survives the
+                // parse is an absolute in-pack path, and a preset naming a texture the
+                // pack does not ship binds nothing at runtime and falls back to the
+                // parameter's default — the same silent no-op as an unparseable colour
+                // above, and the same check an image param's `default` already gets.
                 if (param.type == QLatin1String("image") && !packDir.isEmpty()) {
                     const QString declaredPath = value.toString();
-                    // confinedPackPath, which now DELEGATES to the runtime's own
-                    // guard rather than reimplementing it. It used to claim to be the
-                    // stricter of the two and was in fact the laxer: a nonexistent
-                    // leaf left it comparing lexically, so a symlinked intermediate
-                    // pointing out of the pack passed. Same guard, same answer, and
-                    // the validator can no longer be more permissive than production.
-                    if (!declaredPath.isEmpty() && !confinedPackPath(packDir, declaredPath)) {
-                        lints << QStringLiteral("preset '%1' sets '%2' to a path outside the pack: %3")
-                                     .arg(presetName, vit.key(), declaredPath);
-                        ++problems;
-                        continue;
-                    }
-                    // And the file has to EXIST, the same check an image param's
-                    // `default` already gets. A preset naming a texture the pack does
-                    // not ship binds nothing at runtime and falls back to the
-                    // default, so it is the same silent no-op as an unparseable
-                    // colour above.
                     if (!declaredPath.isEmpty() && !QFileInfo::exists(QDir(packDir).absoluteFilePath(declaredPath))) {
                         lints << QStringLiteral("preset '%1' sets '%2' to '%3', which the pack does not contain")
                                      .arg(presetName, vit.key(), declaredPath);

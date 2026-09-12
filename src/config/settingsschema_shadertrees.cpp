@@ -106,7 +106,6 @@ namespace PSS = PhosphorSurfaceShaders;
 /// deliberate statement ("explicitly no shader", "explicitly no preset") that
 /// stops a child inheriting an ancestor's, so a bound that disengaged a field
 /// would silently turn that statement back into "inherit".
-/// Bound one animation assignment.
 ///
 /// COPIES the input and bounds in place, rather than building a fresh profile and
 /// moving the known fields across. That choice is load-bearing: with the

@@ -812,6 +812,58 @@ private Q_SLOTS:
         QVERIFY(r.errors > 0);
     }
 
+    void theOverlayArmLintsAPresetImagePath()
+    {
+        // No overlay test declared an image parameter, so the whole image branch of
+        // the preset lint was uncovered. Writing this one is what showed the
+        // containment half of it to be DEAD: parsePackPresets refuses an escaping
+        // value and drops the entry, so the lint never sees it. Both halves are
+        // asserted here — the dropped values produce no report line, which is the
+        // behaviour to notice rather than the behaviour to want, and the existence
+        // check catches the case that does survive the parse.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject param;
+        param.insert(QStringLiteral("id"), QStringLiteral("tex"));
+        param.insert(QStringLiteral("name"), QStringLiteral("Texture"));
+        param.insert(QStringLiteral("type"), QStringLiteral("image"));
+        param.insert(QStringLiteral("default"), QString());
+
+        QJsonObject obj = overlayPack(QStringLiteral("ov-preset-image"));
+        obj.insert(QStringLiteral("multipass"), false);
+        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Escaping"),
+                       QJsonObject{{QStringLiteral("tex"), QStringLiteral("../../../etc/passwd")}});
+        presets.insert(QStringLiteral("Absolute"), QJsonObject{{QStringLiteral("tex"), QStringLiteral("/etc/passwd")}});
+        // A path inside the pack that simply is not there. Also a silent no-op at
+        // runtime (the parameter falls back to its default), and also unreported
+        // until now.
+        presets.insert(QStringLiteral("Missing"), QJsonObject{{QStringLiteral("tex"), QStringLiteral("absent.png")}});
+        // Empty is legitimate: "no texture for this slot".
+        presets.insert(QStringLiteral("None"), QJsonObject{{QStringLiteral("tex"), QString()}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validateOverlay(tmp, QStringLiteral("ov-preset-image"), obj);
+        // The in-pack path that does not exist IS reported. This is the half of the
+        // image branch that can fire.
+        QVERIFY2(r.report.contains(QStringLiteral("preset 'Missing'")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not contain")), qPrintable(r.report));
+        QVERIFY(r.errors >= 1);
+        // The two ESCAPING paths are not reported, and that is the parse's doing, not
+        // a miss in the lint: parsePackPresets refuses them and drops the entries, so
+        // nothing reaches the parsed map to lint. Pinned so the next reader does not
+        // "restore" a containment check here that can never fire — and so that if
+        // refusals are ever surfaced out of the parse, this assertion fails and points
+        // at the report line that should then exist.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Escaping'")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Absolute'")), qPrintable(r.report));
+        // The legitimate empty one is silent too, so the existence check is not simply
+        // firing on every image-typed value it sees.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'None'")), qPrintable(r.report));
+    }
+
     void presetProblemsPrintUnderTheirOwnHeader()
     {
         // A preset fault used to print an unindented line and then leave the
