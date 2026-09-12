@@ -55,6 +55,15 @@ Item {
     /// locked; hidden for `image` params (no sensible random image).
     property bool enableRandomize: true
     property bool enableImage: true
+    /// Extra hint a screen reader should announce along with this row's value
+    /// control, e.g. that the value is the user's own on top of a preset.
+    ///
+    /// A property rather than `Accessible.description` on this delegate: the
+    /// root here is a bare `Item` with no `Accessible.role`, so it is not an
+    /// accessible object at all and a description set on it is announced
+    /// nowhere. The hint has to sit on the thing that actually takes focus, so
+    /// each value control below binds it.
+    property string overrideHint: ""
     /// Compact mode: slider/spinbox/swatch use fixed widths matching the
     /// settings-app `SettingsSlider` aesthetic (16gu slider, 3gu value
     /// label, 2gu swatch). When false (default), controls fill the
@@ -130,6 +139,7 @@ Item {
             Layout.fillWidth: !paramDelegate.compact
             Layout.preferredWidth: paramDelegate.compact ? paramDelegate.sliderControlWidth : -1
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
+            Accessible.description: paramDelegate.overrideHint
             // `_numberOr` rejects NaN / Infinity / non-numeric strings so the
             // slider always receives finite bounds.
             from: paramDelegate.paramData ? paramDelegate._numberOr(paramDelegate.paramData.min, 0) : 0
@@ -178,6 +188,7 @@ Item {
 
             visible: paramDelegate.paramType === "int"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
+            Accessible.description: paramDelegate.overrideHint
             // SpinBox.from/to are integers — `_numberOr` validates as a
             // finite number first, then we round. The schema's optional
             // `step` is honoured the same way the float slider honours it
@@ -219,6 +230,7 @@ Item {
 
             visible: paramDelegate.paramType === "bool"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
+            Accessible.description: paramDelegate.overrideHint
             // In compact mode the description is already rendered in the
             // row's left-hand label column, so repeating it as the checkbox
             // label would duplicate it. Only the wide layout (name-only left
@@ -257,6 +269,7 @@ Item {
             Layout.fillWidth: !paramDelegate.compact
             Layout.preferredWidth: paramDelegate.compact ? paramDelegate.sliderControlWidth : -1
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
+            Accessible.description: paramDelegate.overrideHint
             model: paramDelegate.paramData ? (paramDelegate.paramData.enumOptions || []) : []
             // On an out-of-vocab miss (currentIndex -1) surface the stored raw
             // value rather than a blank combo.
@@ -345,6 +358,7 @@ Item {
             hoverEnabled: true
             Accessible.role: Accessible.Button
             Accessible.name: i18nc("@action:button", "Choose %1 color", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id) : "")
+            Accessible.description: paramDelegate.overrideHint
             onClicked: {
                 if (!paramDelegate.paramData)
                     return;
@@ -409,6 +423,7 @@ Item {
             visible: paramDelegate.enableImage && paramDelegate.paramType === "image"
             Layout.fillWidth: true
             Accessible.name: i18nc("@action:button", "Choose image for %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
+            Accessible.description: paramDelegate.overrideHint
             text: {
                 if (!currentPath || currentPath.length === 0)
                     return i18nc("@action:button", "Choose Image…");

@@ -83,9 +83,10 @@ RowLayout {
     /// Emitted when the user picks a different preset (or None). The host
     /// writes it to the assignment; this row does not persist anything itself.
     signal presetSelected(string presetId)
-    /// Emitted when the user reverts to the preset's values, carrying the map
-    /// the host should store as the assignment's parameters. Empty means "no
-    /// deltas", which is what reverting to a preset means.
+    /// Emitted when the user reverts to the preset's values. Carries nothing,
+    /// because there is nothing to carry: reverting means the assignment keeps
+    /// no deltas of its own, so the host writes an EMPTY map (not nullopt,
+    /// which would un-engage the override) and the preset supplies everything.
     signal revertRequested
     // There is deliberately NO `presetsChanged` signal here. One existed, emitted at
     // five sites, with zero consumers: every host instead subscribes to the BRIDGE's

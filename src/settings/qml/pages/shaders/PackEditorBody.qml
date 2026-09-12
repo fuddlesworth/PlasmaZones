@@ -10,10 +10,10 @@ import org.plasmazones.common as PZCommon
  * @brief The body every "configure one pack" surface shows: its parameters
  * beside a live preview of it.
  *
- * Used by the decoration and pointer chain rows (through ChainEditor's row
- * expansion) and by the animation event card. Those are the three places a
- * pack is tuned, and before this they each laid the same two children out
- * themselves.
+ * Instantiated in two places: ChainEditor's expanded chain row, which the
+ * decoration surface card and the rules action editor both host (the rules one
+ * is why `previewKind` may be empty, see below), and the animation event card.
+ * Before this they each laid the same two children out themselves.
  *
  * ## Side by side, not stacked
  *
@@ -101,10 +101,18 @@ GridLayout {
     /// What the pack actually renders with: the assigned preset's values with
     /// this assignment's own edits laid over the top.
     ///
-    /// `currentValues` holds only the DELTAS, because that is what an
-    /// assignment stores. Feeding those straight to the sliders and the preview
-    /// showed a pack's plain defaults for every parameter the preset supplies,
-    /// so picking a preset looked like it had done nothing at all.
+    /// `currentValues` is the map the rows display, which at a host with an
+    /// inheriting tree behind it is the resolved walk-up rather than this
+    /// assignment's own keys. That, not `ownValues`, is deliberately what goes
+    /// over the preset, because it is what the compositor does: every flatten
+    /// runs `withPresetsResolved` AFTER the tree walk, so an ancestor's stored
+    /// value is an override and beats the preset exactly as a local one does.
+    /// `ownValues` is for MARKING which keys are this assignment's own, and the
+    /// two must not be conflated in either direction.
+    ///
+    /// Feeding the overlay straight to the sliders and the preview without
+    /// resolving it showed a pack's plain defaults for every parameter the
+    /// preset supplies, so picking a preset looked like it had done nothing.
     ///
     /// Imperative rather than bound, like every other registry-backed value in
     /// this app: the preset lives on disk, so a binding would never re-evaluate
@@ -112,9 +120,10 @@ GridLayout {
     property var _effectiveValues: ({})
 
     function _recomputeEffective() {
-        const deltas = root.currentValues || {};
+        // The OVERLAY, not this assignment's own keys: see `_effectiveValues`.
+        const overlay = root.currentValues || {};
         if (!root.presetBridge || root.presetId.length === 0 || root.packId.length === 0) {
-            root._effectiveValues = deltas;
+            root._effectiveValues = overlay;
             return;
         }
         // The merge is `ShaderPresetRegistry::resolveParams`, reached through the
@@ -127,7 +136,7 @@ GridLayout {
         // replaces: the JS version called `presetParams`, which returns a
         // `ShaderPreset` BY VALUE and copied its whole parameter map, and then built
         // the merged object in JS on top of that.
-        root._effectiveValues = root.presetBridge.effectiveParams(root.packId, root.presetId, deltas);
+        root._effectiveValues = root.presetBridge.effectiveParams(root.packId, root.presetId, overlay);
     }
 
     /// The delta KEY SET as a stable string, so the marks below rebuild when the set

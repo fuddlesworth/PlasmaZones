@@ -3,12 +3,15 @@
 //
 // The offline pack validator's metadata lints, across two of the four
 // authoring models: ANIMATION and OVERLAY. The pointer arm has its own file,
-// test_pointer_pack_validator.cpp, and the SURFACE arm has none at all — which
-// is worth knowing rather than discovering, because a shared lint wired into all
-// four arms can be deleted from the surface one with every test here still
-// green. (This header used to claim three models including pointer, and a
-// pointer diagnostic as its own motivating example, neither of which was true of
-// the file.)
+// test_pointer_pack_validator.cpp, and the surface arm now has
+// test_surface_pack_validator.cpp. That split follows the file-size ceiling
+// rather than the family boundary, and since every executable compiles all four
+// arms, a lint deleted from one family's arm breaks no test in the file that
+// covers it. Which arm a slot is actually about is therefore worth stating, and
+// each slot here says so. (This header used to claim three models including
+// pointer, and a pointer diagnostic as its own motivating example, neither of
+// which was true of the file. It then claimed the surface arm had no harness,
+// which stopped being true when that file was added in this change.)
 //
 // The bundled-pack CI gates (shader_validate_*) only prove the shipped packs are
 // clean — they cannot show that a BROKEN pack is actually caught, which is how an
@@ -683,9 +686,9 @@ private Q_SLOTS:
         // the pack name in the report header.
         QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
         // And a POSITIVE assertion alongside it, because the negative above is
-        // satisfied just as well by the lint never running at all — which is how
-        // three of the four validator arms went unexercised without anyone
-        // noticing. A clean pack reports no errors and reaches metadata OK.
+        // satisfied just as well by the lint never running at all, which is how the
+        // surface arm stayed unexercised without anyone noticing. A clean pack
+        // reports no errors and reaches metadata OK.
         QCOMPARE(r.errors, 0);
         QVERIFY2(r.report.contains(QStringLiteral("metadata       OK")), qPrintable(r.report));
     }
@@ -775,6 +778,49 @@ private Q_SLOTS:
         QVERIFY(r.errors >= 2);
         // The well-formed preset beside them reports nothing, so neither check is
         // merely firing on every value it sees.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
+    }
+
+    void theRemainingPresetLintBranchesFire()
+    {
+        // Three branches of the shared preset lint that no slot reached, so each
+        // could be deleted with the suite green.
+        //
+        // 1. The id lint's LENGTH half. Every id case above is refused by
+        //    `isUsableId` for its characters, so `|| size > MaxNameChars` never
+        //    decided anything. A 200-character key is a real authoring mistake:
+        //    the key is also the picker's label, and MaxNameChars truncation runs
+        //    only for USER presets, so it renders in full and mangles the row.
+        // 2. The int parameter's OWN range, independent of any declared one. The
+        //    declared bounds are optional, so `1e18` under an int parameter with
+        //    no min/max linted clean and then hit a static_cast<int>, which is
+        //    undefined behaviour rather than a clamp.
+        // 3. The non-string branch for colour and image values. A number under a
+        //    colour parameter cannot be parsed as a colour name at all, and the
+        //    `isValidColorName` check above it only ever sees strings.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        const QString longId = QString(200, QLatin1Char('n'));
+        QJsonObject obj = basePack(QStringLiteral("preset-branches"));
+        obj.insert(
+            QStringLiteral("parameters"),
+            QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 4),
+                       animationParam(QStringLiteral("tint"), QStringLiteral("color"), QStringLiteral("#112233"))});
+        QJsonObject presets;
+        presets.insert(longId, QJsonObject{{QStringLiteral("count"), 2}});
+        presets.insert(QStringLiteral("Huge"), QJsonObject{{QStringLiteral("count"), 1e18}});
+        presets.insert(QStringLiteral("NotAColour"), QJsonObject{{QStringLiteral("tint"), 7}});
+        presets.insert(QStringLiteral("Tidy"), QJsonObject{{QStringLiteral("count"), 3}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-branches"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("does not fit in an int parameter")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("to a non-color value")), qPrintable(r.report));
+        QVERIFY(r.errors >= 3);
+        // And the clean preset beside them is untouched, so none of the three is
+        // firing on everything it sees.
         QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
     }
 

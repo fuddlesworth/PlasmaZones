@@ -609,11 +609,17 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Kirigami.Theme.inherit: true
                 compact: false
-                // On the INTERACTIVE row as well as on the label beside it. The label
-                // is not focusable, so a screen-reader user tabbing the controls
+                // On the INTERACTIVE controls as well as on the label beside it. The
+                // label is not focusable, so a screen-reader user tabbing the controls
                 // never reached the mark and was told nothing about which values are
-                // their own — the one thing the mark exists to say.
-                Accessible.description: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
+                // their own, the one thing the mark exists to say.
+                //
+                // `overrideHint` rather than `Accessible.description` here: ParameterRow's
+                // root is a bare Item with no Accessible.role, so it is not an accessible
+                // object and a description set on it announces nowhere. The property
+                // carries the hint down to the slider, spinbox, combo or button that
+                // actually takes focus.
+                overrideHint: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
                 paramData: modelData
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams
@@ -690,9 +696,10 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                 Kirigami.Theme.inherit: true
                 compact: true
-                // See the wide delegate's twin: announced on the focusable row, not
-                // only on the label.
-                Accessible.description: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
+                // See the wide delegate's twin: announced on the focusable controls,
+                // not only on the label, and through `overrideHint` because this
+                // delegate's root Item has no accessible role of its own.
+                overrideHint: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
                 paramData: modelData
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams

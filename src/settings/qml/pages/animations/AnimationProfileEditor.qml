@@ -153,25 +153,23 @@ ColumnLayout {
     /// shape: a params-only override also renders empty once its ancestor's
     /// pack goes away, and that is not the same statement to make about it.
     property bool shaderBlocksInherited: false
-    /// Whether the remove control has a pack to remove.
-    ///
-    /// Distinct from `shaderOwnsPack`, which describes THIS event, because the
-    /// consumer may write a GROUP of paths and the control acts on all of them.
-    /// A caption is a statement about the event in front of the user; a button
-    /// label is a promise about what the click does. Feeding both from the same
-    /// property gave a group whose members disagree a label derived from one of
-    /// them and an action applied to every one.
-    ///
-    /// Defaults to tracking `shaderOwnsPack`, which states the single-path
-    /// contract for a consumer that writes exactly one path. No such consumer
-    /// exists today — AnimationEventCard always sets this explicitly, and
-    /// GlobalTimingDefaultsCard turns the shader leg off entirely — so the
-    /// default is documentation of the contract rather than a live code path.
     /// Whether this event's own parameter values were authored against a pack
     /// that no longer resolves here, so they apply to nothing. Only meaningful
     /// alongside `shaderOwnsParamsOnly`; the consumer supplies it because the
     /// answer needs the shader registry.
     property bool shaderParamsStale: false
+    /// Whether the remove control has a pack to remove.
+    ///
+    /// Distinct from `shaderOwnsPack`, which describes THIS event, because the
+    /// consumer may write a GROUP of paths and the control acts on all of them.
+    /// A caption states something about the event in front of the user, while a
+    /// button label promises what the click does. Feeding both from one property
+    /// gave a disagreeing group a label from one member and an action on all.
+    ///
+    /// The default tracks `shaderOwnsPack`, stating the single-path contract.
+    /// No consumer relies on it (AnimationEventCard always sets it explicitly,
+    /// GlobalTimingDefaultsCard turns the shader leg off), so it documents the
+    /// contract rather than being a live code path.
     property bool shaderPackRemovable: shaderOwnsPack
     /// Whether naming the shown pack on the remove control is accurate, i.e.
     /// every path the control writes holds THAT pack. False on a group whose

@@ -548,7 +548,9 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
     }
 
     if (!lints.isEmpty()) {
-        out << "  presets        ERROR\n";
+        // padLabel, not hand-counted spaces: every other header in this report goes
+        // through it, and a change to its column width has to move this one too.
+        out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
         }

@@ -2081,8 +2081,10 @@ add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_valid
 
 # The WRITE half of the shader-preset feature: ShaderPresetBridge, the
 # `presetBridge` every pack editor binds. The library half (parse, resolve,
-# loader, store) is covered by phosphor-shaders' own test_shaderpresets. Links
-# only the bridge source, which needs no controller and no config store.
+# loader, store) is covered by phosphor-shaders' own test_shaderpresets. Compiles
+# the bridge source directly rather than pulling in the settings app, so no
+# controller is constructed. plasmazones_core still comes in, for PhosphorI18n and
+# the logging categories the bridge uses; the test never builds a config store.
 add_executable(test_shaderpresetbridge
     settings/stores/test_shaderpresetbridge.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/stores/shaderpresetbridge.cpp
@@ -2372,8 +2374,8 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # That topology is worth one honest sentence, because its shape caused a real
 # gap: the split above followed the file-size ceiling rather than the family
 # boundary, and since every executable here compiles all four arms, a lint
-# deleted from one family's arm broke no test and failed no link. Three of the
-# four arms were unexercised and nothing made that visible. One executable per
+# deleted from one family's arm broke no test and failed no link. The SURFACE
+# arm had no slots at all and nothing made that visible. One executable per
 # family over the shared helpers is the structure that would; until then, the
 # rule is that a new arm gets its own file here on the day it is written.
 # ═══════════════════════════════════════════════════════════════════════════════

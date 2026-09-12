@@ -216,8 +216,10 @@ inline QJsonArray toArray(const QStringList& values)
 
 /// The surface twin, and the reason it did not exist until now is the finding it
 /// closes: the SURFACE arm of the validator had no test harness at all. Four
-/// production arms and, before it, four test executables covering three arms — and
-/// each executable compiles all four, so a lint deleted from the surface arm alone
+/// production arms (animation, pointer, surface, overlay) and, before this macro,
+/// four of the five executables listed at the top of this file, between them
+/// reaching only three of those arms. Each executable compiles all four, so a
+/// lint deleted from the surface arm alone
 /// broke no test and failed no link. The topology was an artifact of the file-size
 /// ceiling rather than of the family boundary, which is why the gap went unnoticed.
 ///

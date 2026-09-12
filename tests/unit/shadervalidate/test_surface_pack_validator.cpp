@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The offline pack validator's SURFACE arm, which had no test harness at all.
+// The offline pack validator's SURFACE arm, which until this file had no test
+// harness at all.
 //
 // That absence was structural rather than accidental. The validator has four
 // production arms and, before this file, three test executables: animation and
@@ -117,8 +118,8 @@ private Q_SLOTS:
     }
 
     /// The surface arm runs the shared preset lint, which was the point of
-    /// building this harness: three of the four arms went unexercised, so the
-    /// lint could have been deleted from this one without a single test noticing.
+    /// building this harness: the surface arm had no slots of its own, so the lint
+    /// could have been deleted from it without a single test noticing.
     void thePresetLintRunsOnTheSurfaceArm()
     {
         QTemporaryDir tmp;
