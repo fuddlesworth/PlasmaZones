@@ -107,8 +107,8 @@ public:
     }
 
 private:
-    /// Baseline, overrides and their insertion order, shared with the animation
-    /// and overlay trees rather than hand-written a third time. See
+    /// Baseline, overrides and their insertion order, shared with the two animation
+    /// trees and the overlay one rather than hand-written a fourth time. See
     /// `PathKeyedOverrides` for what is deliberately NOT shared: this tree's
     /// walk-up `resolve()`, its seed overlay, its equality order policy and its
     /// array wire format all stay here.

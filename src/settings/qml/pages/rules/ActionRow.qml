@@ -137,6 +137,24 @@ ColumnLayout {
     /// two shader actions spell it the same way today, but naming it once here
     /// keeps the preset combo from re-deriving the action-type ladder.
     readonly property string _shaderPresetPackKey: "effectId"
+    /// The family's `ShaderPresetBridge` for whichever shader action is being
+    /// edited, or null before `appSettings` resolves.
+    ///
+    /// Named once here because TWO children need it now: the preset combo
+    /// (ActionPresetEditor) and the uniform editor, which has to merge the preset
+    /// under the rule's own deltas or every slider sits at the pack defaults and the
+    /// preset looks inert.
+    readonly property QtObject _shaderPresetBridge: {
+        if (!row.appSettings || row._shaderActionType.length === 0)
+            return null;
+        return row._shaderActionType === "overrideOverlayShader" ? row.appSettings.overlayPresets : row.appSettings.animationPresets;
+    }
+    /// The preset id this action stores, or empty for none. A `string` so its change
+    /// signal fires on a VALUE change: `_withParam` replaces the whole `row.action`
+    /// object on every uniform write, so a binding reading `row.action.presetId`
+    /// directly would re-fire on each one — the same reason
+    /// `_animationShaderEffectId` exists.
+    readonly property string _shaderPresetId: row.action.presetId || ""
 
     // The preset editor is its own type (ActionPresetEditor.qml) rather than one
     // more Component inside ActionParamEditors.qml, which is past the size

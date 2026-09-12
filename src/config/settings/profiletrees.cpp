@@ -241,6 +241,24 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
     // so the comparison below and the stored value are the same shape.
     QVariantMap canonical = tree;
     {
+        // The ROOT is bounded too, and it has to be. `ProfileTree::toJson` emits the
+        // baseline as a full Profile body at the root, and this key has no schema
+        // validator either (see settingsschema.cpp, where motionProfileTreeKey is
+        // registered with no coercion), so bounding only each override's profile left
+        // the one door this helper exists to close wide open: an unknown field or an
+        // unbounded string in `baseline` reached disk and survived every read.
+        //
+        // Root keys outside the two this tree defines are dropped for the same
+        // reason. Nothing reads them, and carrying them forward would persist
+        // whatever a hand edit put there.
+        canonical.insert(QLatin1String("baseline"),
+                         boundedProfileMap(canonical.value(QLatin1String("baseline")).toMap(), QString()));
+        for (const QString& key : canonical.keys()) {
+            if (key != QLatin1String("baseline") && key != QLatin1String("overrides")) {
+                canonical.remove(key);
+            }
+        }
+
         const QVariantList entries = canonical.value(QLatin1String("overrides")).toList();
         QVariantList filtered;
         filtered.reserve(entries.size());

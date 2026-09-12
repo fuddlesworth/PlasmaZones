@@ -87,9 +87,13 @@ RowLayout {
     /// the host should store as the assignment's parameters. Empty means "no
     /// deltas", which is what reverting to a preset means.
     signal revertRequested
-    /// Emitted after a save or update changed what is on disk, so the host can
-    /// re-read anything it derived from the preset.
-    signal presetsChanged
+    // There is deliberately NO `presetsChanged` signal here. One existed, emitted at
+    // five sites, with zero consumers: every host instead subscribes to the BRIDGE's
+    // own `presetsChanged`, which the bridge relays from the registry
+    // (ShaderPresetBridge's ctor) and which therefore also fires for an edit made in
+    // another process or a text editor. A row-local duplicate could only ever be the
+    // narrower of the two, and its doc promised a contract nothing honoured.
+
     /// Emitted when the user deleted the selected preset. The host should drop the
     /// reference and leave the VALUES alone — deleting a preset says nothing about
     /// what the parameters should become. Distinct from `presetSelected("")`,
@@ -311,7 +315,6 @@ RowLayout {
         onClicked: {
             if (root.presetBridge.updatePreset(root.presetId, root.currentValues)) {
                 root.revertRequested();
-                root.presetsChanged();
             }
         }
     }
@@ -358,7 +361,6 @@ RowLayout {
                 // wiped the tuning the user was working on. Deleting a preset says
                 // nothing about what the values should become.
                 root.presetDeleted(deletedId);
-                root.presetsChanged();
             }
         }
     }
@@ -406,8 +408,10 @@ RowLayout {
 
         function commit() {
             if (nameDialog.mode === "rename") {
-                if (root.presetBridge.renamePreset(root.presetId, nameField.text))
-                    root.presetsChanged();
+                // The rename IS the whole effect, and the row re-reads through the
+                // bridge's presetsChanged like every other host. A refusal reports
+                // itself through presetWriteFailed, so the bool needs no branch here.
+                root.presetBridge.renamePreset(root.presetId, nameField.text);
             } else if (nameDialog.mode === "duplicate") {
                 // Copies the SOURCE preset's own values, not the live ones: the
                 // point is to get an editable copy of what the pack ships, and any
@@ -415,7 +419,6 @@ RowLayout {
                 const copyId = root.presetBridge.duplicatePreset(root.packId, root.presetId, nameField.text);
                 if (copyId.length > 0) {
                     root.presetSelected(copyId);
-                    root.presetsChanged();
                 }
             } else {
                 const id = root.presetBridge.savePreset(root.packId, nameField.text, root.currentValues);
@@ -424,7 +427,6 @@ RowLayout {
                     // preset IS these values, so nothing is layered on it yet.
                     root.presetSelected(id);
                     root.revertRequested();
-                    root.presetsChanged();
                 }
             }
             nameDialog.close();

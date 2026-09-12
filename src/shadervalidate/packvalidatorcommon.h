@@ -153,10 +153,12 @@ struct PresetLintParam
 
 /// Lint a pack's `presets` block against what the pack declares.
 ///
-/// Checks three things, which is everything decidable without rendering:
-/// every preset key names a declared parameter, every value matches that
-/// parameter's declared type, a numeric value sits inside any declared range,
-/// and an image-typed value stays inside the pack.
+/// Checks everything decidable without rendering: every preset key is usable as a
+/// picker label, every key names a declared parameter, every value matches that
+/// parameter's declared type, a numeric value sits inside any declared range AND
+/// inside its own type's range, and an image-typed value names a file the pack ships.
+/// Containment is deliberately NOT among them — see the implementation, where the
+/// parse has already refused an escaping path before this lint can see it.
 ///
 /// Collects its findings and prints them under a `presets ERROR` header, then
 /// returns the number of problems found. Emitting straight to the stream as each

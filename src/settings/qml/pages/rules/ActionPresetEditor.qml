@@ -19,8 +19,15 @@ import org.kde.kirigami as Kirigami
  * row has no live preview to revert to and nowhere to save a new preset from,
  * so every maintenance action would be a dead control. Presets are created
  * where a pack is actually being tuned.
+ *
+ * `WideComboBox`, not a bare `ComboBox`, for the reason PresetRow's own combo
+ * records: the settings app pins its style to org.kde.desktop, whose Menu-based
+ * popup binds its width to the combo, so a longer entry is truncated IN THE LIST
+ * the user has to read to choose. These entries are user-authored preset names,
+ * which is the content that rule most matters for, and every other combo in the
+ * rules param editors is already a WideComboBox.
  */
-ComboBox {
+WideComboBox {
     /// The ActionRow this editor belongs to. Passed in rather than reached for
     /// through parent chains, which is what the in-file Component could rely on
     /// and a standalone type cannot. Typed, not `var`: it is an ActionRow, and the
@@ -37,6 +44,33 @@ ComboBox {
         return row._shaderActionType === "overrideOverlayShader" ? row.appSettings.overlayPresets : row.appSettings.animationPresets;
     }
 
+    /// The bridge's rows for this pack, held IMPERATIVELY.
+    ///
+    /// `presetsFor()` is a function call, so a declarative binding on it would never
+    /// re-evaluate when a preset is saved, renamed, deleted or a pack rescans — the
+    /// combo would keep listing a name that is gone, and `currentIndex` would fall
+    /// through to 0 and read "None" while the action still stored the id. PresetRow
+    /// holds its rows the same way and for the same reason.
+    property var _rows: []
+
+    function _refreshRows() {
+        _rows = (_bridge && _packId.length > 0) ? (_bridge.presetsFor(_packId) || []) : [];
+    }
+
+    on_BridgeChanged: _refreshRows()
+    on_PackIdChanged: _refreshRows()
+    Component.onCompleted: _refreshRows()
+
+    // A preset retuned, renamed or deleted anywhere — this window, another process,
+    // a text editor — has to move this combo too.
+    Connections {
+        target: _bridge
+        function onPresetsChanged(packId) {
+            if (packId === _packId)
+                _refreshRows();
+        }
+    }
+
     readonly property var _entries: {
         const out = [
             {
@@ -44,11 +78,8 @@ ComboBox {
                 name: i18nc("@item:inlistbox no shader preset", "None")
             }
         ];
-        if (_bridge && _packId.length > 0) {
-            const rows = _bridge.presetsFor(_packId);
-            for (const r of rows)
-                out.push(r);
-        }
+        for (const r of _rows)
+            out.push(r);
         // A rule can outlive the preset it names — deleted here, or dropped by a
         // pack update. Without a synthetic entry the combo fell back to index 0 and
         // read "None" while the action still stored the id, so a dangling reference

@@ -1129,50 +1129,13 @@ QtObject {
     }
 
     // Inline shader-uniform editor shared by both shader-override actions
-    // (OverrideAnimationShader and OverrideOverlayShader) — bound to
-    // `_activeShaderParamSchema`, which selects the matching registry's schema
-    // per action type. The action stores a nested `params` object (the shader
-    // uniform values);
-    // changing any value rewrites the whole object. Locks live on the row
-    // as working state (not persisted) — exactly like the per-event card on
-    // the animations page. Randomize rolls a new map respecting locks and
-    // writes it back to `action.params`. Image picking is disabled because
-    // shader-image uniforms aren't part of the rule wire format here.
+    // (OverrideAnimationShader and OverrideOverlayShader). Its body lives in
+    // ActionShaderParamsEditor.qml rather than here, because this file is past the
+    // size ceiling and the preset merge it needs could not be added in place — the
+    // same move ActionPresetEditor.qml made.
     property Component _shaderParamsEditor: Component {
-        PZCommon.ShaderParamsEditor {
-            id: paramEditor
-
-            parameters: row._activeShaderParamSchema
-            currentValues: row.action.params || row._emptyShaderParams
-            effectId: row.action.effectId || ""
-            enableLocking: true
-            enableRandomize: true
-            enableImage: false
-            compact: true
-            // The shared editor owns the session-only lock map and hosts the
-            // colour dialog; the rule only persists values. Locks reset on
-            // effect switch via the hosting Loader in ActionRow.qml (its
-            // Connections handler lives there, not in this Component file).
-            onValueChanged: function (effectId, paramId, value) {
-                // Clone the current param map and stamp the new value so the
-                // binding re-evaluates (mutating in place wouldn't trigger).
-                var next = ({});
-                var existing = row.action.params || ({});
-                for (var k in existing)
-                    next[k] = existing[k];
-                next[paramId] = value;
-                row.actionEdited(row._withParam("params", next));
-            }
-            onRandomizeRequested: function (rolled) {
-                // computeRandomized respects locks: locked params keep their
-                // current value, the rest are rolled per their schema range.
-                row.actionEdited(row._withParam("params", rolled));
-            }
-            onResetRequested: function (defaults) {
-                // Full defaults map replaces the rule's param overrides in
-                // one write, mirroring the randomize batch above.
-                row.actionEdited(row._withParam("params", defaults));
-            }
+        ActionShaderParamsEditor {
+            row: editors.row
         }
     }
 

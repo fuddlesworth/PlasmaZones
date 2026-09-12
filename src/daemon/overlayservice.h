@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling and grows
-// with each overlay surface. Deliberately no line count here: it goes stale
-// within a release of being written, and the case below is what the exception
-// rests on. scripts/oversize-baseline.json holds the authoritative figure.
+// with each overlay surface. No line count here, because it goes stale within a
+// release; scripts/oversize-baseline.json holds the authoritative figure.
 //
 // The case for it: OverlayService is the single façade every overlay surface
 // goes through — zone overlay, selector, snap assist, OSD, cheatsheet and the
@@ -167,10 +166,9 @@ public:
     /// order, is what prevents a dangling pointer during shutdown.
     void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
     /// Borrowed preset registry, turning an assignment's `presetId` into the
-    /// parameters it stands for. Same lifetime contract as the two registries
-    /// above. OPTIONAL, unlike them: with none injected every assignment
-    /// resolves to its own parameters, which is what one carrying no preset
-    /// already does, so the path degrades rather than failing.
+    /// parameters it stands for. Same lifetime contract as the two registries above,
+    /// but OPTIONAL unlike them: with none injected every assignment resolves to its
+    /// own parameters, which is what one carrying no preset already does.
     void setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry);
     void updateGeometries() override;
 
@@ -1600,9 +1598,9 @@ private:
     OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                                 const PhosphorZones::Layout* screenLayout) const;
     /// Just the id, for callers asking only whether a shader is in play. Skips the
-    /// preset flatten (a deep copy of the preset's parameter map) — a preset moves
-    /// PARAMETERS, never the pack, so the id is identical, and
-    /// `useShaderForScreen` is per-frame while an overlay is up.
+    /// preset flatten (a deep copy of the preset's parameter map): a preset moves
+    /// PARAMETERS never the pack, so the id is identical, and `useShaderForScreen` is
+    /// per-frame while an overlay is up.
     QString effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                      const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;

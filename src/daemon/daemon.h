@@ -320,12 +320,11 @@ private:
     void setupSurfaceShaderEffects();
 
     // init() phase methods, DECLARED in the order init() (daemon.cpp) calls them,
-    // because that order is load-bearing; each dependency is named at its call
-    // site there. Defined across daemon/init_*.cpp, shader_warmup.cpp and
-    // animation_profiles.cpp.
-    /// Build the preset store, hand it to the overlay service, and connect each
-    /// pack registry's reload edge. Runs AFTER those registries exist: it seeds
-    /// from what they already found rather than waiting for a reload.
+    // because that order is load-bearing; each dependency is named at its call site
+    // there. Defined across daemon/init_*.cpp, shader_warmup.cpp, animation_profiles.cpp.
+    /// Build the preset store, hand it to the overlay service, and connect each pack
+    /// registry's reload edge. Runs AFTER those registries exist, so it seeds from what
+    /// they already found rather than waiting for a reload.
     void setupShaderPresets();
     void setupShaderWarmBakes();
     void initLayoutAndSettingsWiring();
@@ -1262,11 +1261,11 @@ private:
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
     /// Named parameter presets for the three families the daemon resolves (animation,
-    /// surface, overlay; pointer is compositor-only): the user's own, scanned with
-    /// live reload, plus the ones packs declare. An assignment stores a preset id and
-    /// its own edits rather than a copy, so this is what turns that reference into
-    /// rendered parameters. Declared AFTER m_overlayService, like the registries
-    /// above: stop() nulls that borrow before this resets.
+    /// surface, overlay; pointer is compositor-only): the user's own with live reload,
+    /// plus the ones packs declare. An assignment stores a preset id and its own edits
+    /// rather than a copy, so this turns that reference into rendered parameters.
+    /// Declared AFTER m_overlayService, like the registries above: stop() nulls that
+    /// borrow before this resets.
     std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
 
     /// User-authored curve scanner. Scans `plasmazones/curves` from the XDG

@@ -150,8 +150,6 @@ Kirigami.Dialog {
     /// exists to avoid.
     readonly property int _zonePreviewWidth: Math.max(1, Math.round(livePreviewPane.width))
     on_ZonePreviewWidthChanged: _recompute()
-    property string _presetError: ""
-
     /// Which preset the preview is currently showing, or empty for none. Local
     /// to the dialog: the browser has no assignment to store it on.
     property string _browsePresetId: ""
@@ -393,9 +391,6 @@ Kirigami.Dialog {
     // aboutToShow runs before the popup becomes visible, so the panes are built
     // once, with the right parameters, and compose once.
     onAboutToShow: {
-        // The dialog instance is reused per shader, so clear any preset error
-        // left over from the previous shader's session before showing this one.
-        _presetError = "";
         if (_livePreview)
             _resetPreview();
     }
@@ -651,32 +646,6 @@ Kirigami.Dialog {
                     Kirigami.Separator {
                         Layout.fillWidth: true
                         visible: root._hasParameters
-                    }
-
-                    Kirigami.InlineMessage {
-                        id: presetErrorMessage
-
-                        Layout.fillWidth: true
-                        // Visibility is driven imperatively in one direction
-                        // only: the Connections below shows the message when a
-                        // new error lands, and the close button hides it. A
-                        // declarative `visible: _presetError.length > 0`
-                        // binding would be severed the first time the close
-                        // button imperatively wrote visible = false, so later
-                        // preset errors would never show again.
-                        visible: false
-                        type: Kirigami.MessageType.Error
-                        text: root._presetError
-                        showCloseButton: true
-                        onVisibleChanged: if (!visible)
-                            root._presetError = ""
-
-                        Connections {
-                            target: root
-                            function on_PresetErrorChanged() {
-                                presetErrorMessage.visible = root._presetError.length > 0;
-                            }
-                        }
                     }
 
                     // ── Parameters ────────────────────────────────────────
@@ -1152,13 +1121,12 @@ Kirigami.Dialog {
         }
     }
 
-    // The two FileDialogs and the previewController save/load-failure
-    // Connections that used to live here went with the loose-file flow they
-    // served. Refusals now come from the bridge, which is the one writer.
-    Connections {
-        target: root._presetBridge
-        function onPresetWriteFailed(error) {
-            root._presetError = error;
-        }
-    }
+    // The two FileDialogs and the previewController save/load-failure Connections
+    // that used to live here went with the loose-file flow they served.
+    //
+    // There is deliberately NO onPresetWriteFailed handler here either. PresetRow owns
+    // that report now, because it is the control that raised the refusal and it sits
+    // in all four assignment hosts, where nothing was listening at all. This dialog
+    // embeds the same PresetRow, so a handler here reported every refusal TWICE: once
+    // as an InlineMessage above the parameters and once in the row's own footer.
 }

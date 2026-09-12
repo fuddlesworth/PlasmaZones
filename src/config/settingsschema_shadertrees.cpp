@@ -45,22 +45,26 @@
  * therefore not "trimming harder than the setter accepted" in the sense the
  * paragraph above warns about — nothing a user can see is being taken away.
  *
- * ## What cannot be covered here
+ * ## Why the motion keys are not here
  *
- * The two motion keys, `Profile` and `MotionProfileTree`, are NOT covered, and
- * the reason is not the one previously given here. That reason —
+ * `Profile` and `MotionProfileTree` are bounded by their SETTER
+ * (`boundedProfileMap` in settings/profiletrees.cpp) rather than by a sanitizer
+ * registered here, and that setter bounds the whole document: each override's
+ * profile body, the root `baseline` body, and the root key set.
+ *
+ * It is not that they COULD not be registered here. The reason once given —
  * `PhosphorAnimation::Profile::fromJson` needing a `CurveRegistry` — does not
- * apply: nothing on the motion keys' path parses a `Profile` at all. The getter
- * hands back the raw `QVariantMap`, and the setter stores it verbatim precisely
- * so it never has to re-resolve a curve. Its own `boundedProfileMap` is a
- * known-field whitelist plus a string cap over that raw map, with no registry
- * involved, and could be registered here as-is.
+ * apply, because nothing on the motion keys' path parses a `Profile` at all: the
+ * getter hands back the raw `QVariantMap` and the setter stores it verbatim,
+ * precisely so it never has to re-resolve a curve by name. `boundedProfileMap` is
+ * a known-field whitelist plus a string cap over that raw map, with no registry
+ * involved.
  *
- * What is actually true is that the motion keys are bounded on the WRITE path
- * only, so a hand-edited `config.json` or an `importFromJson` blob reaches
- * `motionProfileTree()` unbounded — the same door this file closed for the other
- * two trees. Closing it is a follow-up, not an impossibility; the honest
- * statement is that nobody has done it yet.
+ * What it buys is that the motion setter is ALSO the canonicaliser: it drops an
+ * empty `overrides` list so the key stays equal to its default, and that
+ * normalisation has to happen on the same pass as the bound or the stored value
+ * and the compared value are different shapes. Splitting the two across a
+ * sanitizer and a setter is what would make them drift.
  *
  * ## Content versus size
  *

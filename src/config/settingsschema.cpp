@@ -1199,13 +1199,10 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 
 // ─── Decorations ──────────────────────────────────────────────────────────────
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
-// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
-// JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
-// entry above and the animation ShaderProfileTree blob. Both are bounded here
-// too (settingsschema_shadertrees.cpp), which covers a hand-edited config.json
-// that never reaches this key's typed setter. The blob is a
-// leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
-// Decorations.WindowFiltering sub-group is registered separately.
+// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested JSON
+// object — the same QVariantMap shape as the autotile PerAlgorithmSettings entry above
+// and the animation ShaderProfileTree blob. Both are bounded in
+// settingsschema_shadertrees.cpp, which covers a hand-edited config.json.
 
 void appendDecorationsSchema(PhosphorConfig::Schema& schema)
 {

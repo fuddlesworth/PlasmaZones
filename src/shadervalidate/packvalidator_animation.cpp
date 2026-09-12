@@ -91,7 +91,7 @@ QString withoutLineComments(const QString& source)
 
 } // namespace
 
-// COVERAGE BOUNDARY, so this is not read as more than it is. Three things the
+// COVERAGE BOUNDARY, so this is not read as more than it is. Four things the
 // live compositor does that this bake cannot reproduce:
 //
 // 1. The source is handed to glslang with the pack's own `#version 450`

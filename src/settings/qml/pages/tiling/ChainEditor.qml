@@ -96,7 +96,10 @@ ColumnLayout {
     // empty catalog is "nothing is installed", NOT "everything is already in
     // the chain", and telling the user to add one below is an instruction
     // they cannot follow.
-    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
+    // Boolean-coerced: `availableShaders` is untyped, and the `&&` chain returns the
+    // first falsy operand, which for an undefined model is `undefined` — a typed bool
+    // property rejects that outright. Same guard, same reason, as AnimationProfileEditor.
+    readonly property bool _anyPackAvailable: Boolean(availableShaders && availableShaders.length > 0)
 
     signal chainChangeRequested(var newChain)
     /// The family's `ShaderPresetBridge`, REQUIRED, and forwarded to each layer.
@@ -125,7 +128,12 @@ ColumnLayout {
     /// marked every inherited row as changed here and offered an Update-preset
     /// that would have written the ancestor's values into the shared preset.
     /// A host whose `packParameters` is already own-only binds the same map.
-    property var packOwnParameters: ({})
+    ///
+    /// Required rather than defaulted, for the reason `presetBridge` above and
+    /// PackEditorBody's `ownValues` both are: a default makes a forgotten binding
+    /// indistinguishable from a deliberate opt-out, and the failure is SILENT —
+    /// nothing marked, no Update-preset offered, no error.
+    required property var packOwnParameters
 
     signal paramChangeRequested(string packId, string paramId, var value)
     /// A layer was pointed at a different preset. Empty clears it.

@@ -403,7 +403,7 @@ QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint
     // guarantees a covered output is neither asked for a frame nor painted,
     // however a future caller reaches it.
     //
-    // ignoreSuppression is for the one caller that needs the rect of what is
+    // ignoreSuppression is for the two callers that need the rect of what is
     // ALREADY on screen at the moment suppression closes over the output: the
     // gate has been applied by then, so the honest answer is empty, and that
     // is precisely the band still needing a repaint.

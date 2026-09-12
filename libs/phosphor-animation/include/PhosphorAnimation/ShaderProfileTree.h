@@ -116,8 +116,8 @@ public:
     }
 
 private:
-    /// Baseline, overrides and their insertion order, shared with the decoration
-    /// and overlay trees rather than hand-written a third time. See
+    /// Baseline, overrides and their insertion order, shared with the motion,
+    /// decoration and overlay trees rather than hand-written a fourth time. See
     /// `PathKeyedOverrides` for which half of these trees is deliberately NOT
     /// shared: `resolve()`'s walk-up, equality's order policy and this tree's
     /// array wire format all stay here.

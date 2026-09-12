@@ -116,18 +116,15 @@ public:
  * other two their per-field inheritance. So `resolve()`, the seed overlay, key
  * normalisation and the equality predicate each tree picks stay here.
  *
- * The CONTAINER is a different matter, and it used to be written out three times:
+ * The CONTAINER is a different matter, and it used to be written out four times:
  * setOverride / clearOverride / overriddenPaths, the insertion-order bookkeeping,
  * the empty-path guard, the serialisation loop. Those copies HAD drifted — this
  * type dropped its insertion-order list entirely in 46ed8cdef while the other two
- * kept theirs — so all three now hold a
+ * kept theirs — so all four now hold a
  * `PhosphorRegistry::PathKeyedOverrides<Node>` and forward to it. This tree still
  * compares order-INSENSITIVELY (it serialises overrides as a JSON object, where
  * key order carries nothing), which is why it uses `sameOverrides` without
  * `sameKeyOrder`.
- *
- * The fourth tree, `PhosphorAnimation::ProfileTree`, is the one still hand-writing
- * the container.
  *
  * Why it was worth lifting: the bound CONSTANTS were shared into a common header
  * first while four hand-written traversals stayed, and the SHAPE rules diverged
@@ -181,11 +178,12 @@ public:
     }
 
 private:
-    /// Baseline and overrides, shared with the animation and decoration trees
-    /// rather than hand-written a third time. See `PathKeyedOverrides` for what
-    /// is deliberately NOT shared: this tree's one-step `resolve()`, its sorted
-    /// key view, its order-FREE equality and its key-addressed wire format all
-    /// stay here, and they are exactly the ways it differs from the other two.
+    /// Baseline and overrides, shared with the two animation trees and the
+    /// decoration one rather than hand-written a fourth time. See
+    /// `PathKeyedOverrides` for what is deliberately NOT shared: this tree's one-step
+    /// `resolve()`, its sorted key view, its order-FREE equality and its
+    /// key-addressed wire format all stay here, and they are exactly the ways it
+    /// differs from the other three.
     PhosphorRegistry::PathKeyedOverrides<OverlayShaderProfile> m_store;
 };
 

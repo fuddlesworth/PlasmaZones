@@ -21,8 +21,7 @@ namespace PhosphorRegistry {
  * ## What this deliberately does NOT do
  *
  * It is not an attempt to make the four assignment trees — the three named above
- * plus `PhosphorAnimation::ProfileTree`, the motion tree, which still hand-writes
- * this container — one type. They
+ * plus `PhosphorAnimation::ProfileTree`, the motion tree — one type. They
  * genuinely differ in key space (dot-paths against layout UUIDs), inheritance
  * model (a full walk-up against a single override-or-baseline step), payload
  * shape (per-field optionals against a plain struct) and parse dependency, and
@@ -31,11 +30,11 @@ namespace PhosphorRegistry {
  * overlay, key normalisation and equality stay with each tree, where the
  * differences live.
  *
- * What was duplicated and should not have been is everything below: three
+ * What was duplicated and should not have been is everything below: four
  * hand-written copies of the same storage, the same `setOverride` /
  * `clearOverride` / `overriddenPaths`, the same insertion-order bookkeeping, the
  * same empty-key guard, the same serialisation loop. They had already drifted —
- * one tree dropped its insertion-order list while the other two kept theirs, and
+ * one tree dropped its insertion-order list while the other three kept theirs, and
  * the empty-key guard was written out three times — which is the evidence that
  * lifting the CONSTANTS into a shared header while leaving the traversals
  * hand-written was never going to hold. The numbers were not the hard part.

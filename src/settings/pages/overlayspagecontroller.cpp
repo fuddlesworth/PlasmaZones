@@ -257,8 +257,22 @@ void OverlaysPageController::setShaderPreset(const QString& path, const QString&
         return;
     }
     OverlayShaderTree tree = m_settings->overlayShaderTree();
-    OverlayShaderProfile node = path.isEmpty() ? tree.baseline() : tree.directOverride(path);
-    if (node.presetId == presetId)
+    // Seed from what the layout RESOLVES to, not from its direct override, when it
+    // has none. `directOverride` answers a default-constructed profile for an
+    // unoverridden layout, so engaging only `presetId` on it stored
+    // `{shaderId: "", presetId: X}` — and an empty shaderId is the "None" sentinel
+    // that SUPPRESSES the baseline shader for that layout (see
+    // acceptableShaderEffectId). Picking a preset on a card that was showing the
+    // inherited shader therefore turned that layout's overlay off. The card offers
+    // the preset row whenever a shader resolves, inherited or not, so this was
+    // reachable in one click.
+    //
+    // `resolve()` is one step on this tree — an override or the baseline — so this
+    // carries the pack and its parameters down from the baseline exactly as the card
+    // was already displaying them, which is what the user is tuning.
+    const bool engaged = path.isEmpty() || tree.hasOverride(path);
+    OverlayShaderProfile node = path.isEmpty() ? tree.baseline() : tree.resolve(path);
+    if (engaged && node.presetId == presetId)
         return;
     // The pack and the parameter edits are left exactly as stored: this call
     // carries a preset and nothing else, and the parameters become deltas on
