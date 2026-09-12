@@ -16,8 +16,13 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QMap>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
+#include <QVariantMap>
 
 #include <rhi/qshader.h>
 
@@ -135,6 +140,77 @@ QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShader
 // linked: Qt vendors glslang inside ShaderTools without exposing it, and a
 // direct libglslang dependency for one code path is a heavier build cost than
 // a tool the GLSL toolchain already ships.
+
+/// One declared parameter, reduced to what a preset lint needs: its id, its
+/// type token, and whatever range it declares. The four families spell their
+/// ParameterInfo differently (slot vs step, image vs no image), so the lint
+/// takes this instead of any one of them and each arm projects into it.
+struct PresetLintParam
+{
+    QString id;
+    QString type;
+    QVariant minValue;
+    QVariant maxValue;
+};
+
+/// Lint a pack's `presets` block against what the pack declares.
+///
+/// Checks everything decidable without rendering: every preset key is usable as a
+/// picker label, every key names a declared parameter, every value matches that
+/// parameter's declared type, a numeric value sits inside any declared range AND
+/// inside its own type's range, and an image-typed value names a file the pack ships.
+/// Containment is deliberately NOT among them — see the implementation, where the
+/// parse has already refused an escaping path before this lint can see it.
+///
+/// Collects its findings and prints them under a `presets ERROR` header, then
+/// returns the number of problems found. Emitting straight to the stream as each
+/// problem was found meant a pack whose only fault was a bad preset printed an
+/// unindented error line and then `metadata OK` directly below it, while still
+/// returning a non-zero error count.
+///
+/// @p packDir is the pack's directory, used to check that an image-typed preset
+/// value names a file the pack actually ships. NOT a containment check: the parse
+/// has already dropped an escaping path, so there is nothing left here to refuse
+/// (see the implementation). Every arm passes a real directory today; an empty one
+/// skips the existence check.
+///
+/// Deliberately NOT an error for a preset to omit parameters: a preset is a
+/// partial tuning by design, and the ones it says nothing about fall back to
+/// their defaults.
+/// Lint a preset value set on an IMAGE-typed parameter, for the two families that cannot
+/// keep one.
+///
+/// The animation and surface arms parse a pack's presets before its directory is stamped,
+/// so `parsePackPresets` refuses every image-typed preset value fail-closed and the value
+/// is gone before any other lint sees it. Reads the RAW `presets` block for the keys a
+/// pack sets, because the parsed map is exactly where they have already been dropped.
+int reportImageParamPresets(QTextStream& out, const QJsonObject& root);
+
+/// Lint the RAW `presets` value from @p root, for the faults the parsed map cannot show.
+///
+/// Three of them, each costing the author presets with only a log line: a
+/// present-but-non-object `presets` (the loader ignores it wholesale), more presets than
+/// the loader keeps, and a preset with more values than it keeps. `reportPresetProblems`
+/// below receives the already-parsed, already-truncated map and so is blind to all three.
+///
+/// Returns the number of problems found and prints them under the same `presets` header.
+int reportRawPresetProblems(QTextStream& out, const QJsonObject& root);
+
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PresetLintParam>& declared);
+
+/// Per-family overloads, so each validator arm is one call rather than its own
+/// projection loop. The four ParameterInfo types spell themselves differently
+/// (slot vs step, image vs no image), which is why the lint takes the reduced
+/// PresetLintParam and these do the reducing.
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
 
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on

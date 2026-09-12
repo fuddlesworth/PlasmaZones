@@ -1391,24 +1391,11 @@ private:
     /// decorations.cpp with the rest of the chain-resolution code.
     bool hasDecorationTreeContent() const;
 
-    /// True when a placement-state change could change SOME window's resolved
-    /// rule outcome, so the per-window invalidation path has to run at all.
-    ///
-    /// The exclusion set is a separate term from the three appearance ones on
-    /// purpose. It is not an animation rule, sets no appearance default and
-    /// leaves no decoration-tree content, so an Exclude-only configuration makes
-    /// all three false — yet isExcludedBySnappingRule caches its verdict per
-    /// (windowId, rule-set revision), neither of which moves on a placement flip,
-    /// and that verdict gates shouldHandleWindow / shouldDecorateWindow. Folding
-    /// it in here is what stops `Exclude WHEN IsFloating` (and, since the
-    /// ActiveLayout wire, `WHEN ActiveLayout = X`) freezing at its first consult.
-    /// Callers still gate the expensive appearance work on the three predicates
-    /// separately — this only decides whether the path is entered.
-    bool hasPlacementSensitiveRuleWork() const
-    {
-        return !m_shaderManager.animationRuleSet().isEmpty() || hasWindowAppearanceDefault()
-            || hasDecorationTreeContent() || !m_snappingExclusionRuleSet.isEmpty();
-    }
+    // There is deliberately NO hasPlacementSensitiveRuleWork() helper here. One
+    // existed with a doc asserting callers gated on it and had none: a copy of the live
+    // gate in rule_invalidation.cpp that had fallen two terms behind
+    // (m_decorationExclusionRuleSet, effectVerdictRuleSet), both of which that file
+    // explains are load-bearing. The gate lives at its one call site.
 
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
@@ -1610,9 +1597,10 @@ private:
     /// live animation is drawing from (the compositeTexId-0 class of bug). @p target
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
-    /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map, because every
-    ///     compiled pack is about to be recompiled and no composite survives it;
+    /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
+    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map: every compiled
+    ///     pack is about to be recompiled (its PRESET sibling invalidates the fold flags
+    ///     instead, so a corpse keeps the frozen frame its close leg needs);
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
@@ -2025,13 +2013,13 @@ private:
 
     /// Surface-shader pack registry (the "surface" category: window border /
     /// rounded corners / glow / …). Discovers data/surface packs; the effect
-    /// compiles each pack a resolved decoration chain references. Search paths
-    /// populated lazily via ensureSurfaceRegistryPaths.
+    /// compiles each pack a resolved decoration chain references.
     PhosphorSurfaceShaders::SurfaceShaderRegistry m_surfaceShaderRegistry;
     bool m_surfaceRegistryPathsAdded = false; ///< one-shot guard for the search-path population
+    quint64 m_decorationSweepGeneration = 0; ///< updateAllDecorations re-entry counter; rationale at that call site
 
     /// Per-surface decoration profile tree, delivered by the daemon as
-    /// `decorationProfileTreeJson` (Settings::decorationProfileTree). resolve()
+    /// `decorationProfileTreeJson` (Settings::decorationProfileTree), whose resolve()
     /// over a window's surface path (window.tiled / window.snapped /
     /// window.floating) yields the DecorationProfile that drives the window's
     /// surface-pack chain and the per-pack parameters that style it (border
@@ -2040,11 +2028,20 @@ private:
     /// (seedDecorationTreeBaseline) — nothing is auto-inserted, because border
     /// and title-bar appearance resolve through resolveEffectiveWindowAppearance
     /// rather than through this tree; replaced wholesale when the setting
-    /// arrives. Do not read this as "populated by default":
-    /// hasDecorationTreeContent() is false until the user has actually applied
-    /// surface packs, which is load-bearing for the invalidation gates that
-    /// consult it.
+    /// arrives. NOT "populated by default": hasDecorationTreeContent() is false until the
+    /// user has applied surface packs, which the invalidation gates depend on.
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
+
+    /// `m_decorationTree.resolve(path)` with each layer's preset flattened in. Every
+    /// consumer that reads PARAMETERS goes through here, so "what does this surface render
+    /// with" has one answer; the tree raw skips the preset (hasDecorationTreeContent reads
+    /// raw, correctly: no preset gates a chain). @p family is `Pointer` for the cursor chain.
+    PhosphorSurfaceShaders::DecorationProfile
+    resolveDecorationProfile(const QString& path,
+                             PhosphorShaders::ShaderFamily family = PhosphorShaders::ShaderFamily::Surface) const;
+    /// The POINTER pair spelled once: the family argument above defaults to Surface, so a
+    /// caller omitting it resolves the cursor chain against the wrong family, silently.
+    [[nodiscard]] PhosphorSurfaceShaders::DecorationProfile resolvedPointerProfile() const;
 
     /// Compiled surface-shader packs keyed by pack id (CompiledSurfacePack holds
     /// the main MapTexture shader, contract uniform locations, pack-declared
@@ -2169,45 +2166,47 @@ private:
     /// maximize for a window.maximize pack. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
-    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
-    /// Effects KCM WHILE the suppression holds it unloaded leaves its name
-    /// recorded (the KCM apply is a no-op on the already-unloaded effect), so
-    /// the eventual restore re-loads it for the rest of the session; the next
-    /// session honours kwinrc, which the suppression never writes. Querying
-    /// kwinrc from the effect to close this would add a config dependency the
-    /// plugin doesn't otherwise need.
+    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop Effects
+    /// KCM WHILE the suppression holds it unloaded leaves its name recorded (the KCM
+    /// apply is a no-op on the already-unloaded effect), so the eventual restore
+    /// re-loads it for the rest of the session. The next session honours kwinrc, which
+    /// the suppression never writes, and querying kwinrc from the effect to close this
+    /// would add a config dependency the plugin does not otherwise need.
     QStringList m_suppressedStockEffects;
-    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
-    /// unload of this effect from compositor shutdown in the destructor's
-    /// suppressed-effect restore. See ~PlasmaZonesEffect.
+    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime unload of
+    /// this effect from compositor shutdown in the destructor's suppressed-effect
+    /// restore. See ~PlasmaZonesEffect.
     bool m_compositorShuttingDown = false;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
-    /// callbacks can fire in one event-loop turn (a focus change removes then
-    /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
-    /// the blocking cava stop()/start() off the synchronous path and avoids a
-    /// kill+respawn when a decoration is immediately re-added.
+    /// callbacks can fire in one event-loop turn (a focus change removes then re-adds
+    /// a decoration), and collapsing them to one syncEffectAudioState keeps the
+    /// blocking cava stop()/start() off the synchronous path.
     bool m_audioSyncScheduled = false;
-    /// Warn once, not every sync, when an audio pack wants CAVA but `cava` is not
-    /// installed. Reset when audio is torn down so a later install can re-warn.
+    /// Warn once, not every sync, when an audio pack wants CAVA but it is not
+    /// installed. Reset on audio teardown so a later install can re-warn.
     bool m_audioUnavailableWarned = false;
 
-    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the
-    /// change time, mark the texture dirty, and prime a repaint so audio-reactive
-    /// borders pick it up.
+    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the change time,
+    /// mark the texture dirty, and prime a repaint so audio-reactive borders see it.
     void onEffectAudioSpectrum(const QVector<float>& spectrum);
 
     /// Start/stop/reconfigure the effect's cava instance to match the run gate
-    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() ||
-    /// hasAudioReactiveAnimation())). Lazily creates m_audioProvider on first
-    /// run. Prefer scheduleEffectAudioSync from high-frequency callers
-    /// (decoration refresh, settings replies).
+    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() || hasAudioReactiveAnimation())).
+    /// Lazily creates m_audioProvider; prefer scheduleEffectAudioSync from hot callers.
     void syncEffectAudioState();
 
-    /// Coalesced, deferred syncEffectAudioState: sets a pending latch and posts a
-    /// single queued evaluation, so a remove-then-readd (focus change) or the two
-    /// async settings replies settle to ONE net decision at event-loop return and
-    /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
+    /// Coalesced, deferred syncEffectAudioState: latch plus one queued evaluation, so a
+    /// remove-then-readd or the two async settings replies settle to ONE net decision at
+    /// event-loop return, off the compositor thread's synchronous path.
     void scheduleEffectAudioSync();
+
+    /// The in-handler re-seed flag and the two sweep latches; see `schedulePresetSweep`.
+    bool m_seedingPresetsInline = false;
+    bool m_surfacePresetSweepScheduled = false;
+    bool m_pointerPresetSweepScheduled = false;
+    void schedulePresetSweep(PhosphorShaders::ShaderFamily family);
+    void applySurfacePresetSweep();
+    void applyPointerPresetSweep();
 
     /// Unload the KWin stock effects whose event one of OUR packs owns, and
     /// load back exactly the ones WE unloaded when that stops holding. Three

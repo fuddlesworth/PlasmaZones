@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Fixture helpers shared by the offline pack validator's test executables
-// (test_pack_validators, test_animation_pack_bakes, test_pack_model_detection).
+// Fixture helpers shared by the offline pack validator's five test executables:
+// test_pack_validators, test_pointer_pack_validator, test_surface_pack_validator,
+// test_animation_pack_bakes and test_pack_model_detection.
 // Header-only and `inline` so each executable carries one definition and no
-// test-only library has to exist for three small binaries.
+// test-only library has to exist for five small binaries.
 
 #pragma once
 
@@ -94,6 +95,19 @@ inline bool linkSharedIncludes(const QTemporaryDir& tmp)
 inline bool linkPointerSharedIncludes(const QTemporaryDir& tmp)
 {
     const QString target = QStringLiteral(P_SOURCE_DIR "/data/pointer/shared");
+    return linkSharedInto(tmp, target);
+}
+
+/// The surface twin. Same reason as the pointer one: the surface validator bakes
+/// every pack's fragment through glslang and resolves includes from the pack's
+/// parent and its `shared/` sibling before the installed tree, so without this a
+/// fixture bakes against whatever is INSTALLED rather than the working tree.
+///
+/// Returns false when the source tree is not available, which is the caller's
+/// cue to skip rather than fail.
+inline bool linkSurfaceSharedIncludes(const QTemporaryDir& tmp)
+{
+    const QString target = QStringLiteral(P_SOURCE_DIR "/data/surface/shared");
     return linkSharedInto(tmp, target);
 }
 
@@ -198,4 +212,25 @@ inline QJsonArray toArray(const QStringList& values)
     }                                                                                                                  \
     if (!PackValidatorTest::linkPointerSharedIncludes(tmp)) {                                                          \
         QSKIP("data/pointer/shared not found — running outside source tree");                                          \
+    }
+
+/// The surface twin, and the reason it did not exist until now is the finding it
+/// closes: the SURFACE arm of the validator had no test harness at all. Four
+/// production arms (animation, pointer, surface, overlay) and, before this macro,
+/// four of the five executables listed at the top of this file, between them
+/// reaching only three of those arms. Each executable compiles all four, so a
+/// lint deleted from the surface arm alone
+/// broke no test and failed no link. The topology was an artifact of the file-size
+/// ceiling rather than of the family boundary, which is why the gap went unnoticed.
+///
+/// Deliberately does NOT require glslangValidator, unlike the pointer twin above.
+/// The surface arm compiles through `ShaderCompiler::compile` (QShaderBaker, Qt's
+/// vendored glslang) and never shells out to the binary — `glslangValidatorPath` is
+/// read only by the animation and pointer arms. Requiring it here skipped all six
+/// surface slots on any machine without the package, which would have silently
+/// un-done the coverage this macro exists to provide.
+#define REQUIRE_SURFACE_FIXTURE(tmp)                                                                                   \
+    QVERIFY((tmp).isValid());                                                                                          \
+    if (!PackValidatorTest::linkSurfaceSharedIncludes(tmp)) {                                                          \
+        QSKIP("data/surface/shared not found — running outside source tree");                                          \
     }

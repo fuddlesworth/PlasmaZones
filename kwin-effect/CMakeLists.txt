@@ -91,6 +91,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/lifecycle_wiring.cpp
+    plasmazoneseffect/preset_sweep.cpp
     plasmazoneseffect/lifecycle_wiring_daemon.cpp
     plasmazoneseffect/lifecycle_wiring_drag.cpp
     plasmazoneseffect/gestures.cpp

@@ -505,10 +505,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // resolveEventMotionProfile, which bounds an engaged duration into the
     // envelope and falls back to the profile default otherwise, so
     // `baseDurationMs` is positive on every path and the branch is dead today.
-    // Kept because its fallback is genuinely safe; do NOT read it as the reason
-    // the invariant holds, or drop that clamp on the strength of it.
-    const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
-                                                                     profileTree, ruleWindowId, query, profilePath);
+    // Kept because its fallback is safe, but it is NOT why the invariant holds.
+    const auto resolved =
+        PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(), profileTree,
+                                                   m_shaderManager.presetRegistry(), ruleWindowId, query, profilePath);
     const auto& profile = resolved.profile;
     // The duration comes from the motion cascade ALONE. resolveEventMotionProfile
     // already applied the Rule timing slot and clamped the result into the

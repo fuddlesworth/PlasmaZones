@@ -904,24 +904,31 @@ QtObject {
     }
 
     property Component _decorationChainListEditor: Component {
-        // Below-row half of the OverrideDecorationChain editor: the SAME
-        // chain rows the decoration surface cards embed (reorder, remove,
-        // expand for full descriptions + per-pack parameters), rewired so
-        // every signal mutates the ACTION payload. The add row is hidden
-        // (the inline picker above owns adding) and so are the layer
-        // toggles (a rule chain is explicit; remove a pack instead). An
-        // empty chain is the valid "no decoration" sentinel.
+        // Below-row half of the OverrideDecorationChain editor: the SAME chain
+        // rows the decoration surface cards embed (reorder, remove, expand for
+        // descriptions + per-pack parameters), rewired so every signal mutates
+        // the ACTION payload. No add row (the inline picker above owns adding)
+        // and no layer toggles. An empty chain is the "no decoration" sentinel.
         ChainEditor {
             availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
             chain: row.action[row._decorationChainKey] || []
             // Hoisted stable-empty identity (same as _shaderParamsEditor's
             // currentValues) rather than an inline `({})` that churns a new
-            // object per binding evaluation.
+            // object per binding evaluation. Both axes read the same map: a rule
+            // action has no ancestor to inherit from, so what it stores IS its own.
             packParameters: row.action[row._decorationParamsKey] || row._emptyShaderParams
+            packOwnParameters: row.action[row._decorationParamsKey] || row._emptyShaderParams
+            // The compositor already honours a rule's per-layer presets
+            // (decorations.cpp resolves each one), so without these two bindings
+            // the key shipped consumable but unauthorable. The null bridge hid
+            // every layer's preset row, and a rule that carried one showed its
+            // sliders at the pack defaults.
+            presetBridge: row.appSettings ? row.appSettings.surfacePresets : null
+            packPresetIds: row.action[row._decorationPresetsKey] || row._emptyShaderParams
             showLayerToggles: false
             showAddRow: false
             onChainChangeRequested: function (newChain) {
-                // Prune params of removed packs, mirroring
+                // Prune params AND presets of removed packs, mirroring
                 // DecorationPageController.setChain: re-adding a pack starts
                 // from its defaults rather than resurrecting old overrides.
                 var cur = row.action[row._decorationParamsKey] || {};
@@ -930,9 +937,39 @@ QtObject {
                     if (newChain.indexOf(pid) >= 0)
                         pruned[pid] = cur[pid];
                 }
+                var curPresets = row.action[row._decorationPresetsKey] || {};
+                var prunedPresets = {};
+                for (var ppid in curPresets) {
+                    if (newChain.indexOf(ppid) >= 0)
+                        prunedPresets[ppid] = curPresets[ppid];
+                }
                 var next = row._withParam(row._decorationChainKey, newChain);
                 next[row._decorationParamsKey] = pruned;
+                next[row._decorationPresetsKey] = prunedPresets;
                 row.actionEdited(next);
+            }
+            onPresetChangeRequested: function (packId, presetId) {
+                var cur = row.action[row._decorationPresetsKey] || {};
+                var presets = {};
+                for (var pid in cur)
+                    presets[pid] = cur[pid];
+                if (presetId.length > 0)
+                    presets[packId] = presetId;
+                else
+                    delete presets[packId];
+                row.actionEdited(row._withParam(row._decorationPresetsKey, presets));
+            }
+            onPresetRevertRequested: function (packId) {
+                // Drop this layer's own param values so every one of them resolves
+                // from the preset again, the same meaning the assignment cards give
+                // the gesture.
+                var cur = row.action[row._decorationParamsKey] || {};
+                var params = {};
+                for (var pid in cur) {
+                    if (pid !== packId)
+                        params[pid] = cur[pid];
+                }
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
             }
             onParamChangeRequested: function (packId, paramId, value) {
                 var cur = row.action[row._decorationParamsKey] || {};
@@ -1092,50 +1129,13 @@ QtObject {
     }
 
     // Inline shader-uniform editor shared by both shader-override actions
-    // (OverrideAnimationShader and OverrideOverlayShader) — bound to
-    // `_activeShaderParamSchema`, which selects the matching registry's schema
-    // per action type. The action stores a nested `params` object (the shader
-    // uniform values);
-    // changing any value rewrites the whole object. Locks live on the row
-    // as working state (not persisted) — exactly like the per-event card on
-    // the animations page. Randomize rolls a new map respecting locks and
-    // writes it back to `action.params`. Image picking is disabled because
-    // shader-image uniforms aren't part of the rule wire format here.
+    // (OverrideAnimationShader and OverrideOverlayShader). Its body lives in
+    // ActionShaderParamsEditor.qml rather than here, because this file is past the
+    // size ceiling and the preset merge it needs could not be added in place — the
+    // same move ActionPresetEditor.qml made.
     property Component _shaderParamsEditor: Component {
-        PZCommon.ShaderParamsEditor {
-            id: paramEditor
-
-            parameters: row._activeShaderParamSchema
-            currentValues: row.action.params || row._emptyShaderParams
-            effectId: row.action.effectId || ""
-            enableLocking: true
-            enableRandomize: true
-            enableImage: false
-            compact: true
-            // The shared editor owns the session-only lock map and hosts the
-            // colour dialog; the rule only persists values. Locks reset on
-            // effect switch via the hosting Loader in ActionRow.qml (its
-            // Connections handler lives there, not in this Component file).
-            onValueChanged: function (effectId, paramId, value) {
-                // Clone the current param map and stamp the new value so the
-                // binding re-evaluates (mutating in place wouldn't trigger).
-                var next = ({});
-                var existing = row.action.params || ({});
-                for (var k in existing)
-                    next[k] = existing[k];
-                next[paramId] = value;
-                row.actionEdited(row._withParam("params", next));
-            }
-            onRandomizeRequested: function (rolled) {
-                // computeRandomized respects locks: locked params keep their
-                // current value, the rest are rolled per their schema range.
-                row.actionEdited(row._withParam("params", rolled));
-            }
-            onResetRequested: function (defaults) {
-                // Full defaults map replaces the rule's param overrides in
-                // one write, mirroring the randomize batch above.
-                row.actionEdited(row._withParam("params", defaults));
-            }
+        ActionShaderParamsEditor {
+            row: editors.row
         }
     }
 

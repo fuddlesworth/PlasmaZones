@@ -17,6 +17,10 @@
 
 #include "shader_resolve.h"
 
+// Logging only, and the category header declares a QLoggingCategory and nothing
+// else — so the KWin-free property stated above still holds.
+#include "compositor/effectlogging.h"
+
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -90,8 +94,33 @@ QString curveSlotFor(const QString& eventPath)
 
 } // namespace
 
+namespace {
+/// In-place adaptor over `PhosphorAnimationShaders::withPresetsResolved`.
+///
+/// The flatten itself lives in phosphor-animation beside `ShaderProfile`, so the
+/// daemon and this compositor cannot drift on what "flattened" means — they used
+/// to hold two independent hand-written copies of the same four steps. This
+/// wrapper exists only because the call sites here mutate a profile they already
+/// hold.
+void flattenPreset(PhosphorAnimationShaders::ShaderProfile& profile,
+                   const PhosphorShaders::ShaderPresetRegistry& presets)
+{
+    const std::optional<QString> requested = profile.presetId;
+    profile = PhosphorAnimationShaders::withPresetsResolved(profile, presets);
+    // The effect-side preset path had no log line of its own, which is also why it
+    // could only be verified by reading the mechanism: a live session could not show
+    // whether a preset reached a transition. Logged only when a preset is actually
+    // named, so the ordinary no-preset event stays silent.
+    if (requested && !requested->isEmpty()) {
+        qCDebug(lcEffect) << "flattenPreset: pack" << profile.effectiveEffectId() << "preset" << *requested
+                          << "-> parameters" << profile.effectiveParameters();
+    }
+}
+} // namespace
+
 ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
                                                     const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const PhosphorShaders::ShaderPresetRegistry& presets,
                                                     const QString& windowId, const PhosphorRules::WindowQuery& query,
                                                     const QString& eventPath)
 {
@@ -100,7 +129,9 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
     // avoids consuming a cache slot for an evaluator walk that cannot match
     // anything (no window attribute can satisfy any rule predicate).
     if (!query.hasWindow() || eventPath.isEmpty()) {
-        return ResolvedShaderProfile{tree.resolve(eventPath)};
+        PhosphorAnimationShaders::ShaderProfile bare = tree.resolve(eventPath);
+        flattenPreset(bare, presets);
+        return ResolvedShaderProfile{std::move(bare)};
     }
     // ONE cached evaluator walk feeds both slot lookups. The historical
     // pair of standalone shader-profile + duration resolvers did two
@@ -121,6 +152,13 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
     if (const auto action = resolved.slot(shaderSlotFor(eventPath))) {
         profile.effectId = action->params.value(ActionParam::EffectId).toString();
         profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
+        // A rule can name a preset its own params are deltas against, exactly
+        // as a tree node can. Flattened by the same call below, so the two
+        // routes cannot drift apart on what "preset plus edits" means.
+        const QString rulePreset = action->params.value(ActionParam::PresetId).toString();
+        if (!rulePreset.isEmpty()) {
+            profile.presetId = rulePreset;
+        }
         shaderSlotFromRule = true;
     } else {
         profile = tree.resolve(eventPath);
@@ -131,6 +169,7 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
     // legs of the same rule. Reading it again here (as this used to) worked only
     // because both sites spelled an identical qBound; change one envelope and the
     // two legs of one user-facing rule would silently run different durations.
+    flattenPreset(profile, presets);
     return ResolvedShaderProfile{std::move(profile), shaderSlotFromRule};
 }
 
@@ -394,6 +433,10 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     // ordinary packs in a rule chain, so a rule that names one must be able to
     // set its params too.
     out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
+    // Same nested shape, same reasoning: a rule chain can point one layer at a
+    // preset while tuning the next by hand. Resolved against each pack by the
+    // consumer, so an id belonging to another pack is inert rather than wrong.
+    out.presetIds = action->params.value(PhosphorRules::ActionParam::PresetIds).toObject().toVariantMap();
     return out;
 }
 

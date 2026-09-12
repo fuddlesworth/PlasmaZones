@@ -11,10 +11,13 @@
 // consumer of `PhosphorRules/RuleAction.h` keeps compiling unchanged.
 //
 // The bounds constants live here rather than in the private
-// ruleaction_builtins_p.h because they are shared across library boundaries:
-// the descriptor validators check them at load, and the daemon-side and
-// compositor-side consumers re-check the same numbers on the way out, so a
-// private copy in either would drift by hand-mirroring.
+// ruleaction_builtins_p.h because some are shared across library boundaries: the
+// descriptor validators check every one of them at load, and the APPEARANCE numbers
+// (MaxBorderWidth, MaxAnimationDurationMs) are re-checked on the way out by the
+// compositor, which static_asserts against these very constants
+// (kwin-effect/plasmazoneseffect/shader_resolve.cpp). The chain and preset bounds
+// below are enforced at this load boundary ONLY — no consumer re-derives them — so
+// they live here for one vocabulary rather than for a second check.
 //
 // The companion splits are ActionTypes.h (action type ids) and ActionSlots.h
 // (slot ids).
@@ -39,6 +42,28 @@ namespace ActionParam {
 inline constexpr QLatin1StringView Event{"event"};
 inline constexpr QLatin1StringView EffectId{"effectId"};
 inline constexpr QLatin1StringView Params{"params"};
+// The named parameter preset an action's `Params` are deltas against, carried by the
+// two actions whose uniform blob belongs to ONE pack: OverrideAnimationShader and
+// OverrideOverlayShader. OverrideDecorationChain is a chain of packs, so it carries
+// the per-pack `PresetIds` form below instead and its descriptor refuses this key.
+// Absent or empty means the action's own params are the whole tuning.
+//
+// Resolved against the pack the action names, so an id belonging to another
+// pack resolves to nothing and the action falls back to its own params — the
+// same degradation an assignment tree gets.
+//
+// A STRING, always. The decoration chain's per-pack form is the separate key
+// below rather than this one carrying an object: a key whose TYPE depends on
+// which action holds it breaks the single property this namespace exists to
+// provide, that a reader can handle a key by name. It was already observable —
+// the compositor called `.toString()` on this constant at one site and
+// `.toObject()` at another — and it is why the chain action could not declare a
+// ParamSchema entry for its preset, leaving it invisible to `paramKeyOfKind`.
+inline constexpr QLatin1StringView PresetId{"presetId"};
+/// Per-pack preset references for `OverrideDecorationChain`: `{packId: presetId}`,
+/// mirroring how that action's `Params` is already nested per pack. One chain can
+/// carry a preset on one layer and hand-tuned values on the next.
+inline constexpr QLatin1StringView PresetIds{"presetIds"};
 inline constexpr QLatin1StringView Curve{"curve"};
 inline constexpr QLatin1StringView DurationMs{"durationMs"};
 // The shared SINGLE-PAYLOAD key: any action whose whole payload is one scalar
@@ -156,6 +181,24 @@ inline constexpr int MaxFontFamilyLength = 128;
 /// group with no name names nothing, so the validator rejects it rather than
 /// letting an unnamed group silently gather every matched window.
 inline constexpr int MaxTabGroupNameLength = 64;
+
+/// Caps on an `OverrideDecorationChain` payload, mirroring the config path's
+/// `kMaxChainPacks` / `kMaxShaderStringChars`. Hand-mirrored for the same reason
+/// as the border bounds below: phosphor-rules does not link the settings layer.
+///
+/// These matter more than the config twins they mirror. A rule chain REPLACES the
+/// config chain wholesale, AFTER every config-side bound has run, and lands in
+/// the compositor's per-entry fold where each entry costs a draw and a buffer
+/// slot every frame — so this validator is the only thing standing between a
+/// hand-edited `rules.json` and an unbounded per-frame cost on every matched
+/// window.
+inline constexpr int MaxDecorationChainEntries = 64;
+inline constexpr int MaxChainPackIdLength = 1024;
+
+/// Length cap on a shader preset id carried by a rule action. Every other
+/// free-form string in this vocabulary is bounded; an over-long id is inert
+/// (it resolves to no preset) but the asymmetry is the kind that drifts.
+inline constexpr int MaxShaderPresetIdLength = 1024;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px, mirroring the

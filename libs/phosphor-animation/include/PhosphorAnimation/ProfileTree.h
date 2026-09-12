@@ -6,7 +6,8 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <QHash>
+#include <PhosphorRegistry/PathKeyedOverrides.h>
+
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -89,7 +90,7 @@ public:
     /// The baseline "global" profile — always participates in resolution.
     Profile baseline() const
     {
-        return m_baseline;
+        return m_store.baseline();
     }
     void setBaseline(const Profile& profile);
 
@@ -117,9 +118,15 @@ private:
     /// overlayChainOnto seeds a caller base and returns raw).
     Profile overlayChain(const QString& path, Profile seed) const;
 
-    Profile m_baseline;
-    QHash<QString, Profile> m_overrides;
-    QStringList m_insertionOrder;
+    /// Baseline and overrides, shared with the three shader-assignment trees
+    /// rather than hand-written a fourth time. This tree was the one left behind
+    /// when the other three were converted, in a library that already links
+    /// PhosphorRegistry — and "the fourth tree still writes it out itself" is
+    /// exactly the state that let the SHAPE rules drift between the others.
+    ///
+    /// `resolve()`, the path walk-up and the array serialisation stay here: those
+    /// are where this tree genuinely differs. The container does not.
+    PhosphorRegistry::PathKeyedOverrides<Profile> m_store;
 };
 
 } // namespace PhosphorAnimation

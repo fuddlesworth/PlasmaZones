@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -77,6 +78,23 @@ public:
     const PhosphorAnimationShaders::AnimationShaderRegistry& shaderRegistry() const
     {
         return m_animationShaderRegistry;
+    }
+
+    /// Named parameter presets for every shader family the effect renders:
+    /// animation transitions, surface decorations and the pointer chain.
+    ///
+    /// One store rather than one per family — an assignment's `presetId` is
+    /// resolved against it wherever a profile is turned into parameters, so
+    /// retuning a preset on disk moves what is already on screen without a
+    /// restart. Lives here, beside the animation registry, because this is the
+    /// effect's shader hub and every consumer can already reach it.
+    PhosphorShaders::ShaderPresetStore& presetStore()
+    {
+        return m_presetStore;
+    }
+    const PhosphorShaders::ShaderPresetRegistry& presetRegistry() const
+    {
+        return m_presetStore.registry();
     }
 
     PhosphorAnimationShaders::ShaderProfileTree& profileTree()
@@ -405,6 +423,7 @@ private:
     // Registry + Profile Tree
     // ═══════════════════════════════════════════════════════════════════════════
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
+    PhosphorShaders::ShaderPresetStore m_presetStore;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
     // Rules from rules.json that carry any effect-consumed action

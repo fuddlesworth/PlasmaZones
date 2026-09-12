@@ -26,4 +26,8 @@ endfunction()
 
 phosphorshaders_add_test(test_baseuniformprofile)
 phosphorshaders_add_test(test_pixelunits)
+phosphorshaders_add_test(test_shaderpresets)
+# The store half of the same feature, split out when the file above reached the size
+# ceiling: the directory loader and its watcher, the legacy migration, and the store.
+phosphorshaders_add_test(test_shaderpresetstore)
 phosphorshaders_add_test(test_shaderregistry)

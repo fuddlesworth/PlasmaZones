@@ -1,18 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE SIZE: this TU sits in the 1000-1150 grace band and stays whole
-// deliberately: it is a flat sequence of one appendXxxSchema function per
-// config domain plus the validator helpers several of them share — one
-// file-local (validStringOr), the rest at namespace scope in settingsschema_p.h
-// or declared in settingsschema.h because the per-domain TUs share them too
-// (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList).
-// The domains big enough to carry their own weight are already split
-// (settingsschema_scrolling.cpp's three entry points and
-// settingsschema_tiling.cpp's one); every remaining function is under ninety
-// lines, and moving one out drags its helpers into a header for a single
-// consumer. When a domain grows past that, split it the way scrolling and
-// tiling were — do not let this file cross the 1150 ceiling instead.
+// FILE SIZE: this TU stays whole deliberately. It is a flat sequence of one
+// appendXxxSchema function per config domain plus the validator helpers several of them
+// share — one file-local (validStringOr), the rest at namespace scope in
+// settingsschema_p.h or declared in settingsschema.h because the per-domain TUs share
+// them too (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList). The
+// domains big enough to carry their own weight are already split
+// (settingsschema_scrolling.cpp's three entry points and settingsschema_tiling.cpp's
+// one); every remaining function is under ninety lines, and moving one out drags its
+// helpers into a header for a single consumer. When a domain grows past that, split it
+// the way scrolling and tiling were rather than letting this file cross the ceiling.
 
 #include "settingsschema.h"
 
@@ -423,14 +421,16 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         // directly. Existing string-blob configs are migrated transparently
         // by Store::read's legacy-string fallback on first load.
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap,
-         QStringLiteral("The active motion profile, holding its easing curve, duration, stagger interval, and sequence "
-                        "mode. The animations page writes this, so it is not meant to be edited by hand.")},
+         QStringLiteral("The active motion profile: easing curve, duration, stagger interval and sequence mode. "
+                        "The animations page writes this; it is not meant to be edited by hand.")},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
-                        "writes this, so it is not meant to be edited by hand.")},
+                        "writes this, so it is not meant to be edited by hand."),
+         sanitizeShaderProfileTree},
         {CD::motionProfileTreeKey(), CD::motionProfileTree(), QMetaType::QVariantMap,
-         QStringLiteral("Per-context overrides of animation timing, holding each context's easing curve and duration. "
-                        "The animations page writes this, so it is not meant to be edited by hand.")},
+         QStringLiteral("Per-context overrides of animation timing: each context's easing curve and duration. "
+                        "The animations page writes this; it is not meant to be edited by hand."),
+         sanitizeMotionProfileTree},
     };
 }
 
@@ -1198,12 +1198,10 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 
 // ─── Decorations ──────────────────────────────────────────────────────────────
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
-// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
-// JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
-// entry above and the animation ShaderProfileTree blob, with no sanitizer because
-// the per-pack override schema is not known to the config layer. The blob is a
-// leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
-// Decorations.WindowFiltering sub-group is registered separately.
+// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested JSON
+// object — the same QVariantMap shape as the autotile PerAlgorithmSettings entry above
+// and the animation ShaderProfileTree blob. Both are bounded in
+// settingsschema_shadertrees.cpp, which covers a hand-edited config.json.
 
 void appendDecorationsSchema(PhosphorConfig::Schema& schema)
 {
@@ -1215,10 +1213,10 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // persisted: Settings overlays it as a lowest-precedence seed layer on
         // every read (withSeedDefaults), so shipped default updates keep
         // flowing to configs that never customized those surfaces.
-        {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
-         QMetaType::QVariantMap,
+        {CD::decorationProfileTreeKey(), CD::decorationProfileTreeStoredDefault(), QMetaType::QVariantMap,
          QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window overrides. The "
-                        "decorations page writes this, so it is not meant to be edited by hand.")},
+                        "decorations page writes this, so it is not meant to be edited by hand."),
+         sanitizeDecorationProfileTree},
     };
     // Mostly what the decoration chain is allowed to keep redrawing (an animated
     // pack repaints every window carrying it on every vsync, which never lets the

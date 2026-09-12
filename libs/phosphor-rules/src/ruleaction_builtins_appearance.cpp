@@ -12,6 +12,7 @@
 
 #include "ruleaction_builtins_p.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 
@@ -338,12 +339,76 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::DecorationChain),
         .validate =
             [](const QJsonObject& p) {
-                return p.contains(ActionParam::Chain) && p.value(ActionParam::Chain).isArray();
+                if (!p.contains(ActionParam::Chain) || !p.value(ActionParam::Chain).isArray()) {
+                    return false;
+                }
+                // The rule chain REPLACES the config chain wholesale, after every
+                // config-side bound has been applied, and lands straight in the
+                // compositor's per-entry fold — where each entry costs a draw and
+                // a buffer slot every frame. Unbounded, a hand-edited rules.json
+                // could ask for thousands of folds on every matched window, while
+                // the config path capped the same list at kMaxChainEntries.
+                const QJsonArray chain = p.value(ActionParam::Chain).toArray();
+                if (chain.size() > MaxDecorationChainEntries) {
+                    return false;
+                }
+                for (const QJsonValue& entry : chain) {
+                    if (!entry.isString() || entry.toString().size() > MaxChainPackIdLength) {
+                        return false;
+                    }
+                }
+                // Its OWN key, `presetIds`, carrying `{packId: presetId}`. It used
+                // to reuse `presetId`, which the two scalar shader actions carry
+                // as a STRING — so one key meant two types across three actions in
+                // one vocabulary, the consumer's `.toObject()` silently swallowed a
+                // scalar written here, and the action could not declare a
+                // ParamSchema entry for it at all. Type-checked now, and of string
+                // values, so a wrong shape is refused at load rather than ignored
+                // at resolve.
+                if (p.contains(ActionParam::PresetIds)) {
+                    const QJsonValue presets = p.value(ActionParam::PresetIds);
+                    if (!presets.isObject()) {
+                        return false;
+                    }
+                    const QJsonObject byPack = presets.toObject();
+                    // Bounded on all three axes, like the chain array above and for the
+                    // same stated reason: rules.json is hand-editable and this validator
+                    // is the only boundary. Values alone were bounded, so an object of
+                    // thousands of megabyte-long pack keys loaded, persisted, and was
+                    // re-serialised on every rules.json write — inert at resolve, since
+                    // only chain pack ids are looked up, but carried forever.
+                    if (byPack.size() > MaxDecorationChainEntries) {
+                        return false;
+                    }
+                    for (auto it = byPack.constBegin(); it != byPack.constEnd(); ++it) {
+                        if (it.key().size() > MaxChainPackIdLength) {
+                            return false;
+                        }
+                        if (!it.value().isString() || it.value().toString().size() > MaxShaderPresetIdLength) {
+                            return false;
+                        }
+                    }
+                }
+                // And the per-pack `params` blob beside them, which was the one key
+                // here nothing checked — not even that it is an object. Its nested
+                // `{packId: {paramId: value}}` form is why paramsBlobIsSane accepts
+                // one level of nesting.
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params)},
+        // PresetIds, not PresetId: nested `{packId: presetId}`, mirroring how
+        // Params is already nested per pack, so one chain can carry a preset on
+        // one layer and hand-tuned values on the next. A separate key because the
+        // scalar PresetId the other two shader actions use must keep one type.
+        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params), QString(ActionParam::PresetIds)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")}},
+        // The preset entry is declared too, so `paramKeyOfKind(type,
+        // "shaderPreset")` answers for this action the way it does for the two
+        // scalar shader ones. It could not be declared while the key's type varied
+        // by action, which left the one action carrying a nested preset invisible
+        // to the discovery API its siblings are visible through.
+        .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")},
+                   P{.key = QString(ActionParam::PresetIds), .kind = QStringLiteral("shaderPreset")}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 6,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
@@ -621,7 +686,13 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::AlgorithmParams),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Algorithm);
+                if (!hasNonEmptyString(p, ActionParam::Algorithm)) {
+                    return false;
+                }
+                // The custom-parameter values are validated against the algorithm's
+                // declared schema at apply time, but their SHAPE and size are this
+                // validator's job — it is the only boundary rules.json crosses.
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Algorithm), QString(ActionParam::Params)},

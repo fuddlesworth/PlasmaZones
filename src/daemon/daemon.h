@@ -319,9 +319,13 @@ private:
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
 
-    // init() phase methods, run in order from the thin init() (daemon.cpp); the
-    // order is load-bearing. Defined across daemon/init_*.cpp, shader_warmup.cpp
-    // and animation_profiles.cpp.
+    // init() phase methods, DECLARED in the order init() (daemon.cpp) calls them,
+    // because that order is load-bearing; each dependency is named at its call site
+    // there. Defined across daemon/init_*.cpp, shader_warmup.cpp, animation_profiles.cpp.
+    /// Build the preset store, hand it to the overlay service, and connect each pack
+    /// registry's reload edge. Runs AFTER those registries exist, so it seeds from what
+    /// they already found rather than waiting for a reload.
+    void setupShaderPresets();
     void setupShaderWarmBakes();
     void initLayoutAndSettingsWiring();
     void initCoreAdaptors();
@@ -1256,6 +1260,14 @@ private:
     /// before resetting this registry.
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
+    /// Named parameter presets for the three families the daemon resolves (animation,
+    /// surface, overlay; pointer is compositor-only): the user's own with live reload,
+    /// plus the ones packs declare. An assignment stores a preset id and its own edits
+    /// rather than a copy, so this turns that reference into rendered parameters.
+    /// Declared AFTER m_overlayService, like the registries above: stop() nulls that
+    /// borrow before this resets.
+    std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
+
     /// User-authored curve scanner. Scans `plasmazones/curves` from the XDG
     /// data dirs and registers what it finds with `CurveRegistry`, with
     /// live-reload enabled. Owned by the daemon for process lifetime; the
@@ -1529,43 +1541,38 @@ private:
     /// screenRemoved tail drops unplugged screens.
     QHash<QString, QString> m_lastAnnouncedTemplateByScreen;
 
-    // Compression latch for the deferred rulesChanged → reconcile pass. The
-    // store emits rulesChanged synchronously from inside every mutation, and
-    // the daemon's own assignment writes (mode toggle, quick layouts, KCM
-    // batch) are stored as rules — reconciling inline re-entered the full
-    // assignment-apply path mid-toggle (double OSDs, a resnap racing the
-    // engine flip). Deferring to the next event-loop pass lets the write's
-    // own layoutAssigned tail re-prime the snapshot first, so self-inflicted
-    // edits diff empty and only external rule edits actually apply.
+    // Compression latch for the deferred rulesChanged → reconcile pass. The store emits
+    // rulesChanged synchronously from inside every mutation, and the daemon's own
+    // assignment writes (mode toggle, quick layouts, KCM batch) are stored as rules, so
+    // reconciling inline re-entered the full assignment-apply path mid-toggle (double
+    // OSDs, a resnap racing the engine flip). Deferring to the next event-loop pass lets
+    // the write's own layoutAssigned tail re-prime the snapshot first, so self-inflicted
+    // edits diff empty and only external rule edits apply.
     bool m_reconcileAssignmentsPending = false;
 
     // Compression latch for the deferred colour-scheme overlay refresh
-    // (init_engines.cpp). Separate from m_reconcileAssignmentsPending on
-    // purpose: the two coalesce independent work off different signals, and
-    // sharing one flag let whichever fired first in an event-loop turn swallow
-    // the other's pass. The refresh is deferred rather than run inline because
-    // it can recreate QQuickWindows while the palette-change event that
-    // triggered it is still being delivered.
+    // (init_engines.cpp). Separate from m_reconcileAssignmentsPending on purpose: the
+    // two coalesce independent work off different signals, and sharing one flag let
+    // whichever fired first in an event-loop turn swallow the other's pass. The refresh is deferred rather than run
+    // inline because it can recreate QQuickWindows while the palette-change event that triggered it is still being
+    // delivered.
     bool m_colorSchemeRefreshPending = false;
 
-    // Raised (RAII, via QScopedValueRollback) around the bulk assignment writes
-    // in autotile.cpp so reconcileActiveAssignments early-returns instead of
-    // running a full reconcile per flipped rule over a half-written set. Scoped
-    // to that ONE consumer deliberately: the rule store stays unblocked so the
-    // exclude refilter, overlay refresh, Settings::onRuleStoreChanged and the
-    // RuleAdaptor D-Bus relay still observe the edit.
+    // Raised (RAII, via QScopedValueRollback) around autotile.cpp's bulk assignment
+    // writes so reconcileActiveAssignments early-returns instead of running a full
+    // reconcile per flipped rule over a half-written set. Scoped to that ONE consumer
+    // deliberately: the rule store stays unblocked, so the exclude refilter, overlay
+    // refresh, Settings::onRuleStoreChanged and the RuleAdaptor relay still see the edit.
     bool m_suppressAssignmentReconcile = false;
 
-    // Last observed tiled-window count per screen, tracked so the engine's
-    // placementChanged stream only re-resolves the per-screen tiling algorithm
-    // when the count actually changes (a Field::TiledWindowCount rule keys on
-    // it). Without this gate every retile (drag, resize) would re-walk the
-    // assignment cascade. The value carries the ENGINE that recorded it: both
-    // the autotile and scrolling gates write here, and after a mode flip the
-    // incoming engine's first count must not compare against the outgoing
-    // engine's cache (an equal count would swallow the re-resolve). The key
-    // stays the bare screenId so the physical-id prune in start.cpp keeps
-    // matching.
+    // Last observed tiled-window count per screen, so the engine's placementChanged
+    // stream only re-resolves the per-screen tiling algorithm when the count actually
+    // changes (a Field::TiledWindowCount rule keys on it); without the gate every
+    // retile re-walked the assignment cascade. The value carries the ENGINE that
+    // recorded it, because after a mode flip the incoming engine's first count must not
+    // compare against the outgoing one's cache — an equal count would swallow the
+    // re-resolve. The key stays the bare screenId so start.cpp's physical-id prune
+    // keeps matching.
     QHash<QString, QPair<const void*, int>> m_lastTiledCountByScreen;
 
     // Snap-float restore entries collected by handleEngineWindowsReleased
@@ -1588,11 +1595,20 @@ private:
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not
     // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
     QThreadPool m_shaderBakePool;
-    /// Zone-path shadersChanged → warm-bake wiring, held so a stop() → init()
-    /// cycle disconnects the prior handler instead of stacking a second one
-    /// (m_shaderRegistry is ctor-owned and survives stop(), unlike the
-    /// animation/surface registries which are recreated each init).
+    /// Zone-path shadersChanged → warm-bake wiring, held so a stop() → init() cycle
+    /// disconnects the prior handler instead of stacking a second one (m_shaderRegistry
+    /// is ctor-owned and survives stop(); the animation and surface ones are recreated).
     QMetaObject::Connection m_zoneWarmBakeConnection;
+    /// The overlay preset sync, on the ctor-owned m_shaderRegistry — the other
+    /// connection to the one sender that outlives stop(). It reaches the preset store,
+    /// which stop() resets, so it is severed there and at the TOP of
+    /// setupShaderPresets, before the store is replaced. The other two syncs are held
+    /// for the same reason even though their senders are recreated: that they are is a
+    /// property of how init() sequences three independent phase methods, which neither
+    /// phase enforces, so re-running setupShaderPresets alone stacked a second copy.
+    QMetaObject::Connection m_overlayPresetSyncConnection;
+    QMetaObject::Connection m_animationPresetSyncConnection;
+    QMetaObject::Connection m_surfacePresetSyncConnection;
     /// Skip-unchanged gate for the warm bakes: "<category>:<id>" → last
     /// scheduled fingerprint (vert path + vert mtime + frag path + frag mtime +
     /// include-candidate paths + mtimes + param preamble). The fingerprint is

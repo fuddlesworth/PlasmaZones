@@ -84,6 +84,13 @@ inline FoldInputs foldInputsOf(const WindowDecoration& wb)
 
 } // namespace
 
+PhosphorSurfaceShaders::DecorationProfile
+PlasmaZonesEffect::resolveDecorationProfile(const QString& path, PhosphorShaders::ShaderFamily family) const
+{
+    return PhosphorSurfaceShaders::withPresetsResolved(m_decorationTree.resolve(path), m_shaderManager.presetRegistry(),
+                                                       family);
+}
+
 void PlasmaZonesEffect::setupDecorationManager()
 {
     connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,
@@ -252,7 +259,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // shader whose samplers point at the textures just freed — the unbound-sampler
         // black flash both files document at length.
         //
-        // No live caller can pass a null w today (all eight guard first), so this is
+        // No live caller can pass a null w today (all ten guard first), so this is
         // defence in depth rather than a live path. It is here because the two sites
         // must not disagree about what "the exact window" means, and they did.
         KWin::EffectWindow* const target = resolveDecorationTarget(windowId, w);
@@ -309,7 +316,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
     const QString surfacePath = resolveSurfacePathFor(windowId, w);
-    const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
+    const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = resolveDecorationProfile(surfacePath);
     QStringList userPacks = resolvedProfile.enabledChain();
 
     // Rule-resolved decoration-chain override: a matched
@@ -435,6 +442,21 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // membership change) because they ride the same updateWindowDecoration call.
     // A pack the registry cannot resolve gets no entry; consumers fall back
     // to the compiled pack's baked baseline.
+    //
+    // Kept here as well as at the top of updateAllDecorations, because this
+    // function has callers that do not come through the sweep. After the first call
+    // it is a bool test.
+    //
+    // The FIRST call emits effectsChanged inline, whose handler drops every compiled
+    // pack and runs a full updateAllDecorations() — which decorates this window too,
+    // and then this call resumes and re-does it. The sweep's generation check does
+    // NOT cover that: the generation is read once, at updateAllDecorations entry, so
+    // it protects that function's own loop and nothing else. What makes the
+    // resumption harmless here is that nothing is cached across this line except the
+    // `prior*` locals read below, and the re-compile is lazy, so the outer call
+    // simply re-inserts an identical WindowDecoration over the nested one's. It is
+    // duplicated work on one call per session, not a stale read. Anything this
+    // function starts caching above this line has to move below it.
     ensureSurfaceRegistryPaths();
     QVariantMap allPackParams = resolvedProfile.effectiveParameters();
     if (ruleChain) {
@@ -442,8 +464,38 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // pack owns that pack's values outright (mirroring the animation
         // override's params semantics); packs the rule says nothing about
         // keep the tree/default values.
-        for (auto it = ruleChain->params.constBegin(); it != ruleChain->params.constEnd(); ++it) {
-            allPackParams.insert(it.key(), it.value());
+        // ONE pass over the union of the two maps, and every pack in it goes
+        // through resolveParams.
+        //
+        // A rule's preset resolves against the RULE's own params for that pack, not
+        // against the merged map. A tree node's presetId flattens against that
+        // node's own deltas; the merged map here holds the TREE's already-flattened
+        // values, so passing it as the deltas let the tree's values win every key
+        // and the rule's preset became a no-op. Using the rule's own params makes a
+        // rule layer replace the tree layer outright, which is the per-pack REPLACE
+        // semantics stated immediately above.
+        //
+        // A pack the rule gives params for but NAMES NO PRESET for goes through the
+        // same call, with an empty id. That is not a formality: resolveParams is the
+        // only place a pack's declared min/max is enforced, and both flatten twins
+        // (PhosphorSurfaceShaders::withPresetsResolved and its animation sibling)
+        // deliberately route every entry through it for exactly that reason. Writing
+        // a rule's raw values straight in left rules.json — a hand-editable file
+        // whose validator is the only other boundary — as the one door a parameter
+        // could reach a uniform through unbounded, while the identical value coming
+        // from the tree was clamped.
+        QStringList rulePacks = ruleChain->params.keys();
+        for (const QString& packId : ruleChain->presetIds.keys()) {
+            if (!rulePacks.contains(packId)) {
+                rulePacks.append(packId);
+            }
+        }
+        for (const QString& packId : rulePacks) {
+            allPackParams.insert(
+                packId,
+                m_shaderManager.presetRegistry().resolveParams(PhosphorShaders::ShaderFamily::Surface, packId,
+                                                               ruleChain->presetIds.value(packId).toString(),
+                                                               ruleChain->params.value(packId).toMap()));
         }
     }
     // Shared accent fallback for the plain layers below: the live system
@@ -737,6 +789,28 @@ void PlasmaZonesEffect::updateAllDecorations()
     // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
     // walk below would deref the null.
     if (!KWin::effects) {
+        return;
+    }
+
+    // Populate the surface registry's search paths HERE, before the sweep, and
+    // notice whether doing so re-entered this function.
+    //
+    // The first call scans synchronously and emits effectsChanged INLINE, which
+    // reaches the handler that drops the surface caches and runs a full nested
+    // updateAllDecorations. Called from inside the per-window path, as it used to
+    // be, that happened partway through the outer sweep: the nested call swept
+    // every window correctly and the outer call then walked every remaining
+    // window a second time, against caches the handler had just cleared. One
+    // redundant full sweep plus a cold capture cache, once per session.
+    //
+    // It did not CORRUPT anything, unlike the pointer pass's twin of this (the
+    // outer loop there resumed into a container the nested call had rebuilt), so
+    // the fix is only about the wasted sweep: if the nested call already ran, it
+    // reconciled every window against the same state this one would, and there is
+    // nothing left to do.
+    const quint64 sweepAtEntry = ++m_decorationSweepGeneration;
+    ensureSurfaceRegistryPaths();
+    if (m_decorationSweepGeneration != sweepAtEntry) {
         return;
     }
 

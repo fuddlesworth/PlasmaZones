@@ -56,6 +56,88 @@ Item {
     // starts from what the layout is actually drawing with.
     readonly property string _editShaderId: (root._hasOverride || root.isBaseline) ? (root._raw.shaderId || "") : (root._resolved.shaderId || "")
     readonly property var _editParams: (root._hasOverride || root.isBaseline) ? (root._raw.parameters || ({})) : (root._resolved.parameters || ({}))
+    /// The preset this node points at, read the same way the parameters are:
+    /// the direct override when there is one, else what the layout inherits,
+    /// so a card with no override still shows the preset it draws with.
+    readonly property string _editPresetId: (root._hasOverride || root.isBaseline) ? (root._raw.presetId || "") : (root._resolved.presetId || "")
+    /// What this node stores of its own, with NO fallback to the inherited map.
+    ///
+    /// `_editParams` deliberately falls back so a latched-open card previews
+    /// what the layout draws with. The preset axis cannot use that: a node that
+    /// inherits its values and carries only a preset id stores no delta, and
+    /// reading the inherited map as the delta map reported the assignment
+    /// "Modified", marked every inherited row "Changed here", and offered an
+    /// Update-preset that would have written the ancestor's values into the
+    /// shared preset.
+    readonly property var _ownParams: root._raw.parameters || ({})
+
+    /// `{ paramId: true }` for every key this assignment stores of its own, and
+    /// empty with no preset engaged (with nothing underneath, marking every row
+    /// would say nothing). Twin of PackEditorBody's.
+    /// The delta KEY SET as a stable string, for the reason PackEditorBody's twin
+    /// gives: the map is reassigned on every slider tick while its key set stands
+    /// still, and the marks object's identity change re-marks every visible row.
+    readonly property string _deltaKeySignature: {
+        if (root._editPresetId.length === 0)
+            return "";
+        return Object.keys(root._ownParams || {}).sort().join(",");
+    }
+
+    readonly property var _overriddenParams: {
+        // `_ownParams`, never `_editParams`: the latter can be the inherited map.
+        const signature = root._deltaKeySignature;
+        if (signature.length === 0)
+            return ({});
+        const marks = {};
+        for (const key of signature.split(","))
+            marks[key] = true;
+        return marks;
+    }
+
+    /// What the overlay actually renders with: the assigned preset's values
+    /// with this node's own edits laid over the top.
+    ///
+    /// `_editParams` holds only the DELTAS, because that is what the node
+    /// stores. Showing those alone rendered the pack's plain defaults for every
+    /// parameter the preset supplies, so picking a preset looked inert.
+    ///
+    /// Imperative, like the rest of this card's model state: the preset lives
+    /// on disk and a binding would never re-evaluate when it is retuned.
+    property var _effectiveParams: ({})
+
+    function _recomputeEffectiveParams() {
+        const deltas = root._editParams || {};
+        // NOT named `bridge`: this card already has a `bridge` property, and
+        // that one is the overlays page controller. Shadowing it here read as
+        // a call on the page controller both to a human and to the QML-contract
+        // guard test.
+        // Named `presetBridge`, the spelling the QML-reachability guard in
+        // test_shaderpresetbridge.cpp sweeps for: a local called something else put this
+        // call site outside the one check that catches a renamed bridge method.
+        const presetBridge = settingsController.overlayPresets;
+        if (!presetBridge || root._editPresetId.length === 0 || root._editShaderId.length === 0) {
+            root._effectiveParams = deltas;
+            return;
+        }
+        // The bridge's own merge, which is `ShaderPresetRegistry::resolveParams` —
+        // the same one the daemon resolves through, so this card cannot disagree
+        // with what is actually drawn. It also applies the pack's declared-range
+        // clamp, which the hand-written overlay this replaced did not.
+        root._effectiveParams = presetBridge.effectiveParams(root._editShaderId, root._editPresetId, deltas);
+    }
+
+    on_EditParamsChanged: root._recomputeEffectiveParams()
+    on_EditPresetIdChanged: root._recomputeEffectiveParams()
+    on_EditShaderIdChanged: root._recomputeEffectiveParams()
+
+    // A preset retuned anywhere has to move this card too.
+    Connections {
+        target: settingsController.overlayPresets
+        function onPresetsChanged(packId) {
+            if (packId === root._editShaderId)
+                root._recomputeEffectiveParams();
+        }
+    }
 
     // Parameter DECLARATIONS for the shader being edited. Imperative like
     // the rest of the model state: a function-call binding on
@@ -227,6 +309,9 @@ Item {
     Component.onCompleted: {
         root._refreshEffects();
         root.refresh();
+        // After refresh(), which is what populates the node state the
+        // effective map is derived from.
+        root._recomputeEffectiveParams();
     }
     Component.onDestruction: {
         // Flush a still-pending debounced edit — the Timer dies with the
@@ -341,7 +426,13 @@ Item {
                     Layout.fillWidth: true
                     visible: root._editShaderId.length > 0
                     parameters: root._paramDefs
-                    currentValues: root._editParams
+                    currentValues: root._effectiveParams
+                    // Merged values go in, so mark which of them are this
+                    // assignment's own. `_editParams` is the stored delta map and
+                    // presence in it is the pin, so no comparison is needed —
+                    // which matters, because a delta equal to the preset's value
+                    // is still a delta.
+                    overriddenParams: root._overriddenParams
                     effectId: root._editShaderId
                     subjectMissing: root._editShaderMissing
                     enableLocking: true
@@ -357,7 +448,58 @@ Item {
                     }
                     onResetRequested: function (defaults) {
                         root._dropPendingParams();
-                        root._writeNode(root._editShaderId, defaults);
+                        // With a preset engaged the baseline is the PRESET, not
+                        // the pack's defaults — that is what the card is showing.
+                        // Writing the defaults would pin every parameter as a
+                        // delta over a preset that stays selected, so the card
+                        // would still claim the preset while following none of
+                        // it, and a later retune would reach nothing. Dropping
+                        // the deltas is the reset.
+                        if (root._editPresetId.length > 0)
+                            root._writeNode(root._editShaderId, ({}));
+                        else
+                            root._writeNode(root._editShaderId, defaults);
+                    }
+                }
+
+                // Below the parameters, matching the pack browser's detail
+                // dialog and the chain rows, so every place a pack is tuned
+                // agrees about where its presets live. Overlays embed the
+                // params editor directly rather than going through
+                // PackEditorBody (there is no preview here), so the row is
+                // placed alongside instead of riding in with it.
+                PresetRow {
+                    Layout.fillWidth: true
+                    // No `visible` override here. The component's own guard already
+                    // covers `packId.length > 0` AND the null-bridge case, and
+                    // restating only the first half replaced the second: with a null
+                    // overlayPresets the row would have rendered and its Save, Update,
+                    // Rename and Delete buttons would each have called through it.
+                    packId: root._editShaderId
+                    packDisplayName: root._shaderName(root._editShaderId)
+                    presetBridge: settingsController.overlayPresets
+                    presetId: root._editPresetId
+                    currentValues: root._effectiveParams
+                    // The assignment's own stored deltas, not the merged view and
+                    // not the inherited one, so the modified state reflects what
+                    // is actually stored at this node.
+                    deltas: root._ownParams
+                    onPresetSelected: function (id) {
+                        settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
+                        root.refresh();
+                    }
+                    // Same write as picking None here: the assignment keeps its own
+                    // values and only the reference goes. It is a separate signal
+                    // because a PREVIEW host cannot treat the two alike.
+                    onPresetDeleted: function (id) {
+                        settingsController.overlaysPage.setShaderPreset(root.assignmentPath, "");
+                        root.refresh();
+                    }
+                    onRevertRequested: {
+                        // Dropping the deltas is the whole revert: every value
+                        // then resolves from the preset again.
+                        root._dropPendingParams();
+                        root._writeNode(root._editShaderId, ({}));
                     }
                 }
             }

@@ -166,7 +166,7 @@ QVariantMap AnimationsPageController::rawShaderProfile(const QString& path) cons
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return {};
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const ShaderProfileTree& tree = shaderTree();
     if (!tree.hasOverride(path))
         return {};
     return shaderProfileToMap(tree.directOverride(path));
@@ -180,7 +180,7 @@ QVariantMap AnimationsPageController::allRawShaderProfiles() const
         return out;
     // One tree fetch for every path, which is the whole point of this overload
     // existing beside rawShaderProfile().
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const ShaderProfileTree& tree = shaderTree();
     const QStringList paths = tree.overriddenPaths();
     for (const QString& path : paths)
         out.insert(path, shaderProfileToMap(tree.directOverride(path)));
@@ -192,7 +192,7 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return {};
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const ShaderProfileTree& tree = shaderTree();
     // resolveShaderWithDefault (not bare resolve) so the built-in per-event
     // default — window-morph for the window geometry events — shows as the current
     // value for an unset event. A user override (incl. an explicit "None")
@@ -224,7 +224,7 @@ QStringList AnimationsPageController::stockSuppressedEvents() const
     if (!m_settings || !m_settings->animationsEnabled()) {
         return owned;
     }
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const ShaderProfileTree& tree = shaderTree();
     // Mirrors the compositor's packOwnsEvent gate (syncStockEffectSuppression
     // in the kwin effect): tree-resolved effectId non-empty AND the pack
     // applies to the event's contract class. One deliberate divergence: an
@@ -357,7 +357,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         disabledProfile.effectId = QString();
         if (!parameters.isEmpty())
             disabledProfile.parameters = parameters;
-        ShaderProfileTree tree = m_settings->shaderProfileTree();
+        ShaderProfileTree tree = shaderTree();
         // Compare-and-skip relies on `ShaderProfile::operator==` being
         // engaged-state-sensitive (forwards to `std::optional::operator==`,
         // which treats `nullopt` and `optional(empty)` as DISTINCT).
@@ -384,7 +384,15 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (!parameters.isEmpty())
         profile.parameters = parameters;
 
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
+    // Carry the preset reference across a PROMOTION of the same pack, exactly as the
+    // group writer does (setShaderOverrideOnPaths) and the overlay writer does. This
+    // builds a fresh profile, so without it a motion set applying the pack it already
+    // resolved to dropped the preset; a genuine pack SWITCH still drops it, because
+    // presets are keyed by pack.
+    const ShaderProfile stored = tree.directOverride(path);
+    if (stored.effectId.has_value() && *stored.effectId == effectId)
+        profile.presetId = stored.presetId;
     // Short-circuit when the tree is already at the requested state — avoids
     // a same-tree write that would cycle through Settings + the boomerang
     // and fire a spurious pendingChangesChanged.
@@ -401,7 +409,7 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
     if (!tree.hasOverride(path))
         return false;
     tree.clearOverride(path);
@@ -414,7 +422,7 @@ int AnimationsPageController::shaderOverrideDescendantCount(const QString& path)
 {
     if (!m_settings)
         return 0;
-    return int(collectShaderOverrideDescendants(m_settings->shaderProfileTree(), path).size());
+    return int(collectShaderOverrideDescendants(shaderTree(), path).size());
 }
 
 int AnimationsPageController::clearShaderOverrideDescendants(const QString& path)
@@ -422,7 +430,7 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
     const QStringList toClear = collectShaderOverrideDescendants(tree, path);
     if (toClear.isEmpty())
         return 0;
@@ -438,7 +446,7 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
     using namespace PhosphorAnimationShaders;
     if (!m_settings || effectId.isEmpty())
         return {};
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const ShaderProfileTree& tree = shaderTree();
     const QStringList overridden = tree.overriddenPaths();
     QVariantList out;
     for (const QString& p : overridden) {

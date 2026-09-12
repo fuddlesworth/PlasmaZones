@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Shader presets, for every kind of pack**: a preset is a named set of values for one shader pack, so a look you have tuned can be saved once and used in several places. Only zone overlays had them before, and the only thing you could do with one was load it into the preview, which forgot it again the moment you closed the window. Presets now work for window animations, decorations, the pointer and zone overlays alike, and you assign one rather than copying its values. The preset row sits above the settings wherever a pack is tuned, which is the animation event cards, each layer of a decoration or pointer chain, the overlay assignment cards and the pack browser. Because an assignment points at the preset instead of holding a copy, editing the preset moves everything using it straight away, with no restart and nothing to reapply. Change a setting on top of an assigned preset and it is marked as modified, which means that one value stays as you set it while everything you have not touched keeps following the preset. From there you can put it back, or fold it into the preset for everything else using it. Your presets live in `~/.local/share/plasmazones/shader-presets` as one small file each, so they are easy to keep or pass to someone else, and a file edited by hand or by another program is picked up without a restart. Pack authors can ship presets too, by naming them in the pack's `metadata.json`. Those are listed beside your own and marked as belonging to the pack, and you can copy one to get an editable starting point. Rules can name a preset as well, so a rule that gives one application its own look can point at the same preset everything else uses. Renaming a preset is safe, because what an assignment remembers is not its name. Deleting one leaves everything that used it looking exactly as it does now, since each assignment keeps the values it was already drawing with. Any presets you had saved from the old zone overlay dialog are brought across the first time this version runs. ([#1100](https://github.com/fuddlesworth/PlasmaZones/pull/1100))
+
+### Changed
+
+- **Save Preset and Load Preset are gone from the shader browser**: they wrote loose files that were identified by where you happened to save them, which is the one thing an assignment cannot point at. The preset row that replaces them does the same job and rather more, and it is on every pack rather than only zone overlays. Presets you saved with the old buttons are imported automatically. ([#1100](https://github.com/fuddlesworth/PlasmaZones/pull/1100))
+
 ### Fixed
 
 - **The pointer trail disappeared when you shook the mouse**: shaking the pointer is the gesture that ought to draw the longest trail, and instead the whole trail blinked out in a single frame and stayed out until the shake ended. Plasma magnifies the pointer during a shake by hiding the system cursor and drawing its own larger copy, and PlasmaZones read that hidden system cursor as "there is no pointer here to decorate", so it threw the trail away on every mouse move for as long as the magnification lasted. It now looks at whether there is a cursor image at all, which is the signal that separates a pointer that has genuinely gone from one that another effect is drawing. Under Plasma's zoom the trail still follows the unmagnified pointer rather than the magnified copy, which needs a fix of its own. ([#1097](https://github.com/fuddlesworth/PlasmaZones/pull/1097))
@@ -2456,7 +2464,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.16...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.17...HEAD
+[3.4.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.16...v3.4.17
 [3.4.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.15...v3.4.16
 [3.4.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.14...v3.4.15
 [3.4.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.13...v3.4.14

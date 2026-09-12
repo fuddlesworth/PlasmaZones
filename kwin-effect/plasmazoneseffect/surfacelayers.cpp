@@ -305,7 +305,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // Pass `w`: the id-only overload's exact-id lookup can miss, and a
             // miss here would bake the wrong profile's parameter baselines
             // into the SHARED compiled-pack entry (see the overload doc).
-            profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId, w));
+            profile = resolveDecorationProfile(resolveSurfacePathFor(windowId, w));
         }
         return compiledPack(packId, *profile);
     };

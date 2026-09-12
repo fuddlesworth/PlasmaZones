@@ -18,6 +18,11 @@
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
+// The header holds m_presetStore as a unique_ptr over a forward declaration, so the
+// complete type has to be here, where ~Daemon instantiates its deleter. The unity
+// build hid this behind a neighbour's include; the non-unity build is where it shows.
+#include <PhosphorShaders/ShaderPresetStore.h>
+
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -317,7 +322,17 @@ bool Daemon::init()
     // precede setupShaderWarmBakes(), which borrows both.
     setupAnimationShaderEffects();
     setupSurfaceShaderEffects();
+    // After both, because it seeds pack-declared presets from what those
+    // registries have already discovered rather than waiting on a reload.
+    setupShaderPresets();
     setupShaderWarmBakes();
+    // MUST stay after setupShaderPresets(): this phase hands the settings
+    // object to the overlay service, whose setSettings() is what first applies
+    // the animation shader tree, resolving each profile through the preset
+    // registry. The ctor-time pass runs with that registry null and an empty
+    // tree, so this call is the only one that lands a preset-carrying assignment
+    // at startup. Swap the two and animation presets silently do not apply until
+    // the user's first tree edit.
     initLayoutAndSettingsWiring();
     initCoreAdaptors();
     initEnginesAndWiring();

@@ -136,6 +136,59 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
         merged.insert(it.key(), it.value());
     }
 
+    // BOUNDED, because the merge above is forward-only and this key has no schema
+    // coercion either: a field a hand edit puts in config.json is preserved by every
+    // later write, so without a cap an unbounded string or an object of thousands of
+    // junk keys is carried forever, re-serialised on each save. The motion TREE's
+    // setter bounds its own bodies for the same reason.
+    //
+    // Unknown keys are kept rather than dropped, which is the documented contract
+    // above (a newer build's field must survive an older build's write) and what
+    // test_settings_animation_profile pins. So this bounds SIZE and LENGTH only: the
+    // two things a preserved unknown field can cost.
+    constexpr int kMaxProfileFields = 64;
+    constexpr int kMaxProfileStringChars = 1024;
+    if (merged.size() > kMaxProfileFields) {
+        // The KNOWN fields and the incoming write go in FIRST, then whatever room is
+        // left goes to the unknown keys. A plain truncation would have dropped the
+        // user's edit: QJsonObject iterates key-SORTED, so 64 junk keys sorting before
+        // `curve` (any "a…" or "b…" key does) took every slot, the real fields fell off
+        // the end, and the setter still wrote and emitted — the edit lost in silence.
+        QJsonObject capped;
+        for (auto it = incoming.constBegin(); it != incoming.constEnd(); ++it) {
+            capped.insert(it.key(), it.value());
+        }
+        using P = PhosphorAnimation::Profile;
+        const QList<QLatin1String> knownFields{
+            QLatin1String(P::JsonFieldCurve),           QLatin1String(P::JsonFieldDuration),
+            QLatin1String(P::JsonFieldMinDistance),     QLatin1String(P::JsonFieldSequenceMode),
+            QLatin1String(P::JsonFieldStaggerInterval), QLatin1String(P::JsonFieldPresetName),
+        };
+        for (const QLatin1String& field : knownFields) {
+            if (capped.size() >= kMaxProfileFields) {
+                break;
+            }
+            if (!capped.contains(field) && merged.contains(field)) {
+                capped.insert(field, merged.value(field));
+            }
+        }
+        for (auto it = merged.constBegin(); it != merged.constEnd() && capped.size() < kMaxProfileFields; ++it) {
+            if (!capped.contains(it.key())) {
+                capped.insert(it.key(), it.value());
+            }
+        }
+        // Named rather than silent, like every other bounder on this path.
+        qCWarning(lcConfig) << "setAnimationProfile: the stored profile carries" << merged.size() << "fields; keeping"
+                            << capped.size() << "and dropping the rest";
+        merged = capped;
+    }
+    for (const QString& key : merged.keys()) {
+        const QJsonValue value = merged.value(key);
+        if (value.isString() && value.toString().size() > kMaxProfileStringChars) {
+            merged.insert(key, value.toString().left(kMaxProfileStringChars));
+        }
+    }
+
     if (merged == current) {
         // Nothing to write — skip both the store write and every signal.
         // Guards the slider-drag-at-30-Hz signal-storm case: a merge that

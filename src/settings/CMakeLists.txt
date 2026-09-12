@@ -102,6 +102,8 @@ set(plasmazones_settings_SRCS
     stores/animationpresetlibrary.cpp
     # Shared set store (motion, decoration and overlay sets) and the motion-set
     # domain closures that specialise it.
+    stores/shaderpresetbridge.h
+    stores/shaderpresetbridge.cpp
     stores/shadersetstore.h
     stores/shadersetstore.cpp
     services/motionsetdomain.h
@@ -424,6 +426,8 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/rules/ActionListEditor.qml
         qml/pages/rules/ActionRow.qml
         qml/pages/rules/ActionParamEditors.qml
+        qml/pages/rules/ActionPresetEditor.qml
+        qml/pages/rules/ActionShaderParamsEditor.qml
         qml/pages/animations/InertAnimationEventChip.qml
         qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml
@@ -540,6 +544,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/shaders/PreviewCanvas.qml
         qml/pages/shaders/PackPreview.qml
         qml/pages/shaders/PackEditorBody.qml
+        qml/pages/shaders/PresetRow.qml
         qml/pages/shaders/DecorationChainPreview.qml
         qml/pages/shaders/DecorationPreviewPane.qml
         qml/pages/shaders/AnimationPreviewPane.qml

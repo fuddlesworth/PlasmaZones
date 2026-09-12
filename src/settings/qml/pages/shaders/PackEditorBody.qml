@@ -10,10 +10,10 @@ import org.plasmazones.common as PZCommon
  * @brief The body every "configure one pack" surface shows: its parameters
  * beside a live preview of it.
  *
- * Used by the decoration and pointer chain rows (through ChainEditor's row
- * expansion) and by the animation event card. Those are the three places a
- * pack is tuned, and before this they each laid the same two children out
- * themselves.
+ * Instantiated in two places: ChainEditor's expanded chain row, which the
+ * decoration surface card and the rules action editor both host (the rules one
+ * is why `previewKind` may be empty, see below), and the animation event card.
+ * Before this they each laid the same two children out themselves.
  *
  * ## Side by side, not stacked
  *
@@ -55,6 +55,9 @@ GridLayout {
     // ── The pack ─────────────────────────────────────────────────────────
     /// The pack being configured. Identifies it to both children.
     required property string packId
+    /// A human name for the pack, forwarded to PresetRow so a screen reader can tell
+    /// one expanded chain layer's preset combo from the next. Defaults to the id.
+    property string packDisplayName: packId
     /// The pack's declared parameter schema.
     property var parameters: []
     /// The user's current values for them.
@@ -70,9 +73,136 @@ GridLayout {
     property bool enableReset: true
     property bool enableImage: false
 
+    // ── Presets ──────────────────────────────────────────────────────────
+    /// The family's `ShaderPresetBridge`, REQUIRED, and forwarded to PresetRow.
+    ///
+    /// Required rather than defaulting to null, for the reason written up on
+    /// PresetRow's own copy: null was standing in for "this host has no preset
+    /// support", which made a forgotten binding look exactly like a deliberate
+    /// opt-out. A host that means to go without binds `supportsPresets: false`.
+    required property QtObject presetBridge
+    /// Whether this host has a preset axis at all; forwarded to PresetRow.
+    property bool supportsPresets: true
+    /// The assignment's OWN stored parameter map, REQUIRED, or `null` from a host
+    /// with no assignment behind it.
+    ///
+    /// Distinct from `currentValues`, which is the map the rows DISPLAY and is
+    /// therefore the merged or resolved view. Conflating the two is a live bug
+    /// this property exists to end: the animation host binds `currentValues` from
+    /// `resolvedShaderProfile().parameters`, a tree walk-up, so using it as the
+    /// delta map made an event that inherits everything and stores only a preset
+    /// report "Modified", mark every inherited row as "Changed here", and offer an
+    /// Update-preset that would have written the ancestor's values into the shared
+    /// preset.
+    ///
+    /// Required rather than defaulted for the reason `presetBridge` is: a default
+    /// would let the next host inherit the same bug silently.
+    required property var ownValues
+    /// The assignment's current preset id, or empty for none.
+    property string presetId: ""
+
+    /// What the pack actually renders with: the assigned preset's values with
+    /// this assignment's own edits laid over the top.
+    ///
+    /// `currentValues` is the map the rows display, which at a host with an
+    /// inheriting tree behind it is the resolved walk-up rather than this
+    /// assignment's own keys. That, not `ownValues`, is deliberately what goes
+    /// over the preset, because it is what the compositor does: every flatten
+    /// runs `withPresetsResolved` AFTER the tree walk, so an ancestor's stored
+    /// value is an override and beats the preset exactly as a local one does.
+    /// `ownValues` is for MARKING which keys are this assignment's own, and the
+    /// two must not be conflated in either direction.
+    ///
+    /// Feeding the overlay straight to the sliders and the preview without
+    /// resolving it showed a pack's plain defaults for every parameter the
+    /// preset supplies, so picking a preset looked like it had done nothing.
+    ///
+    /// Imperative rather than bound, like every other registry-backed value in
+    /// this app: the preset lives on disk, so a binding would never re-evaluate
+    /// when it is retuned.
+    property var _effectiveValues: ({})
+
+    function _recomputeEffective() {
+        // The OVERLAY, not this assignment's own keys: see `_effectiveValues`.
+        const overlay = root.currentValues || {};
+        if (!root.presetBridge || root.presetId.length === 0 || root.packId.length === 0) {
+            root._effectiveValues = overlay;
+            return;
+        }
+        // The merge is `ShaderPresetRegistry::resolveParams`, reached through the
+        // bridge, so a preview cannot disagree with what the compositor will
+        // render — and it applies the declared-range clamp, which the hand-written
+        // JS overlay this replaced knew nothing about. It is also one definition
+        // instead of the three that had each been written out separately.
+        //
+        // One call per change, including per drag tick. That is cheaper than what it
+        // replaces: the JS version called `presetParams`, which returns a
+        // `ShaderPreset` BY VALUE and copied its whole parameter map, and then built
+        // the merged object in JS on top of that.
+        root._effectiveValues = root.presetBridge.effectiveParams(root.packId, root.presetId, overlay);
+    }
+
+    /// The delta KEY SET as a stable string, so the marks below rebuild when the set
+    /// CHANGES rather than on every value write.
+    ///
+    /// `ownValues` is reassigned on each slider tick even while the set of keys it
+    /// holds is identical, and the marks object's identity change re-evaluated
+    /// `_isOverridden` for every visible row through ShaderParamsEditor and both
+    /// ParameterEditor delegates. Dragging one slider therefore re-marked the whole
+    /// editor at frame rate for an answer that had not moved.
+    readonly property string _deltaKeySignature: {
+        if (!root.presetId || root.presetId.length === 0)
+            return "";
+        return Object.keys(root.ownValues || {}).sort().join(",");
+    }
+
+    /// `{ paramId: true }` for every key this assignment stores of its own, and
+    /// empty with no preset engaged.
+    readonly property var _overriddenParams: {
+        // `ownValues`, never `currentValues`: the latter is the DISPLAY map, which
+        // at the animation host is a resolved walk-up. Marking from it claimed
+        // every inherited value was this assignment's own.
+        //
+        // Bound on the SIGNATURE, not the map, so this re-runs only when a key
+        // appears or disappears. Empty with no preset engaged: nothing is "on top
+        // of" anything, so marking every row would say nothing.
+        const signature = root._deltaKeySignature;
+        if (signature.length === 0)
+            return ({});
+        const marks = {};
+        for (const key of signature.split(","))
+            marks[key] = true;
+        return marks;
+    }
+
+    onCurrentValuesChanged: root._recomputeEffective()
+    onPresetIdChanged: root._recomputeEffective()
+    onPackIdChanged: root._recomputeEffective()
+    onPresetBridgeChanged: root._recomputeEffective()
+    Component.onCompleted: root._recomputeEffective()
+
+    // A preset retuned anywhere (this window, another process, a text editor)
+    // has to move what is on screen here too.
+    Connections {
+        target: root.presetBridge
+        function onPresetsChanged(packId) {
+            if (packId === root.packId)
+                root._recomputeEffective();
+        }
+    }
+
     signal valueChanged(string effectId, string paramId, var value)
     signal randomizeRequested(var rolled)
     signal resetRequested(var defaults)
+    /// The user picked a different preset. The host writes it to the
+    /// assignment; nothing is persisted here.
+    signal presetSelected(string presetId)
+    /// The assignment's own parameter edits should be dropped, so every value
+    /// goes back to following the preset.
+    signal presetRevertRequested
+    /// The selected preset was deleted. The host should clear its stored reference
+    /// and leave the parameter values alone.
+    signal presetDeleted(string presetId)
 
     // Wide enough that a preview lands at 1:1 rather than being reduced to fit,
     // at any font scale. A pane-shaped preview frames the canvas, so the column
@@ -98,7 +228,12 @@ GridLayout {
         visible: root._hasParams
         compact: true
         parameters: root.parameters
-        currentValues: root.currentValues
+        currentValues: root._effectiveValues
+        // The editor is fed the MERGED values, so the preset's values and this
+        // assignment's own edits would otherwise render identically. The delta
+        // map IS the set of own edits — presence in it is the pin, equal value
+        // included — so it needs no comparison to derive.
+        overriddenParams: root._overriddenParams
         effectId: root.packId
         enableGroups: root.enableGroups
         enableLocking: root.enableLocking
@@ -131,7 +266,7 @@ GridLayout {
             previewKind: root.previewKind
             previewController: root.previewController
             packId: root.packId
-            params: root.currentValues
+            params: root._effectiveValues
             active: root._hasPreview && root.previewActive
             // `active` covers "this row is collapsed" — it tears the shader item
             // down. This covers "the window is not in front": a chain row left
@@ -153,5 +288,34 @@ GridLayout {
             previewController: root.previewKind === "pointer" ? root.previewController : null
             packId: root.packId
         }
+    }
+
+    // Last child, so the grid places it in the next row's FIRST column: under
+    // the parameters and no wider than they are.
+    //
+    // Matches the pack browser's detail dialog, which puts the same row along
+    // the bottom of its params column. It used to sit above the editor and span
+    // both columns, which ran it under the preview and made one card disagree
+    // with the other about where presets live.
+    PresetRow {
+        Layout.fillWidth: true
+        packId: root.packId
+        packDisplayName: root.packDisplayName
+        presetBridge: root.presetBridge
+        supportsPresets: root.supportsPresets
+        presetId: root.presetId
+        currentValues: root._effectiveValues
+        // The assignment's own stored map, so the row can answer "does this carry
+        // a delta" rather than comparing merged values — which cannot see a delta
+        // pinned at the preset's own value, nor one on a parameter the preset
+        // does not mention.
+        deltas: root.ownValues
+        onPresetSelected: function (id) {
+            root.presetSelected(id);
+        }
+        onPresetDeleted: function (id) {
+            root.presetDeleted(id);
+        }
+        onRevertRequested: root.presetRevertRequested()
     }
 }
