@@ -80,6 +80,21 @@ GridLayout {
     required property QtObject presetBridge
     /// Whether this host has a preset axis at all; forwarded to PresetRow.
     property bool supportsPresets: true
+    /// The assignment's OWN stored parameter map, REQUIRED, or `null` from a host
+    /// with no assignment behind it.
+    ///
+    /// Distinct from `currentValues`, which is the map the rows DISPLAY and is
+    /// therefore the merged or resolved view. Conflating the two is a live bug
+    /// this property exists to end: the animation host binds `currentValues` from
+    /// `resolvedShaderProfile().parameters`, a tree walk-up, so using it as the
+    /// delta map made an event that inherits everything and stores only a preset
+    /// report "Modified", mark every inherited row as "Changed here", and offer an
+    /// Update-preset that would have written the ancestor's values into the shared
+    /// preset.
+    ///
+    /// Required rather than defaulted for the reason `presetBridge` is: a default
+    /// would let the next host inherit the same bug silently.
+    required property var ownValues
     /// The assignment's current preset id, or empty for none.
     property string presetId: ""
 
@@ -121,8 +136,11 @@ GridLayout {
     readonly property var _overriddenParams: {
         if (!root.presetId || root.presetId.length === 0)
             return ({});
+        // `ownValues`, never `currentValues`: the latter is the DISPLAY map, which
+        // at the animation host is a resolved walk-up. Marking from it claimed
+        // every inherited value was this assignment's own.
+        const deltas = root.ownValues || {};
         const marks = {};
-        const deltas = root.currentValues || {};
         for (const key in deltas)
             marks[key] = true;
         return marks;
@@ -261,7 +279,7 @@ GridLayout {
         // a delta" rather than comparing merged values — which cannot see a delta
         // pinned at the preset's own value, nor one on a parameter the preset
         // does not mention.
-        deltas: root.currentValues
+        deltas: root.ownValues
         onPresetSelected: function (id) {
             root.presetSelected(id);
         }

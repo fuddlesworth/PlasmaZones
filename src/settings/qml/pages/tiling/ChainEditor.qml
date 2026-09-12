@@ -114,6 +114,18 @@ ColumnLayout {
     /// Per-pack preset ids for this chain, shaped `{ packId: presetId }`, the
     /// same shape `packParameters` already has.
     property var packPresetIds: ({})
+    /// Per-pack parameter maps this node stores ITSELF, shaped the same way
+    /// `packParameters` is.
+    ///
+    /// `packParameters` is the DISPLAY map, and hosts deliberately fall back to
+    /// the resolved (inherited) values for it so a card with no override of its
+    /// own still shows what the surface actually draws with. The preset axis
+    /// cannot use that map: a node that inherits its values and stores only a
+    /// preset id has no delta, and reading the inherited map as the delta map
+    /// marked every inherited row as changed here and offered an Update-preset
+    /// that would have written the ancestor's values into the shared preset.
+    /// A host whose `packParameters` is already own-only binds the same map.
+    property var packOwnParameters: ({})
 
     signal paramChangeRequested(string packId, string paramId, var value)
     /// A layer was pointed at a different preset. Empty clears it.
@@ -246,6 +258,7 @@ ColumnLayout {
             readonly property var _effect: root._effectFor(packDelegate.packId)
             readonly property var _schema: (packDelegate._effect && packDelegate._effect.parameters) ? packDelegate._effect.parameters : []
             readonly property var _values: (root.packParameters && root.packParameters[packDelegate.packId]) ? root.packParameters[packDelegate.packId] : root._emptyParams
+            readonly property var _ownValues: (root.packOwnParameters && root.packOwnParameters[packDelegate.packId]) ? root.packOwnParameters[packDelegate.packId] : root._emptyParams
             readonly property string _description: (packDelegate._effect && packDelegate._effect.description) ? packDelegate._effect.description : ""
             readonly property bool _hasParams: packDelegate._schema.length > 0
 
@@ -352,6 +365,7 @@ ColumnLayout {
                         packId: packDelegate.packId
                         parameters: packDelegate._schema
                         currentValues: packDelegate._values
+                        ownValues: packDelegate._ownValues
                         enableGroups: true
                         enableImage: false
                         previewKind: root.previewKind

@@ -213,6 +213,17 @@ ColumnLayout {
     property QtObject shaderPresetBridge: null
     /// The event's current preset id, empty for none.
     property string shaderPresetId: ""
+    /// The event's OWN stored shader parameter map, never a resolved one.
+    ///
+    /// Distinct from `shaderParams`, which is what the rows DISPLAY and which
+    /// the per-event card binds from `resolvedShaderProfile().parameters` — a
+    /// tree walk-up. The preset axis needs the own map instead: an event that
+    /// inherits its pack and values from an ancestor and stores only a
+    /// `presetId` has no delta at all, and reading the resolved map as the
+    /// delta map reported it "Modified", marked every inherited row "Changed
+    /// here", and offered an Update-preset that would have written the
+    /// ancestor's values into the shared preset.
+    property var shaderOwnParams: ({})
     // ── Computed ────────────────────────────────────────────────────
     /// Whether the shader section has anything to reveal (full
     /// description or a parameter editor). Mirrors the decoration
@@ -977,6 +988,7 @@ ColumnLayout {
                 previewActive: shaderExpansionClip.effectiveExpanded
                 presetBridge: root.shaderPresetBridge
                 presetId: root.shaderPresetId
+                ownValues: root.shaderOwnParams
                 onPresetSelected: function (id) {
                     root.shaderPresetWriteRequested(id);
                 }

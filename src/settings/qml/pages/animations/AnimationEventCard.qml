@@ -891,6 +891,10 @@ Item {
                 shaderOwnsParamsOnly: root._ownsShaderParamsOnly
                 shaderOwnsPresetOnly: root._ownsShaderPresetOnly
                 shaderParamsStale: root._shaderParamsStale
+                // The raw map, NOT `currentShaderParams`: that one is the
+                // resolved walk-up this card displays, and the preset axis has
+                // to know what this event stores of its own.
+                shaderOwnParams: (root._primaryRawShader && root._primaryRawShader.parameters) || ({})
                 shaderOverrideStored: root._storesShaderOverride
                 shaderBlocksInherited: root._shaderBlocksInherited
                 shaderPackRemovable: root._anyWritePathOwnsShaderPack

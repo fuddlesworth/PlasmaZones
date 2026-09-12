@@ -904,25 +904,25 @@ QtObject {
     }
 
     property Component _decorationChainListEditor: Component {
-        // Below-row half of the OverrideDecorationChain editor: the SAME
-        // chain rows the decoration surface cards embed (reorder, remove,
-        // expand for full descriptions + per-pack parameters), rewired so
-        // every signal mutates the ACTION payload. The add row is hidden
-        // (the inline picker above owns adding) and so are the layer
-        // toggles (a rule chain is explicit; remove a pack instead). An
-        // empty chain is the valid "no decoration" sentinel.
+        // Below-row half of the OverrideDecorationChain editor: the SAME chain
+        // rows the decoration surface cards embed (reorder, remove, expand for
+        // descriptions + per-pack parameters), rewired so every signal mutates
+        // the ACTION payload. No add row (the inline picker above owns adding)
+        // and no layer toggles. An empty chain is the "no decoration" sentinel.
         ChainEditor {
             availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
             chain: row.action[row._decorationChainKey] || []
             // Hoisted stable-empty identity (same as _shaderParamsEditor's
             // currentValues) rather than an inline `({})` that churns a new
-            // object per binding evaluation.
+            // object per binding evaluation. Both axes read the same map: a rule
+            // action has no ancestor to inherit from, so what it stores IS its own.
             packParameters: row.action[row._decorationParamsKey] || row._emptyShaderParams
+            packOwnParameters: row.action[row._decorationParamsKey] || row._emptyShaderParams
             // The compositor already honours a rule's per-layer presets
             // (decorations.cpp resolves each one), so without these two bindings
-            // the key shipped consumable but unauthorable: the null bridge hid
+            // the key shipped consumable but unauthorable. The null bridge hid
             // every layer's preset row, and a rule that carried one showed its
-            // sliders at the pack defaults rather than the preset's values.
+            // sliders at the pack defaults.
             presetBridge: row.appSettings ? row.appSettings.surfacePresets : null
             packPresetIds: row.action[row._decorationPresetsKey] || row._emptyShaderParams
             showLayerToggles: false

@@ -60,6 +60,16 @@ Item {
     /// the direct override when there is one, else what the layout inherits,
     /// so a card with no override still shows the preset it draws with.
     readonly property string _editPresetId: (root._hasOverride || root.isBaseline) ? (root._raw.presetId || "") : (root._resolved.presetId || "")
+    /// What this node stores of its own, with NO fallback to the inherited map.
+    ///
+    /// `_editParams` deliberately falls back so a latched-open card previews
+    /// what the layout draws with. The preset axis cannot use that: a node that
+    /// inherits its values and carries only a preset id stores no delta, and
+    /// reading the inherited map as the delta map reported the assignment
+    /// "Modified", marked every inherited row "Changed here", and offered an
+    /// Update-preset that would have written the ancestor's values into the
+    /// shared preset.
+    readonly property var _ownParams: root._raw.parameters || ({})
 
     /// `{ paramId: true }` for every key this assignment stores of its own, and
     /// empty with no preset engaged (with nothing underneath, marking every row
@@ -68,7 +78,8 @@ Item {
         if (root._editPresetId.length === 0)
             return ({});
         const marks = {};
-        const deltas = root._editParams || {};
+        // `_ownParams`, never `_editParams`: the latter can be the inherited map.
+        const deltas = root._ownParams || {};
         for (const key in deltas)
             marks[key] = true;
         return marks;
@@ -452,9 +463,10 @@ Item {
                     presetBridge: settingsController.overlayPresets
                     presetId: root._editPresetId
                     currentValues: root._effectiveParams
-                    // The assignment's own stored deltas, not the merged view, so
-                    // the modified state reflects what is actually stored.
-                    deltas: root._editParams
+                    // The assignment's own stored deltas, not the merged view and
+                    // not the inherited one, so the modified state reflects what
+                    // is actually stored at this node.
+                    deltas: root._ownParams
                     onPresetSelected: function (id) {
                         settingsController.overlaysPage.setShaderPreset(root.assignmentPath, id);
                         root.refresh();

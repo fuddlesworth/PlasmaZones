@@ -105,6 +105,10 @@ Item {
     // resolved chain (so the user previews "what they'd start from").
     property var _chain: []
     property var _params: ({})
+    /// What this surface stores of its own, with NO fallback to the inherited
+    /// map. `_params` deliberately falls back so an unlatched card previews the
+    /// values it draws with; the preset axis needs the unfallen-back map.
+    property var _ownParams: ({})
     /// Per-pack preset ids for this surface's chain, resolved the same way
     /// `_params` is: the direct override when engaged, else what the surface
     /// inherits, so a card with no override of its own still shows the presets
@@ -162,6 +166,7 @@ Item {
         // effective chain, on first edit — display-equivalent, since the
         // editor only indexes per-pack entries for packs in the chain).
         root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ((root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({}));
+        root._ownParams = (root._raw && root._raw.parameters) ? root._raw.parameters : ({});
         root._presetIds = (root._raw && root._raw.presetIds) ? root._raw.presetIds : ((root._resolved && root._resolved.presetIds) ? root._resolved.presetIds : ({}));
         root._disabledPacks = root.bridge.disabledPacksAt(root.surfacePath);
         root._parentChainText = root._computeParentChainText();
@@ -330,6 +335,10 @@ Item {
                     availableShaders: root._effects
                     chain: root._chain
                     packParameters: root._params
+                    // Own-only, with no fallback to the resolved map: the
+                    // preset axis asks "what does THIS surface store", and
+                    // `_params` answers "what does it draw with".
+                    packOwnParameters: root._ownParams
                     packPresetIds: root._presetIds
                     // The pointer surface draws from the pointer pack family,
                     // every other surface from the surface family. Presets are
