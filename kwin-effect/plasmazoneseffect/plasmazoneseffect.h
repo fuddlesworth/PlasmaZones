@@ -1392,12 +1392,10 @@ private:
     bool hasDecorationTreeContent() const;
 
     // There is deliberately NO hasPlacementSensitiveRuleWork() helper here. One
-    // existed, with a doc asserting callers gated on it, and had none: it was a copy
-    // of the live gate at the top of rule_invalidation.cpp's placement handler that
-    // had fallen two terms behind (m_decorationExclusionRuleSet and
-    // effectVerdictRuleSet), and that file's own comment explains why each of those
-    // terms is load-bearing. A second spelling of a gate nobody calls is worse than
-    // no helper, so the gate lives at its one call site.
+    // existed with a doc asserting callers gated on it and had none: a copy of the live
+    // gate in rule_invalidation.cpp that had fallen two terms behind
+    // (m_decorationExclusionRuleSet, effectVerdictRuleSet), both of which that file
+    // explains are load-bearing. The gate lives at its one call site.
 
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
@@ -2168,45 +2166,47 @@ private:
     /// maximize for a window.maximize pack. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
-    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
-    /// Effects KCM WHILE the suppression holds it unloaded leaves its name
-    /// recorded (the KCM apply is a no-op on the already-unloaded effect), so
-    /// the eventual restore re-loads it for the rest of the session; the next
-    /// session honours kwinrc, which the suppression never writes. Querying
-    /// kwinrc from the effect to close this would add a config dependency the
-    /// plugin doesn't otherwise need.
+    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop Effects
+    /// KCM WHILE the suppression holds it unloaded leaves its name recorded (the KCM
+    /// apply is a no-op on the already-unloaded effect), so the eventual restore
+    /// re-loads it for the rest of the session. The next session honours kwinrc, which
+    /// the suppression never writes, and querying kwinrc from the effect to close this
+    /// would add a config dependency the plugin does not otherwise need.
     QStringList m_suppressedStockEffects;
-    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
-    /// unload of this effect from compositor shutdown in the destructor's
-    /// suppressed-effect restore. See ~PlasmaZonesEffect.
+    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime unload of
+    /// this effect from compositor shutdown in the destructor's suppressed-effect
+    /// restore. See ~PlasmaZonesEffect.
     bool m_compositorShuttingDown = false;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
-    /// callbacks can fire in one event-loop turn (a focus change removes then
-    /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
-    /// the blocking cava stop()/start() off the synchronous path and avoids a
-    /// kill+respawn when a decoration is immediately re-added.
+    /// callbacks can fire in one event-loop turn (a focus change removes then re-adds
+    /// a decoration), and collapsing them to one syncEffectAudioState keeps the
+    /// blocking cava stop()/start() off the synchronous path.
     bool m_audioSyncScheduled = false;
-    /// Warn once, not every sync, when an audio pack wants CAVA but `cava` is not
-    /// installed. Reset when audio is torn down so a later install can re-warn.
+    /// Warn once, not every sync, when an audio pack wants CAVA but it is not
+    /// installed. Reset on audio teardown so a later install can re-warn.
     bool m_audioUnavailableWarned = false;
 
-    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the
-    /// change time, mark the texture dirty, and prime a repaint so audio-reactive
-    /// borders pick it up.
+    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the change time,
+    /// mark the texture dirty, and prime a repaint so audio-reactive borders see it.
     void onEffectAudioSpectrum(const QVector<float>& spectrum);
 
     /// Start/stop/reconfigure the effect's cava instance to match the run gate
     /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() ||
-    /// hasAudioReactiveAnimation())). Lazily creates m_audioProvider on first
-    /// run. Prefer scheduleEffectAudioSync from high-frequency callers
-    /// (decoration refresh, settings replies).
+    /// hasAudioReactiveAnimation())). Lazily creates m_audioProvider on first run.
+    /// Prefer scheduleEffectAudioSync from high-frequency callers.
     void syncEffectAudioState();
 
-    /// Coalesced, deferred syncEffectAudioState: sets a pending latch and posts a
-    /// single queued evaluation, so a remove-then-readd (focus change) or the two
-    /// async settings replies settle to ONE net decision at event-loop return and
-    /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
+    /// Coalesced, deferred syncEffectAudioState: latch plus one queued evaluation, so
+    /// a remove-then-readd or the two async settings replies settle to ONE net
+    /// decision at event-loop return, off the compositor thread's synchronous path.
     void scheduleEffectAudioSync();
+
+    /// Coalescing latches for the preset-retune sweeps; see `schedulePresetSweep`.
+    bool m_surfacePresetSweepScheduled = false;
+    bool m_pointerPresetSweepScheduled = false;
+    void schedulePresetSweep(PhosphorShaders::ShaderFamily family);
+    void applySurfacePresetSweep();
+    void applyPointerPresetSweep();
 
     /// Unload the KWin stock effects whose event one of OUR packs owns, and
     /// load back exactly the ones WE unloaded when that stops holding. Three

@@ -243,8 +243,13 @@ public:
     /// `notePointer` cannot see it either.
     void outputGeometryChanged();
 
-    /// Drop all state and release GL resources (effect teardown / compositor
-    /// reset). Null-safe against a torn-down `KWin::effects`.
+    /// Release GL resources and drop the sampled history (effect teardown /
+    /// compositor reset). Null-safe against a torn-down `KWin::effects`.
+    ///
+    /// Does NOT clear the derived chain state — m_engaged, m_engagedLayers,
+    /// m_anyAboveLayer, m_maxReachLogical, m_maxTrailSeconds, m_sampleWindowSeconds
+    /// all stand. Its one caller is teardown, where nothing reads them afterwards;
+    /// a caller that wanted a live reset would have to rebuildChain() as well.
     void reset();
 
 private:
@@ -329,10 +334,11 @@ private:
                    PhosphorPointerShaders::PointerShaderContract::kMaxUserTextureSlots>
             userTextures;
         std::vector<CompiledBufferPass> bufferPasses;
-        /// Ping-pong buffer targets, one pair per compiled buffer stage. Slot
-        /// While the run is in progress `bufferFront` holds the LAST frame's output (what `bufferFeedback`
-        /// reads); the other is written this frame, and the two swap after the
-        /// draw. Sized to the output's device size times the pack's clamped
+        /// Ping-pong buffer targets, one pair per compiled buffer stage.
+        ///
+        /// While the run is in progress `bufferFront` holds the LAST frame's output
+        /// (what `bufferFeedback` reads); the other is written this frame, and the two
+        /// swap after the draw. Sized to the output's device size times the pack's clamped
         /// `bufferScale`, revalidated every frame and reallocated on a change.
         /// Empty for a pack that declares no buffer stages, which is every
         /// bundled pack — a single-pass chain allocates no FBO at all.

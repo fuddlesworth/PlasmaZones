@@ -409,71 +409,18 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         //     consumer that reads effectiveParameters() WITHOUT flattening
         //     silently opts out of presets entirely, which is how four of them
         //     came to ignore presets in the first place.
-        //   • Surface bakes parameters INTO the compiled pack, cached in
-        //     m_compiledPacks, so a preset change means the same cache drop a
-        //     pack edit does.
-        //   • Pointer caches compiled packs the same way, but ALSO holds an
-        //     already-flattened profile, so dropping its cache is not enough —
-        //     see the arm below.
+        //   • Surface bakes parameters INTO the compiled pack, and pointer does too
+        //     but ALSO holds an already-flattened profile, so for those two the
+        //     retune has to be applied rather than merely awaited. That work is
+        //     applySurfacePresetSweep / applyPointerPresetSweep, each of which
+        //     carries its own reasoning.
+        //
+        // COALESCED per family, not per pack: the signal is emitted once per pack
+        // whose set changed, and what each sweep does is whole-registry. See
+        // m_surfacePresetSweepScheduled.
         connect(&presets, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
                 [this](PhosphorShaders::ShaderFamily family, const QString&) {
-                    switch (family) {
-                    case PhosphorShaders::ShaderFamily::Surface:
-                        // Same GL discipline as the surface effectsChanged
-                        // handler above: this arrives from a file watcher
-                        // between frames, with no current context, and the
-                        // caches own GLShaders and GLTextures.
-                        ensureGlContextCurrent();
-                        m_compiledPacks.clear();
-                        m_packBufferScaleCache.clear();
-                        // Invalidate the folds rather than ERASING the entries,
-                        // the way the decoration-tree loader does. A deleted
-                        // window's entry is the intended frame for its close
-                        // leg, and renderSurfaceChainComposite refuses to
-                        // re-capture a corpse — so erasing it left the close
-                        // animation undecorated with no path back. A live window
-                        // recovers on its next fold either way.
-                        for (auto& [windowId, state] : m_surfaceMultipass) {
-                            state.compositeValid = false;
-                            state.prefixValid = false;
-                            state.prefixChainEnd = 0;
-                        }
-                        // These two are stale-TRUE only, and the sibling clear
-                        // sites reset them for the same reason.
-                        m_anyCompiledPackReadsCursor = false;
-                        m_opacityTintFallbackWarned = false;
-                        if (KWin::effects) {
-                            KWin::effects->addRepaintFull();
-                        }
-                        updateAllDecorations();
-                        break;
-                    case PhosphorShaders::ShaderFamily::Pointer:
-                        // Re-push the profile BEFORE dropping the cache. The
-                        // pointer pass stores an ALREADY-FLATTENED profile and
-                        // rebuildChain re-reads that stored copy, so invalidating
-                        // the cache on its own just recompiled the pack from the
-                        // same stale parameter values and the retune never
-                        // reached the screen. Both calls are needed: setProfile
-                        // short-circuits when the flattened profile is unchanged,
-                        // which is exactly when the compiled pack still has to go.
-                        m_pointerPass.setProfile(resolveDecorationProfile(
-                            PhosphorSurfaceShaders::decorationPointerPath(), PhosphorShaders::ShaderFamily::Pointer));
-                        m_pointerPass.invalidateShaderCache();
-                        // Both calls above damage only what the trail already
-                        // occupies, which is EMPTY when the pointer is at rest —
-                        // exactly the state the user is in while dragging a preset
-                        // slider. Without this the retune did not reach the screen
-                        // until the next pointer motion. The reach band, not
-                        // addRepaintFull: a cursor decoration is not worth a full
-                        // compositor repaint.
-                        m_pointerPass.repaintCurrentReach();
-                        break;
-                    case PhosphorShaders::ShaderFamily::Animation:
-                    case PhosphorShaders::ShaderFamily::Overlay:
-                        // Animation re-resolves per transition; overlay is the
-                        // daemon's to render, and the effect never reads it.
-                        break;
-                    }
+                    schedulePresetSweep(family);
                 });
     }
 }
@@ -1081,6 +1028,113 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [refreshSuppression](bool) {
         refreshSuppression();
     });
+}
+
+// COALESCED, one sweep per family per event-loop turn.
+//
+// `ShaderPresetRegistry::presetsChanged` is emitted ONCE PER PACK whose set actually
+// changed, but the work it drives is whole-registry by nature: the surface sweep drops
+// every compiled pack, invalidates every window's fold and runs a full
+// `updateAllDecorations()`, and the pointer sweep re-resolves and recompiles. A
+// user-preset directory rescan re-reads the whole family on every save, so an N-pack
+// change ran N full sweeps on the compositor thread — and on a surface pack hot-reload
+// the registry's own `effectsChanged` handler has ALREADY done the same three things,
+// so the re-seed's emission did them a second time.
+//
+// Deliberately NOT narrowed by packId: the work cannot be narrowed, only counted. Same
+// latch-and-defer idiom as scheduleEffectAudioSync.
+void PlasmaZonesEffect::schedulePresetSweep(PhosphorShaders::ShaderFamily family)
+{
+    // Animation re-resolves per transition, and overlay is the daemon's to render —
+    // the effect never reads it. Neither needs a sweep.
+    switch (family) {
+    case PhosphorShaders::ShaderFamily::Surface:
+        if (m_surfacePresetSweepScheduled) {
+            return;
+        }
+        m_surfacePresetSweepScheduled = true;
+        // `this` as the context object discards the call if the effect is destroyed
+        // before it runs, the same guarantee scheduleEffectAudioSync relies on.
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                m_surfacePresetSweepScheduled = false;
+                applySurfacePresetSweep();
+            },
+            Qt::QueuedConnection);
+        return;
+    case PhosphorShaders::ShaderFamily::Pointer:
+        if (m_pointerPresetSweepScheduled) {
+            return;
+        }
+        m_pointerPresetSweepScheduled = true;
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                m_pointerPresetSweepScheduled = false;
+                applyPointerPresetSweep();
+            },
+            Qt::QueuedConnection);
+        return;
+    case PhosphorShaders::ShaderFamily::Animation:
+    case PhosphorShaders::ShaderFamily::Overlay:
+        return;
+    }
+}
+
+void PlasmaZonesEffect::applySurfacePresetSweep()
+{
+    // Surface bakes parameters INTO the compiled pack, cached in m_compiledPacks, so
+    // a preset change means the same cache drop a pack edit does.
+    //
+    // Same GL discipline as the surface effectsChanged handler: this arrives from a
+    // file watcher between frames, with no current context, and the caches own
+    // GLShaders and GLTextures.
+    ensureGlContextCurrent();
+    m_compiledPacks.clear();
+    m_packBufferScaleCache.clear();
+    // Invalidate the folds rather than ERASING the entries, the way the
+    // decoration-tree loader does. A deleted window's entry is the intended frame for
+    // its close leg, and renderSurfaceChainComposite refuses to re-capture a corpse —
+    // so erasing it left the close animation undecorated with no path back. A live
+    // window recovers on its next fold either way.
+    for (auto& [windowId, state] : m_surfaceMultipass) {
+        state.compositeValid = false;
+        state.prefixValid = false;
+        // -1, the field's invalid sentinel, not 0. Harmless while prefixValid is
+        // cleared on the line above and the one reader checks it first — but 0 is a
+        // legitimate INDEX ("the cached run ends at chain index 0"), so storing it
+        // here would be accepted by a future reader that consults the index without
+        // the flag. Every other reset site in the repo writes -1.
+        state.prefixChainEnd = -1;
+    }
+    // These two are stale-TRUE only, and the sibling clear sites reset them for the
+    // same reason.
+    m_anyCompiledPackReadsCursor = false;
+    m_opacityTintFallbackWarned = false;
+    if (KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
+    updateAllDecorations();
+}
+
+void PlasmaZonesEffect::applyPointerPresetSweep()
+{
+    // Re-push the profile BEFORE dropping the cache. The pointer pass stores an
+    // ALREADY-FLATTENED profile and rebuildChain re-reads that stored copy, so
+    // invalidating the cache on its own just recompiled the pack from the same stale
+    // parameter values and the retune never reached the screen. Both calls are
+    // needed: setProfile short-circuits when the flattened profile is unchanged,
+    // which is exactly when the compiled pack still has to go.
+    m_pointerPass.setProfile(resolveDecorationProfile(PhosphorSurfaceShaders::decorationPointerPath(),
+                                                      PhosphorShaders::ShaderFamily::Pointer));
+    m_pointerPass.invalidateShaderCache();
+    // Both calls above damage only what the trail already occupies, which is EMPTY
+    // when the pointer is at rest — exactly the state the user is in while dragging a
+    // preset slider. Without this the retune did not reach the screen until the next
+    // pointer motion. The reach band, not addRepaintFull: a cursor decoration is not
+    // worth a full compositor repaint.
+    m_pointerPass.repaintCurrentReach();
 }
 
 } // namespace PlasmaZones

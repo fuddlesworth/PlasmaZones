@@ -653,6 +653,15 @@ void PointerDecorationPass::repaintCurrentReach()
     if (!m_output || !KWin::effects) {
         return;
     }
+    // Nothing is on screen on a SUPPRESSED output, so there is nothing to repaint
+    // there. The class's cost rule is that a suppressed output is asked for no
+    // frames, and the trail was already erased when suppression closed over it
+    // (setSuppressedOutputs), so passing ignoreSuppression unconditionally below
+    // would request a band for a pack that draws nothing — once per preset change,
+    // but against the rule either way.
+    if (suppressedOn(m_output)) {
+        return;
+    }
     repaintStale(damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs(), /*ignoreSuppression=*/true));
 }
 
