@@ -232,6 +232,19 @@ public:
         Q_UNUSED(windowId)
         Q_UNUSED(engineId)
     }
+    /// Drop @p desktop's entry from @p engineId's per-desktop zone map on
+    /// @p windowId's record and mark the placements dirty. The store MERGES
+    /// that map, so a capture that stops naming a desktop does not forget
+    /// it: an engine that releases a window from a desktop its span no
+    /// longer covers says so here, or the stale zone survives every later
+    /// save and a restart puts the window back on a desktop it left. Default
+    /// no-op for the same reason releaseEngineSlot's is.
+    virtual void forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(engineId)
+        Q_UNUSED(desktop)
+    }
     /// Screen-scoped consume-once variant: clears only @p screenId's
     /// remembered float-back, preserving other monitors' entries. Default
     /// falls back to the all-screens form for implementations without

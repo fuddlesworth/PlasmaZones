@@ -394,6 +394,15 @@ public:
     /// keeps its slot; that persistence is exactly what login restore reads.
     bool releaseEngineSlot(const QString& windowId, const QString& engineId);
 
+    /// Drop one desktop's entry from an engine slot's zonesByDesktop map.
+    ///
+    /// The counterpart to that map being MERGED by record(): a capture that
+    /// stops naming a desktop does not forget it, so a window that genuinely
+    /// left one has to say so here. Without this the stale zone survives every
+    /// later save and a restart puts the window back on a desktop it no longer
+    /// occupies. Returns true when an entry was actually removed.
+    bool forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop);
+
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId
     /// bucketing (e.g. virtual-screen id remap of freeGeometryByScreen keys). Does NOT

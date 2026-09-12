@@ -13,8 +13,10 @@
 #include <type_traits>
 
 #include <QHash>
+#include <QList>
 #include <QLoggingCategory>
 #include <QString>
+#include <QStringList>
 #include <QtGlobal>
 
 namespace PhosphorEngine {
@@ -94,65 +96,150 @@ public:
         return m_states;
     }
 
-    // ── Reverse (window -> key) map ──────────────────────────────────────────
+    // ── Reverse (window -> memberships) map ──────────────────────────────────
+    //
+    // A window is a member of every state that holds it. Almost always that is
+    // exactly one, and for those the accessors below answer precisely what the
+    // single-key map they replaced answered. More than one arises when a window
+    // is present on several desktops at once — sticky (on all of them), or a
+    // span like {1,2} — and the engines give it a place in each, so it can be
+    // tiled or snapped differently per desktop instead of existing in whichever
+    // context happened to be current when it opened.
+
+    /// Resolves the key a screen is CURRENTLY showing. The container cannot
+    /// know this (the engine owns the context tracker), so the engine installs
+    /// its currentKeyForScreen here and multi-membership lookups use it to pick
+    /// the membership in view. Optional: without it the first membership wins,
+    /// which is the right answer for every single-membership window.
+    using ContextKeyResolver = std::function<PlacementStateKey(const QString& screenId)>;
+
+    void setContextKeyResolver(ContextKeyResolver resolver)
+    {
+        m_contextKeyResolver = std::move(resolver);
+    }
+
     bool hasWindow(const QString& windowId) const
     {
-        return m_windowToKey.contains(windowId);
+        return m_windowMemberships.contains(windowId);
     }
 
-    /// The owning key for `windowId`, or a default-constructed key when untracked
-    /// (mirrors QHash::value — an empty screenId marks "not tracked").
+    /// The PRIMARY key for `windowId`, or a default-constructed key when
+    /// untracked (an empty screenId marks "not tracked", as before).
     PlacementStateKey keyForWindow(const QString& windowId) const
     {
-        return m_windowToKey.value(windowId);
+        return primaryOf(m_windowMemberships.value(windowId));
     }
 
-    /// The owning key for `windowId`, or nullopt when untracked.
+    /// The PRIMARY key for `windowId`, or nullopt when untracked.
     std::optional<PlacementStateKey> windowKey(const QString& windowId) const
     {
-        auto it = m_windowToKey.constFind(windowId);
-        if (it == m_windowToKey.constEnd()) {
+        auto it = m_windowMemberships.constFind(windowId);
+        if (it == m_windowMemberships.constEnd()) {
             return std::nullopt;
         }
-        return it.value();
+        return primaryOf(it.value());
     }
 
+    /// Every state this window belongs to, in the order they were added.
+    QList<PlacementStateKey> membershipsForWindow(const QString& windowId) const
+    {
+        return m_windowMemberships.value(windowId);
+    }
+
+    /// Whether `windowId` belongs to the state at `key` specifically. The
+    /// question to ask instead of comparing keyForWindow() against a key: once
+    /// a window can be in two states at once, "its key is not that one" stops
+    /// meaning "it is not in that one".
+    bool hasMembership(const QString& windowId, const PlacementStateKey& key) const
+    {
+        return m_windowMemberships.value(windowId).contains(key);
+    }
+
+    /// Make `key` the window's ONLY membership. This is ordinary placement:
+    /// the state named by `key` owns the window outright, and any membership
+    /// it held elsewhere is gone. Adopting a window into an ADDITIONAL context
+    /// is addMembership.
     void setKeyForWindow(const QString& windowId, const PlacementStateKey& key)
     {
-        m_windowToKey.insert(windowId, key);
+        m_windowMemberships.insert(windowId, {key});
     }
 
-    /// Drop the reverse-map entry for `windowId` (does not touch state objects).
+    /// Add `key` to the window's memberships, keeping the ones it has. No-op
+    /// when it is already a member.
+    void addMembership(const QString& windowId, const PlacementStateKey& key)
+    {
+        QList<PlacementStateKey>& keys = m_windowMemberships[windowId];
+        if (!keys.contains(key)) {
+            keys.append(key);
+        }
+    }
+
+    /// Drop one membership. The window stops being tracked entirely when its
+    /// last one goes, so `hasWindow` cannot answer true for a window no state
+    /// holds.
+    void removeMembership(const QString& windowId, const PlacementStateKey& key)
+    {
+        auto it = m_windowMemberships.find(windowId);
+        if (it == m_windowMemberships.end()) {
+            return;
+        }
+        it.value().removeAll(key);
+        if (it.value().isEmpty()) {
+            m_windowMemberships.erase(it);
+        }
+    }
+
+    /// Drop EVERY membership for `windowId` (does not touch state objects).
     void removeWindow(const QString& windowId)
     {
-        m_windowToKey.remove(windowId);
+        m_windowMemberships.remove(windowId);
     }
 
-    /// Remove and return the reverse-map entry for `windowId` (default key when
+    /// Remove every membership and return the primary (default key when
     /// absent), mirroring QHash::take.
     PlacementStateKey takeWindow(const QString& windowId)
     {
-        return m_windowToKey.take(windowId);
+        return primaryOf(m_windowMemberships.take(windowId));
     }
 
-    /// Read-only view of the reverse map for iteration.
-    const QHash<QString, PlacementStateKey>& windowKeys() const
+    /// Every tracked window id, once each however many states hold it.
+    QStringList trackedWindowIds() const
     {
-        return m_windowToKey;
+        return m_windowMemberships.keys();
+    }
+
+    int trackedWindowCount() const
+    {
+        return m_windowMemberships.size();
+    }
+
+    /// Visit every (windowId, key) membership pair. For sweeps that have to
+    /// see a multi-membership window once per state rather than once.
+    void forEachMembership(const std::function<void(const QString&, const PlacementStateKey&)>& fn) const
+    {
+        if (!fn) {
+            return;
+        }
+        for (auto it = m_windowMemberships.cbegin(); it != m_windowMemberships.cend(); ++it) {
+            for (const PlacementStateKey& key : it.value()) {
+                fn(it.key(), key);
+            }
+        }
     }
 
     /// Resolve the state that owns `windowId` (no create). When `outKey` is
     /// non-null it receives the window's owning key iff the window is tracked.
     StateT* forWindow(const QString& windowId, PlacementStateKey* outKey = nullptr) const
     {
-        auto it = m_windowToKey.constFind(windowId);
-        if (it == m_windowToKey.constEnd()) {
+        auto it = m_windowMemberships.constFind(windowId);
+        if (it == m_windowMemberships.constEnd()) {
             return nullptr;
         }
+        const PlacementStateKey key = primaryOf(it.value());
         if (outKey) {
-            *outKey = it.value();
+            *outKey = key;
         }
-        return m_states.value(it.value());
+        return m_states.value(key);
     }
 
     /// Move a window's reverse-map entry from `oldKey` to `newKey`. Only the
@@ -168,24 +255,49 @@ public:
         // does not hold it. The move still happens either way — the map is
         // authoritative and refusing here would strand the window worse — so
         // this reports rather than guards.
-        const auto it = m_windowToKey.constFind(windowId);
-        if (it != m_windowToKey.constEnd() && it.value() != oldKey) {
+        auto it = m_windowMemberships.find(windowId);
+        if (it != m_windowMemberships.end() && !it.value().contains(oldKey)) {
             Q_ASSERT(false);
             qCWarning(lcPerScreenStates) << "PerScreenStates::migrate: caller asserted" << windowId << "was on desktop"
                                          << oldKey.desktop << "of screen" << oldKey.screenId
-                                         << "but the reverse map says desktop" << it.value().desktop << "of screen"
-                                         << it.value().screenId << "— migrating from the map's key";
+                                         << "but its memberships are" << it.value().size() << "key(s) not including"
+                                         << "that one — migrating the primary instead";
         }
-        m_windowToKey.insert(windowId, newKey);
+        if (it == m_windowMemberships.end()) {
+            m_windowMemberships.insert(windowId, {newKey});
+            return;
+        }
+        // Move the asserted membership, leaving the window's OTHER contexts
+        // alone: a multi-desktop window migrating on one desktop keeps its
+        // place on the rest. Falls back to the primary when the asserted key
+        // is not held, which is the stale-caller case warned about above.
+        QList<PlacementStateKey>& keys = it.value();
+        const qsizetype at = keys.indexOf(keys.contains(oldKey) ? oldKey : primaryOf(keys));
+        if (at < 0) {
+            keys.append(newKey);
+            return;
+        }
+        if (keys.contains(newKey)) {
+            keys.removeAt(at); // already a member there; the move is a merge
+        } else {
+            keys[at] = newKey;
+        }
     }
 
-    /// Rewrite every reverse-map entry pointing at `oldKey` to `newKey`. Used
-    /// when a whole state is re-keyed (sticky-pin desktop migration).
+    /// Rewrite every membership equal to `oldKey` to `newKey`. Used when a
+    /// whole state is re-keyed (sticky-pin desktop migration).
     void rekeyWindows(const PlacementStateKey& oldKey, const PlacementStateKey& newKey)
     {
-        for (auto it = m_windowToKey.begin(); it != m_windowToKey.end(); ++it) {
-            if (it.value() == oldKey) {
-                it.value() = newKey;
+        for (auto it = m_windowMemberships.begin(); it != m_windowMemberships.end(); ++it) {
+            QList<PlacementStateKey>& keys = it.value();
+            const qsizetype at = keys.indexOf(oldKey);
+            if (at < 0) {
+                continue;
+            }
+            if (keys.contains(newKey)) {
+                keys.removeAt(at);
+            } else {
+                keys[at] = newKey;
             }
         }
     }
@@ -210,12 +322,23 @@ public:
         }
     }
 
-    /// Drop reverse-map entries matching `pred` (e.g. a vanished desktop/activity).
+    /// Drop MEMBERSHIPS matching `pred` (e.g. a vanished desktop/activity).
+    /// Per membership, not per window: a window present on several desktops
+    /// loses only the ones that went away, and drops out of tracking entirely
+    /// when the last of them does.
     void removeWindowsIf(const std::function<bool(const QString&, const PlacementStateKey&)>& pred)
     {
-        for (auto it = m_windowToKey.begin(); it != m_windowToKey.end();) {
-            if (pred(it.key(), it.value())) {
-                it = m_windowToKey.erase(it);
+        if (!pred) {
+            return;
+        }
+        for (auto it = m_windowMemberships.begin(); it != m_windowMemberships.end();) {
+            QList<PlacementStateKey>& keys = it.value();
+            const QString& windowId = it.key();
+            keys.removeIf([&pred, &windowId](const PlacementStateKey& key) {
+                return pred(windowId, key);
+            });
+            if (keys.isEmpty()) {
+                it = m_windowMemberships.erase(it);
             } else {
                 ++it;
             }
@@ -223,8 +346,32 @@ public:
     }
 
 private:
+    /// The membership in the context its screen is currently showing, else the
+    /// first. Single-membership windows — everything but a multi-desktop one —
+    /// short-circuit on the size check without consulting the resolver.
+    PlacementStateKey primaryOf(const QList<PlacementStateKey>& keys) const
+    {
+        if (keys.isEmpty()) {
+            return {};
+        }
+        if (keys.size() == 1 || !m_contextKeyResolver) {
+            return keys.first();
+        }
+        for (const PlacementStateKey& key : keys) {
+            if (m_contextKeyResolver(key.screenId) == key) {
+                return key;
+            }
+        }
+        // Every membership is off-context (the window is on desktops the user
+        // is not looking at on any of its screens). Any of them beats none:
+        // the callers that land here are asking "where is this window tracked",
+        // and a null answer reads as untracked, which it is not.
+        return keys.first();
+    }
+
     QHash<PlacementStateKey, StateT*> m_states; ///< key -> owning state (Qt-parent-owned by engine)
-    QHash<QString, PlacementStateKey> m_windowToKey; ///< windowId -> owning state key
+    QHash<QString, QList<PlacementStateKey>> m_windowMemberships; ///< windowId -> every state holding it
+    ContextKeyResolver m_contextKeyResolver;
 };
 
 } // namespace PhosphorEngine

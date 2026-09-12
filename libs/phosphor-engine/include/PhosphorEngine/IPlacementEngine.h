@@ -1137,9 +1137,15 @@ public:
     {
         Q_UNUSED(resolver)
     }
-    virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+    virtual void updateStickyScreenPins(const StickyPredicate& isSticky, StickyPinPhase) // see StickyPinPhase
     {
-        Q_UNUSED(isWindowSticky)
+        Q_UNUSED(isSticky)
+    }
+    /// Give windows whose desktop span covers the screen's current desktop a
+    /// place in it, and take back places the span no longer covers. Run AFTER
+    /// the context moves.
+    virtual void reconcileDesktopMemberships(const QString&, const DesktopSpanQuery&)
+    {
     }
     virtual QSet<int> desktopsWithActiveState() const
     {

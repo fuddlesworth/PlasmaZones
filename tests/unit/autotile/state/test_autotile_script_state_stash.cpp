@@ -570,15 +570,19 @@ private Q_SLOTS:
         // has to be established AFTER the toggle, which clears it.
         engine.windowOpened(window, screen, 0, 0);
         QCoreApplication::processEvents(); // windowOpened registers via a queued hop
-        engine.updateStickyScreenPins([](const QString&) {
-            return true;
-        });
+        engine.updateStickyScreenPins(
+            [](const QString&) {
+                return true;
+            },
+            PhosphorEngine::StickyPinPhase::Acquire);
 
         // Move the context on and unpin: the state migrates to desktop 2.
         engine.setCurrentDesktop(2);
-        engine.updateStickyScreenPins([](const QString&) {
-            return false;
-        });
+        engine.updateStickyScreenPins(
+            [](const QString&) {
+                return false;
+            },
+            PhosphorEngine::StickyPinPhase::Release);
 
         // The entry must have moved with it. A fresh state back at desktop 1
         // starts clean; without the migration it would be handed the bag that

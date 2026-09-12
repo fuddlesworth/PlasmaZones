@@ -162,10 +162,12 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     preview.targetViewDetachedAtBegin = targetState->strip().viewDetached();
 
     ScrollState* priorState = nullptr;
-    const auto it = m_states.windowKeys().constFind(windowId);
-    if (it != m_states.windowKeys().constEnd()) {
+    // The membership the drag STARTED from: for a multi-desktop window that is
+    // the one on the desktop in view, which is the strip the user is dragging
+    // out of.
+    if (const auto priorKey = m_states.windowKey(windowId)) {
         preview.hadPriorState = true;
-        preview.priorKey = it.value();
+        preview.priorKey = *priorKey;
         preview.priorSameKey = (preview.priorKey == targetKey);
         priorState = m_states.stateForKey(preview.priorKey);
         if (priorState) {
@@ -1016,8 +1018,9 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     // delay is served, re-writes the edge slot against the POST-close strip,
     // which is an honest target again. A momentary dark indicator plus a
     // deliberate re-light is the most this layer can promise.
-    const auto it = m_states.windowKeys().constFind(windowId);
-    if (it != m_states.windowKeys().constEnd() && it.value() == m_dragInsertPreview->targetKey) {
+    // Membership at the preview's target, not "its key is that one": a window
+    // present on other desktops too is still the one being dragged here.
+    if (m_states.hasMembership(windowId, m_dragInsertPreview->targetKey)) {
         m_dragInsertPreview->lastTarget = DragInsertTarget{};
         // Give the edge auto-scroll's ownership back along with the target it
         // was writing. Clearing lastTarget alone would not hold at all: the

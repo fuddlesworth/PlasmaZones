@@ -16,6 +16,9 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorContext/DisabledReason.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -24,6 +27,122 @@
 #include <optional>
 
 namespace PlasmaZones {
+
+/// Run one phase of the sticky-screen pin pass on the tiling-family engines.
+///
+/// The phases bracket a context change and the order is not cosmetic: Release
+/// run BEFORE the context moves resolves the migration's destination against
+/// the context being LEFT, dropping the pinned state on that context's live
+/// one and force-releasing every window it held. See
+/// PhosphorEngine::StickyPinPhase.
+inline void applyStickyScreenPins(WindowTrackingAdaptor* adaptor, PhosphorEngine::IPlacementEngine* autotileEngine,
+                                  PhosphorEngine::IPlacementEngine* scrollEngine, PhosphorEngine::StickyPinPhase phase)
+{
+    // Null-guarded service, matching every other daemon ->service() consumer.
+    auto* service = adaptor ? adaptor->service() : nullptr;
+    if (!service) {
+        return;
+    }
+    const auto sticky = [service](const QString& windowId) {
+        return service->isWindowSticky(windowId);
+    };
+    // Only the tiling-family engines keep pins; the snap engine has no pin
+    // concept and inherits the interface's no-op.
+    if (autotileEngine) {
+        autotileEngine->updateStickyScreenPins(sticky, phase);
+    }
+    if (scrollEngine) {
+        scrollEngine->updateStickyScreenPins(sticky, phase);
+    }
+}
+
+/// Build the desktop-span query the engines' per-desktop membership pass
+/// takes, reading the registry that the effect keeps stamped.
+///
+/// Empty means "every desktop" — a sticky window — and also what an unknown
+/// desktop looks like, the same reading TilingAdaptor's membership reconcile
+/// uses. A span carries its full list in virtualDesktops with virtualDesktop
+/// equal to the first entry, so the list wins when present.
+inline PhosphorEngine::DesktopSpanQuery makeDesktopSpanQuery(PhosphorEngine::WindowRegistry* registry)
+{
+    return [registry](const QString& windowId) -> QSet<int> {
+        QSet<int> desktops;
+        if (!registry) {
+            return desktops;
+        }
+        const auto meta = registry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        if (!meta) {
+            return desktops;
+        }
+        for (const int desktop : meta->virtualDesktops) {
+            if (desktop > 0) {
+                desktops.insert(desktop);
+            }
+        }
+        // Falls through when the span list is absent or filtered to nothing,
+        // rather than returning empty from inside the span branch — reading a
+        // list of junk as "sticky" would be the wrong answer.
+        if (desktops.isEmpty() && meta->virtualDesktop > 0) {
+            desktops.insert(meta->virtualDesktop);
+        }
+        return desktops;
+    };
+}
+
+/// Re-run the per-desktop membership pass for one screen on every engine.
+/// Each no-ops for a screen it does not own, so the caller need not know
+/// which mode the screen is in.
+inline void reconcileMembershipsForScreen(PhosphorEngine::IPlacementEngine* autotileEngine,
+                                          PhosphorEngine::IPlacementEngine* scrollEngine,
+                                          PhosphorEngine::IPlacementEngine* snapEngine,
+                                          PhosphorEngine::WindowRegistry* registry, const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    const auto spanOf = makeDesktopSpanQuery(registry);
+    for (PhosphorEngine::IPlacementEngine* engine : {autotileEngine, scrollEngine, snapEngine}) {
+        if (engine) {
+            engine->reconcileDesktopMemberships(screenId, spanOf);
+        }
+    }
+}
+
+/// Re-run that pass whenever a window's sticky state actually changes.
+///
+/// Becoming sticky changes which desktops a window belongs to without any
+/// desktop switch happening, so the pass that rides the switch never runs for
+/// it. Scoped to the window's own screen: stickiness is a property of the
+/// window, and the other outputs' strips are unaffected.
+inline void wireStickyMembershipUpdates(QObject* owner, WindowTrackingAdaptor* adaptor,
+                                        PhosphorEngine::IPlacementEngine* autotileEngine,
+                                        PhosphorEngine::IPlacementEngine* scrollEngine,
+                                        PhosphorEngine::IPlacementEngine* snapEngine,
+                                        PhosphorEngine::WindowRegistry* registry)
+{
+    // Straight to the service rather than through an adaptor relay: it owns
+    // the sticky state and service() hands back the concrete type, so a relay
+    // signal would only add a hop.
+    auto* service = adaptor ? adaptor->service() : nullptr;
+    if (!owner || !service) {
+        return;
+    }
+    QObject::connect(service, &PhosphorPlacement::WindowTrackingService::windowStickyChanged, owner,
+                     [autotileEngine, scrollEngine, snapEngine, registry](const QString& windowId, bool) {
+                         // heldScreenForWindow, not wherever the window sits
+                         // now: an engine that does not track it has no
+                         // membership to reconcile, and the empty answer gates
+                         // exactly that. Ask each — the window is on one screen
+                         // in one mode, and only that engine answers.
+                         QString screenId;
+                         for (PhosphorEngine::IPlacementEngine* e : {autotileEngine, scrollEngine, snapEngine}) {
+                             if (screenId.isEmpty() && e) {
+                                 screenId = e->heldScreenForWindow(windowId);
+                             }
+                         }
+                         reconcileMembershipsForScreen(autotileEngine, scrollEngine, snapEngine, registry, screenId);
+                     });
+}
 
 /// Ask plasmashell to show its own text OSD.
 ///

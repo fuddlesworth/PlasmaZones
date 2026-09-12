@@ -200,8 +200,8 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
 
 PhosphorTiles::TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* outScreenId)
 {
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it == m_states.windowKeys().constEnd() || it->screenId.isEmpty()) {
+    const auto key = m_states.windowKey(windowId);
+    if (!key || key->screenId.isEmpty()) {
         if (outScreenId) {
             outScreenId->clear();
         }
@@ -209,11 +209,14 @@ PhosphorTiles::TilingState* AutotileEngine::stateForWindow(const QString& window
     }
 
     if (outScreenId) {
-        *outScreenId = it->screenId;
+        *outScreenId = key->screenId;
     }
-    // Use the stored key directly — this returns the state that owns the window,
-    // even if the current desktop/activity has changed since the window was added.
-    return m_states.stateForKey(*it);
+    // The window's PRIMARY membership: the state holding it in the context its
+    // screen is showing, or its sole state when it has only one. Resolving
+    // through the membership map rather than the current key still returns the
+    // owning state when the desktop/activity has moved since the window was
+    // added, which is what every caller here depends on.
+    return m_states.stateForKey(*key);
 }
 
 void AutotileEngine::setInnerGap(int gap)
@@ -330,11 +333,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
 {
     using PhosphorEngine::WindowPlacement;
     const QString wid = canonicalizeForLookup(windowId);
-    const auto keyIt = m_states.windowKeys().constFind(wid);
-    if (keyIt == m_states.windowKeys().constEnd()) {
+    const auto primary = m_states.windowKey(wid);
+    if (!primary) {
         return std::nullopt;
     }
-    const PhosphorEngine::TilingStateKey key = keyIt.value();
+    const PhosphorEngine::TilingStateKey key = *primary;
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
     if (!state || !state->containsWindow(wid)) {
         // Membership, not just a live key: windowOpened keys the window

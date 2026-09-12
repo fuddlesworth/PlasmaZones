@@ -445,6 +445,8 @@ public:
     /// WindowPlacementStore::releaseEngineSlot for what the downgrade means
     /// and why it is not a removal.
     void releaseEngineSlot(const QString& windowId, const QString& engineId) override;
+    /// Dirty-marking wrapper for WindowPlacementStore::forgetDesktopZones.
+    void forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -1038,10 +1040,10 @@ Q_SIGNALS:
     // (it holds IWindowTrackingService*, not WindowTrackingService*, so PMF connect
     // is unavailable). Renaming this signal will silently break autotile zone tracking.
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
+    /// On-all-desktops state changed; fires only on a real transition.
+    void windowStickyChanged(const QString& windowId, bool sticky);
 
-    /**
-     * @brief Emitted when state needs to be saved
-     */
+    /// Emitted when state needs to be saved
     void stateChanged();
 
 private:

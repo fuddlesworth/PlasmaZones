@@ -42,6 +42,7 @@ add_library(PhosphorEngine SHARED
     src/PlacementEngineBase.cpp
     src/ScreenContextTracker.cpp
     src/WindowPlacementStore.cpp
+    src/WindowPlacementStore_serialize.cpp
     src/GeometryUtils.cpp
     src/WindowRegistry.cpp
     include/PhosphorEngine/WindowRegistry.h

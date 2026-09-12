@@ -75,10 +75,11 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
     // Look up the prior PhosphorTiles::TilingState once and reuse below to avoid a redundant
     // m_states hash lookup in the cross-screen branch.
     PhosphorTiles::TilingState* priorState = nullptr;
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it != m_states.windowKeys().constEnd()) {
+    // The membership the drag STARTED from, which for a multi-desktop window
+    // is the one on the desktop in view — the primary.
+    if (const auto priorKey = m_states.windowKey(windowId)) {
         preview.hadPriorState = true;
-        preview.priorKey = it.value();
+        preview.priorKey = *priorKey;
         // Whole-KEY equality (screen AND desktop AND activity), so the name
         // undersells it: a same-screen drag across a desktop switch reads
         // false. That is what the restore paths want — they key off the

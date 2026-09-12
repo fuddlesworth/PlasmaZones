@@ -81,7 +81,33 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
                 }
             }
             for (auto e = incoming.engines.constBegin(); e != incoming.engines.constEnd(); ++e) {
-                merged.engines.insert(e.key(), e.value());
+                EngineSlot slot = e.value();
+                // zonesByDesktop ACCUMULATES; every other field in the slot is
+                // a snapshot the incoming capture owns outright.
+                //
+                // A capture describes the context it ran in, so it can only
+                // ever name the desktops the window is a member of AT THAT
+                // MOMENT. Letting it replace the map made the field erase
+                // itself: a window snapped on desktops 1 and 2 wrote both, and
+                // the very next save — taken while it held one membership, as
+                // happens constantly — wrote a slot with an empty map and took
+                // the other desktop's zone with it. The restore then found
+                // nothing to seed.
+                //
+                // Merging per DESKTOP rather than wholesale keeps a genuine
+                // update authoritative: re-snapping on desktop 2 overwrites
+                // key 2 and leaves key 1 alone. Forgetting a desktop is a
+                // deliberate act (the span shrank, the window closed), and
+                // those paths clear the entry explicitly rather than relying
+                // on a capture's silence.
+                if (const auto stored = merged.engines.constFind(e.key()); stored != merged.engines.constEnd()) {
+                    for (auto d = stored->zonesByDesktop.constBegin(); d != stored->zonesByDesktop.constEnd(); ++d) {
+                        if (!slot.zonesByDesktop.contains(d.key())) {
+                            slot.zonesByDesktop.insert(d.key(), d.value());
+                        }
+                    }
+                }
+                merged.engines.insert(e.key(), slot);
             }
             for (auto g = incoming.freeGeometryByScreen.constBegin(); g != incoming.freeGeometryByScreen.constEnd();
                  ++g) {
@@ -860,9 +886,43 @@ bool WindowPlacementStore::releaseEngineSlot(const QString& windowId, const QStr
             // cross-screen reclaim no longer reads it as a home).
             slotIt->state = QString(WindowPlacement::stateReleased());
             slotIt->zoneIds.clear();
+            // The per-desktop map goes with the zones it elaborates. Left
+            // standing it would outlive the release, and since record()
+            // MERGES that map rather than replacing it, nothing later would
+            // clear it — a handed-off window would come back snapped on
+            // desktops the engine no longer manages it on.
+            slotIt->zonesByDesktop.clear();
             slotIt->order = -1;
             changed = true;
         }
+    }
+    return changed;
+}
+
+bool WindowPlacementStore::forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop)
+{
+    if (desktop < 1) {
+        return false;
+    }
+    bool changed = false;
+    // Every matching record, for the appId-drift reason releaseEngineSlot
+    // gives above.
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (!sameWindowInstance(p.windowId, windowId)) {
+                continue;
+            }
+            const auto slotIt = p.engines.find(engineId);
+            if (slotIt == p.engines.end() || slotIt->zonesByDesktop.remove(desktop) == 0) {
+                continue;
+            }
+            changed = true;
+        }
+    }
+    if (changed) {
+        // A forget is a real content change, so the record earns a fresh
+        // sequence the way every other mutation does.
+        ++m_sequence;
     }
     return changed;
 }
@@ -996,151 +1056,6 @@ int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacemen
         }
     }
     return removed;
-}
-
-QList<WindowPlacement> WindowPlacementStore::records() const
-{
-    QList<WindowPlacement> out;
-    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
-        out.append(it.value());
-    }
-    return out;
-}
-
-QJsonObject WindowPlacementStore::serialize(const std::function<bool(const WindowPlacement&)>& keep) const
-{
-    QJsonObject root;
-    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
-        // appIds never contain '|' (that delimits appId|uuid) — a key that does is
-        // a corrupt identity; skip rather than persist poison.
-        if (it.key().isEmpty() || it.key().contains(QLatin1Char('|'))) {
-            continue;
-        }
-        QJsonArray arr;
-        for (const WindowPlacement& p : it.value()) {
-            if (keep && !keep(p)) {
-                continue;
-            }
-            // Reclaim credit is DERIVED at save time when the probe is wired
-            // (header contract): live windows persist as restore evidence, a
-            // close within the shutdown grace still counts (the logout save),
-            // and everything else — the cross-session graveyard included,
-            // whatever its in-memory credit says — persists credit-less.
-            if (m_liveInstanceProbe) {
-                WindowPlacement stamped = p;
-                stamped.reclaimEligible = m_liveInstanceProbe(p.windowId)
-                    || (p.closedAtMsecs > 0
-                        && QDateTime::currentMSecsSinceEpoch() - p.closedAtMsecs <= ShutdownCloseGraceMs);
-                arr.append(stamped.toJson());
-                continue;
-            }
-            arr.append(p.toJson());
-        }
-        if (!arr.isEmpty()) {
-            root[it.key()] = arr;
-        }
-    }
-    return root;
-}
-
-void WindowPlacementStore::deserialize(const QJsonObject& obj)
-{
-    // WHOLE-STORE REPLACE, and it runs more than once per startup: the daemon
-    // loads through WindowTrackingAdaptor's constructor and again through the
-    // engines' load delegate at finalizeStartup. Both are bringup, before any
-    // window opens, so discarding what is here costs nothing. Calling this
-    // mid-session would not be safe. It would drop every live capture and void
-    // every open claim, so windows already placed this session would lose the
-    // record their engines restore from.
-    m_byApp.clear();
-    m_sequence = 0;
-    // Every claim named a record in the store being replaced.
-    m_openPairing.clear();
-    m_claimedBy.clear();
-    // Likewise the in-flight move excuses: they describe this session's moves,
-    // and both deserialize callers are startup-time (see the note above).
-    m_movedLiveInstances.clear();
-    QList<WindowPlacement> loaded;
-    // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
-    // index into the flattened list: a renamed duplicate persisted under an
-    // old bucket would carry that bucket's low global index into its NEW
-    // bucket and sort ahead of the new bucket's genuinely older entries,
-    // inverting the FIFO head take() consumes. Per-bucket positions keep each
-    // bucket's order self-referential; a record merged in from ANOTHER bucket
-    // (rename with no entry in the destination) has no key here and sorts
-    // last, i.e. newest — matching the runtime rename-append behaviour.
-    QHash<QPair<QString, QString>, int> firstPersistedPos;
-    for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-        if (it.key().isEmpty() || it.key().contains(QLatin1Char('|'))) {
-            continue;
-        }
-        int posInBucket = 0;
-        const QJsonArray arr = it->toArray();
-        for (const QJsonValue& v : arr) {
-            WindowPlacement p = WindowPlacement::fromJson(it.key(), v.toObject());
-            if (!p.isValid()) {
-                continue;
-            }
-            // Drop a structureless windowId (no `appId|uuid` separator) — a forged
-            // or truncated identity that no live window can exact-match. Do NOT
-            // require the windowId prefix to equal the bucket appId: the stored
-            // appId comes from the identity registry, which legitimately drifts
-            // from the windowId's embedded class (e.g. Electron/CEF apps re-broadcast
-            // their WM_CLASS mid-session). The appId-FIFO lookup keys on the bucket,
-            // not the prefix, so such a record is still restorable.
-            if (!p.windowId.contains(QLatin1Char('|'))) {
-                continue;
-            }
-            const QPair<QString, QString> posKey{it.key(), PhosphorIdentity::WindowId::extractInstanceId(p.windowId)};
-            if (!firstPersistedPos.contains(posKey)) {
-                firstPersistedPos.insert(posKey, posInBucket);
-            }
-            ++posInBucket;
-            loaded.append(p);
-        }
-    }
-    // Positions exist because record()'s in-place merge keeps a record's
-    // bucket POSITION while restamping its sequence, so position order and
-    // sequence order legitimately diverge — replaying by sequence alone would
-    // reorder buckets across a reload, flipping take()'s oldest-first head and
-    // the eviction order the header documents as FIFO.
-
-    // Replay oldest to newest through record() so persisted duplicates from an
-    // appId-prefix mutation are merged into one live-instance record (sequence
-    // decides MERGE precedence only). This also applies the normal per-app cap
-    // in the same direction as runtime inserts.
-    std::stable_sort(loaded.begin(), loaded.end(), [](const WindowPlacement& lhs, const WindowPlacement& rhs) {
-        return lhs.sequence < rhs.sequence;
-    });
-    for (WindowPlacement& placement : loaded) {
-        record(std::move(placement));
-    }
-
-    // Restore each bucket to its persisted array order (merged duplicates sit
-    // at their earliest persisted position within THIS bucket — FIFO
-    // semantics; cross-bucket merge arrivals sort last, i.e. newest).
-    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
-        const QString bucketKey = it.key();
-        std::stable_sort(it->begin(), it->end(),
-                         [&firstPersistedPos, &bucketKey](const WindowPlacement& a, const WindowPlacement& b) {
-                             const int pa = firstPersistedPos.value(
-                                 {bucketKey, PhosphorIdentity::WindowId::extractInstanceId(a.windowId)},
-                                 std::numeric_limits<int>::max());
-                             const int pb = firstPersistedPos.value(
-                                 {bucketKey, PhosphorIdentity::WindowId::extractInstanceId(b.windowId)},
-                                 std::numeric_limits<int>::max());
-                             return pa < pb;
-                         });
-    }
-}
-
-int WindowPlacementStore::size() const
-{
-    int n = 0;
-    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
-        n += it->size();
-    }
-    return n;
 }
 
 } // namespace PhosphorEngine

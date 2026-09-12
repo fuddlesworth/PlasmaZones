@@ -8,6 +8,7 @@
 #include <functional>
 #include <QList>
 #include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -226,6 +227,35 @@ enum class StickyWindowHandling {
     TreatAsNormal = 0,
     RestoreOnly = 1,
     IgnoreAll = 2
+};
+
+/// Answers whether a window is on all desktops. The sticky-pin pass takes it
+/// from the caller rather than reading a tracker, so an engine needs no
+/// window-tracking dependency to maintain its pins.
+using StickyPredicate = std::function<bool(const QString&)>;
+
+/// Answers which virtual desktops a window occupies, in the x11 numbering the
+/// state keys use. An EMPTY set means "every desktop" — a sticky window — and
+/// is also what an unknown desktop looks like, exactly as the daemon's
+/// membership reconcile reads it. A window on a span such as {1,2} reports
+/// both, so the same query drives per-desktop membership for spans and for
+/// sticky windows without either being a special case.
+using DesktopSpanQuery = std::function<QSet<int>(const QString&)>;
+
+/// Which half of the sticky-screen pin pass to run. The halves resolve a
+/// screen's context key against OPPOSITE sides of a context change, so they
+/// cannot share a call site.
+///
+/// Acquire runs BEFORE the context moves: it decides whether to pin from the
+/// state under the key the screen resolves to now. Release runs AFTER: it
+/// migrates the pinned state onto the key the screen resolves to with the pin
+/// gone. Run Release early and that key still names the OUTGOING desktop, so
+/// the migration lands on the strip the user is leaving and force-releases
+/// every window it held. The pin is what keeps the split safe — while it is
+/// held the key resolves to the pinned desktop from either side.
+enum class StickyPinPhase {
+    Acquire,
+    Release
 };
 
 inline constexpr QLatin1StringView RestoreSentinel("__restore__");
