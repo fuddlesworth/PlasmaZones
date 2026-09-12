@@ -92,6 +92,8 @@ private Q_SLOTS:
     void updateReplacesTheParameters();
     void renameKeepsTheIdAndTheFile();
     void renameWritesBackToTheFileTheRecordCameFrom();
+    void anUnusableDeclaredIdFallsBackToTheFileStem();
+    void aSourcePathOutsideTheDirectoryFallsBackToTheIdPath();
     void deleteRemovesTheFile();
     void deleteOfAnAlreadyGoneFileSucceeds();
     void writesRefuseAPresetDeletedUnderneathUs();
@@ -105,6 +107,8 @@ private Q_SLOTS:
 private:
     /// Parse the preset file @p presetId was written to.
     QJsonObject readPresetFile(const QString& presetId) const;
+    /// Parse the preset file at @p path, for a file not named after its id.
+    static QJsonObject readPresetFileNamed(const QString& path);
 
     std::unique_ptr<QTemporaryDir> m_root;
     std::unique_ptr<ShaderPresetStore> m_store;
@@ -126,6 +130,15 @@ void TestShaderPresetBridge::cleanup()
     m_bridge.reset();
     m_store.reset();
     m_root.reset();
+}
+
+QJsonObject TestShaderPresetBridge::readPresetFileNamed(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return QJsonDocument::fromJson(file.readAll()).object();
 }
 
 QJsonObject TestShaderPresetBridge::readPresetFile(const QString& presetId) const
@@ -268,6 +281,84 @@ void TestShaderPresetBridge::renameWritesBackToTheFileTheRecordCameFrom()
              QStringLiteral("Renamed"));
 }
 
+void TestShaderPresetBridge::anUnusableDeclaredIdFallsBackToTheFileStem()
+{
+    // commit() concatenates the id into a filesystem path, so an id carrying a
+    // parent-directory hop must never reach it. What the loader does is NOT refuse the
+    // file: `ShaderPreset::fromJson` falls back to the filename STEM, which is a real
+    // path component by construction and so cannot escape, and the preset stays
+    // loadable instead of vanishing over a bad `id` field. That fallback is the
+    // behaviour under test here, because it is what makes the escaping id unreachable.
+    const QString dir = m_bridge->presetDirectory();
+    QVERIFY(QDir().mkpath(dir));
+    QVERIFY(writeFile(dir + QStringLiteral("/escaping.json"), QStringLiteral(R"({
+        "id": "../../../../escaped", "name": "Hostile", "packId": "dissolve",
+        "params": { "speed": 1.0 }
+    })")));
+    m_store->rescanNow(kFamily);
+
+    // Loaded, under the STEM rather than the declared id.
+    const QVariantList rows = m_bridge->presetsFor(kPack);
+    QCOMPARE(rows.size(), 1);
+    QCOMPARE(rows.constFirst().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("escaping"));
+
+    // A rename therefore writes by the safe stem, in place, and nothing lands outside
+    // the preset directory.
+    QVERIFY(m_bridge->renamePreset(QStringLiteral("escaping"), QStringLiteral("Renamed")));
+    QCOMPARE(readPresetFileNamed(dir + QStringLiteral("/escaping.json")).value(QLatin1String("name")).toString(),
+             QStringLiteral("Renamed"));
+    QVERIFY(!QFileInfo::exists(QDir(dir).filePath(QStringLiteral("../../../../escaped.json"))));
+
+    // And the bridge's OWN re-check refuses such an id directly, rather than trusting
+    // the loader's fallback to be the only door. Deleting that guard leaves this
+    // assertion failing.
+    QSignalSpy failed(m_bridge.get(), &ShaderPresetBridge::presetWriteFailed);
+    QVERIFY(!m_bridge->renamePreset(QStringLiteral("../../../../escaped"), QStringLiteral("Again")));
+    QVERIFY(failed.count() >= 1);
+}
+
+void TestShaderPresetBridge::aSourcePathOutsideTheDirectoryFallsBackToTheIdPath()
+{
+    // commit() writes back to the record's own sourcePath so a hand-named file is
+    // updated in place rather than duplicated. That path is loader-stamped, but a
+    // SYMLINK in the preset directory pointing out of it would otherwise let QSaveFile
+    // follow it, so the write is containment-checked and falls back to the id path.
+    // Nothing exercised that fallback.
+    const QString dir = m_bridge->presetDirectory();
+    QVERIFY(QDir().mkpath(dir));
+
+    QTemporaryDir outside;
+    QVERIFY(outside.isValid());
+    const QString realFile = outside.filePath(QStringLiteral("planted.json"));
+    QVERIFY(writeFile(realFile, QStringLiteral(R"({
+        "id": "linked", "name": "Linked", "packId": "dissolve",
+        "params": { "speed": 1.0 }
+    })")));
+    // A symlink INSIDE the preset directory whose target is outside it. The loader
+    // follows it and stamps the canonical outside path as sourcePath.
+    const QString link = dir + QStringLiteral("/linked.json");
+    if (!QFile::link(realFile, link)) {
+        QSKIP("the filesystem refused a symlink");
+    }
+    m_store->rescanNow(kFamily);
+    QCOMPARE(m_bridge->presetsFor(kPack).size(), 1);
+
+    // REFUSED, and that refusal is what this test found. The containment check on
+    // sourcePath correctly declines to write there, but falling back to the id path is
+    // not by itself safe: the id path IS the symlink here, and QSaveFile follows it, so
+    // the write went through the same link the check had just rejected. The guard
+    // refuses a symlinked target whichever path it landed on.
+    QSignalSpy failed(m_bridge.get(), &ShaderPresetBridge::presetWriteFailed);
+    QVERIFY(!m_bridge->renamePreset(QStringLiteral("linked"), QStringLiteral("Renamed")));
+    QCOMPARE(failed.count(), 1);
+
+    // The planted file outside the preset directory is untouched.
+    QFile planted(realFile);
+    QVERIFY(planted.open(QIODevice::ReadOnly));
+    QCOMPARE(QJsonDocument::fromJson(planted.readAll()).object().value(QLatin1String("name")).toString(),
+             QStringLiteral("Linked"));
+}
+
 void TestShaderPresetBridge::deleteRemovesTheFile()
 {
     const QString id = m_bridge->savePreset(kPack, QStringLiteral("Soft"), {{QStringLiteral("speed"), 1.0}});
@@ -373,7 +464,8 @@ void TestShaderPresetBridge::theParameterMapIsBoundedOnTheWayToDisk()
     QVERIFY(!id.isEmpty());
 
     const QVariantMap stored = m_bridge->presetParams(kPack, id);
-    QVERIFY(stored.size() <= 64);
+    // EXACTLY the cap, not merely under it: `<=` is satisfied by a cap of 1.
+    QCOMPARE(stored.size(), 64);
     QVERIFY(!stored.contains(QStringLiteral("nested")));
     QVERIFY(!stored.contains(QStringLiteral("listy")));
     QVERIFY(!stored.contains(QStringLiteral("huge")));

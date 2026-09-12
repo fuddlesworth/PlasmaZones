@@ -10,8 +10,9 @@
 #include <PhosphorShaders/ShaderPresetStore.h>
 
 #include <QDir>
-#include <QLoggingCategory>
 #include <QFile>
+#include <QFileInfo>
+#include <QLoggingCategory>
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QUuid>
@@ -210,6 +211,23 @@ bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
                 << preset.sourcePath;
         }
     }
+    // And refuse a SYMLINKED target, whichever path we landed on. Falling back to the
+    // id path is not by itself safe: the id path can BE the symlink (a file named
+    // `<id>.json` in the preset directory whose target is elsewhere), and QSaveFile
+    // follows it, so the containment check above would refuse to use sourcePath and
+    // then write through the same link anyway. Found by the test below, which planted
+    // exactly that.
+    //
+    // Refusing rather than unlinking: a symlink in here is either a deliberate
+    // arrangement by the user or an attempt to redirect the write, and neither is
+    // something this code should resolve on its own.
+    if (QFileInfo(path).isSymLink()) {
+        const QString error = PhosphorI18n::tr("Could not write the preset to disk.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to write through a symlink in the preset directory" << path
+                            << "->" << QFileInfo(path).symLinkTarget();
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
     // QSaveFile so a crash mid-write cannot leave a truncated preset behind
     // that the loader then refuses on every later scan.
     QSaveFile file(path);
@@ -241,7 +259,15 @@ QString ShaderPresetBridge::savePreset(const QString& packId, const QString& nam
         return {};
     }
     if (!canUsePresetName(name)) {
-        Q_EMIT presetWriteFailed(PhosphorI18n::tr("Enter a name for the preset.", "@info"));
+        // Distinguishes the three refusals canUsePresetName makes. "Enter a name"
+        // is only true of the blank case; for an over-long one or one carrying a
+        // control or bidi character the user HAS entered a name, and being told to
+        // enter one says nothing about what is wrong with it.
+        Q_EMIT presetWriteFailed(name.trimmed().isEmpty()
+                                     ? PhosphorI18n::tr("Enter a name for the preset.", "@info")
+                                     : PhosphorI18n::tr("That name cannot be used. Try a shorter one, without "
+                                                        "special characters.",
+                                                        "@info"));
         return {};
     }
 
@@ -283,7 +309,15 @@ bool ShaderPresetBridge::updatePreset(const QString& presetId, const QVariantMap
 bool ShaderPresetBridge::renamePreset(const QString& presetId, const QString& name)
 {
     if (!canUsePresetName(name)) {
-        Q_EMIT presetWriteFailed(PhosphorI18n::tr("Enter a name for the preset.", "@info"));
+        // Distinguishes the three refusals canUsePresetName makes. "Enter a name"
+        // is only true of the blank case; for an over-long one or one carrying a
+        // control or bidi character the user HAS entered a name, and being told to
+        // enter one says nothing about what is wrong with it.
+        Q_EMIT presetWriteFailed(name.trimmed().isEmpty()
+                                     ? PhosphorI18n::tr("Enter a name for the preset.", "@info")
+                                     : PhosphorI18n::tr("That name cannot be used. Try a shorter one, without "
+                                                        "special characters.",
+                                                        "@info"));
         return false;
     }
     PhosphorShaders::ShaderPreset preset = m_store->registry().presetById(m_family, presetId);

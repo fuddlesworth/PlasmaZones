@@ -26,13 +26,15 @@ namespace PlasmaZones {
  *
  * Shaped after `ShaderSetStore`, its sibling: same atomic write discipline, same
  * "name is not identity" rule, same refusal predicate for a rename dialog to gate
- * its Ok button on. NOT the same on two counts worth knowing — there is no slug
- * step here (a preset's file is named after its id, which is a minted UUID), and
- * each set store is parented to the controller owning its domain while these four
- * are parented to the root controller. The two are different things
- * though, and the distinction is worth keeping straight — a SET is which packs
- * are assigned where across a whole tree, a PRESET is how one pack is tuned.
- * They compose: a set can name assignments that reference presets.
+ * its Ok button on. It differs on two counts worth knowing. There is no slug step
+ * here, because a preset's file is named after its id, which is a minted UUID. And
+ * each set store is parented to the controller owning its domain, while these four
+ * are parented to the root controller.
+ *
+ * A SET and a PRESET are different things, and the distinction is worth keeping
+ * straight: a set is which packs are assigned where across a whole tree, a preset is
+ * how one pack is tuned. They compose, because a set can name assignments that
+ * reference presets.
  *
  * ## Identity
  *

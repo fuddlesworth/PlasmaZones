@@ -327,7 +327,7 @@ SettingsController::~SettingsController()
     }
 
     // Drop the preset bridges, then the store. This is what makes the
-    // `if (m_presetStore)` guard on the three seeding lambdas a real guard: they
+    // `if (m_presetStore)` guard on the four seeding lambdas a real guard: they
     // are connected with `this` as context, so Qt severs them in ~QObject, which
     // runs AFTER these unique_ptr members are destroyed — without this the guard
     // could only ever have read an already-destroyed pointer, which is the
@@ -789,7 +789,7 @@ SettingsController::SettingsController(QObject* parent)
         // are destroyed. An effectsChanged arriving in that window would have
         // seeded freed memory. Asking the owning pointer each time puts this
         // dependency back under the rule the destructor enforces for the other
-        // nine, with no extra teardown bookkeeping to forget.
+        // eleven, with no extra teardown bookkeeping to forget.
         const auto syncAnimation = [this]() {
             if (m_presetStore && m_animationShaderRegistry) {
                 PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Animation,
@@ -944,7 +944,12 @@ SettingsController::SettingsController(QObject* parent)
     // ever hit a null guard, which is why an overlay pack's shipped presets
     // never appeared in the picker even though overlay packs were the one family
     // that could declare them before this feature existed.
-    if (m_presetStore) {
+    {
+        // No outer `if (m_presetStore)` here: it is unconditionally make_unique'd
+        // above with nothing in between that could reset it, so the test could only
+        // ever be true. The guard that matters is the one INSIDE the lambda, which
+        // runs later and after the destructor has cleared the pointer.
+        //
         // Through m_presetStore, not a captured registry reference, for the
         // teardown reason given on the three-family block above.
         const auto syncOverlay = [this]() {

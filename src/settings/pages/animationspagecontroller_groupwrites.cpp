@@ -700,19 +700,36 @@ int AnimationsPageController::setShaderParameterOnPaths(const QStringList& rawPa
         qCWarning(lcConfig) << "setShaderParameterOnPaths: refusing an empty parameter id";
         return -1;
     }
-    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderParameterOnPaths"), {},
-                                 [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
-                                     // From the stored profile, so `effectId` and
-                                     // `presetId` stay exactly as they were: a
-                                     // parameter edit is not a pack pick and not a
-                                     // preset pick.
-                                     ShaderProfile profile = stored;
-                                     QVariantMap params = profile.parameters.value_or(QVariantMap());
-                                     params.insert(paramId, value);
-                                     profile.parameters =
-                                         boundedWrittenMap(params, QLatin1String("setShaderParameterOnPaths"));
-                                     return profile;
-                                 });
+    return applyShaderGroupWrite(
+        rawPaths, QLatin1String("setShaderParameterOnPaths"), {},
+        [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+            // From the stored profile, so `effectId` and
+            // `presetId` stay exactly as they were: a
+            // parameter edit is not a pack pick and not a
+            // preset pick.
+            ShaderProfile profile = stored;
+            QVariantMap params = profile.parameters.value_or(QVariantMap());
+            params.insert(paramId, value);
+            const QVariantMap bounded = boundedWrittenMap(params, QLatin1String("setShaderParameterOnPaths"));
+            // Prune to nullopt when bounding left nothing, exactly as the two
+            // siblings do. `boundedWrittenMap` drops an over-long key or string
+            // value, so the single key the user moved can be the one dropped —
+            // and assigning the resulting EMPTY map engaged it, which is the
+            // statement "no parameters here, and do not inherit any". That
+            // blocks every inherited parameter at this path and below, from a
+            // slider move that was refused.
+            if (bounded.isEmpty())
+                profile.parameters.reset();
+            else
+                profile.parameters = bounded;
+            // And the same nothing-engaged test the siblings apply: with no
+            // slot engaged there is no override left to store, so the entry
+            // goes rather than becoming an empty one. All three slots are
+            // independently engaged.
+            if (!profile.effectId.has_value() && !profile.parameters.has_value() && !profile.presetId.has_value())
+                return std::nullopt;
+            return profile;
+        });
 }
 
 int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,

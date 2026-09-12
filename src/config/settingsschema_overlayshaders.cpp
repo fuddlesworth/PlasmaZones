@@ -29,29 +29,37 @@ namespace {
 /// copies of the same three numbers plus its own over-long-string predicate and
 /// parameter loop, which is the duplication the shared header exists to remove. The
 /// numbers agreed, which is the only reason the duplication was invisible.
-constexpr int kMaxStringChars = kMaxShaderStringChars;
-constexpr int kMaxParameters = kMaxShaderParameters;
-constexpr int kMaxOverrides = kMaxShaderOverrides;
-
+/// Bound one overlay shader assignment.
+///
+/// COPIES the input and bounds in place, rather than building a fresh profile and
+/// moving the known fields across. That choice is load-bearing, and this function was
+/// the last instance of the shape its two twins reject: with the fresh-object form the
+/// next field added to `OverlayShaderProfile` is silently dropped on every read AND
+/// every write unless whoever adds it remembers this function. `presetId` had to be
+/// threaded through all three bounders by hand when it was added, which is the proof.
+/// Copying makes the failure mode "new field is unbounded" instead of "new field
+/// disappears", and the first is the one a reviewer notices.
 OverlayShaderProfile boundedProfile(const OverlayShaderProfile& profile)
 {
-    OverlayShaderProfile out;
+    OverlayShaderProfile out = profile;
     // Each field is bounded independently on purpose. Dropping the surviving
     // parameters along with an over-long id would be a second, coupled rule for
     // no gain: as a baseline an empty id is simply the unset default and the
     // leftover values are inert, and if the id is later corrected by hand the
     // parameters are still there. tests/unit/config/settings/
     // test_settings_overlay_shader_tree.cpp pins this.
-    if (profile.shaderId.size() <= kMaxStringChars)
-        out.shaderId = profile.shaderId;
+    if (out.shaderId.size() > kMaxShaderStringChars) {
+        out.shaderId.clear();
+    }
     // Same independent bound. An over-long preset id is dropped and the
     // assignment falls back to its own parameters, which is exactly what an
     // id naming no preset already resolves to.
-    if (profile.presetId.size() <= kMaxStringChars)
-        out.presetId = profile.presetId;
+    if (out.presetId.size() > kMaxShaderStringChars) {
+        out.presetId.clear();
+    }
     // The shared bounder, not a fourth copy of the same loop: over-long keys and
     // values dropped, non-scalar values dropped, the map capped.
-    out.parameters = boundedShaderParams(profile.parameters);
+    out.parameters = boundedShaderParams(out.parameters);
     return out;
 }
 
@@ -97,11 +105,13 @@ QVariant sanitizeOverlayShaderTree(const QVariant& v)
     int kept = 0;
     const QStringList layouts = in.overriddenLayouts();
     for (const QString& layoutId : layouts) {
-        if (kept >= kMaxOverrides)
+        if (kept >= kMaxShaderOverrides) {
             break;
+        }
         const QUuid parsed = QUuid::fromString(layoutId);
-        if (parsed.isNull())
+        if (parsed.isNull()) {
             continue;
+        }
         // Read on the original spelling, write on the canonical one.
         out.setOverride(parsed.toString(), boundedProfile(in.directOverride(layoutId)));
         ++kept;
