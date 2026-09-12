@@ -272,8 +272,9 @@ jobs:
     if: ${{ !cancelled() && needs.baseline.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
-      # Creating the v<version>-r<N> tag when the release is immutable.
-      contents: write
+      # The v<version>-r<N> tag is cut with the RELEASE_TAG_TOKEN secret,
+      # not GITHUB_TOKEN (see the dispatch step), so no contents write.
+      contents: read
       # workflow_dispatch of release.yml.
       actions: write
     steps:
@@ -370,6 +371,8 @@ jobs:
         if: steps.compare.outputs.rebuild == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
+          # Only the tag creation uses this; see the comment there.
+          RELEASE_TAG_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.baseline.outputs.tag }}
           VERSION_TAG: ${{ needs.baseline.outputs.version_tag }}
@@ -435,8 +438,27 @@ jobs:
               fi
               echo "::notice::$NEXT_TAG already exists at $SHA; reusing it for the dispatch."
           else
+              # GITHUB_TOKEN cannot create this ref, whatever `permissions`
+              # grants it. GitHub refuses (403 "Resource not accessible by
+              # integration") to let the Actions token point a new ref at
+              # any commit whose .github/workflows differ from the default
+              # branch, because that needs the `workflows` scope and the
+              # Actions token can never hold it. A release commit almost
+              # always differs from main there by the time a rebuild is
+              # due. So the tag is cut with a fine-grained PAT that has
+              # Contents and Workflows write on this repository.
+              #
+              # A PAT-created tag also fires release.yml's push trigger,
+              # which runs the release.yml AT THE TAGGED COMMIT. That copy
+              # may predate revision tags entirely, so release.yml refuses
+              # push events for -r<N> tags and the dispatch below (which
+              # runs main's copy against the tag) is the run that ships.
+              if [[ -z "${RELEASE_TAG_TOKEN:-}" ]]; then
+                  echo "::error::The RELEASE_TAG_TOKEN secret is not set. Cutting $NEXT_TAG needs a fine-grained PAT with Contents and Workflows write on $GITHUB_REPOSITORY; GITHUB_TOKEN cannot create a tag at a commit whose workflow files differ from main."
+                  exit 1
+              fi
               echo "Tagging $SHA as $NEXT_TAG"
-              gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              GH_TOKEN="$RELEASE_TAG_TOKEN" gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
                   -f "ref=refs/tags/$NEXT_TAG" -f "sha=$SHA" >/dev/null
           fi
           echo "Dispatching release.yml for $NEXT_TAG (package revision $NEXT of $VERSION_TAG; KWin moved on: $MOVED)"
