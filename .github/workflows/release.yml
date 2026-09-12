@@ -33,10 +33,40 @@ concurrency:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
+  # Refuse push events for revision tags
+  # ═══════════════════════════════════════════════════════════════════════════
+  # A v<version>-r<N> tag is cut by kwin-rebuild-watch with a PAT (the Actions
+  # token cannot create it, see that workflow), and a PAT-created tag fires
+  # this push trigger. But a push event runs the release.yml AT THE TAGGED
+  # COMMIT, which is the original release's copy and may not know revision
+  # tags at all. The watch dispatches main's copy for the tag right after
+  # cutting it, and that dispatch is the run that ships. So on push, a
+  # revision tag is a no-op here; every job hangs off `version`, so gating
+  # it gates the whole workflow. Expressions have no regex, hence a job.
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.gate.outputs.build }}
+    steps:
+      - name: Skip push events for revision tags
+        id: gate
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" =~ -r[2-9][0-9]*$ ]]; then
+              echo "::notice::$GITHUB_REF_NAME is a package-revision tag; it is released by the workflow_dispatch that cut it, not by its push. Nothing to do."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+              echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # Extract version from tag
   # ═══════════════════════════════════════════════════════════════════════════
   version:
     name: Extract Version
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
     outputs:
       ref: ${{ steps.version.outputs.ref }}
