@@ -173,6 +173,12 @@ SettingsCard {
             // The Global default has no shader leg in this UI — shader
             // overrides live on the per-event and Rules layers.
             shaderLegSupported: false
+            // No shader leg means no preset axis, said outright rather than by
+            // handing the editor a null bridge. A null bridge and a forgotten
+            // binding are indistinguishable, which is the whole reason the property
+            // below is required.
+            shaderPresetBridge: null
+            shaderSupportsPresets: false
             eventLabel: i18n("Global animation defaults")
             onValueChanged: card._commitEditor()
         }

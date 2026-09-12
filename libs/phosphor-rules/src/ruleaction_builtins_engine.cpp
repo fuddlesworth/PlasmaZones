@@ -457,11 +457,22 @@ void ActionRegistry::registerBuiltinsEngine()
                 if (!hasNonEmptyString(p, ActionParam::Event)) {
                     return false;
                 }
+                // TYPE as well as length. `"presetId": 7` used to validate and then
+                // be silently ignored by every consumer, because they all read it
+                // with .toString() and a number answers empty — so the rule loaded,
+                // looked fine in the editor and did nothing. ActionParams.h says this
+                // is "A STRING, always", the PresetIds validator a hundred lines away
+                // checks it, and the isString() checks on the adjacent keys in this
+                // very file do too. Undefined stays accepted: the key is optional.
+                const QJsonValue preset = p.value(ActionParam::PresetId);
+                if (!preset.isUndefined() && !preset.isString()) {
+                    return false;
+                }
                 // Bounded like every other free-form string in this vocabulary.
                 // An over-long id is inert rather than dangerous (it resolves to
                 // no preset), but rules.json is hand-editable and the asymmetry
                 // with MaxFontFamilyLength and friends is the kind that drifts.
-                return p.value(ActionParam::PresetId).toString().size() <= MaxShaderPresetIdLength;
+                return preset.toString().size() <= MaxShaderPresetIdLength;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params),
@@ -610,8 +621,13 @@ void ActionRegistry::registerBuiltinsEngine()
                 if (!node.isUndefined() && !node.isString()) {
                     return false;
                 }
-                // Bounded on the same terms as the animation twin above.
-                return p.value(ActionParam::PresetId).toString().size() <= MaxShaderPresetIdLength;
+                // Type-checked and bounded on the same terms as the animation twin
+                // above, including why undefined stays accepted.
+                const QJsonValue preset = p.value(ActionParam::PresetId);
+                if (!preset.isUndefined() && !preset.isString()) {
+                    return false;
+                }
+                return preset.toString().size() <= MaxShaderPresetIdLength;
             },
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring

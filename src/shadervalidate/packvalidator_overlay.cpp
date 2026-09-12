@@ -125,10 +125,6 @@ int validatePack(const QString& packDir, QTextStream& out)
 
     int errors = 0;
 
-    // Preset lint: every preset key must name a declared parameter, and every
-    // value must match that parameter's declared type and range.
-    errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
-
     // ── metadata lints ──
     QStringList lints;
     QHash<QString, QString> claimedLane; // "pool#slot" → first param id, for collision detection
@@ -375,6 +371,12 @@ int validatePack(const QString& packDir, QTextStream& out)
             ++errors;
         }
     }
+
+    // Preset lint: every preset key must name a declared parameter, and every value
+    // must match that parameter's declared type and range. AFTER the metadata block,
+    // matching the other three arms. Run before it, this printed `presets ERROR`
+    // above `metadata OK`.
+    errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
 
     // ── stage compiles (reproduce the runtime assembly) ──
     const QString packsRoot = QFileInfo(packDir).absolutePath();

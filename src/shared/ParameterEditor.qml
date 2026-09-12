@@ -141,8 +141,8 @@ ColumnLayout {
         return result;
     }
     /// Whether @p data's parameter carries an edit of the asking assignment's
-    /// own. False for every host that passes no map, which is how the eight
-    /// hosts with no preset axis stay unmarked.
+    /// own. False for every host that passes no map, which is how a host with no
+    /// preset axis stays unmarked.
     function _isOverridden(data) {
         if (!data || !root.overriddenParams)
             return false;
@@ -609,6 +609,11 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Kirigami.Theme.inherit: true
                 compact: false
+                // On the INTERACTIVE row as well as on the label beside it. The label
+                // is not focusable, so a screen-reader user tabbing the controls
+                // never reached the mark and was told nothing about which values are
+                // their own — the one thing the mark exists to say.
+                Accessible.description: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
                 paramData: modelData
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams
@@ -685,6 +690,9 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                 Kirigami.Theme.inherit: true
                 compact: true
+                // See the wide delegate's twin: announced on the focusable row, not
+                // only on the label.
+                Accessible.description: root._isOverridden(modelData) ? i18nc("@info:whatsthis", "Changed here, on top of the selected preset.") : ""
                 paramData: modelData
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams

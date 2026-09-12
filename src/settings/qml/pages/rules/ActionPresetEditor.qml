@@ -31,7 +31,7 @@ ComboBox {
 
     readonly property var _param: modelData
     readonly property string _packId: row.action[row._shaderPresetPackKey] || ""
-    readonly property var _bridge: {
+    readonly property QtObject _bridge: {
         if (!row.appSettings)
             return null;
         return row._shaderActionType === "overrideOverlayShader" ? row.appSettings.overlayPresets : row.appSettings.animationPresets;
@@ -55,7 +55,7 @@ ComboBox {
         // was indistinguishable from no reference at all. PresetRow solves it the
         // same way.
         const want = row.action[_param.key] || "";
-        if (want.length > 0 && !_entries_has(out, want)) {
+        if (want.length > 0 && !_entriesHas(out, want)) {
             out.push({
                 id: want,
                 name: i18nc("@item:inlistbox preset that no longer exists", "Missing preset")
@@ -64,7 +64,7 @@ ComboBox {
         return out;
     }
 
-    function _entries_has(list, id) {
+    function _entriesHas(list, id) {
         for (let i = 0; i < list.length; ++i) {
             if (list[i].id === id)
                 return true;

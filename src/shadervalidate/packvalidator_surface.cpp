@@ -120,10 +120,6 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
 
     int errors = 0;
 
-    // Preset lint: every preset key must name a declared parameter, and every
-    // value must match that parameter's declared type and range.
-    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
-
     // ── metadata lints ──
     static const QStringList kSurfaceParamTypes = {QStringLiteral("float"), QStringLiteral("int"),
                                                    QStringLiteral("bool"), QStringLiteral("color")};
@@ -282,6 +278,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             ++errors;
         }
     }
+
+    // Preset lint: every preset key must name a declared parameter, and every value
+    // must match that parameter's declared type and range. AFTER the metadata block,
+    // matching the animation and pointer arms. Run before it, this printed
+    // `presets ERROR` above `metadata OK`, which is the self-contradicting shape the
+    // collected-then-printed design was introduced to avoid.
+    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
     if (QFile::exists(eff.fragmentShaderPath)) {

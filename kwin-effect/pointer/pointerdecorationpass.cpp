@@ -124,7 +124,16 @@ void PointerDecorationPass::rebuildChain()
     // enabledChain() is effectiveChain() minus the per-layer disable toggles,
     // which is exactly the set of layers the renderer should paint. An empty
     // one is the "off" state: there is no separate master switch.
-    const QStringList chain = m_profile.enabledChain();
+    //
+    // Read only to decide whether to scan. The chain this function BUILDS from is
+    // re-read below, after ensureRegistryPaths(), together with the parameters, so
+    // both come from one observation of m_profile. Keeping the pre-scan read was a
+    // split observation: ensureRegistryPaths can re-enter this function through
+    // effectsChanged → preset seeding → presetsChanged → setProfile, and the outer
+    // call then resumed with the OLD chain and the NEW parameters. Harmless only
+    // because a preset flatten cannot change a chain, which is not a property this
+    // function should depend on.
+    const QStringList chainForScanDecision = m_profile.enabledChain();
 
     // BEFORE the clear below, and that order is the whole point.
     //
@@ -146,9 +155,14 @@ void PointerDecorationPass::rebuildChain()
     //
     // Still gated on the user having actually enabled a chain, so a disabled
     // feature pays for neither the scan nor the file watcher.
-    if (!chain.isEmpty()) {
+    if (!chainForScanDecision.isEmpty()) {
         ensureRegistryPaths();
     }
+
+    // One observation of m_profile for both axes, taken after the scan. See the
+    // note on chainForScanDecision above.
+    const QStringList chain = m_profile.enabledChain();
+    const QVariantMap allParameters = m_profile.effectiveParameters();
 
     m_engagedLayers.clear();
     m_anyAboveLayer = false;
@@ -164,7 +178,6 @@ void PointerDecorationPass::rebuildChain()
         return;
     }
 
-    const QVariantMap allParameters = m_profile.effectiveParameters();
     m_engagedLayers.reserve(static_cast<size_t>(chain.size()));
     for (const QString& effectId : chain) {
         if (effectId.isEmpty()) {
@@ -633,6 +646,14 @@ void PointerDecorationPass::repaintStale(const QRectF& stale) const
         return;
     }
     KWin::effects->addRepaint(KWin::RectF(stale));
+}
+
+void PointerDecorationPass::repaintCurrentReach()
+{
+    if (!m_output || !KWin::effects) {
+        return;
+    }
+    repaintStale(damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs(), /*ignoreSuppression=*/true));
 }
 
 void PointerDecorationPass::invalidateShaderCache()

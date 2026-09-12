@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Fixture helpers shared by the offline pack validator's test executables
-// (test_pack_validators, test_animation_pack_bakes, test_pack_model_detection).
+// Fixture helpers shared by the offline pack validator's five test executables:
+// test_pack_validators, test_pointer_pack_validator, test_surface_pack_validator,
+// test_animation_pack_bakes and test_pack_model_detection.
 // Header-only and `inline` so each executable carries one definition and no
-// test-only library has to exist for three small binaries.
+// test-only library has to exist for five small binaries.
 
 #pragma once
 

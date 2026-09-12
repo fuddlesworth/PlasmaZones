@@ -629,14 +629,14 @@ void Daemon::stop()
         m_ruleAdaptor->detach();
     }
 
-    // Shader registries + warm-bake pool: torn down ABOVE the !m_running gate
-    // because they are ctor/init-origin (setupAnimationShaderEffects /
-    // setupSurfaceShaderEffects / setupShaderWarmBakes all run from init(),
-    // before start() sets m_running). An init-without-start teardown (a failed
-    // init, or a double-stop) must still null the OverlayService's borrows and
-    // run the registries' destructors, or ~OverlayService is left holding two
-    // dangling registry pointers — the same reverse-destruction hazard the
-    // adaptor detaches above guard against.
+    // Shader registries + preset store + warm-bake pool: torn down ABOVE the
+    // !m_running gate because they are ctor/init-origin (setupAnimationShaderEffects
+    // / setupSurfaceShaderEffects / setupShaderPresets / setupShaderWarmBakes all
+    // run from init(), before start() sets m_running). An init-without-start
+    // teardown (a failed init, or a double-stop) must still null the
+    // OverlayService's borrows and run these destructors, or ~OverlayService is left
+    // holding three dangling pointers — two registries and the preset registry —
+    // the same reverse-destruction hazard the adaptor detaches above guard against.
     m_shaderBakePool.clear();
     m_shaderBakePool.waitForDone(500);
     // Reap the warm-bake QFutureWatchers with their host: a bake discarded by

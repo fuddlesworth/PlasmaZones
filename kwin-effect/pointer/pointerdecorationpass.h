@@ -216,6 +216,18 @@ public:
     /// add or remove the pack ids the chain names.
     void invalidateShaderCache();
 
+    /// Damage the band the chain CURRENTLY reaches around the pointer, ignoring the
+    /// motion suppression.
+    ///
+    /// `staleTrailRect()` answers empty when the trail is quiet, which is the common
+    /// case for a settings or preset change: the user is not moving the mouse while
+    /// they drag a slider, so neither setProfile nor invalidateShaderCache asked for
+    /// any damage and the retune did not reach the screen until the next motion.
+    /// Deliberately not addRepaintFull — this is a band a few hundred px across on a
+    /// per-event path, and a full compositor repaint for a cursor decoration is the
+    /// wrong trade.
+    void repaintCurrentReach();
+
     /// Drop a removed output's state. The history is keyed to one output's
     /// canvas, so an output going away invalidates it wholesale.
     void outputRemoved(KWin::LogicalOutput* screen);

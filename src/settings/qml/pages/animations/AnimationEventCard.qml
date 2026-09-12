@@ -890,6 +890,9 @@ Item {
                 shaderOwnsPack: root._ownsShaderPack
                 shaderOwnsParamsOnly: root._ownsShaderParamsOnly
                 shaderOwnsPresetOnly: root._ownsShaderPresetOnly
+                // Not "only": the caption mentions the preset additively, so a card
+                // storing a preset AND a parameter says both.
+                shaderOwnsPreset: !root._ownsShaderPack && root._primaryPresetId.length > 0
                 shaderParamsStale: root._shaderParamsStale
                 // The raw map, NOT `currentShaderParams`: that one is the
                 // resolved walk-up this card displays, and the preset axis has

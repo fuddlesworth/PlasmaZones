@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorPointerShaders::PointerShaderEffect;
@@ -449,10 +450,12 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                     continue;
                 }
                 // A colour-typed value is parsed with QColor at runtime, and an
-                // unparseable one becomes an INVALID colour rather than an
-                // error: the uniform then receives transparent black, which
-                // reads as "the preset did nothing" instead of "the preset has a
-                // typo". Checking the string is a string caught only half of it.
+                // unparseable one becomes an INVALID colour rather than an error.
+                // Both consuming registries then fall back to the parameter's
+                // DECLARED DEFAULT, so the pack renders exactly as if the preset had
+                // never mentioned the parameter — "the preset did nothing" rather
+                // than "the preset has a typo", and nothing anywhere says which.
+                // Checking the string is a string caught only half of it.
                 if (param.type == QLatin1String("color") && !QColor::isValidColorName(value.toString())) {
                     lints << QStringLiteral("preset '%1' sets '%2' to '%3', which is not a colour QColor can parse")
                                  .arg(presetName, vit.key(), value.toString());
@@ -466,13 +469,25 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 // runtime will refuse, at authoring time.
                 if (param.type == QLatin1String("image") && !packDir.isEmpty()) {
                     const QString declaredPath = value.toString();
-                    // confinedPackPath, not the runtime's guard: this one is
-                    // deliberately the stricter of the two (it canonicalises when
-                    // both sides exist, and falls back to a lexical check when the
-                    // file is not written yet), which is what an authoring-time
-                    // gate should be.
+                    // confinedPackPath, which now DELEGATES to the runtime's own
+                    // guard rather than reimplementing it. It used to claim to be the
+                    // stricter of the two and was in fact the laxer: a nonexistent
+                    // leaf left it comparing lexically, so a symlinked intermediate
+                    // pointing out of the pack passed. Same guard, same answer, and
+                    // the validator can no longer be more permissive than production.
                     if (!declaredPath.isEmpty() && !confinedPackPath(packDir, declaredPath)) {
                         lints << QStringLiteral("preset '%1' sets '%2' to a path outside the pack: %3")
+                                     .arg(presetName, vit.key(), declaredPath);
+                        ++problems;
+                        continue;
+                    }
+                    // And the file has to EXIST, the same check an image param's
+                    // `default` already gets. A preset naming a texture the pack does
+                    // not ship binds nothing at runtime and falls back to the
+                    // default, so it is the same silent no-op as an unparseable
+                    // colour above.
+                    if (!declaredPath.isEmpty() && !QFileInfo::exists(QDir(packDir).absoluteFilePath(declaredPath))) {
+                        lints << QStringLiteral("preset '%1' sets '%2' to '%3', which the pack does not contain")
                                      .arg(presetName, vit.key(), declaredPath);
                         ++problems;
                     }
@@ -500,6 +515,17 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                              "preset '%1' sets '%2' to %3, but '%2' is an int parameter, so the value "
                              "truncates to %4 at runtime")
                              .arg(presetName, vit.key(), QString::number(v), QString::number(std::trunc(v)));
+                ++problems;
+            }
+            // And inside int's own range, independently of the pack's declared one.
+            // The declared bounds are optional, so `{"count": 1e18}` under an int
+            // parameter with no min/max linted clean and then hit a
+            // static_cast<int> at runtime, which is undefined behaviour rather than
+            // a clamp. The type is the bound when the author gave none.
+            if (param.type == QLatin1String("int")
+                && (v < double(std::numeric_limits<int>::min()) || v > double(std::numeric_limits<int>::max()))) {
+                lints << QStringLiteral("preset '%1' sets '%2' to %3, which does not fit in an int parameter")
+                             .arg(presetName, vit.key(), QString::number(v));
                 ++problems;
             }
             if (param.minValue.isValid() && v < param.minValue.toDouble()) {

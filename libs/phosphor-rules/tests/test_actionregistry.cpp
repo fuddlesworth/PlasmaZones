@@ -500,6 +500,20 @@ private Q_SLOTS:
         QVERIFY(!loads(ActionType::OverrideAnimationShader, anim));
         QVERIFY(!loads(ActionType::OverrideOverlayShader, overlay));
 
+        // A non-STRING is refused rather than silently read as empty. Both consumers
+        // read this with .toString(), so a number validated, loaded, and then did
+        // nothing at resolve — a rule that looks right in the editor and never fires.
+        // The decoration sibling below already pinned this for its own key.
+        anim.insert(QString(ActionParam::PresetId), 7);
+        overlay.insert(QString(ActionParam::PresetId), 7);
+        QVERIFY(!loads(ActionType::OverrideAnimationShader, anim));
+        QVERIFY(!loads(ActionType::OverrideOverlayShader, overlay));
+
+        anim.insert(QString(ActionParam::PresetId), QJsonObject{{QStringLiteral("a"), QStringLiteral("b")}});
+        overlay.insert(QString(ActionParam::PresetId), QJsonObject{{QStringLiteral("a"), QStringLiteral("b")}});
+        QVERIFY(!loads(ActionType::OverrideAnimationShader, anim));
+        QVERIFY(!loads(ActionType::OverrideOverlayShader, overlay));
+
         // Absent is fine on both: a rule can pin a pack without pinning a
         // tuning, which is what every rule written before presets existed does.
         anim.remove(QString(ActionParam::PresetId));

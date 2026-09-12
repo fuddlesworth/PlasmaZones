@@ -306,12 +306,17 @@ ColumnLayout {
             // lives beside it in the same payload.
             const presetBridge = root.appSettings ? (action.type === "overrideOverlayShader" ? root.appSettings.overlayPresets : root.appSettings.animationPresets) : null;
             const packForPreset = action.effectId || "";
-            if (presetBridge && packForPreset.length > 0) {
-                const rows = presetBridge.presetsFor(packForPreset) || [];
-                for (let pr = 0; pr < rows.length; ++pr) {
-                    if (rows[pr].id === rawStr)
-                        return rows[pr].name;
-                }
+            // Nothing to say until a bridge has actually answered. While appSettings
+            // is still unresolved the bridge is null, and falling through to the
+            // "Missing preset" line below reported a perfectly valid rule's preset as
+            // gone for the length of that transient. ActionPresetEditor handles the
+            // same null explicitly.
+            if (!presetBridge || packForPreset.length === 0)
+                return "";
+            const rows = presetBridge.presetsFor(packForPreset) || [];
+            for (let pr = 0; pr < rows.length; ++pr) {
+                if (rows[pr].id === rawStr)
+                    return rows[pr].name;
             }
             // A preset an assignment outlived: say so rather than showing its id.
             return i18nc("@info:status preset that no longer exists", "Missing preset");

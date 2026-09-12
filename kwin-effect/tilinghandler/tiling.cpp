@@ -676,7 +676,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         const auto raw = PhosphorAnimationShaders::resolveShaderWithDefault(
                             m_effect->m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::ScrollingView);
                         const auto stripShaderProfile = PhosphorAnimationShaders::withPresetsResolved(
-                            raw, m_effect->m_shaderManager.presetStore().registry());
+                            raw, m_effect->m_shaderManager.presetRegistry());
                         stripEffectId = stripShaderProfile.effectiveEffectId();
                         stripEffectParams = stripShaderProfile.effectiveParameters();
                     }

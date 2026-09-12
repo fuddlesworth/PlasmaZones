@@ -2365,6 +2365,9 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 #                              the shared file passed the size ceiling
 #   test_surface_pack_validator: the same for the surface model, which had NO
 #                              harness at all until this was added
+#   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
+#                              multipass buffer passes
+#   test_pack_model_detection: the shared/ marker lookup and include roots
 #
 # That topology is worth one honest sentence, because its shape caused a real
 # gap: the split above followed the file-size ceiling rather than the family
@@ -2373,9 +2376,6 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # four arms were unexercised and nothing made that visible. One executable per
 # family over the shared helpers is the structure that would; until then, the
 # rule is that a new arm gets its own file here on the day it is written.
-#   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
-#                              multipass buffer passes
-#   test_pack_model_detection: the shared/ marker lookup and include roots
 # ═══════════════════════════════════════════════════════════════════════════════
 # The bundled-pack gates (shader_validate_*) only prove the shipped packs are
 # clean; these build deliberately-broken packs in a temp dir and assert the

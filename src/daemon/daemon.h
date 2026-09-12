@@ -1261,11 +1261,12 @@ private:
     /// before resetting this registry.
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
-    /// Named parameter presets for every family: the user's own, scanned with
-    /// live reload, plus the ones packs declare. An assignment stores a preset
-    /// id and its own edits rather than a copy, so this is what turns that
-    /// reference into rendered parameters. Declared AFTER m_overlayService,
-    /// like the registries above: stop() nulls that borrow before this resets.
+    /// Named parameter presets for the three families the daemon resolves (animation,
+    /// surface, overlay; pointer is compositor-only): the user's own, scanned with
+    /// live reload, plus the ones packs declare. An assignment stores a preset id and
+    /// its own edits rather than a copy, so this is what turns that reference into
+    /// rendered parameters. Declared AFTER m_overlayService, like the registries
+    /// above: stop() nulls that borrow before this resets.
     std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
 
     /// User-authored curve scanner. Scans `plasmazones/curves` from the XDG
@@ -1600,15 +1601,14 @@ private:
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not
     // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
     QThreadPool m_shaderBakePool;
-    /// Zone-path shadersChanged → warm-bake wiring, held so a stop() → init()
-    /// cycle disconnects the prior handler instead of stacking a second one
-    /// (m_shaderRegistry is ctor-owned and survives stop(), unlike the
-    /// animation/surface registries which are recreated each init).
+    /// Zone-path shadersChanged → warm-bake wiring, held so a stop() → init() cycle
+    /// disconnects the prior handler instead of stacking a second one (m_shaderRegistry
+    /// is ctor-owned and survives stop(); the animation and surface ones are recreated).
     QMetaObject::Connection m_zoneWarmBakeConnection;
     /// The overlay preset sync, on the ctor-owned m_shaderRegistry — the other
-    /// connection to the one sender that outlives stop(). Its lambda reaches the
-    /// preset store, which stop() DOES reset, so it is severed there beside the
-    /// handle above and dropped on setupShaderPresets re-entry.
+    /// connection to the one sender that outlives stop(). It reaches the preset store,
+    /// which stop() resets, so it is severed there and at the TOP of
+    /// setupShaderPresets, before the store is replaced.
     QMetaObject::Connection m_overlayPresetSyncConnection;
     /// Skip-unchanged gate for the warm bakes: "<category>:<id>" → last
     /// scheduled fingerprint (vert path + vert mtime + frag path + frag mtime +

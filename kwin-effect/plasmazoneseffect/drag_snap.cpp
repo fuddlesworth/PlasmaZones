@@ -742,7 +742,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // Flattened: REPLACES the flattened profile above.
                 shaderProfile = PhosphorAnimationShaders::withPresetsResolved(
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath),
-                    m_shaderManager.presetStore().registry());
+                    m_shaderManager.presetRegistry());
             }
             // Runtime applicability gate — same canonical-predicate check
             // as tryBeginShaderForEvent (resolvedShaderAppliesToEvent): the

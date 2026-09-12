@@ -7,6 +7,11 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
+// standardUserPresetRoot() and ShaderPresetStore::load() are called below. Reached
+// today through plasmazoneseffect.h → shadertransitionmanager.h, which is the kind
+// of transitive reach that breaks the moment a header sheds an include — and these
+// two free functions moved once already.
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -355,9 +360,16 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // The projection is PhosphorShaders::seedPackPresets, shared with the
         // daemon and the settings app rather than written out here: all three
         // built the same two hashes from an effect list and whole-family
-        // replaced, so a fix to it had to land three times. `presets` is a
-        // reference to the store's registry, which outlives the effect's wiring,
-        // so these three lambdas may hold it past this block.
+        // replaced, so a fix to it had to land three times.
+        //
+        // `presets` is a reference into m_shaderManager's preset store, and the
+        // CONTEXT OBJECT for these three connections is that store's owner rather
+        // than `this`. With `this` as context Qt severs them in ~PlasmaZonesEffect's
+        // ~QObject, which runs after the members are destroyed, so the connections
+        // outlived the very reference they capture. Naming the store as context
+        // severs them while it is still alive, which is what makes the capture safe
+        // rather than merely unreached.
+        auto* presetContext = &m_shaderManager.presetStore();
         const auto syncAnimationPresets = [this, &presets]() {
             PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Animation,
                                              m_shaderManager.m_animationShaderRegistry.availableEffects());
@@ -376,11 +388,12 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         syncPointerPresets();
 
         connect(&m_shaderManager.m_animationShaderRegistry,
-                &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, syncAnimationPresets);
-        connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, presetContext,
+                syncAnimationPresets);
+        connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, presetContext,
                 syncSurfacePresets);
-        connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
-                syncPointerPresets);
+        connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged,
+                presetContext, syncPointerPresets);
 
         // A retuned preset has to reach what is already on screen. Which caches
         // that means dropping differs per family, because each bakes parameters
@@ -446,6 +459,14 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                         m_pointerPass.setProfile(resolveDecorationProfile(
                             PhosphorSurfaceShaders::decorationPointerPath(), PhosphorShaders::ShaderFamily::Pointer));
                         m_pointerPass.invalidateShaderCache();
+                        // Both calls above damage only what the trail already
+                        // occupies, which is EMPTY when the pointer is at rest —
+                        // exactly the state the user is in while dragging a preset
+                        // slider. Without this the retune did not reach the screen
+                        // until the next pointer motion. The reach band, not
+                        // addRepaintFull: a cursor decoration is not worth a full
+                        // compositor repaint.
+                        m_pointerPass.repaintCurrentReach();
                         break;
                     case PhosphorShaders::ShaderFamily::Animation:
                     case PhosphorShaders::ShaderFamily::Overlay:
@@ -723,7 +744,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                 const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::withPresetsResolved(
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
                                                                        PhosphorAnimation::ProfilePaths::DesktopSwitch),
-                    m_shaderManager.presetStore().registry());
+                    m_shaderManager.presetRegistry());
                 const QString effectId = profile.effectiveEffectId();
                 if (effectId.isEmpty()) {
                     return;
@@ -769,7 +790,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             profile = PhosphorAnimationShaders::withPresetsResolved(
                 PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
                                                                    PhosphorAnimation::ProfilePaths::DesktopPeek),
-                m_shaderManager.presetStore().registry());
+                m_shaderManager.presetRegistry());
             effectId = profile.effectiveEffectId();
         }
         if (effectId.isEmpty()) {

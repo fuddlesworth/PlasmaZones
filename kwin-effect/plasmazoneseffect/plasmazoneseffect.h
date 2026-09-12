@@ -1391,24 +1391,13 @@ private:
     /// decorations.cpp with the rest of the chain-resolution code.
     bool hasDecorationTreeContent() const;
 
-    /// True when a placement-state change could change SOME window's resolved
-    /// rule outcome, so the per-window invalidation path has to run at all.
-    ///
-    /// The exclusion set is a separate term from the three appearance ones on
-    /// purpose. It is not an animation rule, sets no appearance default and
-    /// leaves no decoration-tree content, so an Exclude-only configuration makes
-    /// all three false — yet isExcludedBySnappingRule caches its verdict per
-    /// (windowId, rule-set revision), neither of which moves on a placement flip,
-    /// and that verdict gates shouldHandleWindow / shouldDecorateWindow. Folding
-    /// it in here is what stops `Exclude WHEN IsFloating` (and, since the
-    /// ActiveLayout wire, `WHEN ActiveLayout = X`) freezing at its first consult.
-    /// Callers still gate the expensive appearance work on the three predicates
-    /// separately — this only decides whether the path is entered.
-    bool hasPlacementSensitiveRuleWork() const
-    {
-        return !m_shaderManager.animationRuleSet().isEmpty() || hasWindowAppearanceDefault()
-            || hasDecorationTreeContent() || !m_snappingExclusionRuleSet.isEmpty();
-    }
+    // There is deliberately NO hasPlacementSensitiveRuleWork() helper here. One
+    // existed, with a doc asserting callers gated on it, and had none: it was a copy
+    // of the live gate at the top of rule_invalidation.cpp's placement handler that
+    // had fallen two terms behind (m_decorationExclusionRuleSet and
+    // effectVerdictRuleSet), and that file's own comment explains why each of those
+    // terms is load-bearing. A second spelling of a gate nobody calls is worse than
+    // no helper, so the gate lives at its one call site.
 
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
