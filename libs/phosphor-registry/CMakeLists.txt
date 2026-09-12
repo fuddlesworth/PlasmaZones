@@ -89,6 +89,7 @@ set(phosphorregistry_public_HDRS
     include/PhosphorRegistry/Manifest.h
     include/PhosphorRegistry/PluginLoader.h
     include/PhosphorRegistry/MetadataPackLoader.h
+    include/PhosphorRegistry/PathKeyedOverrides.h
 )
 
 set(phosphorregistry_SRCS

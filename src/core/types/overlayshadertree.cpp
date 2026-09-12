@@ -37,66 +37,75 @@ OverlayShaderProfile OverlayShaderProfile::fromJson(const QJsonObject& obj)
 
 OverlayShaderProfile OverlayShaderTree::resolve(const QString& layoutId) const
 {
-    const auto it = m_overrides.constFind(layoutId);
-    if (it != m_overrides.constEnd())
-        return it.value();
-    return m_baseline;
+    // ONE step, not a walk-up: an override or the baseline, nothing between. That
+    // is the difference from the other two trees, and it is why this one does not
+    // share `resolve()` with them.
+    if (m_store.hasOverride(layoutId))
+        return m_store.directOverride(layoutId);
+    return m_store.baseline();
 }
 
 OverlayShaderProfile OverlayShaderTree::directOverride(const QString& layoutId) const
 {
-    return m_overrides.value(layoutId);
+    return m_store.directOverride(layoutId);
 }
 
 bool OverlayShaderTree::hasOverride(const QString& layoutId) const
 {
-    return m_overrides.contains(layoutId);
+    return m_store.hasOverride(layoutId);
 }
 
 QStringList OverlayShaderTree::overriddenLayouts() const
 {
-    QStringList ids = m_overrides.keys();
+    // SORTED, not insertion order. PathKeyedOverrides tracks insertion order for
+    // every consumer, and this one deliberately ignores it: the keys are layout
+    // UUIDs with no meaningful sequence, the wire format is a key-addressed
+    // object, and a stable sorted view is what a picker wants. Sorting here is
+    // also what makes this tree's equality order-free below.
+    QStringList ids = m_store.keys();
     ids.sort();
     return ids;
 }
 
 bool OverlayShaderTree::isEmpty() const
 {
-    return m_baseline.isEmpty() && m_overrides.isEmpty();
+    return m_store.baseline().isEmpty() && m_store.hasNoOverrides();
 }
 
 void OverlayShaderTree::setOverride(const QString& layoutId, const OverlayShaderProfile& profile)
 {
-    // Belt-and-braces: no current caller can reach this. fromJson rejects an
-    // empty key before inserting, and the schema sanitizer only forwards keys
-    // it took from overriddenLayouts(). Kept because "" is the BASELINE's path
-    // everywhere else in this API, so a future caller passing a baseline path
-    // here would otherwise create an override keyed on the empty string that
-    // resolve() could never return.
-    if (layoutId.isEmpty())
-        return;
-    m_overrides.insert(layoutId, profile);
+    // The empty-key refusal lives in PathKeyedOverrides now, where all three
+    // trees' copies of it collapsed into one. The reason is unchanged and was
+    // the same for each of them: "" is the BASELINE's path everywhere else in
+    // these APIs, so an override keyed on it would be one `resolve()` could
+    // never return.
+    m_store.setOverride(layoutId, profile);
 }
 
 bool OverlayShaderTree::clearOverride(const QString& layoutId)
 {
-    return m_overrides.remove(layoutId) != 0;
+    return m_store.clearOverride(layoutId);
 }
 
 void OverlayShaderTree::setBaseline(const OverlayShaderProfile& profile)
 {
-    m_baseline = profile;
+    m_store.setBaseline(profile);
 }
 
 QJsonObject OverlayShaderTree::toJson() const
 {
     QJsonObject obj;
-    if (!m_baseline.isEmpty())
-        obj[QLatin1String(JsonFieldBaseline)] = m_baseline.toJson();
-    if (!m_overrides.isEmpty()) {
+    if (!m_store.baseline().isEmpty())
+        obj[QLatin1String(JsonFieldBaseline)] = m_store.baseline().toJson();
+    if (!m_store.hasNoOverrides()) {
+        // The KEY-ADDRESSED form, unlike the other two trees' arrays. Walking in
+        // insertion order changes nothing here, because QJsonObject is sorted by
+        // key regardless — which is also why this tree's order is not part of its
+        // identity and its equality below is order-free.
         QJsonObject overrides;
-        for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
-            overrides[it.key()] = it.value().toJson();
+        m_store.forEachInOrder([&overrides](const QString& layoutId, const OverlayShaderProfile& profile) {
+            overrides[layoutId] = profile.toJson();
+        });
         obj[QLatin1String(JsonFieldOverrides)] = overrides;
     }
     return obj;
@@ -105,7 +114,7 @@ QJsonObject OverlayShaderTree::toJson() const
 OverlayShaderTree OverlayShaderTree::fromJson(const QJsonObject& obj)
 {
     OverlayShaderTree tree;
-    tree.m_baseline = OverlayShaderProfile::fromJson(obj.value(QLatin1String(JsonFieldBaseline)).toObject());
+    tree.m_store.setBaseline(OverlayShaderProfile::fromJson(obj.value(QLatin1String(JsonFieldBaseline)).toObject()));
     const QJsonObject overrides = obj.value(QLatin1String(JsonFieldOverrides)).toObject();
     for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
         if (it.key().isEmpty() || !it.value().isObject())
@@ -117,12 +126,15 @@ OverlayShaderTree OverlayShaderTree::fromJson(const QJsonObject& obj)
 
 bool OverlayShaderTree::operator==(const OverlayShaderTree& other) const
 {
-    // Order-free by construction: overrides live in a hash and every
-    // ordered view (overriddenLayouts, toJson via QJsonObject) is sorted,
-    // so equality has no order component to consider (unlike the animation
-    // tree, whose operator== also compares order; see the order-insensitive
-    // compare the decoration setter had to build around that).
-    return m_baseline == other.m_baseline && m_overrides == other.m_overrides;
+    // Order-free by construction: every ordered view this tree exposes
+    // (overriddenLayouts, toJson via QJsonObject) is sorted, so the insertion
+    // order PathKeyedOverrides tracks is invisible here and must not be compared.
+    // That is the disagreement between the three trees — the other two DO compare
+    // it, because their overrides are an array on the wire — and it is exactly
+    // why the shared container hands out `sameBaseline` / `sameOverrides` /
+    // `sameKeyOrder` separately instead of an operator== that would pick one
+    // policy for all three.
+    return m_store.sameBaseline(other.m_store) && m_store.sameOverrides(other.m_store);
 }
 
 OverlayShaderProfile withPresetsResolved(const OverlayShaderProfile& profile,

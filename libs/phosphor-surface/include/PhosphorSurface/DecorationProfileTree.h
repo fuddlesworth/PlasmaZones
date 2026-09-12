@@ -6,6 +6,8 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/phosphorsurface_export.h>
 
+#include <PhosphorRegistry/PathKeyedOverrides.h>
+
 #include <QHash>
 #include <QJsonObject>
 #include <QString>
@@ -88,7 +90,7 @@ public:
 
     DecorationProfile baseline() const
     {
-        return m_baseline;
+        return m_store.baseline();
     }
     void setBaseline(const DecorationProfile& profile);
 
@@ -106,9 +108,12 @@ public:
     }
 
 private:
-    DecorationProfile m_baseline;
-    QHash<QString, DecorationProfile> m_overrides;
-    QStringList m_insertionOrder;
+    /// Baseline, overrides and their insertion order, shared with the animation
+    /// and overlay trees rather than hand-written a third time. See
+    /// `PathKeyedOverrides` for what is deliberately NOT shared: this tree's
+    /// walk-up `resolve()`, its seed overlay, its equality order policy and its
+    /// array wire format all stay here.
+    PhosphorRegistry::PathKeyedOverrides<DecorationProfile> m_store;
 };
 
 } // namespace PhosphorSurfaceShaders

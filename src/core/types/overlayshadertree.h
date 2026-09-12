@@ -5,6 +5,8 @@
 
 #include "plasmazones_export.h"
 
+#include <PhosphorRegistry/PathKeyedOverrides.h>
+
 #include <QHash>
 #include <QJsonObject>
 // Forward-declared rather than included: only a const reference to it appears in
@@ -157,7 +159,7 @@ public:
 
     OverlayShaderProfile baseline() const
     {
-        return m_baseline;
+        return m_store.baseline();
     }
     void setBaseline(const OverlayShaderProfile& profile);
 
@@ -178,8 +180,12 @@ public:
     }
 
 private:
-    OverlayShaderProfile m_baseline;
-    QHash<QString, OverlayShaderProfile> m_overrides;
+    /// Baseline and overrides, shared with the animation and decoration trees
+    /// rather than hand-written a third time. See `PathKeyedOverrides` for what
+    /// is deliberately NOT shared: this tree's one-step `resolve()`, its sorted
+    /// key view, its order-FREE equality and its key-addressed wire format all
+    /// stay here, and they are exactly the ways it differs from the other two.
+    PhosphorRegistry::PathKeyedOverrides<OverlayShaderProfile> m_store;
 };
 
 /// Flatten @p profile's preset reference into its `parameters`.
