@@ -225,7 +225,7 @@ void AutotileEngine::toggleWindowFloatAs(const QString& rawWindowId, const QStri
         // CURRENT-desktop states, so a window legitimately tracked in an
         // off-desktop state reaches this branch too, and sweeping its live
         // key would orphan that membership.
-        if (m_states.windowKeys().contains(windowId)) {
+        if (m_states.hasWindow(windowId)) {
             PhosphorTiles::TilingState* keyedState = stateForWindow(windowId);
             if (!keyedState || !keyedState->containsWindow(windowId)) {
                 qCInfo(PhosphorTileEngine::lcTileEngine)
@@ -338,9 +338,12 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // return before setFloating), so what subscribers last heard remains
     // accurate.
     const auto destKey = currentKeyForScreen(ctx.toScreenId);
-    const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
-    if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
-        && state->containsWindow(windowId)) {
+    // Membership at the DESTINATION, not "its key happens to be that one": a
+    // window present on several desktops is legitimately tracked elsewhere as
+    // well, and that is not evidence it has yet been adopted here.
+    const bool trackedAnywhere = m_states.hasWindow(windowId);
+    const bool adoptedAtDest = m_states.hasMembership(windowId, destKey);
+    if (adoptedAtDest && state->containsWindow(windowId)) {
         // Already adopted — nothing structural to do, but a re-handoff can
         // carry a FRESHER min size; on a genuine change the layout must
         // re-validate (same contract as windowMinSizeUpdated).
@@ -356,7 +359,7 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // the entry — handoffRelease is the correct primitive for "drop
     // tracking without mutating geometry" within this engine too.
     QSize preservedMin(0, 0);
-    if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() != destKey) {
+    if (trackedAnywhere && !adoptedAtDest) {
         // Internal re-home: the release wipes m_windowMinSizes on the
         // assumption that ctx.minSize re-seeds it — untrue when the daemon
         // built the context from an engine that does not model min sizes
@@ -405,7 +408,7 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         // "already adopted" nor "different key" matches it), so sweep it
         // here too — otherwise the header's adoption-self-corrects promise
         // has a hole on exactly this refusal arm.
-        if (m_states.windowKeys().contains(windowId)) {
+        if (m_states.hasWindow(windowId)) {
             sweepPhantomTracking(windowId);
         } else {
             m_windowMinSizes.remove(windowId);
@@ -464,11 +467,11 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     const QString canonical = canonicalizeWindowId(windowId);
     qCInfo(PhosphorTileEngine::lcTileEngine) << "AutotileEngine::handoffRelease:" << canonical;
 
-    auto it = m_states.windowKeys().constFind(canonical);
-    if (it == m_states.windowKeys().constEnd()) {
+    const auto primary = m_states.windowKey(canonical);
+    if (!primary) {
         return; // Not ours; nothing to release.
     }
-    const auto key = it.value();
+    const auto key = *primary;
     if (PhosphorTiles::TilingState* state = m_states.stateForKey(key)) {
         // Tracking-only release: drop from layout, drop from floating set.
         // No retile of the rest is requested here — the orchestrator will
@@ -591,14 +594,13 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         // into a silent permanent refusal. Drop the key (and the per-window
         // caches that follow it, matching every other sweep in this engine) so
         // the NEXT dispatch routes through adoption instead.
-        const auto keyIt = m_states.windowKeys().constFind(windowId);
+        const auto phantomKey = m_states.windowKey(windowId);
         // Capture the screen before the sweep drops the key: the sync below
         // should carry the screen the phantom claimed, falling back to the
         // caller's live screen for a window with no key at all (the reverse
         // map's invariant excludes a keyed entry with an empty screenId).
-        const QString refusalScreen =
-            keyIt != m_states.windowKeys().constEnd() ? keyIt.value().screenId : callerScreenId;
-        if (keyIt != m_states.windowKeys().constEnd()) {
+        const QString refusalScreen = phantomKey ? phantomKey->screenId : callerScreenId;
+        if (phantomKey) {
             sweepPhantomTracking(windowId);
         }
         // Relay the refusal. The dispatch that landed here was fire-and-forget

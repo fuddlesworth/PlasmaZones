@@ -91,9 +91,11 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // removal per id but retile each affected screen ONCE afterward, rather
     // than N immediate retiles of the same screen via onWindowRemoved.
     QStringList staleTracked;
-    for (auto it = m_states.windowKeys().constBegin(); it != m_states.windowKeys().constEnd(); ++it) {
-        if (!aliveWindowIds.contains(it.key())) {
-            staleTracked.append(it.key());
+    // Once per window however many states hold it: the teardown below drops
+    // every membership, so a multi-desktop window must not be listed twice.
+    for (const QString& trackedId : m_states.trackedWindowIds()) {
+        if (!aliveWindowIds.contains(trackedId)) {
+            staleTracked.append(trackedId);
         }
     }
     QSet<QString> affectedScreens;

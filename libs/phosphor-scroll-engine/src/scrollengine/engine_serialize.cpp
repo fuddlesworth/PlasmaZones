@@ -399,9 +399,9 @@ QJsonObject ScrollEngine::serializeStripState() const
     // stash tile naming it survive the prune and be handed to a
     // cross-session claim — the same hazard the two structural walks above
     // guard against.
-    const auto& trackedKeys = m_states.windowKeys();
-    for (auto it = trackedKeys.cbegin(); it != trackedKeys.cend(); ++it) {
-        liveWindowIds.insert(it.key());
+    // One entry per window however many states hold it.
+    for (const QString& trackedId : m_states.trackedWindowIds()) {
+        liveWindowIds.insert(trackedId);
     }
     // A drag-insert preview's dragged window is DETACHED — in no strip and
     // in no stash — but it is emphatically live, and without this a save

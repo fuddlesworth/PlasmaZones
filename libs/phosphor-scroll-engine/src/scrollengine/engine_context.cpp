@@ -65,10 +65,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
     }
     QStringList dead;
-    const auto& windowKeys = m_states.windowKeys();
-    for (auto it = windowKeys.cbegin(); it != windowKeys.cend(); ++it) {
-        if (!aliveWindowIds.contains(it.key())) {
-            dead.append(it.key());
+    // One entry per window: the teardown below drops every membership, so a
+    // multi-desktop window must not appear twice in the dead list.
+    for (const QString& trackedId : m_states.trackedWindowIds()) {
+        if (!aliveWindowIds.contains(trackedId)) {
+            dead.append(trackedId);
         }
     }
     QSet<QString> affectedScreens;
@@ -593,7 +594,7 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
         // teardown; re-announcing those would double-release. Keep only the
         // ids the engine still tracks.
         displacedWindows.removeIf([this](const QString& wid) {
-            return !m_states.windowKeys().contains(wid);
+            return !m_states.hasWindow(wid);
         });
     }
     if (!displacedWindows.isEmpty()) {

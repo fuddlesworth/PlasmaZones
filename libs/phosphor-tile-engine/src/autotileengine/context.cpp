@@ -64,11 +64,11 @@ bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
     // Canonicalize for the lookup, symmetric with isWindowFloatingInAutotile() — both
     // are consulted from the same daemon mode-resolution path with the same id.
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it == m_states.windowKeys().constEnd()) {
+    const auto key = m_states.windowKey(windowId);
+    if (!key) {
         return false;
     }
-    const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
+    const PhosphorTiles::TilingState* state = m_states.stateForKey(*key);
     // Membership is required, not just a live key: windowOpened keys the
     // window BEFORE onWindowAdded can refuse it (shouldTileWindow false,
     // max-windows cap), and isFloating() answers false for a window the
@@ -81,12 +81,12 @@ bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
 bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it == m_states.windowKeys().constEnd()) {
+    const auto key = m_states.windowKey(windowId);
+    if (!key) {
         return false;
     }
     // containsWindow for the same phantom-key reason as isWindowTiled.
-    const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
+    const PhosphorTiles::TilingState* state = m_states.stateForKey(*key);
     return state && state->containsWindow(windowId) && state->isFloating(windowId);
 }
 
