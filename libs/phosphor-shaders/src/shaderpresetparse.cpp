@@ -140,10 +140,19 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
         //     it from the offline validator — which lints the PARSED struct, so the
         //     effect headers that point an author at the validator for a typo were
         //     promising coverage it could not give.
-        //   • every value refused (an escaping texture path) means the preset
-        //     cannot do what it says. Keeping it would offer the user a preset that
-        //     silently does nothing; the refusal is already named in the log above.
-        if (!presetValues.isEmpty() || (values.isEmpty() && refusedImageEntries.isEmpty())) {
+        //   • every value DROPPED means the preset cannot do what it says. Keeping it
+        //     would offer the user a preset that silently does nothing; each drop is
+        //     already named in the log above. Two kinds of drop reach here: an
+        //     escaping texture path, and a JSON null value. Both are decided per
+        //     entry, so a preset that declared values and kept none of them is empty
+        //     with a non-empty `values`, which is what distinguishes it from the
+        //     author-declared `{}`.
+        //
+        // The test is therefore on the DECLARED map being empty. A second
+        // `refusedImageEntries.isEmpty()` conjunct used to sit beside it, which could
+        // never be false when `values` was empty (a refusal requires a visited entry)
+        // and made the rule read as two independent conditions.
+        if (!presetValues.isEmpty() || values.isEmpty()) {
             presets[it.key()] = presetValues;
         }
     }

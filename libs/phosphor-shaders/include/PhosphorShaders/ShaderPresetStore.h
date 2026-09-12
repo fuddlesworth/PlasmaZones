@@ -53,17 +53,18 @@ PHOSPHORSHADERS_EXPORT int migrateLegacyOverlayPresets(const QString& root);
  * One per consumer rather than one per process, and that is a convention, not an
  * invariant: nothing here refuses a second instance. Two would double the
  * directory watchers and parse every preset file twice, which is wasteful rather
- * than wrong, so the three consumers each keep exactly one.
+ * than wrong, so the four consumers each keep exactly one.
  *
  * The whole preset side of a consumer's wiring: the registry, one publisher per
  * family, and the one-shot import of the pre-existing overlay preset files.
- * Three processes need all of this — the settings app, the daemon and the KWin
- * effect — and none of them differs in how it sets it up, so it lives here
- * rather than three times over.
+ * Four consumers need all of this — the settings app, the daemon, the KWin
+ * effect and the shell — and none of them differs in how it sets it up, so it
+ * lives here rather than four times over.
  *
  * A consumer names the families it actually resolves. The effect resolves
  * animation, surface and pointer presets; the daemon resolves animation, surface
- * and overlay; the settings app shows all four. An unlisted family simply has no
+ * and overlay; the shell resolves surface only, for its own chrome; the settings
+ * app shows all four. An unlisted family simply has no
  * user presets, which is the registry's documented miss behaviour.
  *
  * Pack-declared presets are NOT loaded here — they arrive from each family's
@@ -150,6 +151,13 @@ public:
 
     /// Whether this store publishes @p family, i.e. whether `load()` was called
     /// and named it. False for every family before `load()`.
+    ///
+    /// A DIAGNOSTIC accessor, like `setPackPresets` above: no production caller reads
+    /// it today, and the tests use it to assert which families a consumer's load()
+    /// actually brought up. Stated here because a function with no caller otherwise
+    /// reads as something the next audit should delete, and this one is cheap to keep
+    /// — it is the only way to ask the question without inferring it from a rescan's
+    /// return.
     bool publishes(ShaderFamily family) const;
 
     /// Rescan @p family's directory synchronously, so the registry reflects the

@@ -444,9 +444,19 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // to the compiled pack's baked baseline.
     //
     // Kept here as well as at the top of updateAllDecorations, because this
-    // function has callers that do not come through the sweep. After the first
-    // call it is a bool test, and the re-entrancy the first one causes is handled
-    // by the generation check there.
+    // function has callers that do not come through the sweep. After the first call
+    // it is a bool test.
+    //
+    // The FIRST call emits effectsChanged inline, whose handler drops every compiled
+    // pack and runs a full updateAllDecorations() — which decorates this window too,
+    // and then this call resumes and re-does it. The sweep's generation check does
+    // NOT cover that: the generation is read once, at updateAllDecorations entry, so
+    // it protects that function's own loop and nothing else. What makes the
+    // resumption harmless here is that nothing is cached across this line except the
+    // `prior*` locals read below, and the re-compile is lazy, so the outer call
+    // simply re-inserts an identical WindowDecoration over the nested one's. It is
+    // duplicated work on one call per session, not a stale read. Anything this
+    // function starts caching above this line has to move below it.
     ensureSurfaceRegistryPaths();
     QVariantMap allPackParams = resolvedProfile.effectiveParameters();
     if (ruleChain) {
@@ -454,25 +464,38 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // pack owns that pack's values outright (mirroring the animation
         // override's params semantics); packs the rule says nothing about
         // keep the tree/default values.
-        for (auto it = ruleChain->params.constBegin(); it != ruleChain->params.constEnd(); ++it) {
-            allPackParams.insert(it.key(), it.value());
-        }
-        // A rule's preset resolves against the RULE's own params for that pack,
-        // not against the merged map. A tree node's presetId flattens against
-        // that node's own deltas; the merged map here holds the TREE's
-        // already-flattened values, so passing it as the deltas let the tree's
-        // values win every key and the rule's preset became a no-op. Using the
-        // rule's own params makes a rule layer replace the tree layer outright,
-        // which is the per-pack REPLACE semantics stated immediately above.
-        for (auto it = ruleChain->presetIds.constBegin(); it != ruleChain->presetIds.constEnd(); ++it) {
-            const QString presetId = it.value().toString();
-            if (presetId.isEmpty()) {
-                continue;
+        // ONE pass over the union of the two maps, and every pack in it goes
+        // through resolveParams.
+        //
+        // A rule's preset resolves against the RULE's own params for that pack, not
+        // against the merged map. A tree node's presetId flattens against that
+        // node's own deltas; the merged map here holds the TREE's already-flattened
+        // values, so passing it as the deltas let the tree's values win every key
+        // and the rule's preset became a no-op. Using the rule's own params makes a
+        // rule layer replace the tree layer outright, which is the per-pack REPLACE
+        // semantics stated immediately above.
+        //
+        // A pack the rule gives params for but NAMES NO PRESET for goes through the
+        // same call, with an empty id. That is not a formality: resolveParams is the
+        // only place a pack's declared min/max is enforced, and both flatten twins
+        // (PhosphorSurfaceShaders::withPresetsResolved and its animation sibling)
+        // deliberately route every entry through it for exactly that reason. Writing
+        // a rule's raw values straight in left rules.json — a hand-editable file
+        // whose validator is the only other boundary — as the one door a parameter
+        // could reach a uniform through unbounded, while the identical value coming
+        // from the tree was clamped.
+        QStringList rulePacks = ruleChain->params.keys();
+        for (const QString& packId : ruleChain->presetIds.keys()) {
+            if (!rulePacks.contains(packId)) {
+                rulePacks.append(packId);
             }
+        }
+        for (const QString& packId : rulePacks) {
             allPackParams.insert(
-                it.key(),
-                m_shaderManager.presetRegistry().resolveParams(PhosphorShaders::ShaderFamily::Surface, it.key(),
-                                                               presetId, ruleChain->params.value(it.key()).toMap()));
+                packId,
+                m_shaderManager.presetRegistry().resolveParams(PhosphorShaders::ShaderFamily::Surface, packId,
+                                                               ruleChain->presetIds.value(packId).toString(),
+                                                               ruleChain->params.value(packId).toMap()));
         }
     }
     // Shared accent fallback for the plain layers below: the live system

@@ -409,7 +409,8 @@ private Q_SLOTS:
         QVERIFY(!stored.effectId.has_value());
         QVERIFY(!stored.presetId.has_value());
         QVERIFY(stored.parameters.has_value());
-        QVERIFY(stored.parameters->size() <= 64);
+        // EXACTLY the cap, not merely under it: `<=` is satisfied by a cap of 1.
+        QCOMPARE(stored.parameters->size(), 64);
         QVERIFY(!stored.parameters->contains(QStringLiteral("long")));
     }
 

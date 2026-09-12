@@ -86,7 +86,7 @@ int migrateLegacyOverlayPresets(const QString& root)
     // Same entry cap the rest of the preset path inherits from DirectoryLoader,
     // and for the same reason. The per-file byte cap below bounded how much each
     // file could cost but nothing bounded HOW MANY, and this scan runs at startup
-    // in three processes over a user-writable directory: fifty thousand junk JSON
+    // in four processes over a user-writable directory: fifty thousand junk JSON
     // files would stall the daemon, the effect and the settings window before any
     // of them drew. Truncating rather than refusing, so a directory that is merely
     // large still migrates what it can.
@@ -115,7 +115,7 @@ int migrateLegacyOverlayPresets(const QString& root)
             continue;
         }
         // Same per-file cap the rest of the preset path inherits from
-        // DirectoryLoader. This scan runs at startup in three processes over a
+        // DirectoryLoader. This scan runs at startup in four processes over a
         // user-writable directory, and read-all had no bound at all.
         if (source.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
             qCWarning(lcPresetStore) << "Legacy preset is larger than"
@@ -158,6 +158,10 @@ int migrateLegacyOverlayPresets(const QString& root)
         // disagreed — the asymmetric half of a defensive pair.
         if (preset.name.size() > ShaderPreset::MaxNameChars) {
             preset.name.truncate(ShaderPreset::MaxNameChars);
+            // And drop a surrogate the cut split, exactly as fromJson does.
+            if (!preset.name.isEmpty() && preset.name.back().isHighSurrogate()) {
+                preset.name.chop(1);
+            }
         }
         preset.packId = packId;
         preset.params = obj.value(QLatin1String(LegacyFieldShaderParams)).toObject().toVariantMap();

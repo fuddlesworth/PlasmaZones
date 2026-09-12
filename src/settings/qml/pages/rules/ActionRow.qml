@@ -548,8 +548,16 @@ ColumnLayout {
                     if (modelData.kind === "overlayShader")
                         return paramEditors._overlayShaderEditor;
 
+                    // Gated on the SCALAR shader actions, not on the kind alone.
+                    // OverrideDecorationChain also declares a `shaderPreset` param
+                    // (for paramKeyOfKind discovery), but its payload is a nested
+                    // `{packId: presetId}` map and its pack comes from the chain
+                    // rather than from an `effectId` param, so this combo had no pack
+                    // to read: it rendered permanently disabled, reading "None",
+                    // beside a ChainEditor where the real per-layer presets are
+                    // authored.
                     if (modelData.kind === "shaderPreset")
-                        return shaderPresetEditorComponent;
+                        return row._shaderActionType.length > 0 ? shaderPresetEditorComponent : null;
 
                     if (modelData.kind === "curveEditor")
                         return paramEditors._curveEditorEditor;

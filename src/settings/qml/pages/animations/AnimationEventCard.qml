@@ -1105,7 +1105,16 @@ Item {
                     // carrying a preset and no deltas: it is preset-blind, reads
                     // both maps as empty, and returns early, so reset was a silent
                     // no-op while the rows visibly showed the preset's values.
-                    if (root._primaryPresetId.length > 0) {
+                    // The RESOLVED preset id, not the event's own: the rows display
+                    // the resolved one, and an event that inherits a preset and owns
+                    // nothing has an empty own id, so testing that let it fall into
+                    // the preset-blind branch below and hit exactly the defect this
+                    // comment describes. Writing an empty own map is right for the
+                    // inherited case too, because an empty map keeps the inherited
+                    // preset resolving. The sibling hosts already test the resolved
+                    // id (OverlayShaderAssignmentCard's `_editPresetId`,
+                    // DecorationSurfaceCard's `_presetIds`).
+                    if (root.currentShaderPresetId.length > 0) {
                         root._writeAllShaderParams(root.currentShaderEffectId, ({}));
                         return;
                     }

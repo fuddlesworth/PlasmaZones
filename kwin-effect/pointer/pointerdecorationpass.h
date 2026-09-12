@@ -143,7 +143,13 @@ public:
     /// Re-derives the engaged-chain cache; a no-op when the profile is
     /// unchanged, so a settings broadcast that touched something else does not
     /// restart a live chain.
-    void setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile);
+    ///
+    /// Returns whether the profile actually changed, which tells a caller that needs
+    /// the compiled packs dropped either way (a preset retune, where the flattened
+    /// profile may be identical) whether this call has already done the
+    /// releaseGl/rebuild/repaint work or whether it still owes an
+    /// invalidateShaderCache.
+    bool setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile);
 
     /// The outputs the effect's fullscreen gate
     /// (Decorations.Performance.SuppressWhileFullscreen) currently covers. The
@@ -216,16 +222,17 @@ public:
     /// add or remove the pack ids the chain names.
     void invalidateShaderCache();
 
-    /// Damage the band the chain CURRENTLY reaches around the pointer, ignoring the
-    /// motion suppression.
+    /// Damage the band the chain CURRENTLY reaches around the pointer.
     ///
-    /// `staleTrailRect()` answers empty when the trail is quiet, which is the common
-    /// case for a settings or preset change: the user is not moving the mouse while
-    /// they drag a slider, so neither setProfile nor invalidateShaderCache asked for
-    /// any damage and the retune did not reach the screen until the next motion.
-    /// Deliberately not addRepaintFull — this is a band a few hundred px across on a
+    /// Takes the trail's band when there is a live trail, and otherwise builds one
+    /// around the live cursor position. Both halves are needed: the history answers
+    /// empty once the last pointer event is older than the chain's trailSeconds,
+    /// which is the common case for a settings or preset change (the user is not
+    /// moving the mouse while they drag a slider), and that is precisely the state
+    /// where a retune would otherwise not reach the screen until the next motion.
+    /// Deliberately not addRepaintFull: this is a band a few hundred px across on a
     /// per-event path, and a full compositor repaint for a cursor decoration is the
-    /// wrong trade.
+    /// wrong trade. A suppressed output is left alone, per the class's cost rule.
     void repaintCurrentReach();
 
     /// Drop a removed output's state. The history is keyed to one output's

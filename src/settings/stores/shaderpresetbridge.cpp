@@ -29,8 +29,12 @@ constexpr int kMaxPresetNameChars = 128;
 /// values, so it is the same input boundary the animation writer bounds its map
 /// at for the same stated reason: persisted close to verbatim, and copied back in
 /// without validation on read.
-constexpr int kMaxPresetParams = 64;
-constexpr int kMaxPresetStringChars = 1024;
+/// Taken FROM the library rather than written again here. The read side
+/// (ShaderPreset::fromJson) applies the same two caps, and a private copy is how the
+/// two halves drift: the bridge bounded what it wrote while a hand-written file
+/// reached resolveParams unbounded.
+constexpr qsizetype kMaxPresetParams = PhosphorShaders::ShaderPreset::MaxParams;
+constexpr qsizetype kMaxPresetStringChars = PhosphorShaders::ShaderPreset::MaxValueChars;
 
 /// @p in with over-long keys and values dropped, non-scalar values dropped, and
 /// the whole map capped. Every parameter type a pack can declare is one scalar; a

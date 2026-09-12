@@ -588,6 +588,86 @@ private Q_SLOTS:
     /// A parameters-only override at a seeded path is a RETUNE: the seed
     /// chain injects into the unengaged chain slot while the user's engaged
     /// parameters map wins wholesale.
+    void withSeedDefaults_engagedPresetIdsBlocksTheSeedParameters()
+    {
+        // A seed carries hard-coded parameter values for the surfaces a decoration set
+        // ships (the OSD and the three popups). The flatten treats every entry in
+        // `parameters` as the DELTA set, so injecting the seed's values under a preset
+        // the user had just chosen pinned them over it: the preset was selected, the
+        // rows showed its values, and the four seeded keys rendered the seed's.
+        // keep-equal-deltas is the right rule for values the user typed, and these are
+        // values the user never typed — so an engaged presetIds blocks the seed's
+        // parameters as well as its own field.
+        DecorationProfileTree seeds;
+        DecorationProfile seed = makeProfile(QStringList{QStringLiteral("border")}, 1.0, QStringLiteral("#112233"));
+        QVariantMap borderParams;
+        borderParams.insert(QStringLiteral("borderWidth"), 1);
+        QVariantMap seedParams;
+        seedParams.insert(QStringLiteral("border"), borderParams);
+        seed.parameters = seedParams;
+        seeds.setOverride(QStringLiteral("osd"), seed);
+
+        DecorationProfileTree user;
+        DecorationProfile chose;
+        QVariantMap presets;
+        presets.insert(QStringLiteral("border"), QStringLiteral("Thick"));
+        chose.presetIds = presets;
+        user.setOverride(QStringLiteral("osd"), chose);
+
+        const DecorationProfileTree merged = user.withSeedDefaults(seeds);
+        const DecorationProfile resolved = merged.resolve(QStringLiteral("osd"));
+        // The seed's chain still lands (the chain gate is untouched by this).
+        QCOMPARE(resolved.enabledChain(), (QStringList{QStringLiteral("border")}));
+        // The preset survives...
+        QCOMPARE(resolved.effectivePresetIds().value(QStringLiteral("border")).toString(), QStringLiteral("Thick"));
+        // ...and the seed's values did NOT become deltas on top of it, so the preset's
+        // own borderWidth is what the flatten will supply.
+        QVERIFY(!resolved.effectiveParameters().contains(QStringLiteral("border")));
+
+        // With no preset engaged the seed's parameters inject exactly as before, so the
+        // gate is specific rather than a blanket block.
+        DecorationProfileTree plain;
+        const DecorationProfile plainResolved = plain.withSeedDefaults(seeds).resolve(QStringLiteral("osd"));
+        QCOMPARE(plainResolved.effectiveParameters()
+                     .value(QStringLiteral("border"))
+                     .toMap()
+                     .value(QStringLiteral("borderWidth"))
+                     .toInt(),
+                 1);
+    }
+
+    void withSeedDefaults_injectsTheSeedsOwnPresetIds()
+    {
+        // The other half: a seed that NAMES a preset has it injected, like every other
+        // engaged field. No bundled seed carries one today, so this pins the arm before
+        // one does rather than after.
+        DecorationProfileTree seeds;
+        DecorationProfile seed = makeProfile(QStringList{QStringLiteral("border")}, 1.0, QStringLiteral("#112233"));
+        QVariantMap presets;
+        presets.insert(QStringLiteral("border"), QStringLiteral("Soft"));
+        seed.presetIds = presets;
+        seeds.setOverride(QStringLiteral("osd"), seed);
+
+        const DecorationProfile resolved =
+            DecorationProfileTree{}.withSeedDefaults(seeds).resolve(QStringLiteral("osd"));
+        QCOMPARE(resolved.effectivePresetIds().value(QStringLiteral("border")).toString(), QStringLiteral("Soft"));
+
+        // And a user preset at the path wins over the seed's, rather than being
+        // overwritten by it.
+        DecorationProfileTree user;
+        DecorationProfile mine;
+        QVariantMap minePresets;
+        minePresets.insert(QStringLiteral("border"), QStringLiteral("Mine"));
+        mine.presetIds = minePresets;
+        user.setOverride(QStringLiteral("osd"), mine);
+        QCOMPARE(user.withSeedDefaults(seeds)
+                     .resolve(QStringLiteral("osd"))
+                     .effectivePresetIds()
+                     .value(QStringLiteral("border"))
+                     .toString(),
+                 QStringLiteral("Mine"));
+    }
+
     void withSeedDefaults_parametersOnlyOverride_keepsSeedChain()
     {
         DecorationProfileTree seeds;

@@ -137,6 +137,21 @@ struct PHOSPHORSHADERS_EXPORT ShaderPreset
     /// also keeps a pathological one out of a filename.
     static constexpr qsizetype MaxIdChars = 256;
 
+    /// Most parameter entries `fromJson` keeps, and the cap the settings bridge
+    /// applies when it WRITES a preset. One number for both halves: the bridge
+    /// carried its own copy, so a hand-written file reached resolveParams with no
+    /// cap at all while a preset the app saved was bounded. A pack declares at
+    /// most 48 parameters (the `parameters` maxItems in every family's metadata
+    /// schema), so this is deliberately above that: an entry naming no declared
+    /// parameter is inert at resolve time, and refusing a preset over it would
+    /// discard the usable keys beside it.
+    static constexpr qsizetype MaxParams = 64;
+
+    /// Longest string VALUE kept in a preset's parameter map (an image path or a
+    /// colour literal). Shared with the settings bridge for the same reason
+    /// MaxParams is.
+    static constexpr qsizetype MaxValueChars = 1024;
+
     /// Whether @p id is safe to use as both an identity and a path component.
     ///
     /// Rejects empty, over-long, `.`, `..`, and anything containing a path

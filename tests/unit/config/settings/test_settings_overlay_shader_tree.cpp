@@ -70,10 +70,12 @@ private Q_SLOTS:
     /// The two counting bounds in the sanitizer. Neither has a fixture
     /// otherwise, so raising either to INT_MAX leaves the suite green.
     ///
-    /// Both are asserted as "fewer than offered, and more than none": pinning
-    /// the exact cap here would make the test a copy of the constant rather
-    /// than a check that a cap runs at all, and a guard that emptied the key
-    /// would pass a bare upper bound.
+    /// Both are asserted at their EXACT surviving count. A "fewer than offered and
+    /// more than none" pair is satisfied by a cap of 1, which is the mutation the
+    /// slot exists to catch, and the `> 0` half plus the untouched-shaderId assertion
+    /// already answer the other worry (a guard that emptied the key). The figures are
+    /// knowable: kMaxShaderParameters and kMaxShaderOverrides, and every offered
+    /// entry here is usable, so the cap fills.
     void testOverlayShaderTree_parameterAndOverrideCountsAreBounded()
     {
         IsolatedConfigGuard guard;
@@ -97,10 +99,8 @@ private Q_SLOTS:
         const OverlayShaderTree read = s.overlayShaderTree();
         const int keptParams = read.baseline().parameters.size();
         const int keptOverrides = read.overriddenLayouts().size();
-        QVERIFY2(keptParams > 0 && keptParams < 300,
-                 qPrintable(QStringLiteral("parameter cap did not run: kept %1 of 300").arg(keptParams)));
-        QVERIFY2(keptOverrides > 0 && keptOverrides < 2000,
-                 qPrintable(QStringLiteral("override cap did not run: kept %1 of 2000").arg(keptOverrides)));
+        QCOMPARE(keptParams, 64);
+        QCOMPARE(keptOverrides, 1024);
         // The bound truncates; it does not corrupt what survives.
         QCOMPARE(read.baseline().shaderId, QStringLiteral("cosmic-flow"));
     }
@@ -389,11 +389,41 @@ private Q_SLOTS:
         QCOMPARE(degraded.parameters.value(QStringLiteral("glow")).toDouble(), 0.9);
         QVERIFY(!degraded.parameters.contains(QStringLiteral("speed")));
 
-        // A profile naming no preset comes back untouched, reference included.
+        // A profile naming no preset comes back untouched, reference included. This
+        // registry declares no bounds for the pack, so there is nothing to clamp and
+        // "untouched" is the whole answer; the CLAMP half of that arm is the slot
+        // below, because this assertion would also hold for a flatten that
+        // early-returned on "no preset here".
         OverlayShaderProfile plain;
         plain.shaderId = QStringLiteral("cosmic-flow");
         plain.parameters = QVariantMap{{QStringLiteral("speed"), 2.0}};
         QCOMPARE(withPresetsResolved(plain, registry), plain);
+    }
+
+    void testWithPresetsResolvedClampsWithNoPresetEngaged()
+    {
+        // The no-preset arm of the overlay flatten still enforces the pack's declared
+        // range, which is why it stopped early-returning. resolveParams is the only
+        // place that range is applied, so an out-of-range value arriving by any other
+        // door (a hand-edited config.json, a D-Bus write, a config predating a
+        // narrowed range) reaches the uniform through exactly this path.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::PresetValueBounds bounds;
+        bounds.insert(QStringLiteral("speed"), PhosphorShaders::PresetValueRange(0.25, 1.5));
+        QHash<QString, PhosphorShaders::PresetValueBounds> boundsByPack;
+        boundsByPack.insert(QStringLiteral("cosmic-flow"), bounds);
+        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Overlay, {}, boundsByPack);
+
+        OverlayShaderProfile plain;
+        plain.shaderId = QStringLiteral("cosmic-flow");
+        plain.parameters = QVariantMap{{QStringLiteral("speed"), 9.0}};
+        const OverlayShaderProfile flat = withPresetsResolved(plain, registry);
+        QCOMPARE(flat.parameters.value(QStringLiteral("speed")).toDouble(), 1.5);
+        // Below the floor too, and the flatten adds no key the assignment did not have.
+        plain.parameters = QVariantMap{{QStringLiteral("speed"), 0.0}};
+        const OverlayShaderProfile low = withPresetsResolved(plain, registry);
+        QCOMPARE(low.parameters.value(QStringLiteral("speed")).toDouble(), 0.25);
+        QCOMPARE(low.parameters.size(), 1);
     }
 };
 

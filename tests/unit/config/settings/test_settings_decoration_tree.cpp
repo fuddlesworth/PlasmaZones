@@ -611,7 +611,8 @@ private Q_SLOTS:
         QVERIFY(!stored.chain->contains(QString(2000, QLatin1Char('x'))));
         QVERIFY(stored.parameters.has_value());
         const QVariantMap storedPack = stored.parameters->value(QStringLiteral("pack0")).toMap();
-        QVERIFY(storedPack.size() <= 64);
+        // EXACTLY the cap, like the chain assertion two lines above.
+        QCOMPARE(storedPack.size(), 64);
         QVERIFY(!storedPack.contains(QStringLiteral("long")));
     }
 
@@ -667,7 +668,7 @@ private Q_SLOTS:
         QCOMPARE(stored.chain->size(), 64);
         QVERIFY(stored.parameters.has_value());
         QVERIFY(!stored.parameters->contains(QStringLiteral("pack1")));
-        QVERIFY(stored.parameters->value(QStringLiteral("pack0")).toMap().size() <= 64);
+        QCOMPARE(stored.parameters->value(QStringLiteral("pack0")).toMap().size(), 64);
         QVERIFY(!stored.parameters->value(QStringLiteral("pack0")).toMap().contains(QStringLiteral("long")));
         // presetIds is flat and string-valued at both levels, so an over-long
         // or non-string value goes while the usable entry stays.
@@ -774,7 +775,7 @@ private Q_SLOTS:
 
         const auto stored = a.decorationProfileTree().directOverride(QStringLiteral("window.tiled"));
         QVERIFY(stored.presetIds.has_value());
-        QVERIFY(stored.presetIds->size() <= 64);
+        QCOMPARE(stored.presetIds->size(), 64);
         QVERIFY(!stored.presetIds->contains(QStringLiteral("glow")));
         QVERIFY(!stored.presetIds->contains(QStringLiteral("shadow")));
     }

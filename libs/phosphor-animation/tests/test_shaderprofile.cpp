@@ -350,11 +350,44 @@ private Q_SLOTS:
 
     void testFlattenLeavesAProfileWithNoPresetAlone()
     {
+        // An EMPTY registry, so resolveParams is identity and this really is the
+        // "nothing to do" case. It is deliberately not the clamp case — that one is
+        // the slot below, because this assertion is satisfied just as well by a
+        // flatten that early-returns on "no preset here".
         PhosphorShaders::ShaderPresetRegistry registry;
         ShaderProfile p;
         p.effectId = QStringLiteral("dissolve");
         p.parameters = QVariantMap{{QStringLiteral("speed"), 2.0}};
         QCOMPARE(withPresetsResolved(p, registry), p);
+    }
+
+    void testFlattenClampsOwnValuesWithNoPresetEngaged()
+    {
+        // The no-preset arm still has to CLAMP, which is the whole reason the flatten
+        // stopped early-returning on "this profile names no preset". resolveParams is
+        // the only place a pack's declared min/max is enforced, so a value that
+        // arrived by another door — a hand-edited config, a D-Bus write, a config
+        // predating a narrowed range — reaches the uniform through this path.
+        //
+        // The decoration twin pins the same arm (testFlattenClampsOwnValuesWithNoPresetEngaged
+        // in test_decorationprofiletree.cpp); this is its animation counterpart.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::PresetValueBounds bounds;
+        bounds.insert(QStringLiteral("speed"), PhosphorShaders::PresetValueRange(0.5, 2.0));
+        QHash<QString, PhosphorShaders::PresetValueBounds> boundsByPack;
+        boundsByPack.insert(QStringLiteral("dissolve"), bounds);
+        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Animation, {}, boundsByPack);
+
+        ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.parameters = QVariantMap{{QStringLiteral("speed"), 9.0}};
+        const ShaderProfile flat = withPresetsResolved(p, registry);
+        QCOMPARE(flat.parameters->value(QStringLiteral("speed")).toDouble(), 2.0);
+        // And the flatten invented no engagement while it was there: a profile that
+        // stored no parameters at all still stores none.
+        ShaderProfile bare;
+        bare.effectId = QStringLiteral("dissolve");
+        QVERIFY(!withPresetsResolved(bare, registry).parameters.has_value());
     }
 
     void testNonStringPresetIdIsDropped()

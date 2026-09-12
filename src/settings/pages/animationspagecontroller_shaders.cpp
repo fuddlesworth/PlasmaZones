@@ -385,6 +385,14 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         profile.parameters = parameters;
 
     ShaderProfileTree tree = shaderTree();
+    // Carry the preset reference across a PROMOTION of the same pack, exactly as the
+    // group writer does (setShaderOverrideOnPaths) and the overlay writer does. This
+    // builds a fresh profile, so without it a motion set applying the pack it already
+    // resolved to dropped the preset; a genuine pack SWITCH still drops it, because
+    // presets are keyed by pack.
+    const ShaderProfile stored = tree.directOverride(path);
+    if (stored.effectId.has_value() && *stored.effectId == effectId)
+        profile.presetId = stored.presetId;
     // Short-circuit when the tree is already at the requested state — avoids
     // a same-tree write that would cycle through Settings + the boomerang
     // and fire a spurious pendingChangesChanged.

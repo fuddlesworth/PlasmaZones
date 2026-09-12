@@ -31,6 +31,14 @@ QLatin1StringView shaderFamilyToken(ShaderFamily family)
     // this project does not build with warnings-as-errors. The trailing return is
     // what the compiler needs, and it is also the silent empty token a missed
     // family would get, so treat the warning as the real signal.
+    //
+    // An empty token would make scopeKey collapse to "/<packId>" and
+    // userPresetDirectory to "<root>/", and ShaderPresetStore::slotOf would index its
+    // array out of bounds — so the one way to reach this return has to stay
+    // impossible. Today it is: nothing in the repo casts an int to ShaderFamily, and
+    // no QML or D-Bus boundary converts one. Q_DECLARE_METATYPE(ShaderFamily) makes a
+    // QVariant round-trip the obvious future door, and a new conversion point has to
+    // validate the value rather than trust it.
     return QLatin1StringView("");
 }
 
@@ -101,6 +109,14 @@ ShaderPreset ShaderPreset::fromJson(const QJsonObject& obj, const QString& fallb
     // every picker row; the UI validator only ever saw names the user typed.
     if (preset.name.size() > MaxNameChars) {
         preset.name.truncate(MaxNameChars);
+        // QString counts UTF-16 code units, so the cut can land between a
+        // surrogate pair and leave a lone high surrogate: an unpaired one renders
+        // as a replacement glyph in every picker row that shows the name. Drop it.
+        // ShaderPresetStore's legacy migration truncates the same field and carries
+        // the same correction.
+        if (!preset.name.isEmpty() && preset.name.back().isHighSurrogate()) {
+            preset.name.chop(1);
+        }
     }
     preset.packId = obj.value(QLatin1String(JsonFieldPackId)).toString();
     // A present-but-non-object `params` is a corrupt or hand-mangled file. Take
@@ -111,6 +127,23 @@ ShaderPreset ShaderPreset::fromJson(const QJsonObject& obj, const QString& fallb
     // an id the pack does not know is inert at resolve time, and filtering here
     // would need the pack registry this type deliberately does not depend on.
     preset.params = obj.value(QLatin1String(JsonFieldParams)).toObject().toVariantMap();
+    // BOUNDED on the read, not only on the write. The settings bridge caps a preset it
+    // writes at MaxParams keys and MaxValueChars per string value, and every other
+    // preset string on this path is bounded here, but a hand-written file reached
+    // presetParams() and resolveParams() with neither cap applied — the read side is
+    // the boundary, and the write side's bound says nothing about a file it did not
+    // write. Dropped rather than truncated at the map level: a key beyond the cap is
+    // inert at resolve time anyway, so there is nothing to salvage by keeping it.
+    if (preset.params.size() > MaxParams) {
+        auto it = preset.params.begin();
+        std::advance(it, MaxParams);
+        preset.params.erase(it, preset.params.end());
+    }
+    for (auto it = preset.params.begin(); it != preset.params.end(); ++it) {
+        if (it.value().typeId() == QMetaType::QString && it.value().toString().size() > MaxValueChars) {
+            it.value() = it.value().toString().left(MaxValueChars);
+        }
+    }
     // A user preset always comes from a file; the loader stamps sourcePath.
     return preset;
 }
@@ -118,8 +151,11 @@ ShaderPreset ShaderPreset::fromJson(const QJsonObject& obj, const QString& fallb
 bool ShaderPreset::operator==(const ShaderPreset& other) const
 {
     // JSON-normalised parameter compare, for the same reason
-    // OverlayShaderProfile does it: a map built in C++ (int variants) must
-    // compare equal to the same values read back from disk (doubles), or a
+    // OverlayShaderProfile does it: a map built in C++ may hold a different numeric
+    // variant type from the same values read back from disk (Qt's JSON reader returns
+    // qlonglong for every whole number and double only for a genuinely fractional
+    // one), and QJsonValue compares Integer and Double numerically. Without the
+    // normalisation a
     // reload that changed nothing would look like a change and re-emit
     // presetsChanged — which invalidates every compiled surface pack.
     return id == other.id && name == other.name && packId == other.packId && readOnly == other.readOnly

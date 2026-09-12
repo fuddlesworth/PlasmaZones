@@ -60,11 +60,12 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
 {
     // True when this tree engages @p member at @p surfacePath or anywhere on
     // its walk-up (baseline included). Chain engagement anywhere on the walk
-    // is the MASTER gate (the user built their own look there); parameters and
-    // disabledPacks additionally run the same walk for their OWN field, so a
-    // seed's leaf map can never shadow an engaged ancestor map — resolve()
-    // overlays deepest-last, and an injected leaf field would silently win
-    // over the user's category-level engagement.
+    // is the MASTER gate (the user built their own look there); parameters,
+    // presetIds and disabledPacks additionally run the same walk for their OWN
+    // field, so a seed's leaf map can never shadow an engaged ancestor map —
+    // resolve() overlays deepest-last, and an injected leaf field would silently
+    // win over the user's category-level engagement. parameters runs the
+    // presetIds walk as well; see the injection sites.
     const auto fieldEngagedOnWalk = [this](const QString& surfacePath, auto member) {
         // Baseline-isolated paths (shell.*) never resolve against the
         // baseline, so a baseline engagement must not block a seed there —
@@ -97,8 +98,18 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
             baseline.chain = seedBaseline.chain;
             changed = true;
         }
-        if (seedBaseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)) {
+        // A user-engaged presetIds blocks the seed's PARAMETERS as well as its own
+        // field. The flatten treats every entry in `parameters` as the delta set, so a
+        // seed's hard-coded values would pin over the preset the user just chose —
+        // keep-equal-deltas is the right rule for values the user typed, and these are
+        // values the user never typed.
+        if (seedBaseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)
+            && !fieldEngagedOnWalk(QString(), &DecorationProfile::presetIds)) {
             baseline.parameters = seedBaseline.parameters;
+            changed = true;
+        }
+        if (seedBaseline.presetIds && !fieldEngagedOnWalk(QString(), &DecorationProfile::presetIds)) {
+            baseline.presetIds = seedBaseline.presetIds;
             changed = true;
         }
         if (seedBaseline.disabledPacks && !fieldEngagedOnWalk(QString(), &DecorationProfile::disabledPacks)) {
@@ -124,8 +135,19 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
             target.chain = seed.chain;
             changed = true;
         }
-        if (seed.parameters && !fieldEngagedOnWalk(path, &DecorationProfile::parameters)) {
+        // presetIds blocks parameters here too, for the reason the baseline block
+        // above gives. This is the live half: the four seeded card surfaces (osd,
+        // popup.layoutPicker, popup.zoneSelector, popup.cheatsheet) carry the seed's
+        // borderWidth / useSystemAccent / edgeSoftness and the shadow map, so before
+        // this a preset picked on one of them resolved with those four keys pinned
+        // over it.
+        if (seed.parameters && !fieldEngagedOnWalk(path, &DecorationProfile::parameters)
+            && !fieldEngagedOnWalk(path, &DecorationProfile::presetIds)) {
             target.parameters = seed.parameters;
+            changed = true;
+        }
+        if (seed.presetIds && !fieldEngagedOnWalk(path, &DecorationProfile::presetIds)) {
+            target.presetIds = seed.presetIds;
             changed = true;
         }
         if (seed.disabledPacks && !fieldEngagedOnWalk(path, &DecorationProfile::disabledPacks)) {

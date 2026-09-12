@@ -34,13 +34,13 @@ namespace PhosphorShaders {
  *
  * ## Why this lives in phosphor-shaders
  *
- * All three consumers resolve presets: the settings app (to show and edit
- * them), the daemon (overlay and OSD surfaces), and the KWin effect (window
- * animations, decorations, pointer). The effect has no access to the config
+ * All four consumers resolve presets: the settings app (to show and edit them),
+ * the daemon (overlay and OSD surfaces), the KWin effect (window animations,
+ * decorations, pointer) and the shell (its own surface chrome). The effect has no access to the config
  * file — it pulls the assignment trees from the daemon over D-Bus — but it
  * DOES read pack and data directories from disk itself, exactly as it already
  * does for pack registries. Putting the store here, in the one library all
- * three already link, lets every process resolve a preset by the same rule
+ * four already link, lets every process resolve a preset by the same rule
  * from the same files, instead of inventing a second flattened wire shape.
  *
  * ## Thread safety

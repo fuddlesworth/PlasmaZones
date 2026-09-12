@@ -8,6 +8,7 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <cmath>
 
 namespace PhosphorShaders {
 
@@ -146,20 +147,60 @@ void ShaderPresetRegistry::clampToBounds(const QString& key, QVariantMap& values
         if (!numeric) {
             continue;
         }
+        const bool hasMin = range->first.isValid();
+        const bool hasMax = range->second.isValid();
+        const double min = hasMin ? range->first.toDouble() : 0.0;
+        const double max = hasMax ? range->second.toDouble() : 0.0;
+        // An INVERTED range is refused rather than applied. Nothing validates
+        // min <= max — `presetBoundsFrom` inserts whatever the pack declared —
+        // and applying max() then min() to a declared min 5 / max 1 leaves the
+        // value BELOW the minimum, so the clamp would move a legal value out of
+        // both bounds and say nothing. A pack that declares the pair backwards
+        // has no usable range, so there is nothing to enforce.
+        if (hasMin && hasMax && min > max) {
+            qCWarning(lcPresetRegistry) << "ShaderPresetRegistry: pack" << key << "declares an inverted range for"
+                                        << it.key() << "(min" << min << "> max" << max << "); not clamping";
+            continue;
+        }
+
         double value = it.value().toDouble();
-        if (range->first.isValid()) {
-            value = std::max(value, range->first.toDouble());
+        if (hasMin) {
+            value = std::max(value, min);
         }
-        if (range->second.isValid()) {
-            value = std::min(value, range->second.toDouble());
+        if (hasMax) {
+            value = std::min(value, max);
         }
-        // Preserve integrality: writing a double back into an int-typed
-        // parameter would change the variant's type under consumers that branch
-        // on it.
         if (type == QMetaType::Double || type == QMetaType::Float) {
             it.value() = value;
+            continue;
+        }
+
+        // An INTEGRAL variant is kept integral where it can be, because writing a
+        // double back would change the type under consumers that branch on it. But
+        // integrality never outranks the bound, and rounding to NEAREST let it:
+        // QJsonObject::toVariantMap returns qlonglong for every whole number, `2.0`
+        // included, so a whole-number value on a FLOAT parameter arrives here as
+        // LongLong and takes this branch. With a fractional declared range that
+        // rounded the clamped value straight back out — `smoothness` (min 0.01, max
+        // 0.6) clamped 2 to 0.6 and then qRound put it at 1, above the max, which
+        // made the clamp a silent no-op for exactly the out-of-range case it exists
+        // to catch.
+        //
+        // So round TOWARD the interval, and when no integer fits inside it (any
+        // range narrower than 1, which is most float ranges) keep the clamped
+        // double. The declared bound is the guarantee; the variant's incidental
+        // integrality is not.
+        double rounded = static_cast<double>(qRound(value));
+        if (hasMin && rounded < min) {
+            rounded = std::ceil(min);
+        }
+        if (hasMax && rounded > max) {
+            rounded = std::floor(max);
+        }
+        if ((hasMin && rounded < min) || (hasMax && rounded > max)) {
+            it.value() = value;
         } else {
-            it.value() = static_cast<qlonglong>(qRound(value));
+            it.value() = static_cast<qlonglong>(rounded);
         }
     }
 }

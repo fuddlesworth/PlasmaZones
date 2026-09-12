@@ -386,6 +386,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // member, so a signal emitted during the member's teardown would dispatch
     // against half-destroyed state.
     disconnect(&m_pointerPass.registry(), nullptr, this, nullptr);
+    // And the preset registry, which lives inside m_shaderManager's preset store and
+    // so is torn down with the members too. Its presetsChanged reaches
+    // schedulePresetSweep, which writes the sweep latches and reads the registry, so
+    // an emission during member teardown (a preset file changing as the effect
+    // unloads) would dispatch against half-destroyed state. The three re-seed
+    // handlers are on the pack registries disconnected above, so they are already
+    // covered; this is the one sender that was not.
+    disconnect(&m_shaderManager.presetStore().registry(), nullptr, this, nullptr);
 
     // Make the context current for the WHOLE destructor, member destruction included.
     //

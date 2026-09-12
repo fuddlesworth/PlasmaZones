@@ -270,9 +270,15 @@ void OverlaysPageController::setShaderPreset(const QString& path, const QString&
     // `resolve()` is one step on this tree — an override or the baseline — so this
     // carries the pack and its parameters down from the baseline exactly as the card
     // was already displaying them, which is what the user is tuning.
-    const bool engaged = path.isEmpty() || tree.hasOverride(path);
     OverlayShaderProfile node = path.isEmpty() ? tree.baseline() : tree.resolve(path);
-    if (engaged && node.presetId == presetId)
+    // Nothing to do when the id already matches, whether the layout is overridden or
+    // not. An `|| tree.hasOverride(path)` conjunct used to gate this, which made the
+    // early return unreachable for an INHERITING layout: the write then engaged an override
+    // carrying the baseline's pack and parameters, pinning a layout that had been
+    // following the baseline, for a call that changed nothing. The card's
+    // `onPresetDeleted` reaches here with an empty id unconditionally, so deleting a
+    // preset while viewing an inheriting card was enough to pin it.
+    if (node.presetId == presetId)
         return;
     // The pack and the parameter edits are left exactly as stored: this call
     // carries a preset and nothing else, and the parameters become deltas on

@@ -85,6 +85,9 @@ private Q_SLOTS:
     void keepsAnAuthorDeclaredEmptyPreset();
     void refusesEveryImageValueWithNoPackDirectory();
     void dropsPresetLeftWithNothing();
+    void refusesAMalformedPresetsBlock();
+    void dropsANullValueAndThePresetItEmpties();
+    void boundsAHandWrittenPresetsParameterMap();
 
     // ─────── overlayPresetDeltas / resolveParams ───────
 
@@ -251,6 +254,76 @@ void TestShaderPresets::refusesEveryImageValueWithNoPackDirectory()
     // ...and the rest of the preset still loads, which is the point of refusing the
     // value rather than the preset.
     QCOMPARE(presets.value(QStringLiteral("Textured")).value(QStringLiteral("speed")).toDouble(), 3.0);
+}
+
+void TestShaderPresets::refusesAMalformedPresetsBlock()
+{
+    // Two shape refusals in the parse that nothing reached, each of which a
+    // hand-written metadata.json can produce. Neither may take the pack down with it.
+    const QJsonObject scalarBlock = jsonFrom(QStringLiteral(R"({ "presets": 7 })"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("presets")));
+    QVERIFY(parsePackPresets(QDir(), {}, scalarBlock, lcTest()).isEmpty());
+
+    // A non-object preset BODY drops that preset only; its usable neighbour stays.
+    const QJsonObject scalarBody = jsonFrom(QStringLiteral(R"({
+        "presets": { "Broken": "fast", "Fine": { "speed": 2.0 } }
+    })"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Broken")));
+    const PackPresets presets = parsePackPresets(QDir(), {}, scalarBody, lcTest());
+    QVERIFY(!presets.contains(QStringLiteral("Broken")));
+    QCOMPARE(presets.value(QStringLiteral("Fine")).value(QStringLiteral("speed")).toDouble(), 2.0);
+}
+
+void TestShaderPresets::dropsANullValueAndThePresetItEmpties()
+{
+    // A JSON null is dropped PER ENTRY, because carrying it through would read as 0
+    // at every numeric consumer and pin the parameter rather than say nothing about
+    // it. The rule was stated only for refused image paths, so the null half was
+    // unstated and untested.
+    const QJsonObject root = jsonFrom(QStringLiteral(R"({
+        "presets": { "Partly": { "speed": null, "glow": 0.5 } }
+    })"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("to null; ignoring that entry")));
+    const PackPresets presets = parsePackPresets(QDir(), {}, root, lcTest());
+    QVERIFY(!presets.value(QStringLiteral("Partly")).contains(QStringLiteral("speed")));
+    QCOMPARE(presets.value(QStringLiteral("Partly")).value(QStringLiteral("glow")).toDouble(), 0.5);
+
+    // And a preset whose EVERY value was a null is dropped, like one emptied by
+    // refusals — it declared values and kept none, which is what distinguishes it
+    // from the author-declared `{}` that is kept.
+    const QJsonObject allNull = jsonFrom(QStringLiteral(R"({
+        "presets": { "Nothing": { "speed": null } }
+    })"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("to null; ignoring that entry")));
+    QVERIFY(!parsePackPresets(QDir(), {}, allNull, lcTest()).contains(QStringLiteral("Nothing")));
+}
+
+void TestShaderPresets::boundsAHandWrittenPresetsParameterMap()
+{
+    // The READ side of the parameter caps. The settings bridge bounds what it writes,
+    // but a preset FILE is hand-editable and reached presetParams()/resolveParams()
+    // with no cap at all, so the two halves of that pair disagreed.
+    QJsonObject params;
+    for (int i = 0; i < 200; ++i) {
+        params.insert(QStringLiteral("p%1").arg(i), i);
+    }
+    params.insert(QStringLiteral("tex"), QString(4000, QLatin1Char('x')));
+    const QJsonObject obj{{QStringLiteral("id"), QStringLiteral("kept")},
+                          {QStringLiteral("name"), QStringLiteral("Kept")},
+                          {QStringLiteral("packId"), QStringLiteral("dissolve")},
+                          {QStringLiteral("params"), params}};
+
+    const ShaderPreset preset = ShaderPreset::fromJson(obj, QStringLiteral("kept.json"));
+    QVERIFY(preset.isValid());
+    // EXACTLY the cap, not merely under it.
+    QCOMPARE(preset.params.size(), ShaderPreset::MaxParams);
+    // A string value is shortened rather than dropped, so an over-long image path
+    // still names something rather than nothing.
+    for (auto it = preset.params.cbegin(); it != preset.params.cend(); ++it) {
+        if (it.value().typeId() == QMetaType::QString) {
+            QCOMPARE(it.value().toString().size(), ShaderPreset::MaxValueChars);
+        }
+    }
 }
 
 void TestShaderPresets::dropsPresetLeftWithNothing()
@@ -1002,6 +1075,53 @@ void TestShaderPresets::resolveParamsClampsToTheDeclaredRange()
                  .value(QStringLiteral("octaves"))
                  .toInt(),
              8);
+
+    // A FRACTIONAL range, which every assertion above misses and which is where the
+    // clamp used to fail outright. Qt's JSON reader returns qlonglong for every
+    // whole number, `2.0` included, so a whole-number value on a float parameter
+    // arrives as an INTEGRAL variant. Preserving that integrality by rounding to
+    // nearest put the clamped value straight back out of range: 2 clamped to 0.6 and
+    // then rounded to 1, above the declared maximum. No integer fits in this range
+    // at all, so the bound wins and the value comes back as the clamped double.
+    PresetValueBounds fine;
+    fine.insert(QStringLiteral("smoothness"), PresetValueRange(0.01, 0.6));
+    QHash<QString, PresetValueBounds> fineByPack;
+    fineByPack.insert(QStringLiteral("circle"), fine);
+    registry.setPackPresetsForFamily(ShaderFamily::Animation, {}, fineByPack);
+
+    const QVariantMap whole{{QStringLiteral("smoothness"), 2}};
+    const QVariant clamped = registry.resolveParams(ShaderFamily::Animation, QStringLiteral("circle"), QString(), whole)
+                                 .value(QStringLiteral("smoothness"));
+    QCOMPARE(clamped.toDouble(), 0.6);
+    // Below the floor, where rounding to nearest would have produced 0.
+    const QVariantMap zero{{QStringLiteral("smoothness"), 0}};
+    QCOMPARE(registry.resolveParams(ShaderFamily::Animation, QStringLiteral("circle"), QString(), zero)
+                 .value(QStringLiteral("smoothness"))
+                 .toDouble(),
+             0.01);
+    // An integral value already INSIDE a range wide enough to hold one keeps its
+    // type, so the fix above does not turn every int into a double.
+    QCOMPARE(registry
+                 .resolveParams(ShaderFamily::Overlay, QStringLiteral("cosmic"), QString(),
+                                QVariantMap{{QStringLiteral("octaves"), 5}})
+                 .value(QStringLiteral("octaves"))
+                 .typeId(),
+             QMetaType::LongLong);
+
+    // An INVERTED declared range is refused rather than applied. Nothing validates
+    // min <= max, and applying both bounds in order to a backwards pair left the
+    // value below the minimum, which is worse than not clamping.
+    PresetValueBounds backwards;
+    backwards.insert(QStringLiteral("span"), PresetValueRange(5, 1));
+    QHash<QString, PresetValueBounds> backwardsByPack;
+    backwardsByPack.insert(QStringLiteral("inverted"), backwards);
+    registry.setPackPresetsForFamily(ShaderFamily::Pointer, {}, backwardsByPack);
+    QCOMPARE(registry
+                 .resolveParams(ShaderFamily::Pointer, QStringLiteral("inverted"), QString(),
+                                QVariantMap{{QStringLiteral("span"), 3}})
+                 .value(QStringLiteral("span"))
+                 .toInt(),
+             3);
 }
 
 QTEST_MAIN(TestShaderPresets)
