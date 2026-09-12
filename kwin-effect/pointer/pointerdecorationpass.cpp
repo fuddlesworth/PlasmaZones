@@ -561,8 +561,8 @@ bool PointerDecorationPass::cursorSpriteGone() const
         return false;
     }
     // The counter is raised. That is what a software KVM's input capture does
-    // (KWin's EisInputCaptureManager::activate hides the cursor and leaves the
-    // image alone, so the image test above never fires for Deskflow), and it
+    // (KWin's EisInputCaptureManager::barrierHit hides the cursor and leaves
+    // the image alone, so the image test above never fires for Deskflow), and it
     // is ALSO what an effect that draws its own copy does. Only the owners
     // known to draw a copy count as visible; see the header for the list and
     // why the counter alone cannot separate the two cases.
@@ -580,9 +580,10 @@ bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
     if (m_cursorHidden || !m_anyAboveLayer || suppressedOn(screen) || !KWin::effects || !cursorOnOutput(screen)) {
         return false;
     }
-    // Another owner (the strip pass, KWin's zoom, a screen-edge peek) already
-    // holds the hidden state and draws its own copy; taking a second hide
-    // would leave the show/hide pair unbalanced and drawing the cursor twice.
+    // Another owner (the strip pass, KWin's shakecursor, a KVM capture) already
+    // holds the hidden state. Taking a second hide would leave the show/hide
+    // pair unbalanced, and where that owner draws its own copy this pass
+    // would draw the cursor twice.
     if (KWin::effects->isCursorHidden()) {
         return false;
     }

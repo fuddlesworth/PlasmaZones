@@ -472,7 +472,7 @@ private:
     ///     surface. Nothing to decorate, whatever the counter says.
     ///   • `EffectsHandler::isCursorHidden()` is raised with the image intact.
     ///     This is what KWin's input-capture portal does for a software KVM
-    ///     (EisInputCaptureManager::activate calls Cursors::hideCursor and
+    ///     (EisInputCaptureManager::barrierHit calls Cursors::hideCursor and
     ///     never touches the image, because "even though the input events
     ///     are filtered out the cursor is updated on screen"). It is ALSO what
     ///     an effect that hides the cursor in order to draw its OWN copy
@@ -495,10 +495,17 @@ private:
     /// chain that would draw its own sprite still stands down for whoever
     /// asked first.
     ///
-    /// Known gap: under `zoom`'s scaled pointer the scene is transformed and
-    /// this pass's trail is not, so the stroke sits off the magnified cursor.
-    /// The counter used to mask that by accident. Fixing it properly needs a
-    /// screen-transform gate, not a cursor-visibility one.
+    /// Known gaps:
+    ///   • Under `zoom`'s scaled pointer the scene is transformed and this
+    ///     pass's trail is not, so the stroke sits off the magnified cursor.
+    ///     zoom raises no hide on 6.7, so no cursor-visibility test can see
+    ///     it; fixing it needs a screen-transform gate.
+    ///   • The counter is a refcount and the Effects API exposes one bit of
+    ///     it, so a capture that lands while THIS pass already holds a hide
+    ///     for an `above` chain is invisible here: the pass keeps drawing its
+    ///     sprite copy and trail along the mirrored motion until its own hide
+    ///     is released, and only then does the raised counter read as gone.
+    ///     A `below` chain never holds a hide and is unaffected.
     bool cursorSpriteGone() const;
 
     /// Drop the live trail because the pointer stopped being a pointer worth
