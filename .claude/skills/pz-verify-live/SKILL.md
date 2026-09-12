@@ -36,6 +36,12 @@ scripts/nested-kwin/run-nested.sh [output-count] [width height] [scale]
 - `PZ_NESTED_BUILD` selects a configure dir other than `build/`. Use
   `build-nounity` for anything in the shell tier, since `build/` has
   `BUILD_PHOSPHOR_SHELL=OFF`.
+- `PZ_NESTED_KEEP_STATE=1` keeps the previous run's XDG homes instead of
+  wiping them. The only way to probe session restore: `daemon.sh` restarts the
+  daemon but not the effect, so a login-shaped restore needs a full nested
+  restart with the `session.json` the daemon reads still on disk. Pair it
+  with `PZ_NESTED_FORCE=1`, since the previous session's bus socket is what
+  the live-session guard checks.
 
 State lives in `$PZ_NESTED_DIR` (default `$XDG_RUNTIME_DIR/pz-nested`). In every
 follow-up shell:

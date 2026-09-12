@@ -37,6 +37,13 @@
 # and capture-output.py. Set PZ_NESTED_BUILD to use a configure dir other
 # than build/ (daemon.sh honours the same variable via env.sh).
 #
+# Every run wipes the XDG homes for a clean slate. PZ_NESTED_KEEP_STATE=1
+# keeps them, which is the only way to probe session restore: daemon.sh
+# restarts the daemon but not the effect, so a login-shaped restore needs a
+# full nested restart with the session.json the daemon reads still on disk.
+# Pair it with PZ_NESTED_FORCE=1 — the live-session guard keys on the
+# previous run's bus socket, which is exactly what is being restarted.
+#
 # PZ_NESTED_SOCKET (default pznested) names the wayland socket. Two nested
 # sessions cannot share one — kwin locks on the name and the second dies with
 # "could not add wayland socket" — so to run one per worktree give each its
@@ -212,7 +219,18 @@ case "$NEST" in
         ;;
 esac
 
-rm -rf "$HOME_N"
+# PZ_NESTED_KEEP_STATE=1 keeps the previous run's XDG homes. The default wipe
+# gives every session a clean slate, which is what nearly every probe wants —
+# but it also destroys the one thing a session-restore probe needs, the
+# session.json the daemon reads at start. Restarting only the daemon does not
+# exercise the effect's own startup, so a login-shaped restore test has to go
+# through a full nested restart, and that is only possible if the state home
+# survives it. Control files under $NEST are still reset below either way.
+if [ "${PZ_NESTED_KEEP_STATE:-0}" = "1" ] && [ -d "$HOME_N" ]; then
+    echo "keeping previous state home $HOME_N (PZ_NESTED_KEEP_STATE=1)" >&2
+else
+    rm -rf "$HOME_N"
+fi
 # Stale control files must not survive into the new run: a daemon.sh run
 # against a previous session's env.sh would target a dead bus.
 #
