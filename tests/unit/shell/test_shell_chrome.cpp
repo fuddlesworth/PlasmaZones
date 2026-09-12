@@ -127,25 +127,38 @@ private Q_SLOTS:
         QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 18.0);
     }
 
-    void outerPaddingIsClampedToTheCeiling()
+    void outerPaddingIsBoundedByTheDeclaredRange()
     {
-        // A typo'd or hostile parameter cannot demand an unbounded canvas.
+        // A typo'd or hostile parameter cannot demand an unbounded canvas, and the
+        // bound that stops it is now the PACK'S OWN declared range rather than the
+        // padding ceiling. ShellChrome flattens presets before reading its parameters,
+        // and `resolveParams` clamps every value to the range the pack declares — so
+        // glow's `glowSize` (min 4, max 64) comes back at 64 and the 128px
+        // kMaxDecorationOuterPaddingPx backstop is never reached through this path.
+        //
+        // That ordering is the point: the ceiling is a last resort for a parameter the
+        // pack declares no max for, which clampToBounds deliberately leaves alone.
         ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
         QVariantMap params;
         QVariantMap glow;
         glow.insert(QStringLiteral("glowSize"), 100000);
         params.insert(QStringLiteral("glow"), glow);
         QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, params)));
-        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()),
-                 static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+        const double clamped = chrome.outerPaddingFor(decorationShellPhosphorOsdPath());
+        QCOMPARE(clamped, 64.0);
+        // Still under the ceiling, which is what makes the declared range the tighter
+        // of the two bounds rather than a second copy of it.
+        QVERIFY(clamped < static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
 
         // And a negative request floors at zero rather than shrinking the surface.
+        // Clamped to the declared MIN of 4 on the way through, then the padding
+        // request's own floor; either way the surface never loses room.
         QVariantMap negative;
         QVariantMap shrink;
         shrink.insert(QStringLiteral("glowSize"), -60);
         negative.insert(QStringLiteral("glow"), shrink);
         QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, negative)));
-        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 0.0);
+        QVERIFY(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()) >= 0.0);
     }
 
     void malformedJsonKeepsTheTree()

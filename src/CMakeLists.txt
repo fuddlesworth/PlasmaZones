@@ -834,10 +834,13 @@ if(BUILD_PHOSPHOR_SHELL)
             # ShellGestures subscribes to the daemon's gestureReported relay
             # by the protocol's interface constants.
             PhosphorProtocol::PhosphorProtocol
-            # ShellChrome: the decoration tree + pack registry (PhosphorSurface),
-            # the SurfaceShaderItem stage (plasmazones_rendering) and the shared
-            # SurfaceDecoration.qml host (org.plasmazones.common) that draws a
-            # pack chain on the chrome.
+            # ShellChrome: the decoration tree + pack registry (PhosphorSurface), the
+            # preset store it flattens through (PhosphorShaders — declared rather than
+            # taken transitively, because ShellChrome.h includes ShaderPresetStore.h and
+            # holds one by value), the SurfaceShaderItem stage
+            # (plasmazones_rendering) and the shared SurfaceDecoration.qml host
+            # (org.plasmazones.common) that draws a pack chain on the chrome.
+            PhosphorShaders::PhosphorShaders
             PhosphorSurface::PhosphorSurface
             plasmazones_rendering
             plasmazones_shared_qml

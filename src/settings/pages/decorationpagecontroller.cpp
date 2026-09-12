@@ -147,7 +147,10 @@ QVariantMap paramsFilteredToChain(const QVariantMap& params, const QStringList& 
 QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QString& path)
 {
     const DecorationProfile resolved = tree.resolve(path);
-    return paramsFilteredToChain(resolved.effectiveParameters(), resolved.effectiveChain());
+    // storedParameters(): this is EDIT-facing. The page shows and writes what this
+    // node stores of its own, and a flattened map would make every inherited preset
+    // value look like a local edit the next write would pin.
+    return paramsFilteredToChain(resolved.storedParameters(), resolved.effectiveChain());
 }
 
 /// The preset twin of inheritedParamsForChain, and there for the same reason:
@@ -514,7 +517,8 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         if (profile.parameters) {
             allParams = *profile.parameters;
         } else {
-            allParams = paramsFilteredToChain(tree.resolve(path).effectiveParameters(), chain);
+            // storedParameters(), for the reason given on the read above.
+            allParams = paramsFilteredToChain(tree.resolve(path).storedParameters(), chain);
         }
         bool seeded = false;
         for (const QString& packId : chain) {

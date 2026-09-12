@@ -11,6 +11,10 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
+// For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
+// rather than relied on through another Qt header: the unity build hides a missing
+// include, and the non-unity build is the only place it surfaces.
+#include <QtGlobal>
 
 #include <algorithm>
 #include <optional>
@@ -93,8 +97,56 @@ public:
     {
         return chain.value_or(QStringList());
     }
+    /// The stored per-pack parameter map, without judgement.
+    ///
+    /// For a caller that legitimately wants the RAW values while a preset is still
+    /// engaged: the flatten itself, which needs them as the delta set, and the
+    /// settings controller's edit-facing reads, which show and write what this node
+    /// stores of its own. Named so those reads state their intent instead of sharing
+    /// a spelling with the reads that want the effective answer. Mirrors the
+    /// animation twin's `storedParameters()`.
+    QVariantMap storedParameters() const
+    {
+        return parameters.value_or(QVariantMap());
+    }
+
+    /// The parameter map a RENDERER should consume.
+    ///
+    /// Identical to `storedParameters()` once the presets have been applied, and a
+    /// loud warning when they have not. "Flattened" is a convention here rather than
+    /// a type — the only marker is that the consumed `presetIds` entries were
+    /// cleared — so nothing in the type system stops a consumer from reading this on
+    /// a RAW profile, where the answer is plausible and wrong because the presets'
+    /// values are simply missing and the pack's declared min/max is unenforced.
+    ///
+    /// The animation twin grew this warning first, and its absence here is exactly
+    /// why the shell's chrome went unflattened unnoticed: every OTHER surface
+    /// consumer happened to flatten, so nothing pointed at the one that did not.
+    ///
+    /// In BOTH builds, for the reason the twin gives: a debug-only assert would have
+    /// caught none of those sites in a user session. It warns rather than refusing
+    /// because the result is degraded, not dangerous.
+    ///
+    /// Only a NON-EMPTY preset id counts as unapplied. An empty-string entry is the
+    /// blocking sentinel ("this pack follows no preset"), which the flatten
+    /// deliberately PRESERVES, so warning on it would fire on every correctly
+    /// flattened profile that carries one.
     QVariantMap effectiveParameters() const
     {
+        if (presetIds) {
+            for (auto it = presetIds->constBegin(); it != presetIds->constEnd(); ++it) {
+                if (it.value().toString().isEmpty()) {
+                    continue;
+                }
+                qWarning(
+                    "PhosphorSurface: DecorationProfile::effectiveParameters() read on a profile whose preset "
+                    "is NOT yet applied (pack=%s presetId=%s). The preset's values are missing from the result "
+                    "and its declared range is unenforced — flatten with withPresetsResolved() after the tree "
+                    "walk-up, never per node.",
+                    qUtf8Printable(it.key()), qUtf8Printable(it.value().toString()));
+                break;
+            }
+        }
         return parameters.value_or(QVariantMap());
     }
     QStringList effectiveDisabledPacks() const

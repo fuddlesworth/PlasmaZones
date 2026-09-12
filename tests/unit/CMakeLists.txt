@@ -2709,6 +2709,10 @@ if(TARGET PhosphorTheme::PhosphorTheme)
             Qt6::DBus
             Qt6::Gui
             PhosphorProtocol::PhosphorProtocol
+            # Declared rather than taken transitively through PhosphorSurface:
+            # ShellChrome.h includes <PhosphorShaders/ShaderPresetStore.h> and holds
+            # the store by value, so the edge belongs to this target too.
+            PhosphorShaders::PhosphorShaders
             PhosphorSurface::PhosphorSurface
             PhosphorTheme::PhosphorTheme
     )

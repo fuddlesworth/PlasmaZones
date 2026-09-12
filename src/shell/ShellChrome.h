@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -95,6 +96,20 @@ private:
     void subscribeToDaemon();
 
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_registry;
+    /// Named parameter presets for the SURFACE family, so a shell surface whose
+    /// assignment names one renders with that preset's values.
+    ///
+    /// The shell is a decoration consumer like any other, and without this it was the
+    /// one that silently was not: `chainFor` and `outerPaddingFor` read
+    /// `effectiveParameters()` on an UNFLATTENED profile, so a shell surface (or an
+    /// ancestor it inherits from) that named a preset rendered with the preset's values
+    /// MISSING and with the pack's declared min/max unenforced, since that clamp only
+    /// happens inside `resolveParams`. Every other surface consumer — the compositor's
+    /// decorations, the daemon's OSD, the pointer pass — flattens.
+    ///
+    /// Declared AFTER m_registry: the seeding connection below reads the registry, and
+    /// reverse member destruction tears this down first.
+    std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
     PhosphorSurfaceShaders::DecorationProfileTree m_tree;
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;

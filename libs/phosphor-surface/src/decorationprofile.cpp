@@ -198,7 +198,10 @@ DecorationProfile withPresetsResolved(const DecorationProfile& profile,
     }
 
     DecorationProfile out = profile;
-    QVariantMap params = out.effectiveParameters();
+    // storedParameters(), not effectiveParameters(): this IS the flatten, so reading
+    // the raw map while the presets are still engaged is exactly right, and the
+    // effective getter would warn about the one read that is not a mistake.
+    QVariantMap params = out.storedParameters();
     bool resolvedAny = false;
     // Keyed on the PARAMETER map, so a pack with stored values and no preset is
     // clamped, and then on any preset-only pack the map does not mention.
