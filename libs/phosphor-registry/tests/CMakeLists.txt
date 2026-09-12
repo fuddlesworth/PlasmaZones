@@ -120,6 +120,13 @@ function(phosphorregistry_add_test name)
 endfunction()
 
 phosphorregistry_add_test(test_phosphor_registry)
+# The shared baseline-plus-keyed-overrides container the four shader-assignment
+# trees hold. Tested here rather than through any one tree: all four used to
+# hand-write it, and the copies drifted, so the contract belongs where the one
+# copy lives. One of its four consumers (OverlayShaderTree) has no unit test at
+# all, which left the empty-key refusal and clearOverride's return value unpinned
+# for that payload entirely.
+phosphorregistry_add_test(test_path_keyed_overrides)
 phosphorregistry_add_test(test_phosphor_registry_metadatapack_loader)
 phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)

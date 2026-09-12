@@ -21,6 +21,7 @@
 #include <Qt>
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -143,7 +144,13 @@ public:
     /// Re-derives the engaged-chain cache; a no-op when the profile is
     /// unchanged, so a settings broadcast that touched something else does not
     /// restart a live chain.
-    void setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile);
+    ///
+    /// Returns whether the profile actually changed, which tells a caller that needs
+    /// the compiled packs dropped either way (a preset retune, where the flattened
+    /// profile may be identical) whether this call has already done the
+    /// releaseGl/rebuild/repaint work or whether it still owes an
+    /// invalidateShaderCache.
+    bool setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile);
 
     /// The outputs the effect's fullscreen gate
     /// (Decorations.Performance.SuppressWhileFullscreen) currently covers. The
@@ -183,6 +190,17 @@ public:
         return m_cursorHidden;
     }
 
+    /// Tell the pass who else in this effect draws its own copy of the cursor
+    /// while holding KWin's hide (the strip pass, in practice). Consulted by
+    /// cursorSpriteGone(): a raised hide counter with no such owner is a
+    /// pointer nobody is drawing, which is the software-KVM case. Set once
+    /// from the effect's constructor; the pass holds no back-pointer to ask
+    /// itself.
+    void setForeignCursorDrawer(std::function<bool()> drawer)
+    {
+        m_foreignCursorDrawer = std::move(drawer);
+    }
+
     /// Draw the chain over @p screen's finished frame. Called from
     /// PlasmaZonesEffect::paintScreen AFTER `KWin::effects->paintScreen`, on
     /// the normal path only (a desktop transition or a strip leg replaces the
@@ -216,6 +234,19 @@ public:
     /// add or remove the pack ids the chain names.
     void invalidateShaderCache();
 
+    /// Damage the band the chain CURRENTLY reaches around the pointer.
+    ///
+    /// Takes the trail's band when there is a live trail, and otherwise builds one
+    /// around the live cursor position. Both halves are needed: the history answers
+    /// empty once the last pointer event is older than the chain's trailSeconds,
+    /// which is the common case for a settings or preset change (the user is not
+    /// moving the mouse while they drag a slider), and that is precisely the state
+    /// where a retune would otherwise not reach the screen until the next motion.
+    /// Deliberately not addRepaintFull: this is a band a few hundred px across on a
+    /// per-event path, and a full compositor repaint for a cursor decoration is the
+    /// wrong trade. A suppressed output is left alone, per the class's cost rule.
+    void repaintCurrentReach();
+
     /// Drop a removed output's state. The history is keyed to one output's
     /// canvas, so an output going away invalidates it wholesale.
     void outputRemoved(KWin::LogicalOutput* screen);
@@ -231,8 +262,13 @@ public:
     /// `notePointer` cannot see it either.
     void outputGeometryChanged();
 
-    /// Drop all state and release GL resources (effect teardown / compositor
-    /// reset). Null-safe against a torn-down `KWin::effects`.
+    /// Release GL resources and drop the sampled history (effect teardown /
+    /// compositor reset). Null-safe against a torn-down `KWin::effects`.
+    ///
+    /// Does NOT clear the derived chain state — m_engaged, m_engagedLayers,
+    /// m_anyAboveLayer, m_maxReachLogical, m_maxTrailSeconds, m_sampleWindowSeconds
+    /// all stand. Its one caller is teardown, where nothing reads them afterwards;
+    /// a caller that wanted a live reset would have to rebuildChain() as well.
     void reset();
 
 private:
@@ -317,10 +353,11 @@ private:
                    PhosphorPointerShaders::PointerShaderContract::kMaxUserTextureSlots>
             userTextures;
         std::vector<CompiledBufferPass> bufferPasses;
-        /// Ping-pong buffer targets, one pair per compiled buffer stage. Slot
-        /// While the run is in progress `bufferFront` holds the LAST frame's output (what `bufferFeedback`
-        /// reads); the other is written this frame, and the two swap after the
-        /// draw. Sized to the output's device size times the pack's clamped
+        /// Ping-pong buffer targets, one pair per compiled buffer stage.
+        ///
+        /// While the run is in progress `bufferFront` holds the LAST frame's output
+        /// (what `bufferFeedback` reads); the other is written this frame, and the two
+        /// swap after the draw. Sized to the output's device size times the pack's clamped
         /// `bufferScale`, revalidated every frame and reallocated on a change.
         /// Empty for a pack that declares no buffer stages, which is every
         /// bundled pack — a single-pass chain allocates no FBO at all.
@@ -429,31 +466,46 @@ private:
     /// desktop so the remote motion mirrors, so `cursorPos` stays live and
     /// every liveness test still passes.
     ///
-    /// The test is the cursor IMAGE, and deliberately NOT
-    /// `EffectsHandler::isCursorHidden()`. That counter does not mean "the
-    /// user cannot see a pointer"; it means "KWin is not compositing the
-    /// pointer itself", which is equally what an effect that hides the cursor
-    /// in order to draw its OWN copy leaves behind. KWin ships at least two:
-    /// `shakecursor`, which magnifies the pointer while the user shakes it,
-    /// and `zoom` in its scaled-pointer mode. Reading the counter here meant
-    /// that shaking the mouse — the very gesture that draws the longest trail
-    /// — took `dropTrail` on every pointer event for as long as the
-    /// magnification lasted, so the whole trail blinked out mid-sweep and
-    /// stayed out for seconds while the pointer was, if anything, more visible
-    /// than usual. A client that installs a null cursor surface leaves the
-    /// counter alone and empties the image instead, so the image is the signal
-    /// that actually separates the two cases, and it stays legible while this
-    /// pass holds a hide of its own.
+    /// Two signals, because a cursor gets hidden two ways and Deskflow uses
+    /// the one a naive test misses:
+    ///   • The cursor IMAGE is null. A client installed a blank cursor
+    ///     surface. Nothing to decorate, whatever the counter says.
+    ///   • `EffectsHandler::isCursorHidden()` is raised with the image intact.
+    ///     This is what KWin's input-capture portal does for a software KVM
+    ///     (EisInputCaptureManager::barrierHit calls Cursors::hideCursor and
+    ///     never touches the image, because "even though the input events
+    ///     are filtered out the cursor is updated on screen"). It is ALSO what
+    ///     an effect that hides the cursor in order to draw its OWN copy
+    ///     leaves behind, and that copy is a pointer the user can see. The
+    ///     counter does not say which, so the hide's OWNER decides: the
+    ///     counter counts as "gone" unless this pass holds the hide itself,
+    ///     the strip pass does (m_foreignCursorDrawer, wired by the effect),
+    ///     or KWin's `shakecursor` is active. That effect is the only KWin
+    ///     effect in 6.7 that calls hideCursor (zoom's scaled pointer no
+    ///     longer does), and the version that read the bare counter made
+    ///     shaking the mouse — the very gesture that draws the longest trail —
+    ///     take `dropTrail` on every pointer event for as long as the
+    ///     magnification lasted.
+    /// Reading the image alone, as the fix for that shake regression did,
+    /// is what let the Deskflow trail back in: the image is never null on
+    /// the capture path.
     ///
     /// This does NOT weaken the `above`-layer arbitration: `hideCursorForPass`
     /// tests `isCursorHidden()` itself and refuses to take a second hide, so a
     /// chain that would draw its own sprite still stands down for whoever
     /// asked first.
     ///
-    /// Known gap: under `zoom`'s scaled pointer the scene is transformed and
-    /// this pass's trail is not, so the stroke sits off the magnified cursor.
-    /// The counter used to mask that by accident. Fixing it properly needs a
-    /// screen-transform gate, not a cursor-visibility one.
+    /// Known gaps:
+    ///   • Under `zoom`'s scaled pointer the scene is transformed and this
+    ///     pass's trail is not, so the stroke sits off the magnified cursor.
+    ///     zoom raises no hide on 6.7, so no cursor-visibility test can see
+    ///     it; fixing it needs a screen-transform gate.
+    ///   • The counter is a refcount and the Effects API exposes one bit of
+    ///     it, so a capture that lands while THIS pass already holds a hide
+    ///     for an `above` chain is invisible here: the pass keeps drawing its
+    ///     sprite copy and trail along the mirrored motion until its own hide
+    ///     is released, and only then does the raised counter read as gone.
+    ///     A `below` chain never holds a hide and is unaffected.
     bool cursorSpriteGone() const;
 
     /// Drop the live trail because the pointer stopped being a pointer worth
@@ -569,6 +621,9 @@ private:
     /// True while THIS pass holds a hideCursor() on the compositor (the call
     /// is refcounted, so the flag keeps show/hide balanced).
     bool m_cursorHidden = false;
+
+    /// See setForeignCursorDrawer. Empty means no other in-effect owner.
+    std::function<bool()> m_foreignCursorDrawer;
 };
 
 } // namespace PlasmaZones

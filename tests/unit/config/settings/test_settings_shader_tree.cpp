@@ -364,6 +364,227 @@ private Q_SLOTS:
         QVERIFY(a.committedShaderProfileTree().hasOverride(QStringLiteral("osd.show")));
         QVERIFY(a.committedShaderProfileTree() == a.shaderProfileTree());
     }
+
+    // ─────── Schema sanitizer ───────
+    //
+    // Driven through a DIRECT BACKEND WRITE rather than the typed setter,
+    // because that is the door the setter's own size bounds cannot see: a
+    // hand-edited config.json, a migration writing outside the Store, a
+    // settings-profile blob. The sanitizer runs on read as well as write, so
+    // the oversized value has to come back bounded without anything having
+    // called the setter.
+
+    /// Helper: stamp a raw ShaderProfileTree JSON blob straight onto the
+    /// backend, bypassing Store::write and the typed setter entirely.
+    static void writeRawShaderTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
+    {
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto animations = backend->group(ConfigDefaults::animationsGroup());
+        const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+        animations->writeString(ConfigDefaults::shaderProfileTreeKey(), json);
+    }
+
+    void testShaderTreeSanitizerBoundsAHandEditedBlob()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("osd.show");
+
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile huge;
+        huge.effectId = QString(2000, QLatin1Char('x'));
+        huge.presetId = QString(2000, QLatin1Char('y'));
+        QVariantMap params;
+        for (int i = 0; i < 200; ++i)
+            params.insert(QStringLiteral("p%1").arg(i), i);
+        params.insert(QStringLiteral("long"), QString(2000, QLatin1Char('z')));
+        huge.parameters = params;
+        tree.setOverride(kPath, huge);
+        writeRawShaderTree(tree);
+
+        Settings a;
+        const auto stored = a.shaderProfileTree().directOverride(kPath);
+
+        // Each field is bounded independently: the two over-long ids go, and
+        // the parameters that fit stay rather than being discarded with them.
+        QVERIFY(!stored.effectId.has_value());
+        QVERIFY(!stored.presetId.has_value());
+        QVERIFY(stored.parameters.has_value());
+        // EXACTLY the cap, not merely under it: `<=` is satisfied by a cap of 1.
+        QCOMPARE(stored.parameters->size(), 64);
+        QVERIFY(!stored.parameters->contains(QStringLiteral("long")));
+    }
+
+    void testShaderTreeSanitizerLeavesAnOrdinaryBlobAlone()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("osd.show");
+
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile p;
+        p.effectId = QStringLiteral("dissolve");
+        p.presetId = QStringLiteral("{neon}");
+        p.parameters = QVariantMap{{QStringLiteral("glow"), 0.8}};
+        tree.setOverride(kPath, p);
+        writeRawShaderTree(tree);
+
+        Settings a;
+        const auto stored = a.shaderProfileTree().directOverride(kPath);
+        QCOMPARE(stored.effectiveEffectId(), QStringLiteral("dissolve"));
+        QCOMPARE(stored.effectivePresetId(), QStringLiteral("{neon}"));
+        QCOMPARE(stored.effectiveParameters().value(QStringLiteral("glow")).toDouble(), 0.8);
+    }
+
+    void testShaderTreeSanitizerPreservesEngagedEmptyFields()
+    {
+        // Engaged-but-empty is "explicitly no shader" / "explicitly no preset",
+        // which is how a child stops inheriting an ancestor's. A bound that
+        // disengaged the field would silently turn that back into "inherit".
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("osd.show");
+
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile p;
+        p.effectId = QString();
+        p.presetId = QString();
+        tree.setOverride(kPath, p);
+        writeRawShaderTree(tree);
+
+        Settings a;
+        const auto stored = a.shaderProfileTree().directOverride(kPath);
+        QVERIFY(stored.effectId.has_value());
+        QVERIFY(stored.effectId->isEmpty());
+        QVERIFY(stored.presetId.has_value());
+        QVERIFY(stored.presetId->isEmpty());
+    }
+
+    /// Writing the SAME tree twice must emit once.
+    ///
+    /// setShaderProfileTree early-returns when the sanitized tree equals what is
+    /// already stored, and deleting that guard left this suite green: every other
+    /// test here writes once and asserts `spy.count() == 1`, which a setter that
+    /// emits on every call also satisfies. Both sibling tree suites pin the repeat
+    /// explicitly. It matters because the signal on the other side reaches the
+    /// daemon and the compositor, and the settings UI writes this tree at
+    /// slider-drag rate.
+    void testShaderProfileTree_repeatWriteOfTheSameTreeEmitsOnce()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile profile;
+        profile.effectId = QStringLiteral("pixelate");
+        profile.parameters = QVariantMap{{QStringLiteral("amount"), 3}};
+        tree.setOverride(QStringLiteral("osd.show"), profile);
+
+        QSignalSpy spy(&a, &Settings::shaderProfileTreeChanged);
+        a.setShaderProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+        a.setShaderProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+        // And a tree rebuilt from scratch with the same contents, not just the same
+        // object: the comparison has to be by VALUE, through the sanitizer.
+        PhosphorAnimationShaders::ShaderProfileTree again;
+        again.setOverride(QStringLiteral("osd.show"), profile);
+        a.setShaderProfileTree(again);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /// The sanitizer must be IDEMPOTENT and ORDER-STABLE on the array-form tree.
+    ///
+    /// This tree serialises its overrides as a JSON array, so insertion order is
+    /// observable and round-trips — unlike the overlay tree, whose object keys are
+    /// sorted either way. Only the overlay suite pinned a second sanitizer pass, and
+    /// it is blind to the mutation that matters here for exactly that reason: making
+    /// `forEachInOrder` iterate the underlying hash, or `overriddenPaths()` sort,
+    /// would leave both sanitizers order-unstable and fire the change signal on every
+    /// repeat write, at drag rate, while staying green.
+    void testShaderProfileTree_sanitizerIsIdempotentAndOrderStable()
+    {
+        IsolatedConfigGuard guard;
+
+        // Non-alphabetical insertion order, so a sort would be visible.
+        const QStringList inserted{QStringLiteral("osd.show"), QStringLiteral("osd.hide"),
+                                   QStringLiteral("window.appearance.open")};
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        for (const QString& path : inserted) {
+            PhosphorAnimationShaders::ShaderProfile p;
+            p.effectId = QStringLiteral("pixelate");
+            tree.setOverride(path, p);
+        }
+
+        Settings a;
+        QSignalSpy spy(&a, &Settings::shaderProfileTreeChanged);
+        a.setShaderProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+
+        const auto firstPass = a.shaderProfileTree();
+        QCOMPARE(firstPass.overriddenPaths(), inserted);
+
+        // The second pass over the sanitizer's OWN output must change nothing, which
+        // is what makes the equality gate above reachable at all.
+        a.setShaderProfileTree(firstPass);
+        QCOMPARE(spy.count(), 1);
+        const auto secondPass = a.shaderProfileTree();
+        QCOMPARE(secondPass.overriddenPaths(), inserted);
+        QCOMPARE(secondPass, firstPass);
+    }
+
+    /// The MOTION tree's root, which this PR started bounding and which no test
+    /// reached: the only callers of `setMotionProfileTree` in the whole test tree
+    /// write a well-formed tree, so neither the root-baseline bound nor the
+    /// root-key drop had coverage.
+    ///
+    /// That key has no schema validator either (it is registered with no coercion),
+    /// so the setter is the single boundary, and `ProfileTree::fromJson` ignores an
+    /// unknown key rather than pruning it — anything that survives the setter is
+    /// persisted for good.
+    void testMotionProfileTree_rootIsBoundedAndStrayKeysDropped()
+    {
+        IsolatedConfigGuard guard;
+        Settings a;
+
+        QVariantMap baseline;
+        baseline.insert(QStringLiteral("curve"), QString(4000, QLatin1Char('c')));
+        baseline.insert(QStringLiteral("junk"), 1);
+        QVariantMap entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.open"));
+        QVariantMap body;
+        body.insert(QStringLiteral("duration"), 200);
+        body.insert(QStringLiteral("alsoJunk"), QStringLiteral("x"));
+        entry.insert(QStringLiteral("profile"), body);
+        entry.insert(QStringLiteral("note"), QString(2000, QLatin1Char('n')));
+
+        QVariantMap tree;
+        tree.insert(QStringLiteral("baseline"), baseline);
+        tree.insert(QStringLiteral("overrides"), QVariantList{entry});
+        tree.insert(QStringLiteral("strayRoot"), 1);
+        a.setMotionProfileTree(tree);
+
+        const QVariantMap stored = a.motionProfileTree();
+        // Only the two keys this tree defines survive at the root.
+        QCOMPARE(QStringList(stored.keys()), (QStringList{QStringLiteral("overrides")}));
+        // The baseline bounded to nothing (its only known field was over-long, its
+        // other key unknown), and an EMPTY baseline is not written at all — the
+        // library's toJson stopped emitting one for the same reason.
+        QVERIFY(!stored.contains(QStringLiteral("baseline")));
+
+        // The override ENTRY is rebuilt from its two fields, so a third key does not
+        // ride along...
+        const QVariantList entries = stored.value(QStringLiteral("overrides")).toList();
+        QCOMPARE(entries.size(), 1);
+        const QVariantMap storedEntry = entries.constFirst().toMap();
+        QCOMPARE(QStringList(storedEntry.keys()), (QStringList{QStringLiteral("path"), QStringLiteral("profile")}));
+        // ...and the profile body keeps its known field while the unknown one goes.
+        const QVariantMap storedBody = storedEntry.value(QStringLiteral("profile")).toMap();
+        QCOMPARE(storedBody.value(QStringLiteral("duration")).toInt(), 200);
+        QVERIFY(!storedBody.contains(QStringLiteral("alsoJunk")));
+
+        // Idempotent: a second pass over the sanitizer's own output changes nothing,
+        // which is what makes the setter's equality gate reachable.
+        a.setMotionProfileTree(stored);
+        QCOMPARE(a.motionProfileTree(), stored);
+    }
 };
 
 QTEST_MAIN(TestSettingsShaderTree)

@@ -26,5 +26,8 @@ endfunction()
 
 phosphorsurface_add_test(test_surfaceuniformprofile)
 phosphorsurface_add_test(test_decorationprofiletree)
+# The preset half of the same type, split out when the file above reached the size
+# ceiling: per-pack preset references and the withPresetsResolved flatten.
+phosphorsurface_add_test(test_decorationprofiletree_presets)
 phosphorsurface_add_test(test_surfaceshaderregistry)
 phosphorsurface_add_test(test_surfacechaincompose)

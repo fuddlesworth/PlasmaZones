@@ -45,10 +45,10 @@ PointerDecorationPass::~PointerDecorationPass()
 
 // ── Settings ────────────────────────────────────────────────────────────────
 
-void PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile)
+bool PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationProfile& profile)
 {
     if (m_profile == profile) {
-        return;
+        return false;
     }
     m_profile = profile;
     // Parameter VALUES are baked into the compiled pack at first compile and
@@ -83,6 +83,7 @@ void PointerDecorationPass::setProfile(const PhosphorSurfaceShaders::DecorationP
         m_hasTimeOrigin = false;
     }
     repaintStale(stale);
+    return true;
 }
 
 void PointerDecorationPass::setSuppressedOutputs(const QSet<KWin::LogicalOutput*>& outputs)
@@ -121,16 +122,55 @@ void PointerDecorationPass::setSuppressedOutputs(const QSet<KWin::LogicalOutput*
 
 void PointerDecorationPass::rebuildChain()
 {
+    // enabledChain() is effectiveChain() minus the per-layer disable toggles,
+    // which is exactly the set of layers the renderer should paint. An empty
+    // one is the "off" state: there is no separate master switch.
+    //
+    // Read only to decide whether to scan. The chain this function BUILDS from is
+    // re-read below, after ensureRegistryPaths(), together with the parameters, so
+    // both come from one observation of m_profile. Keeping the pre-scan read was a
+    // split observation: ensureRegistryPaths can re-enter this function through
+    // effectsChanged → preset seeding → presetsChanged → setProfile, and the outer
+    // call then resumed with the OLD chain and the NEW parameters. Harmless only
+    // because a preset flatten cannot change a chain, which is not a property this
+    // function should depend on.
+    const QStringList chainForScanDecision = m_profile.enabledChain();
+
+    // BEFORE the clear below, and that order is the whole point.
+    //
+    // Populating the search paths is what makes the registry scan the pack dirs
+    // at all, so it has to happen before the first resolve — but the first call
+    // scans SYNCHRONOUSLY and emits effectsChanged INLINE, which reaches the
+    // handler that calls invalidateShaderCache and re-enters this function. With
+    // the clear first, the nested call fully repopulated m_engagedLayers and the
+    // outer call then resumed and push_backed a SECOND copy of every layer: the
+    // main draw ran twice per layer (the ranBufferPasses dedupe suppresses only
+    // buffer stages), so a trail composited its own alpha twice. Visible, not
+    // merely wasteful.
+    //
+    // Hoisting it above the clear makes the re-entry harmless rather than
+    // deferring the handler: the nested call builds whatever it builds, and the
+    // clear below then discards it and rebuilds from scratch. Deferring would
+    // leave the real fault in place — an outer function resuming into a
+    // container something else rebuilt underneath it.
+    //
+    // Still gated on the user having actually enabled a chain, so a disabled
+    // feature pays for neither the scan nor the file watcher.
+    if (!chainForScanDecision.isEmpty()) {
+        ensureRegistryPaths();
+    }
+
+    // One observation of m_profile for both axes, taken after the scan. See the
+    // note on chainForScanDecision above.
+    const QStringList chain = m_profile.enabledChain();
+    const QVariantMap allParameters = m_profile.effectiveParameters();
+
     m_engagedLayers.clear();
     m_anyAboveLayer = false;
     m_maxReachLogical = 0.0;
     m_maxTrailSeconds = 0.0;
     m_sampleWindowSeconds = 0.0;
 
-    // enabledChain() is effectiveChain() minus the per-layer disable toggles,
-    // which is exactly the set of layers the renderer should paint. An empty
-    // one is the "off" state: there is no separate master switch.
-    const QStringList chain = m_profile.enabledChain();
     if (chain.isEmpty()) {
         m_engaged = false;
         // Kept in step on this path too, so the sampler never carries a
@@ -138,13 +178,7 @@ void PointerDecorationPass::rebuildChain()
         m_history.setTrailSeconds(m_sampleWindowSeconds);
         return;
     }
-    // Populating the search paths is what makes the registry scan the pack
-    // dirs at all, so it has to happen before the first resolve — but only
-    // once the user has actually enabled a chain, so a disabled feature never
-    // pays for the scan or the file watcher.
-    ensureRegistryPaths();
 
-    const QVariantMap allParameters = m_profile.effectiveParameters();
     m_engagedLayers.reserve(static_cast<size_t>(chain.size()));
     for (const QString& effectId : chain) {
         if (effectId.isEmpty()) {
@@ -370,10 +404,12 @@ QRectF PointerDecorationPass::damageDeviceRect(KWin::LogicalOutput* screen, qint
     // guarantees a covered output is neither asked for a frame nor painted,
     // however a future caller reaches it.
     //
-    // ignoreSuppression is for the one caller that needs the rect of what is
-    // ALREADY on screen at the moment suppression closes over the output: the
-    // gate has been applied by then, so the honest answer is empty, and that
-    // is precisely the band still needing a repaint.
+    // ignoreSuppression is for the ONE caller that needs the rect of what is ALREADY
+    // on screen at the moment suppression closes over the output (setSuppressedOutputs):
+    // the gate has been applied by then, so the honest answer is empty, and that is
+    // precisely the band still needing a repaint. Every other caller leaves it false —
+    // repaintCurrentReach in particular returns early on a suppressed output, so the
+    // flag could only ever behave as false there anyway.
     if (!m_engaged || !screen || (!ignoreSuppression && suppressedOn(screen))) {
         return {};
     }
@@ -514,13 +550,29 @@ bool PointerDecorationPass::cursorSpriteGone() const
     if (!KWin::effects) {
         return false;
     }
-    // The IMAGE, and only the image — see the header for why the hide counter
-    // is not consulted here. An empty image is a client-installed blank cursor
-    // (or a KVM that took the sprite away): nothing is on screen to decorate.
-    // A non-empty one may still be composited by another effect rather than by
-    // KWin, which is a pointer the user can see and so a pointer worth
-    // decorating.
-    return KWin::effects->cursorImage().isNull();
+    // An empty image is a client-installed blank cursor: nothing is on screen
+    // to decorate, whatever the hide counter says.
+    if (KWin::effects->cursorImage().isNull()) {
+        return true;
+    }
+    // A non-empty image with the counter at zero is KWin's own composited (or
+    // hardware-plane) cursor. Visible.
+    if (!KWin::effects->isCursorHidden()) {
+        return false;
+    }
+    // The counter is raised. That is what a software KVM's input capture does
+    // (KWin's EisInputCaptureManager::barrierHit hides the cursor and leaves
+    // the image alone, so the image test above never fires for Deskflow), and it
+    // is ALSO what an effect that draws its own copy does. Only the owners
+    // known to draw a copy count as visible; see the header for the list and
+    // why the counter alone cannot separate the two cases.
+    if (m_cursorHidden) {
+        return false;
+    }
+    if (m_foreignCursorDrawer && m_foreignCursorDrawer()) {
+        return false;
+    }
+    return !KWin::effects->isEffectActive(QStringLiteral("shakecursor"));
 }
 
 bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
@@ -528,9 +580,10 @@ bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
     if (m_cursorHidden || !m_anyAboveLayer || suppressedOn(screen) || !KWin::effects || !cursorOnOutput(screen)) {
         return false;
     }
-    // Another owner (the strip pass, KWin's zoom, a screen-edge peek) already
-    // holds the hidden state and draws its own copy; taking a second hide
-    // would leave the show/hide pair unbalanced and drawing the cursor twice.
+    // Another owner (the strip pass, KWin's shakecursor, a KVM capture) already
+    // holds the hidden state. Taking a second hide would leave the show/hide
+    // pair unbalanced, and where that owner draws its own copy this pass
+    // would draw the cursor twice.
     if (KWin::effects->isCursorHidden()) {
         return false;
     }
@@ -613,6 +666,67 @@ void PointerDecorationPass::repaintStale(const QRectF& stale) const
         return;
     }
     KWin::effects->addRepaint(KWin::RectF(stale));
+}
+
+void PointerDecorationPass::repaintCurrentReach()
+{
+    if (!m_output || !KWin::effects || !m_engaged) {
+        return;
+    }
+    // Nothing is on screen on a SUPPRESSED output, so there is nothing to repaint
+    // there. The class's cost rule is that a suppressed output is asked for no
+    // frames, and the trail was already erased when suppression closed over it
+    // (setSuppressedOutputs). Note this early return is also why nothing below
+    // passes ignoreSuppression: by the time a suppressed output is excluded here,
+    // the flag could only ever behave as false.
+    if (suppressedOn(m_output)) {
+        return;
+    }
+
+    // The trail's own band, when there IS a trail on screen.
+    const QRectF fromTrail = damageLogicalRect(m_output, ShaderInternal::shaderClockNowMs());
+    if (!fromTrail.isEmpty()) {
+        repaintStale(fromTrail);
+        return;
+    }
+
+    // And otherwise a band around the LIVE cursor, which is the whole reason this
+    // function exists and the half it was missing. `m_history.damageRect` returns an
+    // empty rect whenever the last pointer event is older than the chain's
+    // trailSeconds, so for a pointer at rest — exactly the state the header cites,
+    // the user dragging a slider rather than moving the mouse — the trail-derived
+    // rect is empty and asking for it repainted nothing. A retune then did not reach
+    // the screen until the next motion. A decoration that draws around the resting
+    // cursor (any `layer: above` pack, and every halo) is on screen in that state
+    // regardless of what the history says about motion.
+    //
+    // ONLY for a chain that actually draws at rest. `isActive()` is true while the trail
+    // is live or a cursor hide is held, so for a trail-only chain (no `layer: above`) the
+    // pass is not in the paint chain once the history empties — the band would buy a
+    // compositor frame over a (2*reach)² region that paints nothing. The `above` case,
+    // which is the one this function exists for, holds the hide and does paint.
+    if (!m_anyAboveLayer) {
+        return;
+    }
+
+    // Built in logical px, since that is the unit reach is declared in and the unit
+    // addRepaint takes; the sprite comes back in output canvas px and is converted.
+    const qreal scale = m_output->scale();
+    const QPointF cursor = KWin::effects->cursorPos();
+    QRectF band(cursor.x() - m_maxReachLogical, cursor.y() - m_maxReachLogical, m_maxReachLogical * 2.0,
+                m_maxReachLogical * 2.0);
+    const QRectF sprite = cursorCanvasRect(m_output);
+    if (!sprite.isEmpty()) {
+        // An `above` chain hides KWin's cursor and draws the sprite itself, so the
+        // sprite's own band has to be in the repaint or the pointer is left as a
+        // hole. A reach of zero (an `above`-only pack) makes this the whole rect.
+        const QRectF spriteLogical(sprite.x() / scale, sprite.y() / scale, sprite.width() / scale,
+                                   sprite.height() / scale);
+        band = band.united(spriteLogical.translated(m_output->geometryF().topLeft()));
+    }
+    // Grown to whole logical pixels for the reason damageLogicalRect gives: a
+    // region that stops mid-pixel leaves the pack's outermost row unrefreshed.
+    repaintStale(QRectF(band.intersected(m_output->geometryF()).toAlignedRect()));
 }
 
 void PointerDecorationPass::invalidateShaderCache()

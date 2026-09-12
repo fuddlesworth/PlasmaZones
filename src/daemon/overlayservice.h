@@ -1,18 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling (about
-// 1580 lines and still growing with each overlay surface). Treat the figure as
-// indicative only: it goes stale within a release of being written, and the
-// case below is what the exception rests on, not a number.
+// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling and grows
+// with each overlay surface. No line count here, because it goes stale within a
+// release; scripts/oversize-baseline.json holds the authoritative figure.
 //
-// The case for it: OverlayService is the single façade every overlay surface
-// goes through — zone overlay, selector, snap assist, OSD, cheatsheet and the
-// scrolling drop indicator — so its members are the per-screen state and
-// per-role wiring those surfaces share. The implementation is already split by
-// surface across daemon/overlayservice/*.cpp; splitting the class DECLARATION
-// would scatter the per-screen ownership and teardown-order contract the
-// member ordering encodes, exactly as documented on daemon.h.
+// The case for it: OverlayService is the single façade every overlay surface goes
+// through (zone overlay, selector, snap assist, OSD, cheatsheet, scrolling drop
+// indicator), so its members are the per-screen state and per-role wiring those
+// surfaces share. The implementation is already split by surface across
+// daemon/overlayservice/*.cpp; splitting the class DECLARATION would scatter the
+// per-screen ownership and teardown-order contract the member ordering encodes,
+// exactly as documented on daemon.h.
 
 #pragma once
 
@@ -88,6 +87,10 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorShaders {
+class ShaderPresetRegistry;
+}
+
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
@@ -134,12 +137,10 @@ public:
     ///                 every overlay path that resolves a shader by id.
     ///                 Nullable - passing nullptr disables shader-based
     ///                 overlays entirely (tests that don't exercise shaders).
-    /// @param profileRegistry Borrowed; must outlive this service.
-    ///                 Threaded into the SurfaceAnimator that drives every
-    ///                 overlay show/hide. Composition roots (the daemon)
-    ///                 own a single PhosphorProfileRegistry instance and
-    ///                 hand it through here - the singleton accessor is
-    ///                 gone (Phase A3 of the architecture refactor).
+    /// @param profileRegistry Borrowed; must outlive this service. Threaded into the
+    ///                 SurfaceAnimator that drives every overlay show/hide. Composition
+    ///                 roots (the daemon) own a single PhosphorProfileRegistry and hand
+    ///                 it through here; the singleton accessor is gone.
     /// @param parent Qt parent.
     explicit OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                             PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent = nullptr);
@@ -162,6 +163,11 @@ public:
     /// BEFORE resetting the registry — the explicit teardown, not declaration
     /// order, is what prevents a dangling pointer during shutdown.
     void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
+    /// Borrowed preset registry, turning an assignment's `presetId` into the
+    /// parameters it stands for. Same lifetime contract as the two registries above,
+    /// but OPTIONAL unlike them: with none injected every assignment resolves to its
+    /// own parameters, which is what one carrying no preset already does.
+    void setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry);
     void updateGeometries() override;
 
     // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
@@ -194,16 +200,14 @@ public:
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
 
     /// Inject the daemon's bundle-owned autotile layout source. Optional -
-    /// when set, @ref buildUnifiedLayoutList reuses its internal preview
-    /// cache across calls instead of constructing a transient source per
-    /// call (which throws away the cache). Borrowed - caller owns it and
-    /// must keep it alive for the service's lifetime.
+    /// when set, @ref buildUnifiedLayoutList reuses its internal preview cache across
+    /// calls instead of constructing a transient source per call (which throws the cache
+    /// away). Borrowed: the caller owns it and must keep it alive for this service.
     ///
-    /// @note Expected to be called at most once. The service does not
-    /// subscribe to the source's own signals - replacing the pointer
-    /// later would not require a disconnect today, but matching the
-    /// "set-once after construction" discipline used by every other
-    /// setAutotileLayoutSource call site keeps the contract uniform.
+    /// @note Expected to be called at most once. The service does not subscribe to the
+    /// source's own signals, so replacing the pointer later would need no disconnect
+    /// today, but matching the "set-once after construction" discipline every other
+    /// setAutotileLayoutSource call site uses keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
     /// Scroll-mode zone model for the navigation OSD: returns one entry per
@@ -228,13 +232,12 @@ public:
     /// and routes through the router's live-engine answer, which correctly
     /// downgrades a disabled or switched-off scrolling assignment to
     /// snapping — the raw assignmentId cannot see that downgrade.
-    /// Consumers: resolvePerScreenLayoutInclude empties the layout list only
-    /// for None (a Templates screen swaps the manual list for the native
-    /// template cards); activeLayoutIdForScreen takes its template arm only when
-    /// the live answer is Templates; isSnappingContextInactive suppresses
-    /// the snap overlay for a scrolling assignment only when the scroll
-    /// engine actually owns the screen. Unset falls back to the
-    /// assignment-based resolution. Same clear-before-destroy contract as
+    /// Consumers: resolvePerScreenLayoutInclude empties the layout list only for None (a
+    /// Templates screen swaps the manual list for the native template cards);
+    /// activeLayoutIdForScreen takes its template arm only when the live answer is
+    /// Templates; isSnappingContextInactive suppresses the snap overlay for a scrolling
+    /// assignment only when the scroll engine actually owns the screen. Unset falls back
+    /// to assignment-based resolution, under the same clear-before-destroy contract as
     /// the other injected closures.
     using LayoutSupportResolver = std::function<int(const QString& screenId)>;
     void setLayoutSupportResolver(LayoutSupportResolver resolver)
@@ -244,22 +247,20 @@ public:
 
     /// LIVE "is the autotile engine what actually owns this screen".
     ///
-    /// The autotile twin of the layout-support resolver above, and needed as a
-    /// SEPARATE hook because that one cannot answer this: both the snap engine
-    /// and the autotile engine report Placement, so a Placement answer does not
-    /// say which of the two owns the screen. The router downgrades an autotile
-    /// assignment to snapping when the engine does not own the screen (master
-    /// switch off, Autotile axis context-disabled), and on such a screen the
-    /// drag pipeline runs the full snap path.
+    /// The autotile twin of the layout-support resolver above, a SEPARATE hook because
+    /// that one cannot answer this: both the snap and autotile engines report Placement,
+    /// so a Placement answer does not say which owns the screen. The router downgrades
+    /// an autotile assignment to snapping when the engine does not own the screen
+    /// (master switch off, Autotile axis context-disabled), and such a screen runs the
+    /// full snap path.
     ///
-    /// Consulted by the three arms whose answer decides what the user SEES for
-    /// that screen: resolvePerScreenLayoutInclude (which family of cards the
-    /// picker offers), activeLayoutIdForScreen (which card is highlighted) and
-    /// isSnappingContextInactive (whether the snap overlay is drawn) — the
-    /// exact trio their scrolling siblings gate on the Templates answer. Other
-    /// readers of an autotile id are deliberately NOT gated: snap-assist's
-    /// staleness check treats autotile and scrolling alike as engine-owned and
-    /// keeps that symmetry.
+    /// Consulted by the three arms whose answer decides what the user SEES for that
+    /// screen: resolvePerScreenLayoutInclude (which family of cards the picker offers),
+    /// activeLayoutIdForScreen (which card is highlighted) and isSnappingContextInactive
+    /// (whether the snap overlay is drawn), the exact trio their scrolling siblings gate
+    /// on the Templates answer. Other readers of an autotile id are deliberately NOT
+    /// gated: snap-assist's staleness check treats autotile and scrolling alike as
+    /// engine-owned and keeps that symmetry.
     ///
     /// Unset falls back to trusting the assignment id, which is what the
     /// shutdown window wants. Same clear-before-destroy contract as the other
@@ -446,18 +447,16 @@ public:
     /// template; @p locked renders the lock badge (the locked-preview twin
     /// of showLockedLayoutOsd).
     ///
-    /// @p verticalAxis draws the edge ticks along the strip's own direction,
-    /// the same way the live strip card does. It carries NO default on
-    /// purpose: this is a screen-bound host, the caller has already resolved
-    /// the axis to lay the bands, and a default would let a future call site
-    /// silently ship bands and ticks that disagree.
+    /// @p verticalAxis draws the edge ticks along the strip's own direction, as the live
+    /// strip card does. It carries NO default on purpose: the caller has already resolved
+    /// the axis to lay the bands, and a default would let a future call site silently
+    /// ship bands and ticks that disagree.
     void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones, bool verticalAxis,
                                   const QString& screenId = QString(), bool locked = false);
-    /// The live scrolling-strip card. Its own entry point rather than the
-    /// string overload below, because it is the one layout OSD that must
-    /// render with NO zones: an empty strip is a real state, and the card
-    /// says so with the axis arrow and @p emptyCaption instead of bailing the
-    /// way every other empty-zones caller does.
+    /// The live scrolling-strip card. Its own entry point rather than the string overload
+    /// below, because it is the one layout OSD that must render with NO zones: an empty
+    /// strip is a real state, which the card says with the axis arrow and @p emptyCaption
+    /// instead of bailing the way every other empty-zones caller does.
     ///
     /// @p verticalAxis draws the edge ticks along the strip's own direction.
     /// @p emptyCaption is used only when @p zones is empty, and must be
@@ -602,9 +601,8 @@ public:
     // gates (when false the matching group hides regardless of mode — the
     // mode string alone lags the engine teardown on a disable).
     // `layoutsAvailable` is the bound screen's engine capability
-    // (IPlacementEngine::layoutSupport): when false the catalog rows
-    // tagged "layouts" hide, because those shortcuts answer with a
-    // "not available" OSD on that screen.
+    // (IPlacementEngine::layoutSupport): when false the catalog rows tagged "layouts"
+    // hide, because those shortcuts answer with a "not available" OSD there.
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
                         bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable,
                         bool layoutsAreTemplates);
@@ -638,22 +636,19 @@ public:
     /// underneath a cursor that is mid-drag and taking input there would break
     /// the drag it exists to describe.
     ///
-    /// Scrolling needs a drawn indicator where autotile needs none. Autotile's
-    /// feedback IS its live restructure, but the scroll engine detaches once at
-    /// drag start and applies structure at drop, precisely because restructuring
-    /// live slid the strip out from under a stationary cursor. So the target has
-    /// to be painted rather than enacted.
+    /// Scrolling needs a drawn indicator where autotile needs none: autotile's feedback
+    /// IS its live restructure, while the scroll engine detaches at drag start and
+    /// applies structure at drop, because restructuring live slid the strip out from
+    /// under a stationary cursor. So the target is painted rather than enacted.
     void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) override;
 
-    /// Per-screen drop-indicator PAINT overrides from context rules, keyed by
-    /// the QML property names the slot reads so the layering is one value()
-    /// per property. An empty map clears the screen's overrides.
+    /// Per-screen drop-indicator PAINT overrides from context rules, keyed by the QML
+    /// property names the slot reads so the layering is one value() per property. An
+    /// empty map clears the screen's overrides.
     ///
-    /// This does NOT replay: the indicator only exists while a drag is in
-    /// flight, and the next rect push during that
-    /// drag re-reads the overrides. A rule change landing between drags is
-    /// picked up by the drag that follows, which is the only time anyone can
-    /// see it.
+    /// This does NOT replay: the indicator only exists while a drag is in flight, and the
+    /// next rect push during that drag re-reads the overrides. A rule change landing
+    /// between drags is picked up by the drag that follows, the only time anyone sees it.
     void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
 
     /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
@@ -965,6 +960,9 @@ private:
     /// slot. Same teardown contract as m_animShaderRegistry: Daemon::stop()
     /// nulls this borrow before the registry is reset.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
+    /// Borrowed; may be null. Daemon::stop() nulls it before the owning store is
+    /// reset, the clear-before-teardown contract the two siblings above state.
+    PhosphorShaders::ShaderPresetRegistry* m_presetRegistry = nullptr;
 
     /// Decoration pack refusals already reported, keyed "<packId>|<reason>".
     ///
@@ -1105,6 +1103,8 @@ private:
     // (disconnect(src, sig, this, nullptr) would sever ALL slots matching -
     // safe today but trap-prone if a second connection is ever added).
     QMetaObject::Connection m_shadersChangedConnection;
+    /// presetsChanged, on the same terms as the handle above.
+    QMetaObject::Connection m_presetsChangedConnection;
     // Debounce layoutModified → refreshVisibleWindows. layoutModified fires on
     // every Q_PROPERTY change (e.g. per-frame during a zone drag), so
     // coalescing prevents redundant rebuilds of zone variant lists + label
@@ -1347,6 +1347,11 @@ private:
     /// the slot's decorationChain (and decorationOuterPadding) when no pack
     /// resolves so a stale decoration never renders.
     void applyDecoration(QObject* slot, const QString& surfacePath);
+    /// Re-apply the decoration chain to every popup slot currently up. A visible popup's
+    /// chain is resolved at show time, so a retune (a tree edit, a preset change, a pack
+    /// reload) has to reach the slots already on screen; OSDs are omitted because they
+    /// auto-dismiss sub-second. One function rather than the same eleven lines thrice.
+    void reapplyVisiblePopupDecorations();
 
     void destroyIfTypeMismatch(const QString& screenId);
 
@@ -1575,14 +1580,29 @@ private:
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
-    /// The shader a screen's overlay should draw: rule override → per-layout
-    /// tree override → tree baseline. A context overlay rule wins BOTH id and
-    /// params (an engaged rule id with no params falls back to the shader's
-    /// defaults), preserving the pre-tree rule-wins-both semantics. Otherwise
-    /// the settings OverlayShaderTree resolves per layout UUID with baseline
-    /// fallback. An empty shaderId means "no shader" (isNoneShader).
+    /// Which source answers for a screen's overlay shader: ONE statement of the
+    /// precedence, switched on by both functions below, which each re-derived it before.
+    /// Rule wins outright, Tree is the OverlayShaderTree per layout, None is neither.
+    enum class OverlaySource {
+        Rule,
+        Tree,
+        None
+    };
+    static OverlaySource overlaySourceFor(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                          const PhosphorZones::Layout* screenLayout);
+
+    /// The shader a screen's overlay should draw: rule override → per-layout tree
+    /// override → tree baseline. A rule wins BOTH id and params (an engaged rule id with
+    /// no params falls back to the shader's defaults), preserving the pre-tree semantics.
+    /// Otherwise the settings OverlayShaderTree resolves per layout UUID with baseline
+    /// fallback, and an empty shaderId means "no shader".
     OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                                 const PhosphorZones::Layout* screenLayout) const;
+    /// Just the id, for callers asking only whether a shader is in play. Skips the preset
+    /// flatten (a deep copy of the parameter map): a preset moves PARAMETERS never the
+    /// pack, so the id is identical, and `useShaderForScreen` runs per frame.
+    QString effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                     const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;
     bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;

@@ -1,0 +1,436 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "shaderpresetbridge.h"
+
+#include "core/platform/logging.h"
+#include "phosphor_i18n.h"
+
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QLoggingCategory>
+#include <QJsonDocument>
+#include <QSaveFile>
+#include <QUuid>
+
+namespace PlasmaZones {
+
+namespace {
+/// A display name is a label, not a path or an id. Well above anything a user
+/// would type and far below the cost of letting an unbounded string reach disk.
+constexpr int kMaxPresetNameChars = 128;
+
+/// Caps on a preset's parameter map. A preset file is read back and merged into an
+/// assignment's effective values, so it is the same input boundary the animation writer
+/// bounds its map at for the same reason: persisted close to verbatim and copied back
+/// in on read.
+///
+/// Taken FROM the library rather than written again here. The read side
+/// (ShaderPreset::fromJson) applies the same two caps, and a private copy is how the
+/// two halves drift: the bridge bounded what it wrote while a hand-written file
+/// reached resolveParams unbounded.
+constexpr qsizetype kMaxPresetParams = PhosphorShaders::ShaderPreset::MaxParams;
+constexpr qsizetype kMaxPresetStringChars = PhosphorShaders::ShaderPreset::MaxValueChars;
+
+/// @p in with over-long keys and values dropped, non-scalar values dropped, and
+/// the whole map capped. Every parameter type a pack can declare is one scalar; a
+/// map or a list is nesting no pack produces.
+QVariantMap boundedPresetParams(const QVariantMap& in)
+{
+    QVariantMap out;
+    for (auto it = in.cbegin(); it != in.cend(); ++it) {
+        if (out.size() >= kMaxPresetParams) {
+            break;
+        }
+        if (it.key().size() > kMaxPresetStringChars) {
+            continue;
+        }
+        const int type = it.value().typeId();
+        if (type == QMetaType::QVariantMap || type == QMetaType::QVariantList) {
+            continue;
+        }
+        if (type == QMetaType::QString && it.value().toString().size() > kMaxPresetStringChars) {
+            continue;
+        }
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+void fillRow(const PhosphorShaders::ShaderPreset& preset, QVariantMap& out)
+{
+    out.insert(QStringLiteral("id"), preset.id);
+    out.insert(QStringLiteral("name"), preset.name);
+    out.insert(QStringLiteral("readOnly"), preset.readOnly);
+}
+
+/// Whether @p path resolves inside @p dir.
+///
+/// Both are canonicalised, so a symlink anywhere along either is followed before the
+/// comparison: what is being asked is where the write or unlink would LAND, not how it
+/// is spelled. An unresolvable path (a dangling link, a parent that does not exist)
+/// answers false, which is the fail-closed reading.
+///
+/// Shared by commit() and deletePreset(). The write side checked it and the delete side
+/// did not, which is the asymmetric half of a defensive pair even though no reachable
+/// escape was found on the delete path (the store has one absolute user root, pack
+/// presets are refused above it as read-only, and QFile::remove unlinks a link rather
+/// than its target).
+bool pathIsInside(const QString& dir, const QString& path)
+{
+    if (dir.isEmpty() || path.isEmpty()) {
+        return false;
+    }
+    const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
+    const QString canonicalPath = QFileInfo(path).canonicalFilePath();
+    if (canonicalDir.isEmpty() || canonicalPath.isEmpty()) {
+        return false;
+    }
+    return canonicalPath.startsWith(canonicalDir + QLatin1Char('/'));
+}
+
+/// Rescan the family's directory and say something when it did not happen.
+///
+/// `rescanNow()` answers false when no publisher was ever created for the family, and its
+/// bool was discarded at all three call sites. That is safe only because the settings
+/// controller loads every family: the day one is dropped from that list, commit() still
+/// returns true, QML selects the id it just saved, and `presetsFor()` still answers the old
+/// list, so the picker silently selects nothing. Not a user-facing refusal — the file IS on
+/// disk and the next watcher tick picks it up — but a log line naming the family is what
+/// points a developer at the missing load().
+void rescanOrWarn(PhosphorShaders::ShaderPresetStore* store, PhosphorShaders::ShaderFamily family)
+{
+    if (store && !store->rescanNow(family)) {
+        qCWarning(lcConfig) << "ShaderPresetBridge: nothing publishes the" << PhosphorShaders::shaderFamilyToken(family)
+                            << "family, so a just-saved preset will not be listed until the directory watcher fires";
+    }
+}
+} // namespace
+
+ShaderPresetBridge::ShaderPresetBridge(PhosphorShaders::ShaderPresetStore& store, PhosphorShaders::ShaderFamily family,
+                                       QObject* parent)
+    : QObject(parent)
+    , m_store(&store)
+    , m_family(family)
+{
+    // Relayed rather than re-derived, so a preset edited in ANOTHER process
+    // (the daemon's copy, a text editor) reaches the open settings window the
+    // same way one edited here does. Filtered to this bridge's family, since a
+    // decoration editor has no use for a pointer preset changing.
+    connect(&store.registry(), &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+            [this](PhosphorShaders::ShaderFamily changed, const QString& packId) {
+                if (changed == m_family) {
+                    Q_EMIT presetsChanged(packId);
+                }
+            });
+}
+
+ShaderPresetBridge::~ShaderPresetBridge() = default;
+
+QVariantList ShaderPresetBridge::presetsFor(const QString& packId) const
+{
+    QVariantList rows;
+    const QList<PhosphorShaders::ShaderPreset> presets = m_store->registry().presetsFor(m_family, packId);
+    rows.reserve(presets.size());
+    for (const PhosphorShaders::ShaderPreset& preset : presets) {
+        QVariantMap row;
+        fillRow(preset, row);
+        rows.append(row);
+    }
+    return rows;
+}
+
+QVariantMap ShaderPresetBridge::presetParams(const QString& packId, const QString& presetId) const
+{
+    return m_store->registry().preset(m_family, packId, presetId).params;
+}
+
+QVariantMap ShaderPresetBridge::effectiveParams(const QString& packId, const QString& presetId,
+                                                const QVariantMap& deltas) const
+{
+    return m_store->registry().resolveParams(m_family, packId, presetId, deltas);
+}
+
+bool ShaderPresetBridge::canUsePresetName(const QString& name) const
+{
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || trimmed.size() > kMaxPresetNameChars) {
+        return false;
+    }
+    // Content, not just length. The name is rendered in the picker combo and the
+    // rename dialog, so a newline, a control character or a bidi override would
+    // mangle a row rather than merely look odd — and this is the one validation the
+    // dialog's Ok button gates on.
+    for (const QChar ch : trimmed) {
+        if (ch.category() == QChar::Other_Control || ch.category() == QChar::Other_Format) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QString ShaderPresetBridge::presetDirectory() const
+{
+    return m_store->directoryFor(m_family);
+}
+
+bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
+{
+    // Guard the id here as well as at the parse boundary. The id reaching this
+    // point came from the registry, which means it came from a file the user can
+    // hand-edit, and the next line concatenates it into a filesystem path — so
+    // `"id": "../../../../.config/plasmazones/config"` would have written preset
+    // JSON over an arbitrary file the moment the user pressed Rename. The
+    // library refuses such an id on load now, but this bridge must not depend on
+    // an invariant it cannot see, the same reason acceptableShaderEffectId()
+    // exists alongside the schema's own bound.
+    if (!PhosphorShaders::ShaderPreset::isUsableId(preset.id)) {
+        const QString error = PhosphorI18n::tr("That preset has an unusable name on disk.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to write a preset whose id is not a safe path component:"
+                            << preset.id;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+
+    // An UPDATE or RENAME must not RE-CREATE a preset that is already gone. Each
+    // settings window owns its own store, so after another window deletes a preset
+    // this one still holds it until its watcher fires — and writing then silently
+    // resurrected the file, undoing the delete while keeping the id, so every
+    // assignment snapped back to it.
+    if (!preset.sourcePath.isEmpty() && !QFile::exists(preset.sourcePath)) {
+        const QString error = PhosphorI18n::tr("That preset no longer exists.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to re-create a deleted preset" << preset.id;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+
+    const QString dir = presetDirectory();
+    if (!QDir().mkpath(dir)) {
+        const QString error = PhosphorI18n::tr("Could not create the preset folder.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: cannot create" << dir;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+
+    // Prefer the file the record actually came from. The loader documents a
+    // hand-written file whose id comes from the filename STEM, and fromJson uses
+    // the stem only when the `id` field is absent — so `my-preset.json` carrying
+    // `"id": "abc"` is legal, and deriving the path from the id alone wrote a
+    // second file named after the id while leaving the original in place. The next
+    // rescan then saw two files claiming one id, and which won came down to the
+    // loader's dedup order.
+    //
+    // Containment-checked first: sourcePath is loader-stamped, but a symlink in the
+    // preset directory pointing out of it would otherwise let QSaveFile follow it.
+    QString path = dir + QLatin1Char('/') + preset.id + QStringLiteral(".json");
+    if (!preset.sourcePath.isEmpty()) {
+        if (pathIsInside(dir, preset.sourcePath)) {
+            path = preset.sourcePath;
+        } else {
+            qCWarning(lcConfig)
+                << "ShaderPresetBridge: preset source path is outside the preset directory, writing by id"
+                << preset.sourcePath;
+        }
+    }
+    // And refuse a SYMLINKED target, whichever path we landed on. Falling back to the
+    // id path is not by itself safe: the id path can BE the symlink (a file named
+    // `<id>.json` in the preset directory whose target is elsewhere), and QSaveFile
+    // follows it, so the containment check above would refuse to use sourcePath and
+    // then write through the same link anyway. Found by the test below, which planted
+    // exactly that.
+    //
+    // Refusing rather than unlinking: a symlink in here is either a deliberate
+    // arrangement by the user or an attempt to redirect the write, and neither is
+    // something this code should resolve on its own.
+    //
+    // The check is on the leaf FILE only, so a symlinked preset DIRECTORY is followed
+    // and written through. Deliberate: that directory is the user's own XDG tree, a
+    // symlink at that level is the ordinary way to keep presets elsewhere, and the
+    // containment test above canonicalises, so it agrees rather than fighting it.
+    if (QFileInfo(path).isSymLink()) {
+        const QString error = PhosphorI18n::tr("Could not write the preset to disk.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to write through a symlink in the preset directory" << path
+                            << "->" << QFileInfo(path).symLinkTarget();
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+    // QSaveFile so a crash mid-write cannot leave a truncated preset behind
+    // that the loader then refuses on every later scan.
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        const QString error = PhosphorI18n::tr("Could not write the preset to disk.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: cannot open" << path << file.errorString();
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+    const QByteArray json = QJsonDocument(preset.toJson()).toJson(QJsonDocument::Indented);
+    if (file.write(json) != json.size() || !file.commit()) {
+        const QString error = PhosphorI18n::tr("Could not write the preset to disk.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: write failed for" << path << file.errorString();
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+
+    // Synchronous, not the debounced requestRescan: the caller is about to
+    // select what it just saved, and a picker that does not yet list it would
+    // silently select nothing.
+    rescanOrWarn(m_store, m_family);
+    return true;
+}
+
+QString ShaderPresetBridge::savePreset(const QString& packId, const QString& name, const QVariantMap& params)
+{
+    if (packId.isEmpty() || packId.size() > kMaxPresetStringChars) {
+        // Bounded as well as non-empty. Every other string this bridge persists is, and
+        // this one reaches disk verbatim through `commit()` — `duplicatePreset` forwards
+        // a packId read back from a hand-editable file, so "the UI supplies it" is not
+        // true of every path in.
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("No shader pack selected.", "@info"));
+        return {};
+    }
+    if (!canUsePresetName(name)) {
+        // Distinguishes the three refusals canUsePresetName makes. "Enter a name"
+        // is only true of the blank case; for an over-long one or one carrying a
+        // control or bidi character the user HAS entered a name, and being told to
+        // enter one says nothing about what is wrong with it.
+        Q_EMIT presetWriteFailed(name.trimmed().isEmpty()
+                                     ? PhosphorI18n::tr("Enter a name for the preset.", "@info")
+                                     : PhosphorI18n::tr("That name cannot be used. Try a shorter one, without "
+                                                        "special characters.",
+                                                        "@info"));
+        return {};
+    }
+
+    PhosphorShaders::ShaderPreset preset;
+    // A fresh UUID, never derived from the name: renaming must not break the
+    // assignments pointing at this preset, so the identity cannot come from
+    // anything the user can edit.
+    //
+    // WithoutBraces because this id is also the filename `commit()` builds, and
+    // CLAUDE.md reserves the braced spelling for everything that is not a
+    // filesystem path. It also makes the id equal the file's stem, so the
+    // loader's stem fallback and the declared `id` field cannot disagree.
+    preset.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    preset.name = name.trimmed();
+    preset.packId = packId;
+    preset.params = boundedPresetParams(params);
+
+    return commit(preset) ? preset.id : QString();
+}
+
+bool ShaderPresetBridge::updatePreset(const QString& presetId, const QVariantMap& params)
+{
+    // By id, not pack-scoped: the caller acts on a preset the user picked and
+    // the pack comes back with the record. A read-only one belongs to its pack
+    // and cannot be written here.
+    PhosphorShaders::ShaderPreset preset = m_store->registry().presetById(m_family, presetId);
+    if (!preset.isValid()) {
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("That preset no longer exists.", "@info"));
+        return false;
+    }
+    if (preset.readOnly) {
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("This preset comes with its pack and cannot be changed.", "@info"));
+        return false;
+    }
+    preset.params = boundedPresetParams(params);
+    return commit(preset);
+}
+
+bool ShaderPresetBridge::renamePreset(const QString& presetId, const QString& name)
+{
+    if (!canUsePresetName(name)) {
+        // Distinguishes the three refusals canUsePresetName makes. "Enter a name"
+        // is only true of the blank case; for an over-long one or one carrying a
+        // control or bidi character the user HAS entered a name, and being told to
+        // enter one says nothing about what is wrong with it.
+        Q_EMIT presetWriteFailed(name.trimmed().isEmpty()
+                                     ? PhosphorI18n::tr("Enter a name for the preset.", "@info")
+                                     : PhosphorI18n::tr("That name cannot be used. Try a shorter one, without "
+                                                        "special characters.",
+                                                        "@info"));
+        return false;
+    }
+    PhosphorShaders::ShaderPreset preset = m_store->registry().presetById(m_family, presetId);
+    if (!preset.isValid()) {
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("That preset no longer exists.", "@info"));
+        return false;
+    }
+    if (preset.readOnly) {
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("This preset comes with its pack and cannot be renamed.", "@info"));
+        return false;
+    }
+    preset.name = name.trimmed();
+    // The file is named after the id, so a rename rewrites it in place rather
+    // than moving it. Nothing pointing at this preset notices.
+    return commit(preset);
+}
+
+bool ShaderPresetBridge::deletePreset(const QString& presetId)
+{
+    // Takes no packId, and does not need one: every QML consumer filters
+    // `presetsChanged(family, packId)` on its own pack, and the rescan below reaches
+    // that signal through `setUserPresets`, whose diff sweeps the union of the packs it
+    // held and the packs it just read. A pack whose last preset was the deleted one
+    // therefore appears in that sweep with an empty `after`, and the pack id is
+    // recovered from the scope key — so the emission names the right pack rather than
+    // an empty one, and the rows that listed the preset refresh.
+    const PhosphorShaders::ShaderPreset preset = m_store->registry().presetById(m_family, presetId);
+    if (!preset.isValid()) {
+        return false;
+    }
+    if (preset.readOnly) {
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("This preset comes with its pack and cannot be deleted.", "@info"));
+        return false;
+    }
+    // A file that is already gone is a delete that already happened — another
+    // window, or a text editor. Reporting failure for it told the user something
+    // went wrong when the end state is exactly what they asked for, and skipped the
+    // rescan, so the stale row lingered until the watcher fired.
+    if (!preset.sourcePath.isEmpty() && !QFile::exists(preset.sourcePath)) {
+        rescanOrWarn(m_store, m_family);
+        return true;
+    }
+    if (preset.sourcePath.isEmpty()) {
+        // No file to remove: the record came from somewhere that stamps no path (nothing
+        // does today, since the loader always stamps one and a pack preset is refused
+        // above as read-only). Treated as an already-completed delete, like the
+        // file-is-gone case above, rather than reported as a failure the user cannot act
+        // on — the end state is what they asked for.
+        qCWarning(lcConfig) << "ShaderPresetBridge: preset" << presetId << "carries no source path; nothing to remove";
+        rescanOrWarn(m_store, m_family);
+        return true;
+    }
+    if (!pathIsInside(presetDirectory(), preset.sourcePath)) {
+        // The same containment test commit() applies, rather than trusting the
+        // loader's stamp on one path and re-checking it on the other.
+        const QString error = PhosphorI18n::tr("Could not delete the preset.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to delete outside the preset directory"
+                            << preset.sourcePath;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+    if (!QFile::remove(preset.sourcePath)) {
+        const QString error = PhosphorI18n::tr("Could not delete the preset.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: cannot remove" << preset.sourcePath;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+    rescanOrWarn(m_store, m_family);
+    return true;
+}
+
+QString ShaderPresetBridge::duplicatePreset(const QString& packId, const QString& presetId, const QString& name)
+{
+    const PhosphorShaders::ShaderPreset source = m_store->registry().preset(m_family, packId, presetId);
+    if (!source.isValid()) {
+        Q_EMIT presetWriteFailed(PhosphorI18n::tr("That preset no longer exists.", "@info"));
+        return {};
+    }
+    return savePreset(source.packId, name, source.params);
+}
+
+} // namespace PlasmaZones

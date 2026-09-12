@@ -80,6 +80,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // The pointer pass reads KWin's cursor-hide counter to notice a software
+    // KVM taking the pointer away (see PointerDecorationPass::cursorSpriteGone).
+    // The strip pass raises the same counter while it draws its own copy of
+    // the cursor, which must NOT read as the pointer being gone.
+    m_pointerPass.setForeignCursorDrawer([this]() {
+        return m_stripTransition.holdsCursorHide();
+    });
+
     // The compositor-drawn tab pills carry one translated string (the
     // untitled-tab placeholder) and this process is kwin_wayland, which
     // installs no PlasmaZones catalog of its own. Load the daemon's catalog
@@ -386,6 +394,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // member, so a signal emitted during the member's teardown would dispatch
     // against half-destroyed state.
     disconnect(&m_pointerPass.registry(), nullptr, this, nullptr);
+    // And the preset registry, which lives inside m_shaderManager's preset store and
+    // so is torn down with the members too. Its presetsChanged reaches
+    // schedulePresetSweep, which writes the sweep latches and reads the registry, so
+    // an emission during member teardown (a preset file changing as the effect
+    // unloads) would dispatch against half-destroyed state. The three re-seed
+    // handlers are on the pack registries disconnected above, so they are already
+    // covered; this is the one sender that was not.
+    disconnect(&m_shaderManager.presetStore().registry(), nullptr, this, nullptr);
 
     // Make the context current for the WHOLE destructor, member destruction included.
     //

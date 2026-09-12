@@ -400,6 +400,11 @@ struct ContextOverlayOverride
 {
     std::optional<QString> shaderId;
     QVariantMap shaderParams;
+    /// The named preset `shaderParams` are deltas against, resolved against
+    /// `shaderId`. Empty means the params are the whole tuning. A preset
+    /// belonging to another pack resolves to nothing, so the override falls
+    /// back to its own params rather than rendering something unrelated.
+    QString shaderPresetId;
     std::optional<int> style;
     std::optional<QColor> highlightColor;
     std::optional<QColor> inactiveColor;
@@ -414,8 +419,9 @@ struct ContextOverlayOverride
     {
         // shaderParams is only ever populated alongside shaderId, but check it too so
         // isEmpty() stays honest if a future writer sets the map without the gate.
-        return !shaderId && shaderParams.isEmpty() && !style && !highlightColor && !inactiveColor && !borderColor
-            && !activeOpacity && !inactiveOpacity && !borderWidth && !borderRadius && !showZoneNumbers;
+        return !shaderId && shaderParams.isEmpty() && shaderPresetId.isEmpty() && !style && !highlightColor
+            && !inactiveColor && !borderColor && !activeOpacity && !inactiveOpacity && !borderWidth && !borderRadius
+            && !showZoneNumbers;
     }
 };
 

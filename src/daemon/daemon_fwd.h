@@ -26,6 +26,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorShaders {
+class ShaderPresetStore;
+}
+
 namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }

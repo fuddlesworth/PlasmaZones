@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QSet>
 
 namespace PhosphorSurfaceShaders {
 
@@ -42,13 +43,15 @@ DecorationProfile DecorationProfileTree::resolve(const QString& surfacePath) con
     // baseline is the user's look for surfaces WE own, and a foreign shell
     // surface must stay undecorated until a chain is engaged in its own
     // subtree. See decorationPathIsBaselineIsolated.
-    DecorationProfile effective = decorationPathIsBaselineIsolated(surfacePath) ? DecorationProfile{} : m_baseline;
+    DecorationProfile effective =
+        decorationPathIsBaselineIsolated(surfacePath) ? DecorationProfile{} : m_store.baseline();
 
     for (const QString& step : chain) {
-        auto it = m_overrides.constFind(step);
-        if (it == m_overrides.constEnd())
-            continue;
-        DecorationProfile::overlay(effective, it.value());
+        // findOverride, not hasOverride + directOverride: one hash lookup per step
+        // and no payload copy, which on a four-segment path is four lookups and up
+        // to sixteen container ref-count operations saved.
+        if (const DecorationProfile* own = m_store.findOverride(step))
+            DecorationProfile::overlay(effective, *own);
     }
 
     return effective.withDefaults();
@@ -58,26 +61,88 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
 {
     // True when this tree engages @p member at @p surfacePath or anywhere on
     // its walk-up (baseline included). Chain engagement anywhere on the walk
-    // is the MASTER gate (the user built their own look there); parameters and
-    // disabledPacks additionally run the same walk for their OWN field, so a
-    // seed's leaf map can never shadow an engaged ancestor map — resolve()
-    // overlays deepest-last, and an injected leaf field would silently win
-    // over the user's category-level engagement.
+    // is the MASTER gate (the user built their own look there); parameters,
+    // presetIds and disabledPacks additionally run the same walk for their OWN
+    // field, so a seed's leaf map can never shadow an engaged ancestor map —
+    // resolve() overlays deepest-last, and an injected leaf field would silently
+    // win over the user's category-level engagement. parameters runs the
+    // presetIds walk as well; see the injection sites.
     const auto fieldEngagedOnWalk = [this](const QString& surfacePath, auto member) {
         // Baseline-isolated paths (shell.*) never resolve against the
         // baseline, so a baseline engagement must not block a seed there —
         // mirror resolve()'s isolation or a global user chain would silently
         // veto every shell seed a decoration set ships.
-        if (!decorationPathIsBaselineIsolated(surfacePath) && (m_baseline.*member).has_value())
+        if (!decorationPathIsBaselineIsolated(surfacePath) && (m_store.baseline().*member).has_value())
             return true;
         QString cursor = surfacePath;
         while (!cursor.isEmpty()) {
-            const auto it = m_overrides.constFind(cursor);
-            if (it != m_overrides.constEnd() && (it.value().*member).has_value())
-                return true;
+            if (const DecorationProfile* at = m_store.findOverride(cursor)) {
+                if (((*at).*member).has_value())
+                    return true;
+            }
             cursor = decorationParentPath(cursor);
         }
         return false;
+    };
+
+    /// The pack ids this tree PINS a preset on at @p surfacePath or anywhere on its
+    /// walk-up, as a set.
+    ///
+    /// PER PACK, not per field, because presetIds and parameters are both per-pack maps:
+    /// a whole-map gate meant picking a preset on ONE chain layer suppressed the seed's
+    /// parameters for EVERY layer, so a preset on `shadow` silently dropped the seeded
+    /// `border` tuning and the border stopped tracking the theme.
+    ///
+    /// Only a NON-EMPTY id counts as pinning. An engaged-empty map, and a map whose
+    /// entries are all the empty-string blocking sentinel, pin nothing: the flatten
+    /// treats an empty id as a block rather than as a preset, so the seed's values are
+    /// exactly what should apply there.
+    const auto presetPinnedPacks = [this](const QString& surfacePath) {
+        QSet<QString> pinned;
+        const auto collect = [&pinned](const DecorationProfile& profile) {
+            if (!profile.presetIds) {
+                return;
+            }
+            for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
+                if (!it.value().toString().isEmpty()) {
+                    pinned.insert(it.key());
+                }
+            }
+        };
+        if (!decorationPathIsBaselineIsolated(surfacePath)) {
+            collect(m_store.baseline());
+        }
+        QString cursor = surfacePath;
+        while (!cursor.isEmpty()) {
+            if (const DecorationProfile* at = m_store.findOverride(cursor)) {
+                collect(*at);
+            }
+            cursor = decorationParentPath(cursor);
+        }
+        return pinned;
+    };
+
+    /// @p seedParams with the packs in @p pinned removed, or nullopt when that leaves
+    /// nothing to inject. Keeping the unpinned packs is the whole point: the seed's
+    /// border tuning must survive a preset chosen on the shadow layer.
+    const auto seedParamsExcluding = [](const std::optional<QVariantMap>& seedParams,
+                                        const QSet<QString>& pinned) -> std::optional<QVariantMap> {
+        if (!seedParams) {
+            return std::nullopt;
+        }
+        if (pinned.isEmpty()) {
+            return seedParams;
+        }
+        QVariantMap kept;
+        for (auto it = seedParams->constBegin(); it != seedParams->constEnd(); ++it) {
+            if (!pinned.contains(it.key())) {
+                kept.insert(it.key(), it.value());
+            }
+        }
+        if (kept.isEmpty()) {
+            return std::nullopt;
+        }
+        return kept;
     };
 
     DecorationProfileTree merged = *this;
@@ -87,32 +152,44 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
     // field checks its own engagement. Sharing the lambda keeps the baseline
     // and per-path gate expressions from ever drifting apart.
     if (!fieldEngagedOnWalk(QString(), &DecorationProfile::chain)) {
-        DecorationProfile baseline = merged.m_baseline;
+        DecorationProfile baseline = merged.m_store.baseline();
+        const DecorationProfile seedBaseline = seeds.m_store.baseline();
         bool changed = false;
-        if (seeds.m_baseline.chain) {
-            baseline.chain = seeds.m_baseline.chain;
+        if (seedBaseline.chain) {
+            baseline.chain = seedBaseline.chain;
             changed = true;
         }
-        if (seeds.m_baseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)) {
-            baseline.parameters = seeds.m_baseline.parameters;
+        // A user-pinned preset blocks the seed's PARAMETERS for THAT PACK. The flatten
+        // treats every entry in `parameters` as the delta set, so a seed's hard-coded
+        // values would pin over the preset the user just chose — keep-equal-deltas is
+        // the right rule for values the user typed, and these are values the user never
+        // typed. Per pack, so the seed's tuning for the OTHER layers still lands.
+        if (seedBaseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)) {
+            if (const auto injected = seedParamsExcluding(seedBaseline.parameters, presetPinnedPacks(QString()))) {
+                baseline.parameters = injected;
+                changed = true;
+            }
+        }
+        if (seedBaseline.presetIds && !fieldEngagedOnWalk(QString(), &DecorationProfile::presetIds)) {
+            baseline.presetIds = seedBaseline.presetIds;
             changed = true;
         }
-        if (seeds.m_baseline.disabledPacks && !fieldEngagedOnWalk(QString(), &DecorationProfile::disabledPacks)) {
-            baseline.disabledPacks = seeds.m_baseline.disabledPacks;
+        if (seedBaseline.disabledPacks && !fieldEngagedOnWalk(QString(), &DecorationProfile::disabledPacks)) {
+            baseline.disabledPacks = seedBaseline.disabledPacks;
             changed = true;
         }
         if (changed)
-            merged.m_baseline = baseline;
+            merged.m_store.setBaseline(baseline);
     }
 
-    for (const QString& path : seeds.m_insertionOrder) {
+    for (const QString& path : seeds.m_store.keys()) {
         // Master gate: an engaged chain at the path or any ancestor blocks the
         // whole seed for this path. The walk reads *this, not `merged`, so an
         // already-injected sibling seed never blocks another seed path.
         if (fieldEngagedOnWalk(path, &DecorationProfile::chain))
             continue;
-        const DecorationProfile seed = seeds.m_overrides.value(path);
-        DecorationProfile target = merged.m_overrides.value(path);
+        const DecorationProfile seed = seeds.m_store.directOverride(path);
+        DecorationProfile target = merged.m_store.directOverride(path);
         bool changed = false;
         // The chain slot at `path` is unengaged (the master gate covers the
         // path itself), so a seed chain always lands here.
@@ -120,8 +197,25 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
             target.chain = seed.chain;
             changed = true;
         }
+        // A pinned preset blocks the seed's parameters for that pack here too, for the
+        // reason the baseline block above gives. This is the live half: the four seeded
+        // card surfaces (osd, popup.layoutPicker, popup.zoneSelector, popup.cheatsheet)
+        // carry seeded values for BOTH chain packs, so before this a preset picked on
+        // either layer resolved with the seed's keys pinned over it — and a whole-map
+        // gate then went too far the other way, dropping the seeded tuning of the layer
+        // the user had not touched.
+        // The pinned set once per path, not once per arm: withSeedDefaults runs on EVERY
+        // read of this tree (the settings getters carry no parse cache), and both arms
+        // below want the same answer.
+        const QSet<QString> pinned = presetPinnedPacks(path);
         if (seed.parameters && !fieldEngagedOnWalk(path, &DecorationProfile::parameters)) {
-            target.parameters = seed.parameters;
+            if (const auto injected = seedParamsExcluding(seed.parameters, pinned)) {
+                target.parameters = injected;
+                changed = true;
+            }
+        }
+        if (seed.presetIds && !fieldEngagedOnWalk(path, &DecorationProfile::presetIds)) {
+            target.presetIds = seed.presetIds;
             changed = true;
         }
         if (seed.disabledPacks && !fieldEngagedOnWalk(path, &DecorationProfile::disabledPacks)) {
@@ -137,17 +231,17 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
 
 DecorationProfile DecorationProfileTree::directOverride(const QString& surfacePath) const
 {
-    return m_overrides.value(surfacePath);
+    return m_store.directOverride(surfacePath);
 }
 
 bool DecorationProfileTree::hasOverride(const QString& surfacePath) const
 {
-    return m_overrides.contains(surfacePath);
+    return m_store.hasOverride(surfacePath);
 }
 
 QStringList DecorationProfileTree::overriddenPaths() const
 {
-    return m_insertionOrder;
+    return m_store.keys();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -156,33 +250,25 @@ QStringList DecorationProfileTree::overriddenPaths() const
 
 void DecorationProfileTree::setOverride(const QString& surfacePath, const DecorationProfile& profile)
 {
-    if (surfacePath.isEmpty())
-        return;
-    if (!m_overrides.contains(surfacePath))
-        m_insertionOrder.append(surfacePath);
-    m_overrides.insert(surfacePath, profile);
+    // The empty-path refusal lives in PathKeyedOverrides now. All four trees
+    // guarded it separately, each for the same reason: the empty string is how
+    // they spell "the baseline".
+    m_store.setOverride(surfacePath, profile);
 }
 
 bool DecorationProfileTree::clearOverride(const QString& surfacePath)
 {
-    if (!m_overrides.remove(surfacePath))
-        return false;
-    // removeOne, not removeAll: setOverride's contains-check keeps the order
-    // list duplicate-free, so at most one entry exists and the scan can stop
-    // at the hit.
-    m_insertionOrder.removeOne(surfacePath);
-    return true;
+    return m_store.clearOverride(surfacePath);
 }
 
 void DecorationProfileTree::clearAllOverrides()
 {
-    m_overrides.clear();
-    m_insertionOrder.clear();
+    m_store.clearAllOverrides();
 }
 
 void DecorationProfileTree::setBaseline(const DecorationProfile& profile)
 {
-    m_baseline = profile;
+    m_store.setBaseline(profile);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -192,23 +278,19 @@ void DecorationProfileTree::setBaseline(const DecorationProfile& profile)
 QJsonObject DecorationProfileTree::toJson() const
 {
     QJsonObject root;
-    root.insert(QLatin1String(kJsonFieldBaseline), m_baseline.toJson());
+    root.insert(QLatin1String(kJsonFieldBaseline), m_store.baseline().toJson());
 
+    // The ARRAY form, same as the animation tree and for the same reason: the
+    // order is observable on the wire, which is why it is part of identity below.
+    // The ordered walk and the desync guard that used to sit here now live in
+    // PathKeyedOverrides, which is where all four trees had written them out.
     QJsonArray overrides;
-    for (const QString& path : m_insertionOrder) {
-        // Unreachable in practice: every mutator writes m_overrides and
-        // m_insertionOrder together (setOverride / clearOverride /
-        // clearAllOverrides are the complete set), so the two cannot desync.
-        // Kept as a cheap guard rather than an assert — a desync here would
-        // only drop the orphaned entry from the serialized form.
-        auto it = m_overrides.constFind(path);
-        if (it == m_overrides.constEnd())
-            continue;
+    m_store.forEachInOrder([&overrides](const QString& path, const DecorationProfile& profile) {
         QJsonObject entry;
         entry.insert(QLatin1String(kJsonFieldPath), path);
-        entry.insert(QLatin1String(kJsonFieldProfile), it.value().toJson());
+        entry.insert(QLatin1String(kJsonFieldProfile), profile.toJson());
         overrides.append(entry);
-    }
+    });
     root.insert(QLatin1String(kJsonFieldOverrides), overrides);
 
     return root;
@@ -219,7 +301,7 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
     DecorationProfileTree tree;
 
     if (obj.contains(QLatin1String(kJsonFieldBaseline)))
-        tree.m_baseline = DecorationProfile::fromJson(obj.value(QLatin1String(kJsonFieldBaseline)).toObject());
+        tree.m_store.setBaseline(DecorationProfile::fromJson(obj.value(QLatin1String(kJsonFieldBaseline)).toObject()));
 
     const QJsonArray arr = obj.value(QLatin1String(kJsonFieldOverrides)).toArray();
     for (const QJsonValue& v : arr) {
@@ -265,20 +347,12 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
 
 bool DecorationProfileTree::operator==(const DecorationProfileTree& other) const
 {
-    if (m_baseline != other.m_baseline)
-        return false;
-    if (m_insertionOrder != other.m_insertionOrder)
-        return false;
-    if (m_overrides.size() != other.m_overrides.size())
-        return false;
-    for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it) {
-        auto otherIt = other.m_overrides.constFind(it.key());
-        if (otherIt == other.m_overrides.constEnd())
-            return false;
-        if (it.value() != otherIt.value())
-            return false;
-    }
-    return true;
+    // Order-SENSITIVE, like both animation trees' and unlike the overlay tree's:
+    // this tree's overrides are an array on the wire, so their order is part of
+    // the value. The settings setter works around that with its own
+    // order-insensitive merged compare, which is why that helper exists there.
+    return m_store.sameBaseline(other.m_store) && m_store.sameKeyOrder(other.m_store)
+        && m_store.sameOverrides(other.m_store);
 }
 
 } // namespace PhosphorSurfaceShaders

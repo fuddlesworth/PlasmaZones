@@ -270,14 +270,24 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata       OK\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
     } else {
-        out << "  metadata       ERROR\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
         }
     }
+
+    // Preset lint: every preset key must name a declared parameter, and every value
+    // must match that parameter's declared type and range. AFTER the metadata block,
+    // matching the animation and pointer arms. Run before it, this printed
+    // `presets ERROR` above `metadata OK`, which is the self-contradicting shape the
+    // collected-then-printed design was introduced to avoid.
+    errors += reportRawPresetProblems(out, doc.object());
+    // Same gap as the animation arm, same reason: presets parse before sourceDir.
+    errors += reportImageParamPresets(out, doc.object());
+    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
     if (QFile::exists(eff.fragmentShaderPath)) {

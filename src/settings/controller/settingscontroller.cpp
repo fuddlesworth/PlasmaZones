@@ -11,6 +11,10 @@
 
 #include "settingscontroller.h"
 
+#include "settings/stores/shaderpresetbridge.h"
+
+#include <PhosphorShaders/ShaderPresetStore.h>
+
 #include "settings/pages/editorpagecontroller.h"
 #include "settings/pages/generalpagecontroller.h"
 #include "settings/utils/registryshaderpreviewbackend.h"
@@ -321,6 +325,19 @@ SettingsController::~SettingsController()
         if (m_rulesPage->model())
             m_rulesPage->model()->refreshLabels();
     }
+
+    // Drop the preset bridges, then the store. This is what makes the
+    // `if (m_presetStore)` guard on the four seeding lambdas a real guard: they
+    // are connected with `this` as context, so Qt severs them in ~QObject, which
+    // runs AFTER these unique_ptr members are destroyed — without this the guard
+    // could only ever have read an already-destroyed pointer, which is the
+    // failure it was written to prevent. Bridges first, because each BORROWS the
+    // store by reference (the same reason they are declared after it).
+    m_animationPresets.reset();
+    m_surfacePresets.reset();
+    m_pointerPresets.reset();
+    m_overlayPresets.reset();
+    m_presetStore.reset();
 
     // Drop the registry's borrow of the template store, the same posture the
     // lookups above take: the injection is a raw pointer with no owner-side
@@ -744,6 +761,80 @@ SettingsController::SettingsController(QObject* parent)
     m_pointerShaderRegistry = new PhosphorPointerShaders::PointerShaderRegistry(this);
     registerXdgPackDirs(m_pointerShaderRegistry, ConfigDefaults::userPointerSubdir());
 
+    // ── Shader presets ────────────────────────────────────────────────────
+    //
+    // After the four pack registries, because the store is seeded from what
+    // they have already discovered rather than waiting for a reload that may
+    // never come. Before the page controllers below, which hand a bridge to
+    // QML.
+    m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
+    m_presetStore->load();
+    {
+        // Push each family's pack-declared presets now, and again on every
+        // reload, so a pack dropped in while the window is open brings its
+        // presets with it.
+        //
+        // The projection is PhosphorShaders::seedPackPresets, shared with the
+        // daemon and the compositor rather than written out here: all three
+        // built the same two hashes from a pack list and whole-family replaced,
+        // so a fix to it had to land in all three.
+        //
+        // Each lambda reaches the store through `m_presetStore` and checks it,
+        // rather than capturing a reference into the registry. Every other
+        // late-bound dependency in this controller is hand-cleared in the
+        // destructor precisely so a deferred callback cannot reach a dangling
+        // one, and a captured `ShaderPresetRegistry&` could not join that
+        // discipline: these are connected with `this` as context, so Qt
+        // disconnects them in ~QObject, which runs AFTER the unique_ptr members
+        // are destroyed. An effectsChanged arriving in that window would have
+        // seeded freed memory. Asking the owning pointer each time puts this
+        // dependency back under the rule the destructor enforces for the other
+        // eleven, with no extra teardown bookkeeping to forget.
+        const auto syncAnimation = [this]() {
+            if (m_presetStore && m_animationShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Animation,
+                                                 m_animationShaderRegistry->availableEffects());
+            }
+        };
+        const auto syncSurface = [this]() {
+            if (m_presetStore && m_surfaceShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Surface,
+                                                 m_surfaceShaderRegistry->availableEffects());
+            }
+        };
+        const auto syncPointer = [this]() {
+            if (m_presetStore && m_pointerShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Pointer,
+                                                 m_pointerShaderRegistry->availableEffects());
+            }
+        };
+
+        syncAnimation();
+        syncSurface();
+        syncPointer();
+        // Overlay is NOT seeded here: m_overlayShaderRegistry does not exist
+        // yet. It is built roughly a hundred lines below, so seeding it from
+        // this block only ever hit its own null guard and every overlay pack's
+        // shipped presets stayed invisible to the settings UI. It is seeded, and
+        // its reload edge connected, immediately after that registry is built.
+
+        connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+                syncAnimation);
+        connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                syncSurface);
+        connect(m_pointerShaderRegistry, &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this,
+                syncPointer);
+
+        m_animationPresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Animation, this);
+        m_surfacePresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Surface, this);
+        m_pointerPresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Pointer, this);
+        m_overlayPresets =
+            std::make_unique<ShaderPresetBridge>(*m_presetStore, PhosphorShaders::ShaderFamily::Overlay, this);
+    }
+
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
     // DecorationProfileTree (per-surface chains of decoration packs) with a
     // baseline global default + walk-up inheritance. The tree persists via the
@@ -846,6 +937,30 @@ SettingsController::SettingsController(QObject* parent)
     // the registry is built after that call).
     connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
             &SettingsController::refreshRuleLabels);
+
+    // Seed the overlay family's pack-declared presets, and re-seed on every
+    // rescan. This lives here rather than with the other three families because
+    // the registry it reads did not exist at that point — seeding it there only
+    // ever hit a null guard, which is why an overlay pack's shipped presets
+    // never appeared in the picker even though overlay packs were the one family
+    // that could declare them before this feature existed.
+    {
+        // No outer `if (m_presetStore)` here: it is unconditionally make_unique'd
+        // above with nothing in between that could reset it, so the test could only
+        // ever be true. The guard that matters is the one INSIDE the lambda, which
+        // runs later and after the destructor has cleared the pointer.
+        //
+        // Through m_presetStore, not a captured registry reference, for the
+        // teardown reason given on the three-family block above.
+        const auto syncOverlay = [this]() {
+            if (m_presetStore && m_overlayShaderRegistry) {
+                PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Overlay,
+                                                 m_overlayShaderRegistry->availableShaders());
+            }
+        };
+        syncOverlay();
+        connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, syncOverlay);
+    }
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject
@@ -999,5 +1114,25 @@ TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
 
 // setActivePage / dirty-tracking / external-edit methods live in
 // settingscontroller_pagestate.cpp.
+
+ShaderPresetBridge* SettingsController::animationPresets() const
+{
+    return m_animationPresets.get();
+}
+
+ShaderPresetBridge* SettingsController::surfacePresets() const
+{
+    return m_surfacePresets.get();
+}
+
+ShaderPresetBridge* SettingsController::pointerPresets() const
+{
+    return m_pointerPresets.get();
+}
+
+ShaderPresetBridge* SettingsController::overlayPresets() const
+{
+    return m_overlayPresets.get();
+}
 
 } // namespace PlasmaZones

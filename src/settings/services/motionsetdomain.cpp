@@ -51,6 +51,10 @@ constexpr QLatin1String kBaselineKey{"baseline"};
 constexpr QLatin1String kShaderKey{"shader"};
 constexpr QLatin1String kEffectIdKey{"effectId"};
 constexpr QLatin1String kParametersKey{"parameters"};
+constexpr QLatin1String kPresetIdKey{"presetId"};
+/// The same figure AnimationsPageController's writer refuses above, mirrored rather than
+/// shared because that header is not in this file's include set. If one moves, both move.
+constexpr int kMaxPresetIdChars = 1024;
 
 /// The timing fields `Profile` actually round-trips. A timing half whose keys
 /// are all unrecognised is a wrong-shaped or hand-edited entry: it is a
@@ -179,8 +183,24 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged,
                 qCWarning(lcConfig) << "motionset: shader parameters are not an object for path" << path;
                 return false;
             }
-            if (!shader.contains(kEffectIdKey) && !shader.contains(kParametersKey)) {
-                qCWarning(lcConfig) << "motionset: shader half carries neither effectId nor parameters for path"
+            if (shader.contains(kPresetIdKey) && !shader.value(kPresetIdKey).isString()) {
+                qCWarning(lcConfig) << "motionset: shader presetId is not a string for path" << path;
+                return false;
+            }
+            // BOUNDED here, where a refusal still fails the whole set. The controller's
+            // writer refuses an over-long id and returns -1, and an imported set that got
+            // that far would commit its timing and pack halves and silently lose the
+            // preset — the mid-commit partial this validator exists to prevent.
+            if (shader.value(kPresetIdKey).toString().size() > kMaxPresetIdChars) {
+                qCWarning(lcConfig) << "motionset: shader presetId is too long for path" << path;
+                return false;
+            }
+            // A presetId counts as content. An event can inherit its pack and its
+            // values and own nothing but a preset reference, which the capture writes
+            // out as a presetId-only half; refusing that dropped the one thing the
+            // entry was about, with a warning, at parse time.
+            if (!shader.contains(kEffectIdKey) && !shader.contains(kParametersKey) && !shader.contains(kPresetIdKey)) {
+                qCWarning(lcConfig) << "motionset: shader half carries no effectId, parameters or presetId for path"
                                     << path;
                 return false;
             }

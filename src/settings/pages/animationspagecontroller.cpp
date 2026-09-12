@@ -38,6 +38,15 @@ using namespace animations_controller_detail;
 
 // ─── Construction ──────────────────────────────────────────────────────
 
+const PhosphorAnimationShaders::ShaderProfileTree& AnimationsPageController::shaderTree() const
+{
+    if (!m_shaderTreeCache.has_value()) {
+        m_shaderTreeCache =
+            m_settings ? m_settings->shaderProfileTree() : PhosphorAnimationShaders::ShaderProfileTree{};
+    }
+    return *m_shaderTreeCache;
+}
+
 AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry,
                                                    ISettings* settings, QObject* parent)
     // Id is the headless staging-domain identity, deliberately distinct from
@@ -74,6 +83,39 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     };
     auto writeShaderFn = [this](const QString& path, const QVariantMap& shader) {
         const QVariantMap params = shader.value(JsonShaderParametersKey).toMap();
+        // The PRESET half, which the capture has always written
+        // (shaderProfileToMap inserts presetId whenever it is engaged) and this
+        // closure used to ignore entirely, so applying a set dropped every preset
+        // reference it carried and, on an entry that also named a pack, replaced an
+        // existing one with nothing.
+        //
+        // Applied AFTER whichever pack/params branch below runs, because those go
+        // through setShaderOverride, which builds a fresh ShaderProfile and keeps nothing
+        // of what was stored. An EMPTY captured id goes through the sentinel writer rather
+        // than the combo's heuristic, for the reason stated at the call.
+        const bool carriesPreset = shader.contains(JsonShaderPresetIdKey);
+        const QString presetId = shader.value(JsonShaderPresetIdKey).toString();
+        const auto applyPreset = [this, path, carriesPreset, presetId](bool ok) {
+            if (!ok || !carriesPreset) {
+                return ok;
+            }
+            // An EMPTY captured id is the blocking sentinel, written through the dedicated
+            // writer rather than through the combo's blockInherited heuristic: that
+            // heuristic stores the block only where nothing is stored, so applying a set
+            // onto a path that already owned a preset reset the slot and let an ancestor's
+            // preset back in — the opposite of what the set recorded.
+            const int written = presetId.isEmpty() ? setShaderPresetSentinelOnPaths({path})
+                                                   : setShaderPresetOnPaths({path}, presetId,
+                                                                            /*blockInherited=*/false);
+            // A REFUSAL (-1, an over-long id) fails the entry rather than reporting success
+            // with the preset half silently missing: this closure's caller is the whole-set
+            // apply, whose promise is that an entry commits completely or not at all.
+            if (written < 0) {
+                qCWarning(lcConfig) << "motion set: refusing an entry whose preset id could not be written for" << path;
+                return false;
+            }
+            return true;
+        };
 
         // ── De-seed, the counterpart of the snapshot capturing built-in
         // defaults (see motionsetdomain's snapshot). Decoration does this in
@@ -101,11 +143,13 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // `params.isEmpty()` cannot tell that from "no parameters at all", so
         // it de-seeded such an entry, leaving the path with nothing stored and
         // the set's badge reading inactive right after a successful apply.
-        if (!shader.contains(JsonShaderParametersKey) && shader.contains(JsonEffectIdKey)) {
+        // Not when the entry carries a preset: the de-seed drops the whole override,
+        // which would take the preset reference with it.
+        if (!carriesPreset && !shader.contains(JsonShaderParametersKey) && shader.contains(JsonEffectIdKey)) {
             const QString id = shader.value(JsonEffectIdKey).toString();
             QString inheritedId;
             if (m_settings != nullptr) {
-                auto candidate = m_settings->shaderProfileTree();
+                auto candidate = shaderTree();
                 candidate.clearOverride(path);
                 inheritedId = PhosphorAnimationShaders::resolveShaderWithDefault(candidate, path).effectiveEffectId();
             }
@@ -128,7 +172,13 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // an empty id. Routing it to clearShaderOverride would drop the entry
         // and silently re-enable inheritance.
         if (shader.contains(JsonEffectIdKey))
-            return setShaderOverride(path, shader.value(JsonEffectIdKey).toString(), params);
+            return applyPreset(setShaderOverride(path, shader.value(JsonEffectIdKey).toString(), params));
+        // A PRESET-ONLY half: the event inherits its pack and owns no parameters, so
+        // there is nothing for either writer below to do and the preset is the whole
+        // entry. Without this the params writer stored an engaged-empty parameter map,
+        // which blocks inheritance rather than leaving it alone.
+        if (!shader.contains(JsonShaderParametersKey) && carriesPreset)
+            return applyPreset(true);
         // No effectId at all: the event inherits its pack and overrides only
         // the parameter map. setShaderParametersOnPaths starts from the stored
         // profile, so it preserves that unset state.
@@ -139,7 +189,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // before any write happens, which removes the refusal case here; the
         // remaining 0 really is a no-op.
         setShaderParametersOnPaths({path}, params);
-        return true;
+        return applyPreset(true);
     };
     // Sub-services are constructed before the dirty-forwarder wiring below.
     // Nothing is missed by that ordering: the forwarder seeds
@@ -177,7 +227,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 if (m_settings == nullptr) {
                     return out;
                 }
-                const auto tree = m_settings->shaderProfileTree();
+                const auto& tree = shaderTree();
                 for (const QString& path : PlasmaZones::shaderSupportedEventPaths()) {
                     out.insert(path,
                                PhosphorAnimationShaders::resolveShaderWithDefault(tree, path).effectiveEffectId());
@@ -287,8 +337,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                     Q_EMIT shaderProfileChanged(QString());
                 }
                 // The live tree moved, so the value-based dirty compare must
-                // be re-run on the next hasPendingChanges() query.
+                // be re-run on the next hasPendingChanges() query, and the
+                // parsed-tree cache is stale.
                 m_treeDirtyCache.reset();
+                m_shaderTreeCache.reset();
                 // Tree assignment is the primary input of the stock-suppression
                 // gate (see stockSuppressedEvents).
                 maybeEmitStockSuppressedEventsChanged();

@@ -6,10 +6,21 @@
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QJsonObject>
+#include <QMutex>
+#include <QSet>
 #include <QString>
+// For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
+// rather than relied on through QString: this header is pulled in by the unity
+// build everywhere, where a neighbour's include hides a missing one, and the
+// non-unity build is the only place it shows up.
+#include <QtGlobal>
 #include <QVariantMap>
 
 #include <optional>
+
+namespace PhosphorShaders {
+class ShaderPresetRegistry;
+}
 
 namespace PhosphorAnimationShaders {
 
@@ -47,7 +58,27 @@ public:
     /// ids declared in the effect's `AnimationShaderEffect::parameters`.
     /// `std::nullopt` = inherit. Engaged-but-empty map = explicitly use
     /// all defaults.
+    ///
+    /// When `presetId` is engaged these are DELTAS on top of the preset
+    /// rather than the whole tuning: a key present here overrides the
+    /// preset's value for it, and every key absent here follows the preset.
+    /// That is what lets a retuned preset move an assignment that has its
+    /// own edits without discarding them.
     std::optional<QVariantMap> parameters;
+
+    /// The preset `parameters` are deltas against, resolved by id from
+    /// `PhosphorShaders::ShaderPresetRegistry` against the RESOLVED effect.
+    /// `std::nullopt` = inherit. Engaged-but-empty string = explicitly no
+    /// preset, so `parameters` is the whole tuning.
+    ///
+    /// Independent of `effectId`, exactly as `parameters` already is, so a
+    /// preset-only override rides the cascade instead of severing it. A
+    /// presetId inherited across a node that changed the pack is INERT, not
+    /// wrong: the registry keys presets by (family, packId, presetId), so a
+    /// preset belonging to another pack simply does not resolve and the
+    /// assignment falls back to its own parameters — the same shape a
+    /// parameter id the resolved pack does not declare already has.
+    std::optional<QString> presetId;
 
     // ─────── Effective getters ───────
 
@@ -55,9 +86,80 @@ public:
     {
         return effectId.value_or(QString());
     }
-    QVariantMap effectiveParameters() const
+    /// The stored parameter map, without judgement.
+    ///
+    /// For a caller that legitimately wants the RAW values while a preset is still
+    /// engaged. Today there is exactly one, the flatten itself, which needs them as
+    /// the delta set; an editor showing what an assignment stores of its own is the
+    /// other shape that belongs here, and it reaches the raw map through the tree
+    /// rather than through a profile. Named so such a read states its intent
+    /// instead of sharing a spelling with the reads that want the effective answer.
+    QVariantMap storedParameters() const
     {
         return parameters.value_or(QVariantMap());
+    }
+
+    /// The parameter map a CONSUMER should render.
+    ///
+    /// Identical to `storedParameters()` once the preset has been applied, and a
+    /// loud warning when it has not. "Flattened" is a convention here rather than a
+    /// type — the only marker is that `presetId` was reset() — so nothing in the
+    /// type system stops a consumer from reading this on a RAW profile, where the
+    /// answer is plausible and wrong because the preset's values are simply
+    /// missing. Four of nine animation and surface consumers did exactly that, on
+    /// an invariant documented in three places.
+    ///
+    /// So the getter says so itself, in BOTH builds. A debug-only assert would have
+    /// caught none of those four in a user session, which is the whole reason they
+    /// survived review. It warns rather than refusing because the result is
+    /// degraded, not dangerous, and a hard failure on a render path is worse than a
+    /// wrong colour.
+    ///
+    /// What would make this impossible rather than merely loud is moving the getter
+    /// off the raw profile so a missed site fails to compile. That is a bigger
+    /// change than a remediation pass should make to a library with four consumers,
+    /// and it is recorded as the follow-up rather than attempted here.
+    QVariantMap effectiveParameters() const
+    {
+        // ONCE per (effectId, presetId), not per call. These getters are read from render
+        // and install paths, so a single genuinely-unflattened consumer would otherwise
+        // repeat the warning for the life of the session and bury everything around it.
+        // The decoration tree's own parser chose qCDebug over a warning for exactly that
+        // reason; latching keeps the louder level, which is right for a contract
+        // violation, without the flood.
+        if (presetId && !presetId->isEmpty()) {
+            // Guarded: this getter is const on a value type whose class doc says it is not
+            // internally synchronized, and contains()+insert() on a shared QSet is not
+            // atomic (only the static's INITIALISATION is). The set is bounded by the
+            // user's own config, so growth is not the concern; a torn read is.
+            //
+            // The latch is process-wide, which is why no test asserts "warns exactly
+            // once": a slot doing that would pass or fail on slot ORDER within the
+            // binary. A test that wants to see the warning has to use a (pack, preset)
+            // pair no earlier slot has touched, which the key makes possible.
+            static QMutex latchMutex;
+            static QSet<QString> reported;
+            const QMutexLocker latchLock(&latchMutex);
+            const QString key = effectId.value_or(QString()) + QLatin1Char('\x1f') + *presetId;
+            if (!reported.contains(key)) {
+                reported.insert(key);
+                qWarning(
+                    "PhosphorAnimation: ShaderProfile::effectiveParameters() read on a profile whose preset is NOT "
+                    "yet applied (effectId=%s presetId=%s). The preset's values are missing from the result — "
+                    "flatten with withPresetsResolved() after the tree walk-up, never per node. Reported once per "
+                    "pack and preset.",
+                    qUtf8Printable(effectId.value_or(QString())), qUtf8Printable(*presetId));
+            }
+        }
+        return parameters.value_or(QVariantMap());
+    }
+    /// As with the decoration twin's `presetIdFor`, the callers are tests. It
+    /// stays for symmetry with the two accessors above: every field on this
+    /// value type answers the same way, and a reader who finds two of three is
+    /// left wondering which spelling is the intended one.
+    QString effectivePresetId() const
+    {
+        return presetId.value_or(QString());
     }
 
     ShaderProfile withDefaults() const;
@@ -66,6 +168,7 @@ public:
 
     static constexpr auto JsonFieldEffectId = "effectId";
     static constexpr auto JsonFieldParameters = "parameters";
+    static constexpr auto JsonFieldPresetId = "presetId";
 
     QJsonObject toJson() const;
     static ShaderProfile fromJson(const QJsonObject& obj);
@@ -84,5 +187,30 @@ public:
         return !(*this == other);
     }
 };
+
+/// Flatten @p profile's preset reference into its `parameters`.
+///
+/// Returns a copy whose `parameters` hold the preset's values overlaid with the
+/// profile's own edits, and whose `presetId` is cleared to say the preset has
+/// already been applied. Consumers downstream keep reading
+/// `effectiveParameters()` and never have to know a preset was involved.
+///
+/// MUST be called AFTER the tree walk-up, never per node before it: a node can
+/// carry a preset while inheriting its pack from an ancestor, and presets are
+/// keyed by (family, packId, presetId), so flattening early would look the
+/// preset up against an empty pack id and silently resolve nothing. Because it
+/// clears the reference it applied, a second call is a no-op.
+///
+/// A preset id naming no preset keeps the profile's own parameters, which is the
+/// look it had before it pointed at one. That covers an assignment outliving its
+/// preset and an id inherited across a node that changed pack.
+///
+/// The surface family has had this since presets arrived; the animation family
+/// did not, so the same four steps were hand-written in the daemon and the
+/// compositor, and four further animation consumers never flattened at all.
+/// Anything resolving an animation profile should call this rather than
+/// re-deriving it.
+PHOSPHORANIMATION_EXPORT ShaderProfile withPresetsResolved(const ShaderProfile& profile,
+                                                           const PhosphorShaders::ShaderPresetRegistry& presets);
 
 } // namespace PhosphorAnimationShaders

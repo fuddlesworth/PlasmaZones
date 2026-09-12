@@ -6,9 +6,11 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QSet>
 
 namespace PhosphorAnimationShaders {
 
@@ -190,6 +192,12 @@ QJsonObject AnimationShaderEffect::toJson() const
         if (!texArr.isEmpty())
             obj.insert(QLatin1String("textures"), texArr);
     }
+    if (!presets.isEmpty()) {
+        QJsonObject presetsObj;
+        for (auto it = presets.constBegin(); it != presets.constEnd(); ++it)
+            presetsObj.insert(it.key(), QJsonObject::fromVariantMap(it.value()));
+        obj.insert(QLatin1String("presets"), presetsObj);
+    }
 
     return obj;
 }
@@ -367,10 +375,28 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
 
     const QJsonArray params = arrayOrWarn("parameters");
     e.parameters.reserve(params.size());
+    // First-declaration-wins, like the other three families. This one had no
+    // duplicate guard at all, so a repeated id was carried through — and the
+    // preamble then emitted `#define p_<id>` twice with DIFFERENT auto-slots, which
+    // glslang rejects as a macro redefinition. The author got a compile error
+    // pointing into generated code they did not write, for a metadata fault the
+    // siblings name precisely. It also left the preset lint range-checking the LAST
+    // declaration while the other families keep the first.
+    QSet<QString> seenParamIds;
     for (const QJsonValue& v : params) {
         const QJsonObject pObj = v.toObject();
         ParameterInfo p;
         p.id = pObj.value(QLatin1String("id")).toString();
+        if (!p.id.isEmpty() && seenParamIds.contains(p.id)) {
+            qCWarning(lcAnimationShader())
+                << "AnimationShaderEffect::fromJson: effect" << e.id << "declares parameter id" << p.id
+                << "more than once — ignoring the later entry (a duplicate would redefine its p_ macro and fail the "
+                   "shader compile)";
+            continue;
+        }
+        if (!p.id.isEmpty()) {
+            seenParamIds.insert(p.id);
+        }
         p.name = pObj.value(QLatin1String("name")).toString();
         p.type = pObj.value(QLatin1String("type")).toString();
         p.description = pObj.value(QLatin1String("description")).toString();
@@ -385,6 +411,32 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             p.stepValue = pObj.value(QLatin1String("step")).toVariant();
         e.parameters.append(std::move(p));
     }
+
+    // Pack-declared presets. The image-id set is derived from the declared
+    // parameters rather than hard-coded empty, so if this family ever gains an
+    // `image` parameter type the containment check starts applying on its own
+    // instead of silently trusting pack-declared paths. It is empty today —
+    // animation packs carry textures in a separate top-level `textures` array,
+    // and the schema's parameter `type` enum has no `image` member.
+    //
+    // `sourceDir` is stamped by the registry loader AFTER fromJson returns, so there
+    // is no pack directory to anchor against here. That case IS fail-closed, in
+    // `parsePackPresets` itself: an empty or "." pack directory with a non-empty
+    // image-param set refuses every image-typed value rather than resolving it,
+    // because `QDir(QString())` behaves as `QDir(".")` and `absolutePath()` would
+    // otherwise answer the process working directory — confining a relative path to
+    // THAT instead of refusing it. So a hand-written `"type": "image"` in this family
+    // loses its preset texture values and keeps the rest of the preset.
+    //
+    // If this family ever SUPPORTS an image parameter type, `fromJson` has to take a
+    // `sourceDir` the way the pointer twin already does, or every such value is
+    // refused rather than resolved.
+    QSet<QString> imageParamIds;
+    for (const ParameterInfo& p : std::as_const(e.parameters)) {
+        if (p.type == QLatin1String("image"))
+            imageParamIds.insert(p.id);
+    }
+    e.presets = PhosphorShaders::parsePackPresets(QDir(e.sourceDir), imageParamIds, obj, lcAnimationShader());
 
     // Cap the texture list at the contract budget. Surplus entries are
     // silently dropped — the canonical UBO only declares uTexture1..3
@@ -513,6 +565,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
             return false;
     }
     if (textures != other.textures)
+        return false;
+    if (presets != other.presets)
         return false;
     return true;
 }

@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 
 #include <QQuickItem>
 #include <PhosphorSurfaces/SurfaceManager.h>
@@ -72,21 +73,161 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     return useShaderForScreen(physId);
 }
 
+void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry)
+{
+    if (m_presetRegistry == registry) {
+        return;
+    }
+    // Disconnect from the outgoing registry before the borrow is overwritten, or a
+    // re-set would leave a second connection behind. The daemon nulls this borrow
+    // before tearing the store down, so the old pointer is still alive here.
+    //
+    // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`: the
+    // blanket form severs every slot this object has on that sender, which is safe
+    // only while there is exactly one. This class keeps handles for exactly that
+    // reason (see m_shadersChangedConnection). Note setSurfaceShaderRegistry still
+    // uses the blanket form — correct there today because this object makes exactly
+    // one connection to that sender, but it is the counter-example, not the model.
+    if (m_presetsChangedConnection) {
+        disconnect(m_presetsChangedConnection);
+        m_presetsChangedConnection = {};
+    }
+    m_presetRegistry = registry;
+    if (!m_presetRegistry) {
+        return;
+    }
+
+    // A retuned preset changes the PARAMETERS of assignments already on screen,
+    // never which pack they use, so a plain refresh is enough — no
+    // recreate-on-type-mismatch, which only matters when an assignment flips
+    // between rectangle and shader overlays. refreshVisibleWindows re-runs
+    // updateOverlayWindow, which re-resolves through effectiveOverlayShader and
+    // pushes the new uniforms.
+    //
+    // Not filtered on the PACK the signal names: an overlay window resolves its
+    // pack per screen through the layout, so deciding whether any visible window
+    // uses that pack costs the same walk the refresh does. It IS filtered on the
+    // FAMILY, which the signal also carries and which is free to test — and each
+    // family needs a different arm anyway, because each bakes its parameters
+    // somewhere else.
+    m_presetsChangedConnection = connect(m_presetRegistry, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+                                         [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                                             switch (family) {
+                                             case PhosphorShaders::ShaderFamily::Overlay:
+                                                 refreshVisibleWindows();
+                                                 break;
+                                             case PhosphorShaders::ShaderFamily::Animation:
+                                                 // The flattened parameters are baked into SurfaceAnimator's
+                                                 // per-role Config, which is only rebuilt here and on a
+                                                 // shaderProfileTree edit — so without this arm a retuned
+                                                 // animation preset never reached the OSD and popup show/hide
+                                                 // legs until the user happened to edit the tree. "The next
+                                                 // show re-resolves" is true of the effect, not of here.
+                                                 if (m_settings) {
+                                                     applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                                                 }
+                                                 break;
+                                             case PhosphorShaders::ShaderFamily::Surface:
+                                                 // Mirror of the decorationProfileTreeChanged arm in
+                                                 // setSettings: a visible popup's decoration chain is
+                                                 // resolved at show time, so a retune has to be pushed into
+                                                 // the slots that are already up. OSDs are omitted for the
+                                                 // same reason they are there — they auto-dismiss sub-second.
+                                                 reapplyVisiblePopupDecorations();
+                                                 break;
+                                             case PhosphorShaders::ShaderFamily::Pointer:
+                                                 // The daemon does not render the cursor chain; the
+                                                 // compositor owns it and has its own arm.
+                                                 break;
+                                             }
+                                         });
+
+    // APPLY ONCE at set time as well as on every later change, because on an init()
+    // re-run nothing else would. The animator's per-role Config holds parameters
+    // flattened against whichever registry was live when it was last built, and the
+    // only other thing that rebuilds it is `setSettings` — whose entire body sits
+    // behind `if (m_settings != settings)`. m_settings is ctor-owned and stop() never
+    // resets it, so the second init passes the same pointer and the whole block is
+    // skipped. The result was not a dangling pointer (Config holds value copies) but
+    // stale TUNING: the OSD and popup show/hide legs kept the values flattened against
+    // the destroyed store until a presetsChanged or a tree edit happened to arrive.
+    if (m_settings) {
+        applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+    }
+}
+
+OverlayService::OverlaySource
+OverlayService::overlaySourceFor(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                 const PhosphorZones::Layout* screenLayout)
+{
+    // THE precedence, stated once. Both effectiveOverlayShaderId and
+    // effectiveOverlayShader switch on this rather than each re-deriving the ladder:
+    // they used to, and the comment on one of them named the drift hazard without
+    // removing it.
+    //
+    // A rule override wins outright — the registry has already picked the rule for this
+    // layout's node in resolveContextOverlay, so by the time either function runs the
+    // override IS the answer, and an engaged EMPTY id is the rule's "no shader"
+    // sentinel rather than an absence. With no rule and no layout there is nothing to
+    // resolve against; otherwise the cached tree answers.
+    if (overlayOverride.shaderId) {
+        return OverlaySource::Rule;
+    }
+    return screenLayout ? OverlaySource::Tree : OverlaySource::None;
+}
+
+QString OverlayService::effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                                 const PhosphorZones::Layout* screenLayout) const
+{
+    // The id half of effectiveOverlayShader, for callers that only ask "is a
+    // shader in play here". Deliberately skips the preset flatten: a preset
+    // changes an assignment's PARAMETERS and never which pack it uses, so the
+    // answer is identical and the deep copy is not paid.
+    switch (overlaySourceFor(overlayOverride, screenLayout)) {
+    case OverlaySource::Rule:
+        return *overlayOverride.shaderId;
+    case OverlaySource::None:
+        return {};
+    case OverlaySource::Tree:
+        break;
+    }
+    // The enum says a layout answers; it does not CARRY the pointer, so the Tree case
+    // re-checks rather than trusting a contract stated two functions away. A future
+    // reorder of that ladder then fails loudly here instead of dereferencing null.
+    Q_ASSERT(screenLayout);
+    if (!screenLayout) {
+        return {};
+    }
+    return m_overlayShaderTree.resolve(screenLayout->id().toString()).shaderId;
+}
+
 OverlayShaderProfile
 OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                        const PhosphorZones::Layout* screenLayout) const
 {
-    // Rule override wins both id and params: an engaged rule id with no
-    // params means "that shader at its defaults", never "that shader with
-    // the tree's params" (see the pre-tree semantics this preserves). The
-    // registry has already picked the rule for this layout's tree node (or
-    // the global node) in resolveContextOverlay, so by the time it arrives
-    // here the override IS the answer for this layout. An engaged EMPTY id is
-    // the rule's "no shader" sentinel and resolves to no shader below, the
-    // same way an empty tree override suppresses the baseline.
-    if (overlayOverride.shaderId) {
-        return {*overlayOverride.shaderId, overlayOverride.shaderParams};
+    // Rule override wins both id and params: an engaged rule id with no params means
+    // "that shader at its defaults", never "that shader with the tree's params" (see
+    // the pre-tree semantics this preserves). WHICH source wins is overlaySourceFor's
+    // single statement of the precedence; what each source means for the PARAMS is this
+    // function's own business, which is why the two are separate.
+    switch (overlaySourceFor(overlayOverride, screenLayout)) {
+    case OverlaySource::Rule: {
+        OverlayShaderProfile ruleProfile{*overlayOverride.shaderId, overlayOverride.shaderParams};
+        ruleProfile.presetId = overlayOverride.shaderPresetId;
+        // Flattened through the same function as the tree node below, so the rule
+        // route and the tree route cannot drift on what a preset plus its deltas
+        // means. That function lives beside the profile type, not here: the
+        // flatten is a property of the profile rather than of this service.
+        return m_presetRegistry ? withPresetsResolved(ruleProfile, *m_presetRegistry) : ruleProfile;
     }
+    case OverlaySource::None:
+        return {};
+    case OverlaySource::Tree:
+        break;
+    }
+    // Re-checked here too, for the reason the id twin gives: the enum value does not
+    // carry the pointer.
+    Q_ASSERT(screenLayout);
     if (!screenLayout) {
         return {};
     }
@@ -96,7 +237,17 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     // setSettings clears the cache when settings detach, so a detached service
     // resolves through an empty tree to the same empty profile a null check
     // would have returned.
-    return m_overlayShaderTree.resolve(screenLayout->id().toString());
+    const OverlayShaderProfile profile = m_overlayShaderTree.resolve(screenLayout->id().toString());
+    // Flatten the preset here, once, rather than at each consumer: the returned
+    // profile's `parameters` are the EFFECTIVE tuning (the preset overlaid with
+    // this assignment's own edits) and `presetId` is cleared to say the preset
+    // has already been applied. Callers therefore never have to know a preset
+    // was involved — which is what keeps `useShaderForScreen` and the two
+    // window-update sites from each needing their own resolve step.
+    //
+    // With no preset registry injected, or a presetId naming no preset, this
+    // leaves `parameters` exactly as stored.
+    return m_presetRegistry ? withPresetsResolved(profile, *m_presetRegistry) : profile;
 }
 
 bool OverlayService::anyScreenUsesShader() const
@@ -124,7 +275,12 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     // A context overlay rule may override the resolved shader / style for
     // this (screen, desktop, activity). Resolve once and apply over the tree.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
-    const QString effectiveShaderId = effectiveOverlayShader(overlayOverride, screenLayout).shaderId;
+    // Id only. This is a per-frame path while an overlay is up — the audio
+    // spectrum drives it per screen per frame at the configured shader frame
+    // rate — and the full resolve deep-copies the preset's parameter map
+    // (overlayPresetDeltas detaches the QMap on its first insert) to produce
+    // values this function then discards.
+    const QString effectiveShaderId = effectiveOverlayShaderId(overlayOverride, screenLayout);
     if (ShaderRegistry::isNoneShader(effectiveShaderId)) {
         return false;
     }

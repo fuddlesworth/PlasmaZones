@@ -59,12 +59,39 @@ ShellChrome::ShellChrome(QObject* parent)
 ShellChrome::ShellChrome(const QStringList& packSearchPaths, QObject* parent)
     : QObject(parent)
     , m_registry(std::make_unique<PhosphorSurfaceShaders::SurfaceShaderRegistry>(nullptr))
+    , m_presetStore(std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr))
 {
     if (!packSearchPaths.isEmpty()) {
         // Last path is the user's, as the daemon orders them.
         m_registry->setUserPath(packSearchPaths.last());
         m_registry->addSearchPaths(packSearchPaths);
     }
+
+    // The SURFACE family only: that is the one the shell resolves. A family the shell
+    // does not consult would still cost a QFileSystemWatcher and a whole-directory
+    // re-parse on every preset the user saves, which is the reason every other
+    // consumer names its families too.
+    m_presetStore->load(PhosphorShaders::standardUserPresetRoot(), {PhosphorShaders::ShaderFamily::Surface});
+
+    // Pack-declared presets live in each pack's metadata.json, which only the pack
+    // registry parses, so push what it has now and again on every reload. The
+    // projection is the shared `seedPackPresets`, not a local copy.
+    const auto seedPresets = [this]() {
+        PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Surface,
+                                         m_registry->availableEffects());
+    };
+    seedPresets();
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, m_presetStore.get(),
+            seedPresets);
+    // A preset retuned anywhere — this process, the settings app, a text editor — has
+    // to move the chrome that is already on screen. `revision` is what every QML
+    // binding here re-resolves on.
+    connect(&m_presetStore->registry(), &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+            [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                if (family == PhosphorShaders::ShaderFamily::Surface) {
+                    bump();
+                }
+            });
 }
 
 void ShellChrome::setPalette(PhosphorTheme::PaletteStore* palette)
@@ -144,7 +171,11 @@ bool ShellChrome::setTreeJson(const QString& json)
 QVariantList ShellChrome::chainFor(const QString& surfacePath) const
 {
     QVariantList stages;
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_tree.resolve(surfacePath);
+    // FLATTENED, like every other surface consumer. `resolve()` walks the tree but does
+    // not apply presets, and `effectiveParameters()` below is the post-flatten read —
+    // so without this a surface naming a preset rendered without its values, and
+    // without the declared-range clamp `resolveParams` applies.
+    const PhosphorSurfaceShaders::DecorationProfile& profile = resolvedProfile(surfacePath);
     const QStringList chain = profile.enabledChain();
     if (chain.isEmpty()) {
         return stages;
@@ -177,7 +208,10 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
 
 double ShellChrome::outerPaddingFor(const QString& surfacePath) const
 {
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_tree.resolve(surfacePath);
+    // Flattened for the same reason chainFor is: a preset can move the very parameter
+    // a pack's padding request is computed from, so reading the unflattened map here
+    // would size the chrome's margin against values the stages do not draw with.
+    const PhosphorSurfaceShaders::DecorationProfile& profile = resolvedProfile(surfacePath);
     const QVariantMap allParams = profile.effectiveParameters();
     double padding = 0.0;
     const QStringList chain = profile.enabledChain();
@@ -229,8 +263,28 @@ void ShellChrome::fetchTree()
     });
 }
 
+const PhosphorSurfaceShaders::DecorationProfile& ShellChrome::resolvedProfile(const QString& surfacePath) const
+{
+    const auto it = m_resolvedCache.constFind(surfacePath);
+    if (it != m_resolvedCache.constEnd()) {
+        return *it;
+    }
+    // The flatten, for the reason each caller used to state itself: the tree resolve does
+    // not apply presets and `effectiveParameters()` is the post-flatten read, so an
+    // unflattened profile renders without the preset's values and without the
+    // declared-range clamp `resolveParams` applies.
+    return *m_resolvedCache.insert(surfacePath,
+                                   PhosphorSurfaceShaders::withPresetsResolved(m_tree.resolve(surfacePath),
+                                                                               m_presetStore->registry(),
+                                                                               PhosphorShaders::ShaderFamily::Surface));
+}
+
 void ShellChrome::bump()
 {
+    // The flattened-profile memo is scoped to one revision, so it goes here rather than at
+    // each mutation site: every path that changes a tree, a pack set or a preset ends up
+    // calling bump(), which is what makes this the single invalidation point.
+    m_resolvedCache.clear();
     ++m_revision;
     Q_EMIT revisionChanged();
 }

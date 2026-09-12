@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorRules/WindowQuery.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
 
 #include <QColor>
 #include <QString>
@@ -86,8 +87,14 @@ struct ResolvedShaderProfile
 /// shader leg. This function used to read and clamp the SAME slot a second time —
 /// idempotent only because both sites happened to spell an identical qBound, and
 /// a silent desync waiting for one of them to change. One read, one clamp.
+///
+/// @p presets resolves the profile's `presetId` into the parameters it stands
+/// for, overlaid with the profile's own edits, so every caller downstream sees
+/// one flat parameter map and never has to know a preset was involved. The
+/// returned profile's `presetId` is cleared to say it has already been applied.
 ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
                                                     const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const PhosphorShaders::ShaderPresetRegistry& presets,
                                                     const QString& windowId, const PhosphorRules::WindowQuery& query,
                                                     const QString& eventPath);
 
@@ -222,6 +229,10 @@ struct ResolvedDecorationChain
 {
     QStringList chain;
     QVariantMap params;
+    /// Per-pack preset references, `{packId -> presetId}`, the same nested
+    /// shape `params` uses. A rule can point one layer at a preset and tune the
+    /// next by hand, exactly as a decoration tree node can.
+    QVariantMap presetIds;
 };
 
 std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved);

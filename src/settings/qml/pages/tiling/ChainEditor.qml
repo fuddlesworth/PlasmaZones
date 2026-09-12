@@ -28,15 +28,21 @@ import org.plasmazones.common as PZCommon
  *
  * Pure props-and-signals — the component owns no persistence. The host
  * (DecorationSurfaceCard) feeds:
- *   - availableShaders: QVariantList of effect maps (id / name / parameters)
- *   - chain:            QStringList of pack ids in order
- *   - packParameters:   { packId -> { paramId -> value } } override map
+ *   - availableShaders:   QVariantList of effect maps (id / name / parameters)
+ *   - chain:              QStringList of pack ids in order
+ *   - packParameters:     { packId -> { paramId -> value } } override map
+ *   - packOwnParameters:  the same shape, REQUIRED, holding only what this node
+ *                         stores itself (packParameters may be a resolved walk-up)
+ *   - presetBridge:       the family's ShaderPresetBridge, REQUIRED
+ *   - packPresetIds:      { packId -> presetId } for this chain
  * and listens for:
  *   - chainChangeRequested(newChain)          — add / remove / reorder
  *   - paramChangeRequested(packId, id, value) — a per-pack parameter edit
  *   - paramsRandomizeRequested(packId, rolled) — a whole-pack randomize roll
  *   - paramsResetRequested(packId, defaults)  — a whole-pack reset to defaults
  *   - layerEnabledChangeRequested(packId, on) — per-pack enable toggle
+ *   - presetChangeRequested(packId, presetId) — a per-pack preset pick
+ *   - presetRevertRequested(packId)           — drop this pack's own deltas
  *
  * The host routes those signals into the DecorationPageController's
  * setChain / setChainParam mutators (with its own surface path), then
@@ -96,10 +102,56 @@ ColumnLayout {
     // empty catalog is "nothing is installed", NOT "everything is already in
     // the chain", and telling the user to add one below is an instruction
     // they cannot follow.
-    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
+    // Boolean-coerced: `availableShaders` is untyped, and the `&&` chain returns the
+    // first falsy operand, which for an undefined model is `undefined` — a typed bool
+    // property rejects that outright. Same guard, same reason, as AnimationProfileEditor.
+    readonly property bool _anyPackAvailable: Boolean(availableShaders && availableShaders.length > 0)
 
     signal chainChangeRequested(var newChain)
+    /// The family's `ShaderPresetBridge`, REQUIRED, and forwarded to each layer.
+    ///
+    /// This is where the null-as-feature-flag habit cost something: the comment
+    /// here used to say the rules-action embed passes null because "a rule chain
+    /// is edited against no particular surface and has nowhere to persist a
+    /// preset". That stopped being true when the rule action gained its own
+    /// presetIds key, and nothing made the stale opt-out visible, because a
+    /// deliberate null and a forgotten binding look identical. Required now, with
+    /// `supportsPresets` carrying the opt-out a host actually means.
+    required property QtObject presetBridge
+    /// Whether this host has a preset axis at all; forwarded to each layer.
+    ///
+    /// Provision for a host that has no preset support, rather than a description of
+    /// one that exists: every host of this component passes a real bridge today (the
+    /// rules embed included), so nothing sets this false. The animation side has the
+    /// live equivalent, GlobalTimingDefaultsCard's `shaderSupportsPresets: false`.
+    property bool supportsPresets: true
+    /// Per-pack preset ids for this chain, shaped `{ packId: presetId }`, the
+    /// same shape `packParameters` already has.
+    property var packPresetIds: ({})
+    /// Per-pack parameter maps this node stores ITSELF, shaped the same way
+    /// `packParameters` is.
+    ///
+    /// `packParameters` is the DISPLAY map, and hosts deliberately fall back to
+    /// the resolved (inherited) values for it so a card with no override of its
+    /// own still shows what the surface actually draws with. The preset axis
+    /// cannot use that map: a node that inherits its values and stores only a
+    /// preset id has no delta, and reading the inherited map as the delta map
+    /// marked every inherited row as changed here and offered an Update-preset
+    /// that would have written the ancestor's values into the shared preset.
+    /// A host whose `packParameters` is already own-only binds the same map.
+    ///
+    /// Required rather than defaulted, for the reason `presetBridge` above and
+    /// PackEditorBody's `ownValues` both are: a default makes a forgotten binding
+    /// indistinguishable from a deliberate opt-out, and the failure is SILENT —
+    /// nothing marked, no Update-preset offered, no error.
+    required property var packOwnParameters
+
     signal paramChangeRequested(string packId, string paramId, var value)
+    /// A layer was pointed at a different preset. Empty clears it.
+    signal presetChangeRequested(string packId, string presetId)
+    /// A layer's own parameter edits should be dropped so every value goes
+    /// back to following its preset.
+    signal presetRevertRequested(string packId)
     signal paramsRandomizeRequested(string packId, var rolled)
     signal paramsResetRequested(string packId, var defaults)
     signal layerEnabledChangeRequested(string packId, bool enabled)
@@ -225,6 +277,7 @@ ColumnLayout {
             readonly property var _effect: root._effectFor(packDelegate.packId)
             readonly property var _schema: (packDelegate._effect && packDelegate._effect.parameters) ? packDelegate._effect.parameters : []
             readonly property var _values: (root.packParameters && root.packParameters[packDelegate.packId]) ? root.packParameters[packDelegate.packId] : root._emptyParams
+            readonly property var _ownValues: (root.packOwnParameters && root.packOwnParameters[packDelegate.packId]) ? root.packOwnParameters[packDelegate.packId] : root._emptyParams
             readonly property string _description: (packDelegate._effect && packDelegate._effect.description) ? packDelegate._effect.description : ""
             readonly property bool _hasParams: packDelegate._schema.length > 0
 
@@ -329,13 +382,29 @@ ColumnLayout {
                         Layout.fillWidth: true
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
                         packId: packDelegate.packId
+                        // The pack's display name, so each layer's preset combo
+                        // announces which layer it belongs to.
+                        packDisplayName: root._displayName(packDelegate.packId)
                         parameters: packDelegate._schema
                         currentValues: packDelegate._values
+                        ownValues: packDelegate._ownValues
                         enableGroups: true
                         enableImage: false
                         previewKind: root.previewKind
                         previewController: root.previewController
                         previewActive: packDelegate.expanded
+                        presetBridge: root.presetBridge
+                        supportsPresets: root.supportsPresets
+                        presetId: (root.packPresetIds && root.packPresetIds[packDelegate.packId]) ? root.packPresetIds[packDelegate.packId] : ""
+                        onPresetSelected: function (id) {
+                            root.presetChangeRequested(packDelegate.packId, id);
+                        }
+                        // Clearing the reference is the same write as picking None
+                        // on an assignment; the layer keeps its own values.
+                        onPresetDeleted: function (id) {
+                            root.presetChangeRequested(packDelegate.packId, "");
+                        }
+                        onPresetRevertRequested: root.presetRevertRequested(packDelegate.packId)
                         onValueChanged: function (effectId, paramId, value) {
                             root.paramChangeRequested(effectId, paramId, value);
                         }

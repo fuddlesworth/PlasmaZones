@@ -163,6 +163,16 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
             qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares parameter" << p.id
                                        << "with type image, which pointer packs do not support; declare the"
                                        << "texture in the top-level textures array instead (it binds as uTexture<N>)";
+            // DROPPED, not carried. The warning used to fall through and append
+            // the parameter anyway, which made two documented invariants false:
+            // the comment below claiming this loop "rejects type: image
+            // outright", and `parsePackPresets`'s own note that the image set is
+            // empty for this family. With the parameter kept, a pack declaring
+            // one turned preset image values into resolved absolute paths that
+            // `effectContentSignature` does not hash and `effectWatchPaths` does
+            // not watch, so editing that file never re-registered the pack. A
+            // warning with no control-flow exit is not a guard.
+            continue;
         }
         p.description = pObj.value(QLatin1String("description")).toString();
         p.group = pObj.value(QLatin1String("group")).toString();
@@ -180,6 +190,21 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
         }
         e.parameters.append(std::move(p));
     }
+
+    // Pack-declared presets. The image-id set is derived from the declared
+    // parameters rather than hard-coded empty, so if this family ever gains an
+    // `image` parameter type the containment check starts applying on its own
+    // instead of silently trusting pack-declared paths. It is empty today: the
+    // loop above rejects `type: "image"` outright, and pointer packs carry
+    // textures in a separate top-level `textures` array. Unlike the animation
+    // and surface twins this call HAS a real pack directory to anchor against,
+    // because fromJson takes `sourceDir` as an argument.
+    QSet<QString> imageParamIds;
+    for (const ParameterInfo& p : std::as_const(e.parameters)) {
+        if (p.type == QLatin1String("image"))
+            imageParamIds.insert(p.id);
+    }
+    e.presets = PhosphorShaders::parsePackPresets(QDir(sourceDir), imageParamIds, obj, lcPointerEffect());
 
     // Textures: an empty path maps to nothing and is dropped (which shifts
     // later slots, so it is logged), then the survivors are capped at the

@@ -6,7 +6,8 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <QHash>
+#include <PhosphorRegistry/PathKeyedOverrides.h>
+
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -97,7 +98,7 @@ public:
 
     ShaderProfile baseline() const
     {
-        return m_baseline;
+        return m_store.baseline();
     }
     void setBaseline(const ShaderProfile& profile);
 
@@ -115,9 +116,12 @@ public:
     }
 
 private:
-    ShaderProfile m_baseline;
-    QHash<QString, ShaderProfile> m_overrides;
-    QStringList m_insertionOrder;
+    /// Baseline, overrides and their insertion order, shared with the motion,
+    /// decoration and overlay trees rather than hand-written a fourth time. See
+    /// `PathKeyedOverrides` for which half of these trees is deliberately NOT
+    /// shared: `resolve()`'s walk-up, equality's order policy and this tree's
+    /// array wire format all stay here.
+    PhosphorRegistry::PathKeyedOverrides<ShaderProfile> m_store;
 };
 
 /// True when @p path resolves its shader in ISOLATION: ShaderProfileTree::

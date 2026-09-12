@@ -6,6 +6,12 @@
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+// standardUserPresetRoot() and ShaderPresetStore::load() are called below. Reached
+// today through plasmazoneseffect.h → shadertransitionmanager.h, which is the kind
+// of transitive reach that breaks the moment a header sheds an include — and these
+// two free functions moved once already.
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -21,6 +27,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopedValueRollback>
 #include <QTimer>
 #include <QVarLengthArray>
 
@@ -150,6 +157,20 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     });
     connect(&m_shaderManager.m_animationShaderRegistry,
             &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
+                // RE-SEED the family's pack presets before anything below reads them:
+                // a reload can add, remove or retune a pack's declared presets, and
+                // this handler's own work re-resolves against them. See the preset
+                // block at the end of this function for why the seed lives inside the
+                // consumer rather than in a connection of its own.
+                {
+                    // RAII, so the flag cannot outlive the seed: see schedulePresetSweep
+                    // for why the presetsChanged it emits synchronously must not schedule
+                    // a sweep this handler is about to perform itself.
+                    const QScopedValueRollback<bool> seeding(m_seedingPresetsInline, true);
+                    PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
+                                                     PhosphorShaders::ShaderFamily::Animation,
+                                                     m_shaderManager.m_animationShaderRegistry.availableEffects());
+                }
                 // Make the GL context current FIRST. This fires from the registry's file
                 // watcher, between frames, where the compositor's context is not current
                 // — and everything below is GL: endShaderTransition hands the redirect
@@ -280,6 +301,15 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // the next paint to reallocate against the new pass count. The next
     // compiledPack() call recompiles lazily per pack id.
     connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        // RE-SEED first, for the reason the animation handler above gives: the
+        // updateAllDecorations() at the end of this handler re-resolves every
+        // window's profile, and it must see the reloaded packs' presets.
+        {
+            const QScopedValueRollback<bool> seeding(m_seedingPresetsInline, true);
+            PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
+                                             PhosphorShaders::ShaderFamily::Surface,
+                                             m_surfaceShaderRegistry.availableEffects());
+        }
         // This fires from the registry's file watcher between frames, where the
         // compositor's GL context is NOT current. m_compiledPacks owns GLShaders
         // and m_surfaceMultipass owns GLTextures, so their destruction issues
@@ -326,6 +356,14 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // the fresh packs, and a full repaint here would light up the whole
     // screen for a decoration that is not even live.
     connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this, [this]() {
+        // RE-SEED first: invalidateShaderCache below rebuilds the chain and flattens
+        // the profile against these presets. Same reasoning as the two handlers above.
+        {
+            const QScopedValueRollback<bool> seeding(m_seedingPresetsInline, true);
+            PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
+                                             PhosphorShaders::ShaderFamily::Pointer,
+                                             m_pointerPass.registry().availableEffects());
+        }
         // Fires from the registry's file watcher between frames, where
         // the compositor's GL context is NOT current, and the cached
         // packs own GLShaders, GLTextures and GLFramebuffers.
@@ -333,6 +371,79 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // under the same discipline as the sibling handlers here.
         m_pointerPass.invalidateShaderCache();
     });
+
+    // ── Shader presets ────────────────────────────────────────────────────
+    //
+    // Scan the user preset directories with live reload, seed what the three
+    // pack registries already declare, and re-seed whenever one reloads. This
+    // runs after the registry connections above so a reload that arrives mid
+    // setup is not missed.
+    // The THREE families this process resolves, named rather than taking the
+    // default of all four. Each loader holds a QFileSystemWatcher and re-parses
+    // its whole directory on every save, here on the compositor thread, so the
+    // overlay family the effect cannot consult was real work for no effect.
+    m_shaderManager.presetStore().load(PhosphorShaders::standardUserPresetRoot(),
+                                       {PhosphorShaders::ShaderFamily::Animation,
+                                        PhosphorShaders::ShaderFamily::Surface,
+                                        PhosphorShaders::ShaderFamily::Pointer});
+    {
+        // Seed what the three registries already declare. The projection is
+        // PhosphorShaders::seedPackPresets, shared with the daemon and the settings
+        // app rather than written out here: all three built the same two hashes from
+        // an effect list and whole-family replaced, so a fix to it had to land three
+        // times.
+        //
+        // The RE-SEED on a pack reload is deliberately NOT three more connections on
+        // these same signals. It is the first statement of each effectsChanged
+        // handler above, because Qt dispatches slots in connection order and those
+        // handlers CONSUME preset data: they drop the compiled packs and re-resolve
+        // every window. Seeded from a separate connection made here, the seed ran
+        // second, so every pack hot-reload resolved against the presets of the
+        // registry that had just been replaced and then paid a second, corrective
+        // sweep off presetsChanged. Seeding inside the consumer, before it consumes,
+        // makes the first resolve the right one.
+        //
+        // Seeding from those handlers also removes the lifetime question the
+        // separate connections raised: nothing captures a reference into the preset
+        // store any more, each handler reads it through `this` at call time, and the
+        // destructor's existing blanket disconnects on these three senders already
+        // cover them.
+        auto& presets = m_shaderManager.presetStore().registry();
+        PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Animation,
+                                         m_shaderManager.m_animationShaderRegistry.availableEffects());
+        PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Surface,
+                                         m_surfaceShaderRegistry.availableEffects());
+        PhosphorShaders::seedPackPresets(presets, PhosphorShaders::ShaderFamily::Pointer,
+                                         m_pointerPass.registry().availableEffects());
+
+        // A retuned preset has to reach what is already on screen. Which caches
+        // that means dropping differs per family, because each bakes parameters
+        // at a different point:
+        //
+        //   • Animation params are baked at the start of each leg, and every leg
+        //     re-resolves its own, so the next transition, desktop switch, peek
+        //     or scroll picks a retuned preset up on its own. A leg already
+        //     running keeps the values it began with, deliberately — they are
+        //     sub-second, and tearing one down mid-blend to restyle it would be
+        //     a visible glitch for no gain. This holds only because every one of
+        //     those consumers flattens its preset at begin; a new animation
+        //     consumer that reads effectiveParameters() WITHOUT flattening
+        //     silently opts out of presets entirely, which is how four of them
+        //     came to ignore presets in the first place.
+        //   • Surface bakes parameters INTO the compiled pack, and pointer does too
+        //     but ALSO holds an already-flattened profile, so for those two the
+        //     retune has to be applied rather than merely awaited. That work is
+        //     applySurfacePresetSweep / applyPointerPresetSweep, each of which
+        //     carries its own reasoning.
+        //
+        // COALESCED per family, not per pack: the signal is emitted once per pack
+        // whose set changed, and what each sweep does is whole-registry. See
+        // m_surfacePresetSweepScheduled.
+        connect(&presets, &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+                [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                    schedulePresetSweep(family);
+                });
+    }
 }
 
 void PlasmaZonesEffect::initTimers()
@@ -592,9 +703,16 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                 if (!m_windowAnimator->isEnabled()) {
                     return;
                 }
-                const PhosphorAnimationShaders::ShaderProfile profile =
+                // Flattened after the walk-up, like every other animation
+                // consumer. Without it a preset assigned to the desktop-switch
+                // event was silently ignored here while the daemon's twin
+                // applied it, so the two processes disagreed about the same
+                // assignment — the worst shape of bug for a .so that only
+                // reloads with the session.
+                const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::withPresetsResolved(
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
-                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch);
+                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch),
+                    m_shaderManager.presetRegistry());
                 const QString effectId = profile.effectiveEffectId();
                 if (effectId.isEmpty()) {
                     return;
@@ -635,8 +753,12 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         QString effectId;
         PhosphorAnimationShaders::ShaderProfile profile;
         if (m_windowAnimator->isEnabled()) {
-            profile = PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
-                                                                         PhosphorAnimation::ProfilePaths::DesktopPeek);
+            // Flattened after the walk-up, for the same reason as the
+            // desktop-switch leg above.
+            profile = PhosphorAnimationShaders::withPresetsResolved(
+                PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                   PhosphorAnimation::ProfilePaths::DesktopPeek),
+                m_shaderManager.presetRegistry());
             effectId = profile.effectiveEffectId();
         }
         if (effectId.isEmpty()) {
@@ -928,5 +1050,9 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         refreshSuppression();
     });
 }
+
+// schedulePresetSweep and the two sweeps it defers live in preset_sweep.cpp. They are
+// not constructor wiring, which is this file's stated concern, and the surface sweep in
+// particular is decoration cache work.
 
 } // namespace PlasmaZones

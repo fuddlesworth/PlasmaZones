@@ -467,6 +467,13 @@ def iter_json_prose(path: str):
     def walk(node, trail):
         if isinstance(node, dict):
             for k, v in node.items():
+                # A preset's KEY is its label: the shader pack schemas say the picker shows
+                # the preset name verbatim, so it is user-facing prose even though no
+                # "name" field holds it. Without this the only user-visible string in the
+                # whole presets block goes unchecked.
+                if k == "presets" and isinstance(v, dict):
+                    for preset_name in v:
+                        yield trail + "/presets", preset_name
                 yield from walk(v, trail + "/" + k)
         elif isinstance(node, list):
             for i, v in enumerate(node):

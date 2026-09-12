@@ -32,6 +32,7 @@
 #include <array>
 
 #include <PhosphorServiceIdle/IdleService.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -175,18 +176,16 @@ void Daemon::start()
     // the idle state permanently stale. Guarded on !m_idleService so the ordinary
     // init()-then-start() path does not build it twice.
     //
-    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
-    // name, and re-registering them lives in init(), not here. A restarted daemon therefore
-    // has no bus presence, so nothing it publishes reaches the effect regardless. The
-    // same asymmetry covers the autotile shortcuts: their grabs survive stop()
-    // while their handler connections died with the engine, and although
-    // initializeAutotile() re-runs from start() below, it wires the handlers
-    // only when m_autotileEngine exists — which after a no-init stop() it does
-    // not (engines are rebuilt in init(), not here). With no bus presence
-    // nothing they would trigger reaches anyone anyway, so wiring them here
-    // would repair a limb of a cycle that is degraded by design. The
-    // re-arm exists so the daemon's own state is consistent after the cycle (which the
-    // repairs below also do), not because the cycle fully restores service.
+    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the
+    // service name, and re-registering them lives in init(), not here, so a restarted
+    // daemon has no bus presence and nothing it publishes reaches the effect regardless.
+    // The same asymmetry covers the autotile shortcuts: their grabs survive stop() while
+    // their handler connections died with the engine, and initializeAutotile() re-runs
+    // from start() below but wires handlers only when m_autotileEngine exists, which
+    // after a no-init stop() it does not. With no bus presence nothing they trigger
+    // reaches anyone, so wiring them here would repair a limb of a cycle that is
+    // degraded by design. The re-arm exists so the daemon's own state is consistent
+    // after the cycle, not because the cycle restores service.
     if (!m_idleService) {
         setupIdleService();
     }
@@ -423,13 +422,12 @@ void Daemon::stop()
         m_plasmaWorkspaceTargetPath.clear();
     }
 
-    // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for
-    // the same reason as the provider lambdas and QML statics below: both are
-    // wired from init() (init_adaptors.cpp / init_engines.cpp), which runs
-    // before start(), so an init-without-start teardown (test fixture,
-    // early-fail init, double-stop) would otherwise reach member destruction
-    // with the adaptor still holding a pointer to the about-to-die
-    // ShortcutManager / AutotileEngine. Both setters are null-safe and
+    // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for the same
+    // reason as the provider lambdas and QML statics below: both are wired from init()
+    // (init_adaptors.cpp / init_engines.cpp), which runs before start(), so an
+    // init-without-start teardown (test fixture, early-fail init, double-stop) would
+    // otherwise reach member destruction with the adaptor still holding a pointer to the
+    // about-to-die ShortcutManager / AutotileEngine. Both setters are null-safe and
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
         // Cancel a live preview BEFORE dropping the engine borrows. The
@@ -609,7 +607,7 @@ void Daemon::stop()
     // method dispatch to them before we begin tearing down, and Qt's
     // sender-destruction auto-disconnect cleans up signal wiring when the
     // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those nine would require null-guarding
+    // destruction. Adding detach() to those eleven would require null-guarding
     // every slot body (they currently rely on the "borrowed pointer is
     // always valid" invariant), which is a larger refactor than the
     // defense-in-depth buys. If a future adaptor grows a dtor body that
@@ -628,14 +626,14 @@ void Daemon::stop()
         m_ruleAdaptor->detach();
     }
 
-    // Shader registries + warm-bake pool: torn down ABOVE the !m_running gate
-    // because they are ctor/init-origin (setupAnimationShaderEffects /
-    // setupSurfaceShaderEffects / setupShaderWarmBakes all run from init(),
-    // before start() sets m_running). An init-without-start teardown (a failed
-    // init, or a double-stop) must still null the OverlayService's borrows and
-    // run the registries' destructors, or ~OverlayService is left holding two
-    // dangling registry pointers — the same reverse-destruction hazard the
-    // adaptor detaches above guard against.
+    // Shader registries + preset store + warm-bake pool: torn down ABOVE the
+    // !m_running gate because they are ctor/init-origin (setupAnimationShaderEffects
+    // / setupSurfaceShaderEffects / setupShaderPresets / setupShaderWarmBakes all
+    // run from init(), before start() sets m_running). An init-without-start
+    // teardown (a failed init, or a double-stop) must still null the
+    // OverlayService's borrows and run these destructors, or ~OverlayService is left
+    // holding three dangling pointers — two registries and the preset registry —
+    // the same reverse-destruction hazard the adaptor detaches above guard against.
     m_shaderBakePool.clear();
     m_shaderBakePool.waitForDone(500);
     // Reap the warm-bake QFutureWatchers with their host: a bake discarded by
@@ -656,10 +654,30 @@ void Daemon::stop()
         m_overlayService->setSurfaceShaderRegistry(nullptr);
     }
     m_surfaceShaderRegistry.reset();
-    // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every
-    // pack (the registries are rebuilt, so a remembered fingerprint would
-    // wrongly suppress the fresh bake), and the hash does not grow unbounded
-    // across cycles.
+    // Same order for the preset store, so no queued presetsChanged reaches a
+    // dangling registry while the event loop spins during shutdown.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(nullptr);
+    }
+    // Both connections to the ctor-owned m_shaderRegistry, severed before the store
+    // goes. That registry is not reset here, keeps its watcher running, and stop() runs
+    // with the event loop alive, so a later shadersChanged would reach the preset sync
+    // (publishing into the store reset below) and the zone warm-bake (parenting a
+    // watcher to an already-reset host).
+    disconnect(m_overlayPresetSyncConnection);
+    m_overlayPresetSyncConnection = {};
+    // Belt and braces: these two die with the registries reset above, but the handles
+    // must be cleared or setupShaderPresets' own sever reads a stale one next init.
+    disconnect(m_animationPresetSyncConnection);
+    m_animationPresetSyncConnection = {};
+    disconnect(m_surfacePresetSyncConnection);
+    m_surfacePresetSyncConnection = {};
+    disconnect(m_zoneWarmBakeConnection);
+    m_zoneWarmBakeConnection = {};
+    m_presetStore.reset();
+    // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every pack (the
+    // registries are rebuilt, so a remembered fingerprint would wrongly suppress the
+    // fresh bake) and the hash does not grow unbounded across cycles.
     m_scheduledBakeFingerprints.clear();
 
     // initEnginesAndWiring lends the resolver to OverlayService before
@@ -670,18 +688,17 @@ void Daemon::stop()
         m_overlayService->setContextResolver(nullptr);
     }
 
-    // The borrow-severing blocks below are ALSO init-origin (initEnginesAndWiring
-    // wires them, and init() can complete without start() ever running), so they
-    // must sit ABOVE the running gate: on an init-without-start teardown (failed
-    // init, ~Daemon after init()) the captured `this` / raw-member closures would
-    // otherwise stay installed while member destruction frees what they deref.
-    // Every one of them is a null-safe idempotent clear, so running them on a
-    // never-inited daemon is a no-op.
+    // The borrow-severing blocks below are ALSO init-origin (initEnginesAndWiring wires
+    // them, and init() can complete without start() ever running), so they must sit
+    // ABOVE the running gate: on an init-without-start teardown (failed init, ~Daemon
+    // after init()) the captured `this` / raw-member closures would otherwise stay
+    // installed while member destruction frees what they deref. Each is a null-safe
+    // idempotent clear, so running them on a never-inited daemon is a no-op.
 
-    // Clear adaptor engine pointers BEFORE destroying the engines.
-    // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
-    // arriving between engine destruction and adaptor destruction would otherwise
-    // access freed memory. After clearing, ensureEngine() returns false.
+    // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
+    // children of the daemon (destroyed later); a D-Bus call arriving between engine
+    // destruction and adaptor destruction would otherwise access freed memory. After
+    // clearing, ensureEngine() returns false.
     if (m_tilingAdaptor) {
         m_tilingAdaptor->clearEngine();
     }
