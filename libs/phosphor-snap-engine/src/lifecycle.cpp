@@ -450,7 +450,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     // put the other desktops' zones back in their own stores.
                     const int restoreDesktop = currentVirtualDesktopForScreen(restoreScreen);
                     const QStringList zoneIds = slot.zonesByDesktop.value(restoreDesktop, slot.zoneIds);
-                    seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop);
                     const QRect geo =
                         zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
                     if (geo.isValid()) {
@@ -469,6 +468,22 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                             qCInfo(PhosphorSnapEngine::lcSnapEngine)
                                 << "resolveWindowRestore: placement(snapped) already assigned, no-op for" << windowId;
                             return SnapResult::noSnap();
+                        }
+                        // A multi-desktop record: the restore desktop's
+                        // membership FIRST, then the others. The caller's
+                        // commit resolves the window's owner through its
+                        // memberships, and with only the seeded ones present
+                        // the sole entry wins outright — the restore desktop's
+                        // zone was then written into ANOTHER desktop's store,
+                        // overwriting the zone it held there. Granted here,
+                        // inside the branch that returns a snap, so a declined
+                        // restore grants nothing.
+                        if (!slot.zonesByDesktop.isEmpty()) {
+                            const PhosphorEngine::PlacementStateKey restoreKey{restoreScreen, restoreDesktop,
+                                                                               currentActivity()};
+                            ensureStateForKey(restoreKey);
+                            m_states.addMembership(canonicalWindowId(windowId), restoreKey);
+                            seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop);
                         }
                         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: placement(snapped) for"
                                                                  << windowId << "->" << geo << "freeGeo=" << freeGeo;

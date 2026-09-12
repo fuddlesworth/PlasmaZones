@@ -49,6 +49,11 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
     if (slot.zonesByDesktop.isEmpty() || screenId.isEmpty()) {
         return;
     }
+    // Memberships are keyed by the canonical id everywhere else in this
+    // engine (stateForWindowOnScreen canonicalizes before it adds), so the
+    // same form here, or the restore desktop's membership and the seeded ones
+    // would sit under two different keys and never count as one window.
+    const QString canonical = canonicalWindowId(windowId);
     for (auto it = slot.zonesByDesktop.constBegin(); it != slot.zonesByDesktop.constEnd(); ++it) {
         const int desktop = it.key();
         if (desktop < 1 || desktop == restoreDesktop || it.value().isEmpty()) {
@@ -60,7 +65,7 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
             continue;
         }
         state->assignWindowToZones(windowId, it.value(), screenId, desktop);
-        m_states.addMembership(windowId, key);
+        m_states.addMembership(canonical, key);
         qCInfo(lcSnapEngine) << "seedPersistedDesktopZones: restored" << windowId << "to" << it.value().size()
                              << "zone(s) on desktop" << desktop << "of" << screenId;
     }
