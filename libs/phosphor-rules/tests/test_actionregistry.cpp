@@ -514,6 +514,23 @@ private Q_SLOTS:
         QVERIFY(!loads(ActionType::OverrideAnimationShader, anim));
         QVERIFY(!loads(ActionType::OverrideOverlayShader, overlay));
 
+        // EXACTLY at the bound is ACCEPTED. Without this, mutating the three `<=`
+        // comparisons to `<` refuses a legal id and the whole suite stays green.
+        const QString atLimit(MaxShaderPresetIdLength, QLatin1Char('x'));
+        anim.insert(QString(ActionParam::PresetId), atLimit);
+        overlay.insert(QString(ActionParam::PresetId), atLimit);
+        QVERIFY(loads(ActionType::OverrideAnimationShader, anim));
+        QVERIFY(loads(ActionType::OverrideOverlayShader, overlay));
+
+        // EMPTY is accepted too, which the vocabulary documents as equivalent to
+        // absent ("the action's own params are the whole tuning"). A validator
+        // tightened to hasNonEmptyString-style checking would pass every other
+        // assertion here.
+        anim.insert(QString(ActionParam::PresetId), QString());
+        overlay.insert(QString(ActionParam::PresetId), QString());
+        QVERIFY(loads(ActionType::OverrideAnimationShader, anim));
+        QVERIFY(loads(ActionType::OverrideOverlayShader, overlay));
+
         // Absent is fine on both: a rule can pin a pack without pinning a
         // tuning, which is what every rule written before presets existed does.
         anim.remove(QString(ActionParam::PresetId));

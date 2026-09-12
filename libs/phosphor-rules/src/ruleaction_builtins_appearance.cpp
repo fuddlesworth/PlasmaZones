@@ -371,7 +371,19 @@ void ActionRegistry::registerBuiltinsAppearance()
                         return false;
                     }
                     const QJsonObject byPack = presets.toObject();
+                    // Bounded on all three axes, like the chain array above and for the
+                    // same stated reason: rules.json is hand-editable and this validator
+                    // is the only boundary. Values alone were bounded, so an object of
+                    // thousands of megabyte-long pack keys loaded, persisted, and was
+                    // re-serialised on every rules.json write — inert at resolve, since
+                    // only chain pack ids are looked up, but carried forever.
+                    if (byPack.size() > MaxDecorationChainEntries) {
+                        return false;
+                    }
                     for (auto it = byPack.constBegin(); it != byPack.constEnd(); ++it) {
+                        if (it.key().size() > MaxChainPackIdLength) {
+                            return false;
+                        }
                         if (!it.value().isString() || it.value().toString().size() > MaxShaderPresetIdLength) {
                             return false;
                         }

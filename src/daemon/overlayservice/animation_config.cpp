@@ -369,6 +369,24 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
+    // THE FUNCTION'S PRECONDITION, checked before the first reference to the member
+    // rather than part-way down. It used to sit after the `setSurfaceAnimator(nullptr)`
+    // drop below — harmless, because that use is itself null-guarded, but a guard
+    // documented as a precondition should precede every use rather than most of them.
+    //
+    // Release-build fatal (qFatal aborts the process) on a null host, so a future
+    // caller that reorders the ctor and reaches this point with m_shellHost still
+    // nullptr exits with a clear diagnostic instead of segfaulting on the next
+    // `m_shellHost->`. A null-deref here previously caused a systemd-respawn loop in
+    // production, because applyShaderProfilesToAnimator's chain led straight into
+    // m_shellHost->registerConfigForRole before the host was up.
+    if (!m_shellHost) {
+        qFatal(
+            "OverlayService::setupSurfaceAnimator: the shell host must be constructed first "
+            "(applyShaderProfilesToAnimator dereferences m_shellHost on every call, and a host "
+            "without an animator cannot run hideSlot)");
+    }
+
     // phosphor_roles.h defines nine roles. PassiveShell is not counted here:
     // it is the HOST surface, and its doc records that per-content motion is
     // resolved through the role-override beginShow / beginHide overloads, so
@@ -401,21 +419,8 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // applyShaderProfilesToAnimator runs, since that function routes
     // every per-role config write through ShellHost::registerConfigForRole
     // (which is a no-op without an animator). The ShellHost is
-    // constructed earlier in the OverlayService ctor.
-    //
-    // Release-build fatal (qFatal aborts the process) on a null host
-    // so a future caller that reorders the ctor and reaches this point
-    // with m_shellHost still nullptr exits with a clear diagnostic
-    // instead of segfaulting on the next `m_shellHost->`. A null-deref
-    // here previously caused a systemd-respawn loop in production
-    // because applyShaderProfilesToAnimator's chain led straight into
-    // m_shellHost->registerConfigForRole before the host was up.
-    if (!m_shellHost) {
-        qFatal(
-            "OverlayService::setupSurfaceAnimator: the shell host must be constructed first "
-            "(applyShaderProfilesToAnimator dereferences m_shellHost on every call, and a host "
-            "without an animator cannot run hideSlot)");
-    }
+    // constructed earlier in the OverlayService ctor, and the precondition
+    // guard at the top of this function has already established it.
     m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
     // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
     // before `setSettings` is ever called, so `m_settings` is null here

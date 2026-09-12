@@ -78,14 +78,16 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     if (m_presetRegistry == registry) {
         return;
     }
-    // Disconnect from the outgoing registry before the borrow is overwritten,
-    // or a re-set would leave a second connection behind. The daemon nulls this
-    // borrow before tearing the store down, so the old pointer is still alive
-    // here. Same discipline as setSurfaceShaderRegistry.
-    // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`:
-    // the blanket form severs every slot this object has on that sender, which
-    // is safe only while there is exactly one. This class keeps handles for
-    // exactly that reason (see m_shadersChangedConnection).
+    // Disconnect from the outgoing registry before the borrow is overwritten, or a
+    // re-set would leave a second connection behind. The daemon nulls this borrow
+    // before tearing the store down, so the old pointer is still alive here.
+    //
+    // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`: the
+    // blanket form severs every slot this object has on that sender, which is safe
+    // only while there is exactly one. This class keeps handles for exactly that
+    // reason (see m_shadersChangedConnection). Note setSurfaceShaderRegistry still
+    // uses the blanket form — correct there today because this object makes exactly
+    // one connection to that sender, but it is the counter-example, not the model.
     if (m_presetsChangedConnection) {
         disconnect(m_presetsChangedConnection);
         m_presetsChangedConnection = {};
@@ -150,6 +152,19 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
                         break;
                     }
                 });
+
+    // APPLY ONCE at set time as well as on every later change, because on an init()
+    // re-run nothing else would. The animator's per-role Config holds parameters
+    // flattened against whichever registry was live when it was last built, and the
+    // only other thing that rebuilds it is `setSettings` — whose entire body sits
+    // behind `if (m_settings != settings)`. m_settings is ctor-owned and stop() never
+    // resets it, so the second init passes the same pointer and the whole block is
+    // skipped. The result was not a dangling pointer (Config holds value copies) but
+    // stale TUNING: the OSD and popup show/hide legs kept the values flattened against
+    // the destroyed store until a presetsChanged or a tree edit happened to arrive.
+    if (m_settings) {
+        applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+    }
 }
 
 QString OverlayService::effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
