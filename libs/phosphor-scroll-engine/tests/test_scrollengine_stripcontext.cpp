@@ -52,7 +52,22 @@ private Q_SLOTS:
     void stripContextRePushAnnouncesNothing();
     void unpinMigratesOntoTheDesktopBeingEnteredNotTheOneBeingLeft();
     void allStickyScreenIsNotPinnedWhenAnotherDesktopHasAStrip();
+    void aStickyWindowGetsAColumnOnEveryDesktopItSpans();
+    void aSpanWindowJoinsOnlyTheDesktopsItCovers();
 };
+
+namespace {
+// Whether @p windowId holds a place on @p desktop of @p screenId, asked
+// through the public API: heldKeyForWindow resolves a window's PRIMARY
+// membership, which is the one in the context its screen is showing, so
+// switching to a desktop and asking makes the answer specific to it.
+bool holdsPlaceOn(ScrollEngine* engine, const QString& screenId, int desktop, const QString& windowId)
+{
+    engine->setCurrentDesktopForScreen(screenId, desktop);
+    const auto held = engine->heldKeyForWindow(windowId);
+    return held && held->screenId == screenId && held->desktop == desktop;
+}
+} // namespace
 
 void TestScrollEngineStripContext::desktopSwitchBackEmitsEvenWhenNoRectMoved()
 {
@@ -664,6 +679,92 @@ void TestScrollEngineStripContext::allStickyScreenIsNotPinnedWhenAnotherDesktopH
     const auto held = engine->heldKeyForWindow(QStringLiteral("app|keep1"));
     QVERIFY(held.has_value());
     QCOMPARE(held->desktop, 1);
+}
+
+void TestScrollEngineStripContext::aStickyWindowGetsAColumnOnEveryDesktopItSpans()
+{
+    // The defect this whole change exists for: a window on ALL desktops was
+    // adopted into exactly one of them — whichever was current when it opened
+    // — so on every other desktop it was visible but absent from the strip,
+    // floating over the columns instead of being one. It must instead hold a
+    // place in each desktop's strip, which is what lets it be sized and
+    // positioned independently per desktop.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    const QString kS1 = QStringLiteral("S1");
+    const QString kSticky = QStringLiteral("app|sticky");
+    // Empty span == on every desktop, the reading the daemon's reconcile uses.
+    const PhosphorEngine::DesktopSpanQuery stickyEverywhere = [&](const QString& windowId) {
+        return windowId == kSticky ? QSet<int>{} : QSet<int>{1};
+    };
+
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->windowOpened(QStringLiteral("app|d1"), kS1, 0, 0);
+    engine->windowOpened(kSticky, kS1, 0, 0);
+    QCoreApplication::processEvents();
+    QVERIFY(holdsPlaceOn(engine, kS1, 1, kSticky));
+
+    // Desktop 2: the sticky window has never been here, and before this
+    // change nothing would ever put it here.
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->reconcileDesktopMemberships(kS1, stickyEverywhere);
+    QCoreApplication::processEvents();
+    QVERIFY(holdsPlaceOn(engine, kS1, 2, kSticky));
+    // And it did NOT leave desktop 1 to get here — that is the difference
+    // between belonging to both and merely following the user.
+    QVERIFY(holdsPlaceOn(engine, kS1, 1, kSticky));
+    // The desktop-1 window stayed where it was: adoption adds, it does not
+    // drag the rest of the strip along.
+    QVERIFY(holdsPlaceOn(engine, kS1, 1, QStringLiteral("app|d1")));
+    QVERIFY(!holdsPlaceOn(engine, kS1, 2, QStringLiteral("app|d1")));
+}
+
+void TestScrollEngineStripContext::aSpanWindowJoinsOnlyTheDesktopsItCovers()
+{
+    // Sticky is the extreme case of a desktop SPAN, not its own concept: KWin
+    // lets a window sit on {1,2} without being on all, and that window had the
+    // identical defect. Driving membership off the span covers both, and the
+    // span shrinking has to take the membership back again.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    const QString kS1 = QStringLiteral("S1");
+    const QString kSpan = QStringLiteral("app|span");
+    QSet<int> span{1, 2};
+    const PhosphorEngine::DesktopSpanQuery spanOf = [&](const QString& windowId) {
+        return windowId == kSpan ? span : QSet<int>{1};
+    };
+
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->windowOpened(kSpan, kS1, 0, 0);
+    QCoreApplication::processEvents();
+
+    // Desktop 2 is in the span, so it joins.
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->reconcileDesktopMemberships(kS1, spanOf);
+    QCoreApplication::processEvents();
+    QVERIFY(holdsPlaceOn(engine, kS1, 2, kSpan));
+
+    // Desktop 3 is not, so it does not.
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    engine->reconcileDesktopMemberships(kS1, spanOf);
+    QCoreApplication::processEvents();
+    QVERIFY(!holdsPlaceOn(engine, kS1, 3, kSpan));
+
+    // The span shrinks to desktop 1 alone (the window was un-stuck from 2).
+    // The place it held on desktop 2 has to go back, or it stays a column on
+    // a desktop it no longer occupies.
+    span = QSet<int>{1};
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->reconcileDesktopMemberships(kS1, spanOf);
+    QCoreApplication::processEvents();
+    QVERIFY(!holdsPlaceOn(engine, kS1, 2, kSpan));
+    QVERIFY(holdsPlaceOn(engine, kS1, 1, kSpan));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineStripContext)

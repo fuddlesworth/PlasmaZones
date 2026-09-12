@@ -33,10 +33,10 @@ ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker
     , m_screenManager(screenManager)
     // Seeded here rather than in-class: kFuzzyClaimGraceMs lives in the
     // engine-internal enginelimits.h, which the exported header cannot
-    // include, and mirroring the literal there would be exactly the drift the
-    // shared-constant convention exists to prevent.
+    // include, and mirroring it would be the drift the convention prevents.
     , m_fuzzyClaimGraceMs(kFuzzyClaimGraceMs)
 {
+    installContextResolver();
 }
 
 ScrollEngine::~ScrollEngine() = default;

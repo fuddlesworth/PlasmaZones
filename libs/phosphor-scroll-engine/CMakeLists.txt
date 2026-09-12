@@ -40,6 +40,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_overrides.cpp
     src/scrollengine/engine_grouping.cpp
     src/scrollengine/engine_context.cpp
+    src/scrollengine/engine_membership.cpp
     src/scrollengine/enginelimits.h
     src/scrollengine/engine_apply.cpp
     src/scrollengine/engine_query.cpp

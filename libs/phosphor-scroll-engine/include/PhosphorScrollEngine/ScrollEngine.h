@@ -764,6 +764,11 @@ public:
     /// switch resolves a fresh key and the strip comes up empty while the
     /// sticky windows are still visible. See PhosphorEngine::StickyPinPhase.
     void updateStickyScreenPins(const PhosphorEngine::StickyPredicate&, PhosphorEngine::StickyPinPhase) override;
+    /// Give a window present on several desktops a column in each of their
+    /// strips, so it can be placed and sized independently per desktop rather
+    /// than existing only in the context it opened in. Driven off the desktop
+    /// SPAN, so {1,2} is handled on the same terms as sticky.
+    void reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery&) override;
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void renumberDesktopsAfterRemoval(int removedDesktop) override;
@@ -1287,6 +1292,14 @@ private:
     /// before a grouped join made the arrival its shown tab (empty on every
     /// other arm), so the caller's focus-new-windows rewind can put that tab
     /// back on show when the arrival declines focus.
+    /// Point the container's primary resolution at currentKeyForScreen.
+    void installContextResolver();
+    /// Add a column for @p windowId at @p key, keeping its other memberships.
+    /// The additive twin of the windowOpened migration, which moves instead.
+    bool adoptIntoContext(const QString& windowId, const PhosphorEngine::PlacementStateKey& key);
+    /// Drop @p windowId from @p key alone. NOT a float-back: it stays managed
+    /// on the desktops its span still covers, so nothing needs restoring.
+    void releaseMembership(const QString& windowId, const PhosphorEngine::PlacementStateKey& key);
     bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
                             int minHeightIn, ScrollOpenParams* outOpenParams = nullptr, bool migration = false,
                             QString* outDisplacedTab = nullptr);

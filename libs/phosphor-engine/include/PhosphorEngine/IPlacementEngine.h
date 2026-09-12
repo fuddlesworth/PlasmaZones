@@ -1141,6 +1141,12 @@ public:
     {
         Q_UNUSED(isSticky)
     }
+    /// Give windows whose desktop span covers the screen's current desktop a
+    /// place in it, and take back places the span no longer covers. Run AFTER
+    /// the context moves.
+    virtual void reconcileDesktopMemberships(const QString&, const DesktopSpanQuery&)
+    {
+    }
     virtual QSet<int> desktopsWithActiveState() const
     {
         return {};

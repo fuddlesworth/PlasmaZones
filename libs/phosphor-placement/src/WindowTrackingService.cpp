@@ -982,24 +982,6 @@ bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Sticky Window Handling
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sticky)
-{
-    // Canonicalize so sticky state survives the effect-restart-after-class-mutation
-    // re-identification skew (issue #628). The daemon seeds the canonical mapping
-    // in WindowTrackingAdaptor::setWindowMetadata, so canonicalizeForLookup
-    // resolves to the first-seen composite without seeding here.
-    m_windowStickyStates[canonicalizeForLookup(rawWindowId)] = sticky;
-}
-
-bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
-{
-    return m_windowStickyStates.value(canonicalizeForLookup(rawWindowId), false);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Shared Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 

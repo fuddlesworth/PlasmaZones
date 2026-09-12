@@ -60,6 +60,14 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     // sub-controllers) — every method that dereferences a dependency guards
     // it locally. Do not Q_ASSERT here.
 
+    // Teach the state container which key each screen is showing, so a window
+    // holding a membership on several desktops resolves to the one in view
+    // rather than to whichever it was adopted into first. Capturing `this` is
+    // safe: the container is a member and cannot outlive the engine.
+    m_states.setContextKeyResolver([this](const QString& screenId) {
+        return currentKeyForScreen(screenId);
+    });
+
     // Guard timer: while active, refreshConfigFromSettings() skips overwriting
     // splitRatio/masterCount with Settings values. Mirrors the old SettingsBridge
     // m_shortcutSaveTimer — restarts on each write-back so rapid shortcut presses
