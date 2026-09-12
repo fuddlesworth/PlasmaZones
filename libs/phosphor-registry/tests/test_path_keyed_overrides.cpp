@@ -55,7 +55,7 @@ private Q_SLOTS:
         // here now, so this is the only place it can be pinned.
         Store store;
         store.setOverride(QString(), Value{7});
-        QVERIFY(store.hasNoOverrides());
+        QVERIFY(!store.hasOverrides());
         QVERIFY(!store.hasOverride(QString()));
         QVERIFY(store.keys().isEmpty());
 
@@ -124,7 +124,7 @@ private Q_SLOTS:
         QVERIFY(store.clearOverride(QStringLiteral("a")));
         QVERIFY(!store.clearOverride(QStringLiteral("a")));
         QVERIFY(!store.clearOverride(QStringLiteral("never-set")));
-        QVERIFY(store.hasNoOverrides());
+        QVERIFY(!store.hasOverrides());
         QVERIFY(store.keys().isEmpty());
     }
 
@@ -229,7 +229,7 @@ private Q_SLOTS:
         store.setOverride(QStringLiteral("b"), Value{2});
 
         store.clearAllOverrides();
-        QVERIFY(store.hasNoOverrides());
+        QVERIFY(!store.hasOverrides());
         QVERIFY(store.keys().isEmpty());
         // The baseline is a separate statement and clearing the overrides is not a
         // reset of the whole tree.

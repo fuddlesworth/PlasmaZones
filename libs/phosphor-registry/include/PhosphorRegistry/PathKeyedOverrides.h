@@ -147,11 +147,14 @@ public:
         m_insertionOrder.clear();
     }
 
-    /// True when there is no override at all. Says nothing about the baseline,
+    /// True when at least one override is present. Says nothing about the baseline,
     /// which a caller judges with its own payload-specific emptiness test.
-    bool hasNoOverrides() const
+    ///
+    /// Named positively on purpose. The first spelling was `hasNoOverrides`, and every
+    /// caller but one wanted the opposite, so each one read `!hasNoOverrides()`.
+    bool hasOverrides() const
     {
-        return m_overrides.isEmpty();
+        return !m_overrides.isEmpty();
     }
 
     // ─────── Ordered traversal ───────

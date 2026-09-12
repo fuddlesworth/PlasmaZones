@@ -18,6 +18,11 @@
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
+// The header holds m_presetStore as a unique_ptr over a forward declaration, so the
+// complete type has to be here, where ~Daemon instantiates its deleter. The unity
+// build hid this behind a neighbour's include; the non-unity build is where it shows.
+#include <PhosphorShaders/ShaderPresetStore.h>
+
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 

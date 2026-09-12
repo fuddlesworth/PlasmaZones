@@ -17,6 +17,10 @@
 
 #include "shader_resolve.h"
 
+// Logging only, and the category header declares a QLoggingCategory and nothing
+// else — so the KWin-free property stated above still holds.
+#include "compositor/effectlogging.h"
+
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -101,7 +105,16 @@ namespace {
 void flattenPreset(PhosphorAnimationShaders::ShaderProfile& profile,
                    const PhosphorShaders::ShaderPresetRegistry& presets)
 {
+    const std::optional<QString> requested = profile.presetId;
     profile = PhosphorAnimationShaders::withPresetsResolved(profile, presets);
+    // The effect-side preset path had no log line of its own, which is also why it
+    // could only be verified by reading the mechanism: a live session could not show
+    // whether a preset reached a transition. Logged only when a preset is actually
+    // named, so the ordinary no-preset event stays silent.
+    if (requested && !requested->isEmpty()) {
+        qCDebug(lcEffect) << "flattenPreset: pack" << profile.effectiveEffectId() << "preset" << *requested
+                          << "-> parameters" << profile.effectiveParameters();
+    }
 }
 } // namespace
 

@@ -86,7 +86,7 @@ QStringList ProfileTree::overriddenPaths() const
 
 bool ProfileTree::hasAnyOverride() const
 {
-    return !m_store.hasNoOverrides();
+    return m_store.hasOverrides();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

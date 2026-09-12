@@ -5,7 +5,10 @@
 
 #include <PhosphorSurface/phosphorsurface_export.h>
 
-#include <PhosphorShaders/ShaderPresetRegistry.h>
+// ShaderFamily is needed by VALUE in the withPresetsResolved signature below, so the
+// enum's own header comes in. The registry itself is only named as a reference in that
+// same declaration, so it is forward-declared instead, like the animation twin does.
+#include <PhosphorShaders/ShaderPreset.h>
 
 #include <QJsonObject>
 #include <QString>
@@ -20,6 +23,10 @@
 
 #include <algorithm>
 #include <optional>
+
+namespace PhosphorShaders {
+class ShaderPresetRegistry;
+}
 
 namespace PhosphorSurfaceShaders {
 

@@ -3,6 +3,10 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 
+// withPresetsResolved() calls into the registry, which the header only
+// forward-declares.
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
 #include <QJsonArray>
 #include <QJsonValue>
 

@@ -11,6 +11,10 @@
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
 
+#include "compositor/effectlogging.h"
+
+#include <QLoggingCategory>
+
 #include <effect/effecthandler.h>
 
 namespace PlasmaZones {
@@ -50,6 +54,8 @@ void PlasmaZonesEffect::schedulePresetSweep(PhosphorShaders::ShaderFamily family
     // on the compositor thread. A retune that arrives by any OTHER route (a preset file
     // saved in this process or another) is not inside that window and still schedules.
     if (m_seedingPresetsInline) {
+        qCDebug(lcEffect) << "schedulePresetSweep: family" << static_cast<int>(family)
+                          << "folded into the inline re-seed already running";
         return;
     }
     // Animation re-resolves per transition, and overlay is the daemon's to render —
@@ -97,6 +103,8 @@ void PlasmaZonesEffect::applySurfacePresetSweep()
     // Same GL discipline as the surface effectsChanged handler: this arrives from a
     // file watcher between frames, with no current context, and the caches own
     // GLShaders and GLTextures.
+    qCDebug(lcEffect) << "applySurfacePresetSweep: dropping" << m_compiledPacks.size() << "compiled surface packs and"
+                      << m_surfaceMultipass.size() << "multipass folds for a preset retune";
     ensureGlContextCurrent();
     m_compiledPacks.clear();
     m_packBufferScaleCache.clear();
@@ -140,6 +148,7 @@ void PlasmaZonesEffect::applyPointerPresetSweep()
     // the compiled pack holds baked parameter values that a retune invalidates even
     // when the profile compares equal.
     const bool profileChanged = m_pointerPass.setProfile(resolvedPointerProfile());
+    qCDebug(lcEffect) << "applyPointerPresetSweep: re-pushed the flattened pointer profile, changed=" << profileChanged;
     if (!profileChanged) {
         m_pointerPass.invalidateShaderCache();
     }

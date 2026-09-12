@@ -21,7 +21,6 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLoggingCategory>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -31,8 +30,6 @@
 using namespace PhosphorShaders;
 
 namespace {
-Q_LOGGING_CATEGORY(lcTest, "phosphorshaders.test.presets")
-
 QJsonObject jsonFrom(const QString& text)
 {
     QJsonParseError err{};
@@ -106,6 +103,7 @@ private Q_SLOTS:
     void packPresetsAreRetractedForAVanishedPack();
     void resolveParamsClampsToTheDeclaredRange();
     void storeLoadsOnlyTheFamiliesTheConsumerNames();
+    void loadCreatesTheFamilyDirectoryItWatches();
 };
 
 // ═══════════════════════ loader ═══════════════════════
@@ -577,6 +575,33 @@ void TestShaderPresetStore::storeLoadsOnlyTheFamiliesTheConsumerNames()
     all.load(root.path());
     QVERIFY(all.publishes(ShaderFamily::Overlay));
     QCOMPARE(all.registry().presetsFor(ShaderFamily::Overlay, QStringLiteral("pack")).size(), 1);
+}
+
+void TestShaderPresetStore::loadCreatesTheFamilyDirectoryItWatches()
+{
+    // The watcher's parent-directory promotion is NOT enough on a fresh install:
+    // in the real XDG layout the nearest existing ancestor is the data home, and
+    // WatchedDirectorySet refuses that as a forbidden watch root, so the watch
+    // never armed and the first preset the user saved stayed invisible until the
+    // process restarted. Found in a nested compositor, where a preset written into
+    // a freshly created tree never reached the running effect — the sibling
+    // watcher test passes because a QTemporaryDir root is watchable, which the
+    // data home is not.
+    //
+    // So the store creates the directory it is about to watch, and the assertion
+    // is exactly that, rather than anything about the forbidden-root list.
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const QString dir = userPresetDirectory(root.path(), ShaderFamily::Animation);
+    QVERIFY(!QDir(dir).exists());
+
+    ShaderPresetStore store;
+    store.load(root.path(), {ShaderFamily::Animation});
+
+    QVERIFY2(QDir(dir).exists(), "load() must create the family directory so its watch arms on a fresh install");
+    // And only the families the consumer named, so the creation does not quietly
+    // widen what load() touches.
+    QVERIFY(!QDir(userPresetDirectory(root.path(), ShaderFamily::Overlay)).exists());
 }
 
 void TestShaderPresetStore::resolveParamsClampsToTheDeclaredRange()

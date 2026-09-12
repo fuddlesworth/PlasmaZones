@@ -75,7 +75,7 @@ QStringList OverlayShaderTree::overriddenLayouts() const
 
 bool OverlayShaderTree::isEmpty() const
 {
-    return m_store.baseline().isEmpty() && m_store.hasNoOverrides();
+    return m_store.baseline().isEmpty() && !m_store.hasOverrides();
 }
 
 void OverlayShaderTree::setOverride(const QString& layoutId, const OverlayShaderProfile& profile)
@@ -103,7 +103,7 @@ QJsonObject OverlayShaderTree::toJson() const
     QJsonObject obj;
     if (!m_store.baseline().isEmpty())
         obj[QLatin1String(JsonFieldBaseline)] = m_store.baseline().toJson();
-    if (!m_store.hasNoOverrides()) {
+    if (m_store.hasOverrides()) {
         // The KEY-ADDRESSED form, unlike the other two trees' arrays. Walking in
         // insertion order changes nothing here, because QJsonObject is sorted by
         // key regardless — which is also why this tree's order is not part of its

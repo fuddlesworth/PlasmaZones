@@ -1213,8 +1213,7 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // persisted: Settings overlays it as a lowest-precedence seed layer on
         // every read (withSeedDefaults), so shipped default updates keep
         // flowing to configs that never customized those surfaces.
-        {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
-         QMetaType::QVariantMap,
+        {CD::decorationProfileTreeKey(), CD::decorationProfileTreeStoredDefault(), QMetaType::QVariantMap,
          QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window overrides. The "
                         "decorations page writes this, so it is not meant to be edited by hand."),
          sanitizeDecorationProfileTree},

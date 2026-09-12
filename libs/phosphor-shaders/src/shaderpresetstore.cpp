@@ -418,12 +418,25 @@ void ShaderPresetStore::load(const QString& root, const QList<ShaderFamily>& fam
         }
         publisher.sink = std::make_unique<Sink>(m_registry, family);
         publisher.loader = std::make_unique<PhosphorFsLoader::DirectoryLoader>(*publisher.sink);
+        // CREATE the family directory before the watch is registered. The parent
+        // promotion the watcher falls back to cannot carry a fresh install in the
+        // real XDG layout: the nearest existing ancestor there is the data home
+        // itself, which WatchedDirectorySet refuses as a forbidden watch root, so
+        // the watch never arms and the first preset the user saves stays invisible
+        // until the process restarts. Verified in a nested compositor — a preset
+        // written into a freshly created tree never reached the running effect.
+        //
+        // Creating it is not speculative: this is the store's own directory, and it
+        // is where a save writes. A failure to create is not fatal, since the loader
+        // handles an absent directory and the next save creates it anyway.
+        const QString dir = userPresetDirectory(root, family);
+        if (!QDir().mkpath(dir)) {
+            qCWarning(lcPresetStore) << "Could not create the preset directory" << dir
+                                     << "— presets saved later will not be seen until the next restart";
+        }
         // LiveReload::On is the point of the whole design: a preset retuned on
-        // disk has to reach every process without a restart. The watcher
-        // promotes itself to the parent directory when the family directory
-        // does not exist yet, so a fresh install picks up the first preset the
-        // user saves without anyone having to create the tree up front.
-        publisher.loader->loadFromDirectory(userPresetDirectory(root, family), LiveReload::On);
+        // disk has to reach every process without a restart.
+        publisher.loader->loadFromDirectory(dir, LiveReload::On);
     }
 }
 
