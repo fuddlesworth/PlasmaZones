@@ -550,13 +550,29 @@ bool PointerDecorationPass::cursorSpriteGone() const
     if (!KWin::effects) {
         return false;
     }
-    // The IMAGE, and only the image — see the header for why the hide counter
-    // is not consulted here. An empty image is a client-installed blank cursor
-    // (or a KVM that took the sprite away): nothing is on screen to decorate.
-    // A non-empty one may still be composited by another effect rather than by
-    // KWin, which is a pointer the user can see and so a pointer worth
-    // decorating.
-    return KWin::effects->cursorImage().isNull();
+    // An empty image is a client-installed blank cursor: nothing is on screen
+    // to decorate, whatever the hide counter says.
+    if (KWin::effects->cursorImage().isNull()) {
+        return true;
+    }
+    // A non-empty image with the counter at zero is KWin's own composited (or
+    // hardware-plane) cursor. Visible.
+    if (!KWin::effects->isCursorHidden()) {
+        return false;
+    }
+    // The counter is raised. That is what a software KVM's input capture does
+    // (KWin's EisInputCaptureManager::barrierHit hides the cursor and leaves
+    // the image alone, so the image test above never fires for Deskflow), and it
+    // is ALSO what an effect that draws its own copy does. Only the owners
+    // known to draw a copy count as visible; see the header for the list and
+    // why the counter alone cannot separate the two cases.
+    if (m_cursorHidden) {
+        return false;
+    }
+    if (m_foreignCursorDrawer && m_foreignCursorDrawer()) {
+        return false;
+    }
+    return !KWin::effects->isEffectActive(QStringLiteral("shakecursor"));
 }
 
 bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
@@ -564,9 +580,10 @@ bool PointerDecorationPass::hideCursorForPass(KWin::LogicalOutput* screen)
     if (m_cursorHidden || !m_anyAboveLayer || suppressedOn(screen) || !KWin::effects || !cursorOnOutput(screen)) {
         return false;
     }
-    // Another owner (the strip pass, KWin's zoom, a screen-edge peek) already
-    // holds the hidden state and draws its own copy; taking a second hide
-    // would leave the show/hide pair unbalanced and drawing the cursor twice.
+    // Another owner (the strip pass, KWin's shakecursor, a KVM capture) already
+    // holds the hidden state. Taking a second hide would leave the show/hide
+    // pair unbalanced, and where that owner draws its own copy this pass
+    // would draw the cursor twice.
     if (KWin::effects->isCursorHidden()) {
         return false;
     }

@@ -21,6 +21,7 @@
 #include <Qt>
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -187,6 +188,17 @@ public:
     bool holdsCursorHide() const
     {
         return m_cursorHidden;
+    }
+
+    /// Tell the pass who else in this effect draws its own copy of the cursor
+    /// while holding KWin's hide (the strip pass, in practice). Consulted by
+    /// cursorSpriteGone(): a raised hide counter with no such owner is a
+    /// pointer nobody is drawing, which is the software-KVM case. Set once
+    /// from the effect's constructor; the pass holds no back-pointer to ask
+    /// itself.
+    void setForeignCursorDrawer(std::function<bool()> drawer)
+    {
+        m_foreignCursorDrawer = std::move(drawer);
     }
 
     /// Draw the chain over @p screen's finished frame. Called from
@@ -454,31 +466,46 @@ private:
     /// desktop so the remote motion mirrors, so `cursorPos` stays live and
     /// every liveness test still passes.
     ///
-    /// The test is the cursor IMAGE, and deliberately NOT
-    /// `EffectsHandler::isCursorHidden()`. That counter does not mean "the
-    /// user cannot see a pointer"; it means "KWin is not compositing the
-    /// pointer itself", which is equally what an effect that hides the cursor
-    /// in order to draw its OWN copy leaves behind. KWin ships at least two:
-    /// `shakecursor`, which magnifies the pointer while the user shakes it,
-    /// and `zoom` in its scaled-pointer mode. Reading the counter here meant
-    /// that shaking the mouse — the very gesture that draws the longest trail
-    /// — took `dropTrail` on every pointer event for as long as the
-    /// magnification lasted, so the whole trail blinked out mid-sweep and
-    /// stayed out for seconds while the pointer was, if anything, more visible
-    /// than usual. A client that installs a null cursor surface leaves the
-    /// counter alone and empties the image instead, so the image is the signal
-    /// that actually separates the two cases, and it stays legible while this
-    /// pass holds a hide of its own.
+    /// Two signals, because a cursor gets hidden two ways and Deskflow uses
+    /// the one a naive test misses:
+    ///   • The cursor IMAGE is null. A client installed a blank cursor
+    ///     surface. Nothing to decorate, whatever the counter says.
+    ///   • `EffectsHandler::isCursorHidden()` is raised with the image intact.
+    ///     This is what KWin's input-capture portal does for a software KVM
+    ///     (EisInputCaptureManager::barrierHit calls Cursors::hideCursor and
+    ///     never touches the image, because "even though the input events
+    ///     are filtered out the cursor is updated on screen"). It is ALSO what
+    ///     an effect that hides the cursor in order to draw its OWN copy
+    ///     leaves behind, and that copy is a pointer the user can see. The
+    ///     counter does not say which, so the hide's OWNER decides: the
+    ///     counter counts as "gone" unless this pass holds the hide itself,
+    ///     the strip pass does (m_foreignCursorDrawer, wired by the effect),
+    ///     or KWin's `shakecursor` is active. That effect is the only KWin
+    ///     effect in 6.7 that calls hideCursor (zoom's scaled pointer no
+    ///     longer does), and the version that read the bare counter made
+    ///     shaking the mouse — the very gesture that draws the longest trail —
+    ///     take `dropTrail` on every pointer event for as long as the
+    ///     magnification lasted.
+    /// Reading the image alone, as the fix for that shake regression did,
+    /// is what let the Deskflow trail back in: the image is never null on
+    /// the capture path.
     ///
     /// This does NOT weaken the `above`-layer arbitration: `hideCursorForPass`
     /// tests `isCursorHidden()` itself and refuses to take a second hide, so a
     /// chain that would draw its own sprite still stands down for whoever
     /// asked first.
     ///
-    /// Known gap: under `zoom`'s scaled pointer the scene is transformed and
-    /// this pass's trail is not, so the stroke sits off the magnified cursor.
-    /// The counter used to mask that by accident. Fixing it properly needs a
-    /// screen-transform gate, not a cursor-visibility one.
+    /// Known gaps:
+    ///   • Under `zoom`'s scaled pointer the scene is transformed and this
+    ///     pass's trail is not, so the stroke sits off the magnified cursor.
+    ///     zoom raises no hide on 6.7, so no cursor-visibility test can see
+    ///     it; fixing it needs a screen-transform gate.
+    ///   • The counter is a refcount and the Effects API exposes one bit of
+    ///     it, so a capture that lands while THIS pass already holds a hide
+    ///     for an `above` chain is invisible here: the pass keeps drawing its
+    ///     sprite copy and trail along the mirrored motion until its own hide
+    ///     is released, and only then does the raised counter read as gone.
+    ///     A `below` chain never holds a hide and is unaffected.
     bool cursorSpriteGone() const;
 
     /// Drop the live trail because the pointer stopped being a pointer worth
@@ -594,6 +621,9 @@ private:
     /// True while THIS pass holds a hideCursor() on the compositor (the call
     /// is refcounted, so the flag keeps show/hide balanced).
     bool m_cursorHidden = false;
+
+    /// See setForeignCursorDrawer. Empty means no other in-effect owner.
+    std::function<bool()> m_foreignCursorDrawer;
 };
 
 } // namespace PlasmaZones

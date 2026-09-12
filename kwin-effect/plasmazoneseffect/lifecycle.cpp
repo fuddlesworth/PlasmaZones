@@ -80,6 +80,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // The pointer pass reads KWin's cursor-hide counter to notice a software
+    // KVM taking the pointer away (see PointerDecorationPass::cursorSpriteGone).
+    // The strip pass raises the same counter while it draws its own copy of
+    // the cursor, which must NOT read as the pointer being gone.
+    m_pointerPass.setForeignCursorDrawer([this]() {
+        return m_stripTransition.holdsCursorHide();
+    });
+
     // The compositor-drawn tab pills carry one translated string (the
     // untitled-tab placeholder) and this process is kwin_wayland, which
     // installs no PlasmaZones catalog of its own. Load the daemon's catalog
