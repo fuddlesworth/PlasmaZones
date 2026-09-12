@@ -163,6 +163,16 @@ PointerShaderEffect PointerShaderEffect::fromJson(const QJsonObject& obj, const 
             qCWarning(lcPointerEffect) << "Pointer effect" << e.id << "declares parameter" << p.id
                                        << "with type image, which pointer packs do not support; declare the"
                                        << "texture in the top-level textures array instead (it binds as uTexture<N>)";
+            // DROPPED, not carried. The warning used to fall through and append
+            // the parameter anyway, which made two documented invariants false:
+            // the comment below claiming this loop "rejects type: image
+            // outright", and `parsePackPresets`'s own note that the image set is
+            // empty for this family. With the parameter kept, a pack declaring
+            // one turned preset image values into resolved absolute paths that
+            // `effectContentSignature` does not hash and `effectWatchPaths` does
+            // not watch, so editing that file never re-registered the pack. A
+            // warning with no control-flow exit is not a guard.
+            continue;
         }
         p.description = pObj.value(QLatin1String("description")).toString();
         p.group = pObj.value(QLatin1String("group")).toString();

@@ -81,11 +81,20 @@ PHOSPHORSHADERS_EXPORT int migrateLegacyOverlayPresets(const QString& root);
  *
  * So the publisher is now a slot in a fixed array here, one per family, and the
  * invariant is a property of the data structure rather than of a check: a second
- * publisher for a family is not something this class can be asked to build. The
- * retraction happens in this destructor's BODY, at a point the owner chose,
- * while the registry is provably alive — it is declared first below, so it is
- * destroyed last. That is what removes the use-after-free, with no QPointer
- * anywhere in it.
+ * publisher for a family is not something this class can be asked to build.
+ *
+ * And the teardown retraction is GONE rather than relocated. It only ever existed
+ * because the loader could not see whether anyone else published for its family,
+ * and it only made sense while the registry outlived the loaders. The registry is
+ * now a by-value member destroyed with this store, so there is nothing to retract
+ * FOR — and emitting `presetsChanged` during teardown was itself a hazard, because
+ * a consumer's handler runs until ~QObject severs its connections, which is after
+ * its members are already destroyed. That removes the use-after-free with no
+ * QPointer anywhere in it, and without trading it for one in the consumer.
+ *
+ * NOTE for a second store in one process: each carries its own registry, so two
+ * of them do not corrupt each other — they just pay for two sets of watchers and
+ * parse every saved preset twice. One per consumer is the intent.
  *
  * ## Thread safety
  *

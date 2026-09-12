@@ -7,6 +7,8 @@
 
 #include "daemon/rendering/zoneentryscaffold.h"
 
+#include <PhosphorFsLoader/PackPathGuard.h>
+
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPreset.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
@@ -35,30 +37,28 @@ using PhosphorSurfaceShaders::SurfaceShaderEffect;
 
 namespace PlasmaZones::ShaderValidate {
 
-// Two comparison domains. When both the pack dir and the candidate exist on
-// disk the check is CANONICAL (symlinks resolved on both sides), so a symlink
-// inside the pack that points outside it is rejected even though its lexical
-// path sits under the pack. When the candidate does not exist yet (a stage the
-// author has not written, an --emit-preamble run before the shader) the check
-// falls back to the LEXICAL cleaned path, which still rejects `../` escapes and
-// absolute paths. The runtime only canonicalises, so this gate is deliberately
-// the stricter of the two.
+// Delegates to the RUNTIME's guard rather than re-deriving containment.
+//
+// This used to hand-roll the check with two comparison domains, and its comment
+// claimed the result was "deliberately the stricter of the two". It was laxer, on
+// the one case that matters most: when the candidate does not exist yet, the
+// canonical compare was skipped entirely and the decision fell back to a purely
+// LEXICAL prefix test. So `<pack>/link/future.frag`, where `link` is a symlink
+// out of the pack, is lexically inside it and PASSED — while the runtime rejects
+// it, because `resolveWithinDirectory` canonicalises the deepest EXISTING
+// ancestor and re-appends the missing tail. A validator that accepts what
+// production refuses is worse than no validator: it signs off the pack.
+//
+// Sharing the library guard also means this cannot drift from it again, and the
+// non-existent-leaf case (a stage the author has not written yet, an
+// --emit-preamble run before the shader) is one that guard already handles by
+// design rather than by fallback.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel)
 {
-    if (rel.isEmpty()) {
-        return std::nullopt;
-    }
-    const QString lexicalRoot = QDir::cleanPath(QDir(packDir).absolutePath()) + QStringLiteral("/");
-    const QString abs = QDir::cleanPath(QDir(packDir).filePath(rel));
-    const QString canonicalRoot = QFileInfo(QDir(packDir).absolutePath()).canonicalFilePath();
-    const QString canonicalSelf = QFileInfo(abs).canonicalFilePath();
-    const bool useCanonical = !canonicalRoot.isEmpty() && !canonicalSelf.isEmpty();
-    const QString candidate = useCanonical ? canonicalSelf : abs;
-    const QString comparisonRoot = useCanonical ? (canonicalRoot + QStringLiteral("/")) : lexicalRoot;
-    if (!candidate.startsWith(comparisonRoot)) {
-        return std::nullopt;
-    }
-    return abs;
+    // Reject, not Trust: every path this sees is PACK-declared, and a pack ships
+    // its own assets, so an absolute path can only be a mistake or an escape.
+    return PhosphorFsLoader::resolveWithinDirectory(rel, QDir(packDir).absolutePath(),
+                                                    PhosphorFsLoader::AbsolutePathPolicy::Reject);
 }
 
 bool confinePackPathInPlace(const QString& packDir, QString& path)
@@ -398,11 +398,27 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
         // others it was never consulted at all. One predicate, shared with the
         // runtime that enforces it, beats a schema keyword that works on neither
         // path.
-        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName)) {
+        // Matches what `parsePackPresets` now actually refuses, which is the
+        // point. This lint used to claim "the runtime will refuse it" while the
+        // runtime accepted anything, so a pack shipping `"Night / Day"` rendered
+        // perfectly and was failed here for nothing. The key is both the id an
+        // assignment stores AND the display name the picker renders, so it has to
+        // satisfy both rules.
+        bool unprintableId = false;
+        for (const QChar ch : presetName) {
+            if (ch.category() == QChar::Other_Control || ch.category() == QChar::Other_Format) {
+                unprintableId = true;
+                break;
+            }
+        }
+        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName) || presetName.trimmed().isEmpty()
+            || presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars || unprintableId) {
             lints << QStringLiteral(
-                         "preset '%1' has an id that is not a single safe path component, so the runtime "
-                         "will refuse it")
-                         .arg(presetName);
+                         "preset '%1' has an unusable id: it must be a single safe path component, "
+                         "non-blank, at most %2 characters, and free of control or formatting characters. "
+                         "The id is also the name the picker renders, and it is what an assignment stores")
+                         .arg(presetName)
+                         .arg(PhosphorShaders::ShaderPreset::MaxNameChars);
             ++problems;
             continue;
         }

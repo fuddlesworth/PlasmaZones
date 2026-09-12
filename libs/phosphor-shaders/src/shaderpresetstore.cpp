@@ -275,25 +275,45 @@ ShaderPresetStore::ShaderPresetStore(QObject* parent)
 
 ShaderPresetStore::~ShaderPresetStore()
 {
-    // Retract in the destructor BODY, at a point this class chose, rather than
-    // leaving it to a member or child destructor to do on the way out.
+    // Tear the publishers down in an order this class chose, and retract
+    // NOTHING. See the note inside the loop for why the retraction that used to
+    // be here was the hazard rather than the safeguard.
     //
-    // That ordering is the whole fix for the use-after-free this shape replaces.
-    // The retraction is whole-family, which is only meaningful while a family
-    // has exactly one publisher — and here it provably does, because the
-    // publisher IS the slot. The registry is a member declared before the slots,
-    // so it is alive for every line below and destroyed after all of them.
+    // The registry needs no protecting either way: it is a member declared
+    // before the slots, so it outlives every line below under ordinary
+    // member-destruction order.
     for (const ShaderFamily family : kAllFamilies) {
         Publisher& publisher = m_publishers[slotOf(family)];
         if (!publisher.active()) {
+            // Nothing to do, and nothing below would misbehave on an empty slot
+            // either — resetting a null unique_ptr is a no-op. Skipping is for
+            // the reader, not for correctness.
             continue;
         }
-        // Hand back an empty set, so tearing the store down drops presets no
-        // file backs any more rather than leaving them for a sequential store
-        // (tests, a settings window opened twice) to inherit.
-        m_registry.setUserPresets(family, {});
+        // NO retraction here, and that absence is the point.
+        //
+        // This used to hand the registry an empty set per family, carried over
+        // from the shape where the registry OUTLIVED the loaders. Its stated
+        // reason — stop a sequential store inheriting presets no file backs —
+        // cannot apply any more: the registry is this store's own by-value
+        // member and dies with it, so the next store gets a fresh empty one and
+        // has nothing to inherit through.
+        //
+        // Keeping it was actively harmful rather than merely redundant.
+        // `setUserPresets` EMITS `presetsChanged` when the family had any
+        // presets, and in the KWin effect that signal is connected with the
+        // effect itself as context. Qt severs a QObject's connections in
+        // ~QObject, which runs AFTER its members are destroyed — so the emission
+        // landed in a handler that then touched `m_pointerPass`, a member
+        // declared after the shader manager and therefore already destroyed.
+        // That is a write into freed memory holding GL handles: the same fault
+        // class this refactor removed from the library, re-created one layer up
+        // by the one line that did not need to be here.
+        //
         // Loader before sink: the loader's watcher can still call into the sink,
-        // so the thing that calls must die before the thing it calls.
+        // so the thing that calls must die before the thing it calls. The field
+        // order in Publisher already gives this, but resetting explicitly means
+        // the ordering does not silently depend on it.
         publisher.loader.reset();
         publisher.sink.reset();
     }

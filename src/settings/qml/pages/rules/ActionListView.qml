@@ -294,7 +294,11 @@ ColumnLayout {
                 const packIds = Object.keys(raw);
                 if (packIds.length === 0)
                     return "";
-                return i18ncp("@info:status number of decoration layers with a preset", "%1 layer with a preset", "%1 layers with a preset", packIds.length);
+                // %n, never %1: PhosphorLocalizedContext's numerus path substitutes
+                // only %n, and an extra arg is silently dropped by QML — so %1
+                // renders as the literal placeholder. Same bug PR #801 fixed across
+                // five call sites; every other plural string in this app uses %n.
+                return i18ncp("@info:status number of decoration layers with a preset", "%n layer with a preset", "%n layers with a preset", packIds.length);
             }
             if (rawStr.length === 0)
                 return "";

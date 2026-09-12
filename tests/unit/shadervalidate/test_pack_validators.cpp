@@ -717,8 +717,9 @@ private Q_SLOTS:
     {
         // A pack-declared preset's key IS its id, and the settings app builds a
         // filename from an id when the user duplicates one into an editable
-        // preset. The runtime refuses an unusable id on load and drops the
-        // preset with a log line the author will never see.
+        // preset. The parse deliberately KEEPS such a key so this lint can report
+        // it: dropping it there would make the validator blind, and the pack would
+        // ship green with nothing but a log line no author reads.
         //
         // This lived in the metadata schema as a `propertyNames` rule, where it
         // worked on no family: the vendored JSON-schema validator rejects every
@@ -738,7 +739,7 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("presets"), presets);
 
         const PackResult r = validate(tmp, QStringLiteral("preset-badid"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("not a single safe path component")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
         QVERIFY(r.errors >= 2);
         // The usable one beside them is not implicated: one bad id does not
         // condemn the pack's other presets.

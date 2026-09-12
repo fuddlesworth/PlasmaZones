@@ -137,7 +137,7 @@ private Q_SLOTS:
             validateSurface(tmp, QStringLiteral("sf-preset"), obj, surfaceBodyReading({QStringLiteral("width")}));
         QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("not a single safe path component")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
         QVERIFY(r.errors >= 3);
     }
 

@@ -4,6 +4,10 @@
 #include <PhosphorShaders/ShaderPresetParse.h>
 
 #include <PhosphorShaders/ShaderPackPaths.h>
+// For ShaderPreset::isUsableId / MaxNameChars: a pack-declared preset KEY is
+// both the id an assignment stores and the name the picker renders, so it is
+// screened against the same rules a user preset file's id is.
+#include <PhosphorShaders/ShaderPreset.h>
 
 #include <QJsonValue>
 #include <QLoggingCategory>
@@ -28,12 +32,57 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
         return presets;
     }
 
+    // FAIL CLOSED when there are image-typed parameters but no pack directory to
+    // resolve them against.
+    //
+    // `imageParamIds` is NOT statically empty for the three non-overlay families:
+    // each derives it from its declared parameter types, and `type` is read raw
+    // from a hand-editable metadata.json with no enum validation. So a
+    // user-installed animation or surface pack writing `"type": "image"` flips
+    // this branch on — and those two families call this from `fromJson`, where
+    // `sourceDir` is still empty because the registry stamps it afterwards.
+    //
+    // An empty QDir is NOT caught downstream: `QDir(QString())` behaves as
+    // `QDir(".")`, so `absolutePath()` answers the process WORKING DIRECTORY,
+    // which is non-empty — `resolveWithinDirectory`'s own empty-directory
+    // fail-closed therefore never fires, and a relative preset texture path gets
+    // confined to the CWD subtree and ACCEPTED. With a compositor CWD of "/" that
+    // is most of the filesystem.
+    //
+    // Refusing the image values here keeps the guarantee a property of the code
+    // rather than of the data: the rest of each preset still loads, and those
+    // parameters fall back to their declared defaults, which is exactly what a
+    // refused path already does below.
+    const bool packDirUnusable = packDir.path().isEmpty() || packDir.path() == QLatin1String(".");
+    const bool refuseAllImages = packDirUnusable && !imageParamIds.isEmpty();
+    if (refuseAllImages) {
+        qCWarning(log).noquote() << "Shader pack declares image-typed parameters but was parsed with no pack "
+                                    "directory; refusing every image-typed preset value rather than resolving it "
+                                    "against the process working directory";
+    }
+
     const QJsonObject presetsObj = presetsValue.toObject();
     for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
         // Same reasoning one level down: a non-object preset BODY yielded an empty
         // value map and the preset was then dropped by the isEmpty() test below,
         // with no diagnostic — unlike the refused-image case, which deliberately
         // names the preset so it cannot vanish unexplained.
+        // A pack-declared KEY is deliberately NOT screened here, and the reason is
+        // worth stating because the obvious change is wrong.
+        //
+        // Dropping an unusable key at parse time looks like the safe move, but it
+        // makes the OFFLINE VALIDATOR blind: the validator lints the PARSED preset
+        // map, so a preset this function silently discarded produces no error in
+        // the report and the pack ships green with a log line no author reads. A
+        // runtime refusal and an authoring-time diagnostic are not
+        // interchangeable — the diagnostic is the one that reaches the person who
+        // can fix it.
+        //
+        // Nothing forces a screen here either: `applyPackBucket` takes the key as
+        // the preset's id and name with `sourcePath` empty, and a pack preset never
+        // becomes a filename — duplicating one into a user preset mints a fresh
+        // UUID. So the enforcement lives in `reportPresetProblems`, which states
+        // the rules without claiming this function refuses them.
         if (!it.value().isObject()) {
             qCWarning(log).noquote() << "Shader pack" << packDir.dirName() << "preset" << it.key()
                                      << "is not an object; ignoring it";
@@ -55,8 +104,9 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
                 // legitimate. A refused value is dropped from the preset so it
                 // falls back to the param's default rather than binding an
                 // arbitrary file.
-                const QString resolved =
-                    resolveWithinPack(packDir, declared, PhosphorFsLoader::AbsolutePathPolicy::Reject, log);
+                const QString resolved = refuseAllImages
+                    ? QString()
+                    : resolveWithinPack(packDir, declared, PhosphorFsLoader::AbsolutePathPolicy::Reject, log);
                 if (!resolved.isEmpty()) {
                     presetValues[vit.key()] = resolved;
                 } else {
