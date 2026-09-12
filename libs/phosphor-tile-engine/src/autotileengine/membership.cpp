@@ -18,6 +18,10 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 
 #include <PhosphorTiles/TilingState.h>
+// releaseMembership calls through the algorithm's lifecycle hooks, so the
+// definition is needed here. AutotileEngine.h only forward-declares it, and a
+// unity build hid the omission by pulling it in from a sibling TU.
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include "tileenginelogging.h"
 
 #include <algorithm>
