@@ -33,6 +33,15 @@ namespace {
 /// The overlay tree's signal drives the daemon's overlay recreate, so the
 /// repeat is not free. The two arms above this one canonicalize their input
 /// in-setter and need no help.
+/// Above any legitimate curve spec or preset name, and far below the cost of letting an
+/// unbounded string reach the key. Shared by the profile-body bounder and the entry loop,
+/// which bounds the override PATH by the same figure.
+constexpr int kMaxStringChars = 1024;
+/// The override count, matching kMaxShaderOverrides on the two trees that get their cap
+/// from a schema sanitizer. This tree has no schema validator, so its setter is the only
+/// boundary and has to carry every cap itself.
+constexpr int kMaxMotionOverrides = 1024;
+
 QVariantMap sanitizedThroughSchema(const PhosphorConfig::Store* store, const QString& group, const QString& key,
                                    const QVariantMap& map)
 {
@@ -194,9 +203,6 @@ QVariantMap boundedProfileMap(const QVariantMap& profile, const QString& path)
         QLatin1String(P::JsonFieldMinDistance),     QLatin1String(P::JsonFieldSequenceMode),
         QLatin1String(P::JsonFieldStaggerInterval), QLatin1String(P::JsonFieldPresetName),
     };
-    // Above any legitimate curve spec or preset name and far below the cost of
-    // letting an unbounded string reach the key.
-    constexpr int kMaxStringChars = 1024;
 
     QVariantMap out;
     for (auto it = profile.cbegin(); it != profile.cend(); ++it) {
@@ -215,30 +221,19 @@ QVariantMap boundedProfileMap(const QVariantMap& profile, const QString& path)
 
 } // namespace
 
-void Settings::setMotionProfileTree(const QVariantMap& tree)
+/// The motion tree's persistence form: every body bounded, every root and entry key
+/// whitelisted, an empty `overrides` (and then an empty `baseline`) dropped.
+///
+/// A free function because BOTH halves need it. `Settings::setMotionProfileTree` is the
+/// write path, and `sanitizeMotionProfileTree` (registered on the key in
+/// settingsschema.cpp) is the read path — which the setter alone could never cover:
+/// `configmigration_v8` writes this key straight into the JSON document, outside the
+/// store, and config.json is hand-editable, so neither of those ever passed through a
+/// setter. The canonicalisation and the bound have to happen on ONE pass or the stored
+/// value and the compared value end up different shapes, which is why this is one
+/// function rather than a sanitizer plus a setter each doing half.
+QVariantMap canonicalMotionProfileTree(const QVariantMap& tree)
 {
-    refreshCleanBackendFromDisk();
-    // Stored VERBATIM, with no round trip through ProfileTree. That round trip
-    // looks like harmless canonicalisation and is not: Profile stores its curve
-    // as a resolved object, so re-serializing one parsed against a registry
-    // that has not loaded the user's curve packs drops the `curve` key
-    // outright, silently retiming every event that names a curve by name. The
-    // config layer has no curve registry and must not grow one, so it does not
-    // parse. Callers assemble the tree from what they read here, and the write
-    // side of the animations page is the only thing that builds one.
-    //
-    // The ONE normalisation applied here is dropping an empty `overrides` list
-    // (and, with it, an empty `baseline`). A tree carrying no overrides is the
-    // schema default, and storing it as `{"overrides": []}` would leave the key
-    // permanently unequal to its default: sparse persistence would never prune
-    // it, `isKeyModified` would report the page dirty forever, and the key would
-    // join every settings-profile delta captured afterwards. This touches only
-    // the empty case and never inspects a profile body, so the curve hazard
-    // above does not apply. Doing it here rather than only at the page's helper
-    // makes the persistence boundary canonical whoever builds the map —
-    // `setMotionProfileTreeJson`, a profile apply, or a future writer.
-    // Filter each entry's profile body before anything else looks at the map,
-    // so the comparison below and the stored value are the same shape.
     QVariantMap canonical = tree;
     {
         // The ROOT is bounded too, and it has to be. `ProfileTree::toJson` emits the
@@ -287,6 +282,23 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
             if (path.isEmpty()) {
                 continue;
             }
+            // The PATH is bounded too, on the same terms as every string inside the
+            // profile body. It was taken verbatim, so a 64 KB path survived every read
+            // and rewrite — the body's cap says nothing about the key it is filed under.
+            if (path.size() > kMaxStringChars) {
+                qCWarning(lcConfig) << "setMotionProfileTree: dropping an override with an over-long path ("
+                                    << path.size() << "chars)";
+                continue;
+            }
+            // And the override COUNT, for parity with the shader and decoration
+            // sanitizers, which cap theirs at the same figure. Unbounded, a hand-edited
+            // config could hold an arbitrary number of entries, each re-serialised on
+            // every write.
+            if (filtered.size() >= kMaxMotionOverrides) {
+                qCWarning(lcConfig) << "setMotionProfileTree: more than" << kMaxMotionOverrides
+                                    << "overrides; dropping the rest from" << path;
+                break;
+            }
             // REBUILT from the two fields this tree defines rather than re-inserted
             // with a bounded profile laid over it. The entry LEVEL was the one rung
             // this helper left unbounded: a hand edit adding any third key (a 64 KB
@@ -299,9 +311,12 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
                                   boundedProfileMap(entry.value(QLatin1String("profile")).toMap(), path));
             filtered.append(canonicalEntry);
         }
-        if (!filtered.isEmpty()) {
-            canonical.insert(QLatin1String("overrides"), filtered);
-        }
+        // UNCONDITIONALLY, and that matters: a conditional insert left the ORIGINAL
+        // unfiltered list in place when every entry was dropped (all of them pathless),
+        // and the empty-normalisation below then read that non-empty original and kept
+        // the key — so the one case where the rebuild had the most to remove was the
+        // case it did not apply to. The normalisation block handles the empty list.
+        canonical.insert(QLatin1String("overrides"), filtered);
     }
     if (canonical.value(QLatin1String("overrides")).toList().isEmpty()) {
         canonical.remove(QLatin1String("overrides"));
@@ -309,6 +324,34 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
             canonical.remove(QLatin1String("baseline"));
         }
     }
+    return canonical;
+}
+
+void Settings::setMotionProfileTree(const QVariantMap& tree)
+{
+    refreshCleanBackendFromDisk();
+    // Stored VERBATIM, with no round trip through ProfileTree. That round trip
+    // looks like harmless canonicalisation and is not: Profile stores its curve
+    // as a resolved object, so re-serializing one parsed against a registry
+    // that has not loaded the user's curve packs drops the `curve` key
+    // outright, silently retiming every event that names a curve by name. The
+    // config layer has no curve registry and must not grow one, so it does not
+    // parse. Callers assemble the tree from what they read here, and the write
+    // side of the animations page is the only thing that builds one.
+    //
+    // The ONE normalisation applied here is dropping an empty `overrides` list
+    // (and, with it, an empty `baseline`). A tree carrying no overrides is the
+    // schema default, and storing it as `{"overrides": []}` would leave the key
+    // permanently unequal to its default: sparse persistence would never prune
+    // it, `isKeyModified` would report the page dirty forever, and the key would
+    // join every settings-profile delta captured afterwards. This touches only
+    // the empty case and never inspects a profile body, so the curve hazard
+    // above does not apply. Doing it here rather than only at the page's helper
+    // makes the persistence boundary canonical whoever builds the map —
+    // `setMotionProfileTreeJson`, a profile apply, or a future writer.
+    // Filter each entry's profile body before anything else looks at the map,
+    // so the comparison below and the stored value are the same shape.
+    const QVariantMap canonical = canonicalMotionProfileTree(tree);
     // Compared against the canonical READ. A blob that is not a map at all
     // reads back as an empty map, so this short-circuits against it, and the
     // key is nonetheless repaired: at that point the value equals its default,
@@ -552,7 +595,10 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // Size-bound every profile body before anything else looks at the tree,
     // so the seed strip below and the stored value see the same shape (the
     // motion twin filters before its comparison for the same reason).
-    pruned.setBaseline(boundedDecorationProfile(pruned.baseline(), QString()));
+    // "(baseline)" rather than an empty path, so a dropped field's warning says where it
+    // came from; an empty one read as "at" with nothing after it, indistinguishable from an
+    // override at an empty path. Same correction the motion twin above carries.
+    pruned.setBaseline(boundedDecorationProfile(pruned.baseline(), QStringLiteral("(baseline)")));
     for (const QString& path : pruned.overriddenPaths())
         pruned.setOverride(path, boundedDecorationProfile(pruned.directOverride(path), path));
     // Strip the parts of an override the read-side seed overlay regenerates:

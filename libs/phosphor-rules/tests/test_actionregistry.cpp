@@ -651,6 +651,47 @@ private Q_SLOTS:
         // Absent stays valid: the key is optional wherever it is allowed.
         QVERIFY(loads(ActionType::OverrideAnimationShader,
                       QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")}}));
+
+        // AT the limits, which the over-limit cases above cannot pin: an off-by-one
+        // tightening (`>` becoming `>=`) would refuse a legal blob with every assertion
+        // above still green. The sibling presetIds slot makes the same argument.
+        const auto withParams = [](const QJsonValue& params) {
+            return QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")},
+                               {QString(ActionParam::Params), params}};
+        };
+        QJsonObject atEntryCap;
+        for (int i = 0; i < MaxDecorationChainEntries; ++i) {
+            atEntryCap.insert(QStringLiteral("p%1").arg(i), i);
+        }
+        QVERIFY2(loads(ActionType::OverrideAnimationShader, withParams(atEntryCap)),
+                 "exactly at the entry cap must load");
+        QVERIFY2(loads(ActionType::OverrideAnimationShader,
+                       withParams(QJsonObject{{QString(MaxChainPackIdLength, QLatin1Char('k')), 1}})),
+                 "a key exactly at the cap must load");
+        QVERIFY2(
+            loads(ActionType::OverrideAnimationShader,
+                  withParams(QJsonObject{{QStringLiteral("tex"), QString(MaxChainPackIdLength, QLatin1Char('x'))}})),
+            "a value exactly at the cap must load");
+
+        // And an ARRAY value is refused at every level: no pack declares one, and leaving
+        // it unchecked made the whole size bound bypassable through a nested list.
+        QVERIFY(!loads(ActionType::OverrideAnimationShader,
+                       withParams(QJsonObject{{QStringLiteral("p"), QJsonArray{1, 2, 3}}})));
+        QVERIFY(!loads(
+            ActionType::OverrideDecorationChain,
+            QJsonObject{{QString(ActionParam::Chain), QJsonArray{QStringLiteral("border")}},
+                        {QString(ActionParam::Params),
+                         QJsonObject{{QStringLiteral("border"), QJsonObject{{QStringLiteral("p"), QJsonArray{1}}}}}}}));
+
+        // The pack and layout ids are length-bounded too, on the same terms as the preset
+        // id beside them.
+        QVERIFY(
+            !loads(ActionType::OverrideAnimationShader,
+                   QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")},
+                               {QString(ActionParam::EffectId), QString(MaxChainPackIdLength + 1, QLatin1Char('e'))}}));
+        QVERIFY(
+            !loads(ActionType::OverrideOverlayShader,
+                   QJsonObject{{QString(ActionParam::LayoutId), QString(MaxChainPackIdLength + 1, QLatin1Char('l'))}}));
     }
 
     /// Every preset-carrying action declares its preset key as a ParamSchema

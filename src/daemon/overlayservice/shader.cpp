@@ -191,6 +191,13 @@ QString OverlayService::effectiveOverlayShaderId(const PhosphorZones::ContextOve
     case OverlaySource::Tree:
         break;
     }
+    // The enum says a layout answers; it does not CARRY the pointer, so the Tree case
+    // re-checks rather than trusting a contract stated two functions away. A future
+    // reorder of that ladder then fails loudly here instead of dereferencing null.
+    Q_ASSERT(screenLayout);
+    if (!screenLayout) {
+        return {};
+    }
     return m_overlayShaderTree.resolve(screenLayout->id().toString()).shaderId;
 }
 
@@ -217,6 +224,12 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
         return {};
     case OverlaySource::Tree:
         break;
+    }
+    // Re-checked here too, for the reason the id twin gives: the enum value does not
+    // carry the pointer.
+    Q_ASSERT(screenLayout);
+    if (!screenLayout) {
+        return {};
     }
     // m_overlayShaderTree is the cached settings tree (see the member doc);
     // reading through ISettings here would re-parse the store per call. No

@@ -377,9 +377,9 @@ int validatePack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata       OK\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
     } else {
-        out << "  metadata       ERROR\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -390,6 +390,7 @@ int validatePack(const QString& packDir, QTextStream& out)
     // must match that parameter's declared type and range. AFTER the metadata block,
     // matching the other three arms. Run before it, this printed `presets ERROR`
     // above `metadata OK`.
+    errors += reportRawPresetProblems(out, rawRoot);
     errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
 
     // ── stage compiles (reproduce the runtime assembly) ──

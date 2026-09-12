@@ -503,6 +503,13 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
         connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 [this]() {
                     m_warnedDecorationPacks.clear();
+                    // And RE-RESOLVE what is on screen. A pack installed, removed or
+                    // edited on disk changes what a visible popup's chain composes to,
+                    // and nothing else on this path pushes that: the chain is resolved
+                    // at show time, so a popup already up kept the old composition until
+                    // it was dismissed. The shell's twin does the same thing through
+                    // bump() for its own chrome.
+                    reapplyVisiblePopupDecorations();
                 });
     }
 }
@@ -511,14 +518,18 @@ void OverlayService::reapplyVisiblePopupDecorations()
 {
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const auto& state = it.value();
-        if (m_zoneSelectorVisible)
+        if (m_zoneSelectorVisible) {
             applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
-        if (m_snapAssistVisible)
+        }
+        if (m_snapAssistVisible) {
             applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
-        if (m_layoutPickerVisible)
+        }
+        if (m_layoutPickerVisible) {
             applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
-        if (m_cheatsheetVisible)
+        }
+        if (m_cheatsheetVisible) {
             applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
+        }
     }
 }
 

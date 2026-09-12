@@ -1103,8 +1103,7 @@ private:
     // (disconnect(src, sig, this, nullptr) would sever ALL slots matching -
     // safe today but trap-prone if a second connection is ever added).
     QMetaObject::Connection m_shadersChangedConnection;
-    /// presetsChanged, on the same terms: a blanket disconnect here would be
-    /// exactly the trap-prone form described above.
+    /// presetsChanged, on the same terms as the handle above.
     QMetaObject::Connection m_presetsChangedConnection;
     // Debounce layoutModified → refreshVisibleWindows. layoutModified fires on
     // every Q_PROPERTY change (e.g. per-frame during a zone drag), so
@@ -1348,11 +1347,10 @@ private:
     /// the slot's decorationChain (and decorationOuterPadding) when no pack
     /// resolves so a stale decoration never renders.
     void applyDecoration(QObject* slot, const QString& surfacePath);
-    /// Re-apply the decoration chain to every popup slot currently up. A visible
-    /// popup's chain is resolved at show time, so a retune (a tree edit or a preset
-    /// change) has to be pushed into the slots already on screen; OSDs are omitted
-    /// because they auto-dismiss sub-second. One function rather than the same eleven
-    /// lines in two files, where adding a fifth popup to one only was silent.
+    /// Re-apply the decoration chain to every popup slot currently up. A visible popup's
+    /// chain is resolved at show time, so a retune (a tree edit, a preset change, a pack
+    /// reload) has to reach the slots already on screen; OSDs are omitted because they
+    /// auto-dismiss sub-second. One function rather than the same eleven lines thrice.
     void reapplyVisiblePopupDecorations();
 
     void destroyIfTypeMismatch(const QString& screenId);
@@ -1583,9 +1581,8 @@ private:
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
     /// Which source answers for a screen's overlay shader: ONE statement of the
-    /// precedence, switched on by both functions below (each used to re-derive it, and
-    /// one carried a comment naming that drift hazard). Rule wins outright; Tree is the
-    /// settings OverlayShaderTree per layout; None is no rule and no layout.
+    /// precedence, switched on by both functions below, which each re-derived it before.
+    /// Rule wins outright, Tree is the OverlayShaderTree per layout, None is neither.
     enum class OverlaySource {
         Rule,
         Tree,
@@ -1595,16 +1592,15 @@ private:
                                           const PhosphorZones::Layout* screenLayout);
 
     /// The shader a screen's overlay should draw: rule override → per-layout tree
-    /// override → tree baseline. A context overlay rule wins BOTH id and params (an
-    /// engaged rule id with no params falls back to the shader's defaults), preserving
-    /// the pre-tree rule-wins-both semantics. Otherwise the settings OverlayShaderTree
-    /// resolves per layout UUID with baseline fallback. An empty shaderId means "no
-    /// shader" (isNoneShader).
+    /// override → tree baseline. A rule wins BOTH id and params (an engaged rule id with
+    /// no params falls back to the shader's defaults), preserving the pre-tree semantics.
+    /// Otherwise the settings OverlayShaderTree resolves per layout UUID with baseline
+    /// fallback, and an empty shaderId means "no shader".
     OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                                 const PhosphorZones::Layout* screenLayout) const;
     /// Just the id, for callers asking only whether a shader is in play. Skips the preset
-    /// flatten (a deep copy of the preset's parameter map): a preset moves PARAMETERS
-    /// never the pack, so the id is identical, and `useShaderForScreen` runs per frame.
+    /// flatten (a deep copy of the parameter map): a preset moves PARAMETERS never the
+    /// pack, so the id is identical, and `useShaderForScreen` runs per frame.
     QString effectiveOverlayShaderId(const PhosphorZones::ContextOverlayOverride& overlayOverride,
                                      const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;

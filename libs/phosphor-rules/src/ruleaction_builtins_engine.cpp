@@ -475,6 +475,12 @@ void ActionRegistry::registerBuiltinsEngine()
                 if (preset.toString().size() > MaxShaderPresetIdLength) {
                     return false;
                 }
+                // The PACK id on the same terms. It is type-checked by the key ladder but
+                // was never length-bounded, while the preset id beside it is — the exact
+                // asymmetry this file's own comment calls the kind that drifts.
+                if (p.value(ActionParam::EffectId).toString().size() > MaxChainPackIdLength) {
+                    return false;
+                }
                 // The `params` blob, which nothing bounded at all until now. See
                 // paramsBlobIsSane: same axis as PresetIds above, same reason.
                 return paramsBlobIsSane(p.value(ActionParam::Params));
@@ -633,6 +639,12 @@ void ActionRegistry::registerBuiltinsEngine()
                     return false;
                 }
                 if (preset.toString().size() > MaxShaderPresetIdLength) {
+                    return false;
+                }
+                // The pack id and the layout id, bounded for the reason the animation twin
+                // above gives.
+                if (p.value(ActionParam::EffectId).toString().size() > MaxChainPackIdLength
+                    || p.value(ActionParam::LayoutId).toString().size() > MaxChainPackIdLength) {
                     return false;
                 }
                 return paramsBlobIsSane(p.value(ActionParam::Params));

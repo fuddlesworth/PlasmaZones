@@ -68,16 +68,6 @@ void fillRow(const PhosphorShaders::ShaderPreset& preset, QVariantMap& out)
     out.insert(QStringLiteral("readOnly"), preset.readOnly);
 }
 
-/// Rescan the family's directory and say something when it did not happen.
-///
-/// `rescanNow()` answers false when no publisher was ever created for the family,
-/// and its bool was discarded at all three call sites. That is safe only because
-/// the settings controller loads every family: the day one is dropped from that
-/// list, commit() still returns true, QML selects the id it just saved, and
-/// `presetsFor()` still answers the old list, so the picker silently selects
-/// nothing. Not a user-facing refusal — the file IS on disk and the next watcher
-/// tick picks it up — but a log line naming the family is what points a developer
-/// at the missing load().
 /// Whether @p path resolves inside @p dir.
 ///
 /// Both are canonicalised, so a symlink anywhere along either is followed before the
@@ -103,6 +93,15 @@ bool pathIsInside(const QString& dir, const QString& path)
     return canonicalPath.startsWith(canonicalDir + QLatin1Char('/'));
 }
 
+/// Rescan the family's directory and say something when it did not happen.
+///
+/// `rescanNow()` answers false when no publisher was ever created for the family, and its
+/// bool was discarded at all three call sites. That is safe only because the settings
+/// controller loads every family: the day one is dropped from that list, commit() still
+/// returns true, QML selects the id it just saved, and `presetsFor()` still answers the old
+/// list, so the picker silently selects nothing. Not a user-facing refusal — the file IS on
+/// disk and the next watcher tick picks it up — but a log line naming the family is what
+/// points a developer at the missing load().
 void rescanOrWarn(PhosphorShaders::ShaderPresetStore* store, PhosphorShaders::ShaderFamily family)
 {
     if (store && !store->rescanNow(family)) {
@@ -392,6 +391,16 @@ bool ShaderPresetBridge::deletePreset(const QString& presetId)
     // went wrong when the end state is exactly what they asked for, and skipped the
     // rescan, so the stale row lingered until the watcher fired.
     if (!preset.sourcePath.isEmpty() && !QFile::exists(preset.sourcePath)) {
+        rescanOrWarn(m_store, m_family);
+        return true;
+    }
+    if (preset.sourcePath.isEmpty()) {
+        // No file to remove: the record came from somewhere that stamps no path (nothing
+        // does today, since the loader always stamps one and a pack preset is refused
+        // above as read-only). Treated as an already-completed delete, like the
+        // file-is-gone case above, rather than reported as a failure the user cannot act
+        // on — the end state is what they asked for.
+        qCWarning(lcConfig) << "ShaderPresetBridge: preset" << presetId << "carries no source path; nothing to remove";
         rescanOrWarn(m_store, m_family);
         return true;
     }

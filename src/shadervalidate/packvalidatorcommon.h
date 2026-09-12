@@ -16,6 +16,8 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMap>
 #include <QString>
 #include <QStringList>
@@ -175,6 +177,25 @@ struct PresetLintParam
 /// Deliberately NOT an error for a preset to omit parameters: a preset is a
 /// partial tuning by design, and the ones it says nothing about fall back to
 /// their defaults.
+/// Lint a preset value set on an IMAGE-typed parameter, for the two families that cannot
+/// keep one.
+///
+/// The animation and surface arms parse a pack's presets before its directory is stamped,
+/// so `parsePackPresets` refuses every image-typed preset value fail-closed and the value
+/// is gone before any other lint sees it. Reads the RAW `presets` block for the keys a
+/// pack sets, because the parsed map is exactly where they have already been dropped.
+int reportImageParamPresets(QTextStream& out, const QJsonObject& root);
+
+/// Lint the RAW `presets` value from @p root, for the faults the parsed map cannot show.
+///
+/// Three of them, each costing the author presets with only a log line: a
+/// present-but-non-object `presets` (the loader ignores it wholesale), more presets than
+/// the loader keeps, and a preset with more values than it keeps. `reportPresetProblems`
+/// below receives the already-parsed, already-truncated map and so is blind to all three.
+///
+/// Returns the number of problems found and prints them under the same `presets` header.
+int reportRawPresetProblems(QTextStream& out, const QJsonObject& root);
+
 int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PresetLintParam>& declared);
 

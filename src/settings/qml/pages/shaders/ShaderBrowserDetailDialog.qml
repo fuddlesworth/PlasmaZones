@@ -14,11 +14,10 @@ import "../../js/FontUtils.js" as FontUtils
 /**
  * @brief Detail view for a single shader effect (pack-agnostic).
  *
- * Side-by-side layout (mirroring the zone editor): the metadata + parameters
- * scroll independently on the left, and a PINNED preview fills the right — so
- * the preview never scrolls out of view and the parameters always have room.
- * Drives both the animation-shaders browser and the snapping-overlay-shaders
- * browser via a `bridge`.
+ * Side-by-side layout (mirroring the zone editor): the metadata and parameters scroll
+ * independently on the left while a PINNED preview fills the right, so the preview never
+ * scrolls out of view and the parameters always have room. Drives both the
+ * animation-shaders browser and the snapping-overlay-shaders browser via a `bridge`.
  *
  * When the bridge also exposes a `previewController`, the right pane is a LIVE
  * preview (selected by the bridge's `previewKind`: a ZoneShaderItem render for
@@ -55,10 +54,9 @@ Kirigami.Dialog {
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
 
-    // Percent-encode a local file path for use in a file:// URL. `encodeURI`
-    // handles spaces and unicode while preserving path separators, but leaves
-    // `#` and `?` untouched, so those two are escaped explicitly or they would
-    // be parsed as fragment/query delimiters.
+    // Percent-encode a local file path for a file:// URL. `encodeURI` handles spaces and
+    // unicode while preserving path separators but leaves `#` and `?` untouched, so those
+    // two are escaped explicitly or they parse as fragment/query delimiters.
     // Twin site: AnimationPreviewPane.qml wallpaper Image source.
     function _encodeFilePath(path) {
         return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
@@ -133,19 +131,16 @@ Kirigami.Dialog {
     /// Width the zone pane renders at, in logical px, published by the pane
     /// itself because the translation below needs it.
     ///
-    /// A zone shader's px parameters (a border width, a corner radius) are
-    /// absolute against the SCREEN. This pane is a few hundred px standing in
-    /// for a few thousand, so the raw values draw an effect several times too
-    /// coarse for the zone rectangles beside them, which zonesForShaderPreview
-    /// has already scaled into pane space. Handing the width to
-    /// translateShaderParams is what puts the two on the same footing.
+    /// A zone shader's px parameters (a border width, a corner radius) are absolute
+    /// against the SCREEN. This pane is a few hundred px standing in for a few thousand,
+    /// so raw values draw an effect several times too coarse for the zone rectangles
+    /// beside them, which zonesForShaderPreview has already scaled into pane space.
+    /// Handing the width to translateShaderParams puts the two on the same footing.
     ///
-    /// A binding, not a handler write: `livePreviewPane` is declared in this
-    /// file, so the root can read its width directly. Floored at 1 to match the
-    /// zone geometry call, which uses the same floor — a 0 here would leave the
-    /// px parameters raw while zonesForShaderPreview scaled the geometry as if
-    /// the pane were 1px, the exact geometry/parameter mismatch this scaling
-    /// exists to avoid.
+    /// A binding, not a handler write: `livePreviewPane` is declared in this file, so the
+    /// root reads its width directly. Floored at 1 to match the zone geometry call — a 0
+    /// would leave the px parameters raw while the geometry scaled as if the pane were
+    /// 1px, the exact mismatch this scaling exists to avoid.
     readonly property int _zonePreviewWidth: Math.max(1, Math.round(livePreviewPane.width))
     on_ZonePreviewWidthChanged: _recompute()
     /// Which preset the preview is currently showing, or empty for none. Local
@@ -192,16 +187,24 @@ Kirigami.Dialog {
         root._recompute();
     }
 
+    /// Tolerant value compare, the shape PresetRow._sameValue uses: numbers within an
+    /// epsilon, everything else by string form, because a round trip through C++ can
+    /// change a value's TYPE without changing what it means.
+    function _sameValue(a, b) {
+        if (typeof a === "number" && typeof b === "number")
+            return Math.abs(a - b) < 0.0001;
+        return String(a) === String(b);
+    }
+
     /// Which keys the loaded preset named, and the map loading it produced.
     property var _presetNamedKeys: []
     property var _appliedValues: ({})
 
     /// What a save or update from here stores: the keys the preset already names plus
-    /// whatever the user has moved since it loaded. NOT `_liveParams`, which
-    /// `_applyPresetToPreview` fills with every declared default so the PREVIEW shows
-    /// what the preset specifies; handing that to PresetRow expanded a two-parameter
-    /// preset into one pinning all of them, and no-delta assignments then followed
-    /// those defaults rather than their own values.
+    /// whatever the user moved since it loaded. NOT `_liveParams`, which
+    /// `_applyPresetToPreview` fills with every declared default so the PREVIEW shows what
+    /// the preset specifies; handing that to PresetRow expanded a two-parameter preset into
+    /// one pinning all of them, and no-delta assignments then followed those defaults.
     readonly property var _presetSaveValues: {
         const live = root._liveParams || {};
         const applied = root._appliedValues || {};
@@ -210,8 +213,11 @@ Kirigami.Dialog {
         for (let i = 0; i < named.length; ++i)
             if (live[named[i]] !== undefined)
                 out[named[i]] = live[named[i]];
+        // The tolerant compare, not `!==`: a value can come back from C++ as an int where
+        // it went in as a double, or a colour as a QColor rather than its string, and a
+        // strict test then reads an untouched key as user-changed and pins it.
         for (const key in live)
-            if (applied[key] === undefined || live[key] !== applied[key])
+            if (applied[key] === undefined || !root._sameValue(live[key], applied[key]))
                 out[key] = live[key];
         return out;
     }
@@ -250,15 +256,12 @@ Kirigami.Dialog {
     readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
 
     // Whether the browsed pack actually consumes the audio spectrum, so a
-    // non-audio pack's dialog session does not spawn the external CAVA
-    // process at all. Only the animation controller can answer per pack
-    // (packInfo); the zone and decoration controllers expose no such probe
-    // yet, so those kinds keep the historical start-always behaviour — a
-    // known cost, not an oversight, until their bridges grow one.
-    //
-    // The pointer controller is different again: it has no audio API at all,
-    // so there is nothing to start and asking would be a call into a method
-    // that does not exist.
+    // non-audio pack's dialog session does not spawn the external CAVA process at all.
+    // Only the animation controller can answer per pack (packInfo); the zone and
+    // decoration controllers expose no such probe, so those kinds keep the historical
+    // start-always behaviour, a known cost until their bridges grow one. The pointer
+    // controller has no audio API at all, so there is nothing to start and asking would
+    // call a method that does not exist.
     function _packWantsAudio() {
         if (_previewKind === "pointer")
             return false;
@@ -290,6 +293,15 @@ Kirigami.Dialog {
     }
 
     function _resetPreview() {
+        // The PRESET state first, ABOVE the no-preview early return, because the preset
+        // row shows on a family with no preview pane too. Without this a pack switch left
+        // the previous pack's id selected (rendering as "Missing preset" for a pack with
+        // nothing wrong with it) and left `_appliedValues` / `_presetNamedKeys` pointing
+        // at the previous pack, so `_presetSaveValues` judged nearly every key
+        // user-changed and a Save pinned every declared default again.
+        _browsePresetId = "";
+        _presetNamedKeys = [];
+        _appliedValues = ({});
         if (!_livePreview)
             return;
         // Fresh clock per shader: without this the previous shader's iTime
@@ -327,20 +339,19 @@ Kirigami.Dialog {
     // lifecycle lives here, in one pair of functions, and the panes' Loaders gate on
     // flags only these functions write. The contract:
     //
-    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It cannot rely
-    //     on `visible` dropping: a QQC2 Popup keeps `visible` true until its EXIT
-    //     transition finishes, so reopening on another pack mid-close never
-    //     deactivated a `visible`-gated Loader and the old pack's stale composition
-    //     survived into the new open. That was the stale / unavailable flicker.
+    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It cannot rely on
+    //     `visible` dropping: a QQC2 Popup keeps `visible` true until its EXIT transition
+    //     finishes, so reopening on another pack mid-close never deactivated a
+    //     `visible`-gated Loader and the old pack's stale composition survived into the
+    //     new open. That was the stale / unavailable flicker.
     //
     //   - ARM is per pane, because the two build differently, which is what kept
     //     breaking. Decoration arms a TICK after teardown (Qt.callLater, so the Loader
-    //     destroys the old item first): its chain composes asynchronously and its pane
-    //     covers itself until ready, so deferring it to `opened` is what made the card
-    //     arrive bare and decorate late. Zone arms from onOpened, after the enter
-    //     transition, because creating a ZoneShaderItem compiles and links
-    //     synchronously and doing that before the popup is on screen spent the compile
-    //     on a window nobody could see.
+    //     destroys the old item first): its chain composes asynchronously and covers
+    //     itself until ready, so deferring it to `opened` made the card arrive bare and
+    //     decorate late. Zone arms from onOpened, after the enter transition, because a
+    //     ZoneShaderItem compiles and links synchronously and doing that before the
+    //     popup is on screen spent the compile on a window nobody could see.
     //
     // Net effect for both: popup appears, "Preview unavailable" covers, preview
     // reveals when ready. The contract test in test_animations_qml_contracts.cpp names
@@ -393,12 +404,11 @@ Kirigami.Dialog {
         _recompute();
     }
 
-    // BEFORE the panes are built, not after. `opened` does not fire until the
-    // enter transition has finished, but the preview Loaders activate on
-    // `visible`, which is set at the START of it — so resetting there handed the
-    // decoration pane the PREVIOUS pack's parameters, let it compose and show
-    // that, and then changed them out from under it. The chain recomposed, the
-    // placeholder came back, and the preview arrived a second time: the
+    // BEFORE the panes are built, not after. `opened` does not fire until the enter
+    // transition has finished, but the preview Loaders activate on `visible`, set at the
+    // START of it — so resetting there handed the decoration pane the PREVIOUS pack's
+    // parameters, let it compose and show that, then changed them under it. The chain
+    // recomposed, the placeholder came back and the preview arrived twice: the
     // preview / unavailable / preview flicker on every open.
     //
     // aboutToShow runs before the popup becomes visible, so the panes are built
@@ -477,6 +487,7 @@ Kirigami.Dialog {
                 anchors.verticalCenter: parent.verticalCenter
 
                 packId: root.effect ? root.effect.id : ""
+                packDisplayName: root.effect ? (root.effect.name || root.effect.id || "") : ""
                 presetBridge: root._presetBridge
                 presetId: root._browsePresetId
                 // The filtered map, not the defaults-filled preview one: see
@@ -690,14 +701,11 @@ Kirigami.Dialog {
                             compact: false
                             enableLocking: true
                             enableRandomize: true
-                            // Reset lives in the shared editor's own header,
-                            // beside lock-all and randomize, exactly as it does
-                            // everywhere else ParameterEditor is used. This
-                            // dialog used to suppress it and hand-roll a
-                            // "Default" button into its footer instead, which
-                            // put the same action somewhere different from the
-                            // rest of the app and made it something each host
-                            // had to remember to provide.
+                            // Reset lives in the shared editor's own header, beside
+                            // lock-all and randomize, as everywhere else ParameterEditor
+                            // is used. This dialog used to suppress it and hand-roll a
+                            // "Default" button into its footer, which put the same action
+                            // somewhere different from the rest of the app.
                             enableReset: true
                             enableGroups: true
                             enableImage: true
@@ -824,25 +832,20 @@ Kirigami.Dialog {
                 Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 20, _minPreviewWidth)
                 Layout.fillHeight: true
 
-                // Live decoration preview: the stand-in card run through the
-                // real SurfaceDecoration chain host. In a Loader so the whole
-                // capture / shader chain is only instantiated for a decoration
-                // pack, and is torn down when the dialog closes rather than
-                // lingering: this dialog is a single reused instance, and
-                // _decorationPreview depends only on the controller and the
-                // effect, neither of which is cleared on close, so an ungated
-                // Loader would keep the pane and its whole chain alive for the
-                // app's life.
+                // Live decoration preview: the stand-in card run through the real
+                // SurfaceDecoration chain host. In a Loader so the whole capture / shader
+                // chain is instantiated only for a decoration pack and torn down when the
+                // dialog closes: this dialog is one reused instance and _decorationPreview
+                // depends only on the controller and the effect, neither cleared on close,
+                // so an ungated Loader would keep the pane alive for the app's life.
                 //
-                // `visible`, NOT `opened`. Popup.opened only goes true once the
-                // ENTER TRANSITION has finished, so gating on it composed the
-                // chain after the dialog had already animated in — you watched
-                // the card arrive bare and then turn decorated. `visible` is
-                // true for the whole shown state including both transitions, so
-                // the chain is ready as the dialog appears, and the pane still
-                // tears down on close. It also stops the pane emptying on the
-                // first frame of the CLOSE animation, which gating on `opened`
-                // did at the other end.
+                // `visible`, NOT `opened`. Popup.opened goes true only once the ENTER
+                // TRANSITION has finished, so gating on it composed the chain after the
+                // dialog had animated in and you watched the card arrive bare and then
+                // turn decorated. `visible` covers the whole shown state including both
+                // transitions, so the chain is ready as the dialog appears, the pane still
+                // tears down on close, and it does not empty on the first frame of the
+                // CLOSE animation the way `opened` did.
                 Loader {
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
@@ -942,17 +945,16 @@ Kirigami.Dialog {
                         source: root._zoneWallpaperUrl
                         visible: source.toString().length > 0
                         fillMode: Image.PreserveAspectCrop
-                        // A desktop wallpaper is far larger than this pane, and
-                        // the decode is cached by ShaderRegistry, so ask for the
-                        // pane's size rather than holding the full image.
+                        // A wallpaper is far larger than this pane and the decode is
+                        // cached by ShaderRegistry, so ask for the pane's size.
                         sourceSize.width: Math.max(1, Math.round(parent.width))
                         sourceSize.height: Math.max(1, Math.round(parent.height))
                         asynchronous: true
                         cache: true
                     }
 
-                    // Zones the preview renders over — shared by the renderer,
-                    // the label texture, and the hover hit-test. Recomputed on
+                    // Zones the preview renders over, shared by the renderer, the label
+                    // texture and the hover hit-test. Recomputed on
                     // resize; the settings backend supplies a four-zone sample
                     // (one master, three stack) so multi-zone + per-zone-highlight effects are visible.
                     readonly property var _zones: (root._zonePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []

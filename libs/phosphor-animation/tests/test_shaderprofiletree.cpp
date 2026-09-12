@@ -6,6 +6,8 @@
 
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
 #include <QTest>
 
 using PhosphorAnimationShaders::ShaderProfile;
@@ -20,6 +22,44 @@ class TestShaderProfileTree : public QObject
 private Q_SLOTS:
 
     // ─── Resolve walk-up ───
+
+    /// A presetId rides the TREE walk-up, which is the case the flatten-after-walk-up
+    /// invariant exists for: the preset is stored at a LEAF while the pack it belongs to
+    /// comes from an ancestor, so flattening per node would resolve the preset against a
+    /// node that names no pack at all. Pinned at the profile level already; this is the
+    /// tree level, where the walk happens.
+    void testPresetIdRidesTheWalkUpAndFlattensAgainstTheAncestorsPack()
+    {
+        ShaderProfileTree tree;
+        ShaderProfile category;
+        category.effectId = QStringLiteral("dissolve");
+        tree.setOverride(QStringLiteral("window"), category);
+
+        ShaderProfile leaf;
+        leaf.presetId = QStringLiteral("Quiet");
+        tree.setOverride(QStringLiteral("window.open"), leaf);
+
+        // The resolved node carries BOTH: the ancestor's pack and the leaf's preset.
+        const ShaderProfile resolved = tree.resolve(QStringLiteral("window.open"));
+        QCOMPARE(resolved.effectId.value_or(QString()), QStringLiteral("dissolve"));
+        QCOMPARE(resolved.presetId.value_or(QString()), QStringLiteral("Quiet"));
+
+        // And the flatten then resolves that preset against the pack the walk supplied,
+        // which is only possible because it runs AFTER the walk rather than per node.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        QHash<QString, PhosphorShaders::PackPresets> byPack;
+        byPack.insert(QStringLiteral("dissolve"),
+                      PhosphorShaders::PackPresets{{QStringLiteral("Quiet"), {{QStringLiteral("speed"), 0.25}}}});
+        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Animation, byPack, {});
+
+        const ShaderProfile flat = withPresetsResolved(resolved, registry);
+        QCOMPARE(flat.parameters->value(QStringLiteral("speed")).toDouble(), 0.25);
+        // RESET, not engaged-empty: this family's flatten drops the reference outright,
+        // which is how a consumer knows the preset has already been applied. (The
+        // decoration family keeps a blocking entry instead, because there the empty string
+        // is a per-pack sentinel rather than a whole-profile slot.)
+        QVERIFY(!flat.presetId.has_value());
+    }
 
     void testResolveEmptyTreeReturnsDefaults()
     {

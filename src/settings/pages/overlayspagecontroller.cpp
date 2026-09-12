@@ -231,7 +231,14 @@ void OverlaysPageController::setShaderOverride(const QString& path, const QStrin
         return;
     }
     OverlayShaderTree tree = m_settings->overlayShaderTree();
-    const OverlayShaderProfile stored = path.isEmpty() ? tree.baseline() : tree.directOverride(path);
+    // What the path RESOLVES to, not its direct override. For an inheriting layout the
+    // direct override is a default-constructed profile, so the carry below could never
+    // fire and promoting such a layout destroyed the preset it was resolving with —
+    // which the card reaches on every slider edit AND from its Revert control, the one
+    // documented as "every value then resolves from the preset again". This tree is
+    // whole-node and one step, so resolve() is the baseline for an un-overridden path,
+    // exactly as setShaderPreset already seeds from it.
+    const OverlayShaderProfile stored = path.isEmpty() ? tree.baseline() : tree.resolve(path);
     OverlayShaderProfile node{effectId, params};
     // Carry the preset reference across, but ONLY while the pack is unchanged.
     // This writer is how a parameter edit lands as well as how a pack is

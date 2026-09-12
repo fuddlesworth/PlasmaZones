@@ -365,6 +365,102 @@ int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::
     return 1;
 }
 
+/// The two parse caps, mirrored from `parsePackPresets` so the lint can say what the
+/// loader will drop. Mirrored rather than shared because phosphor-shaders does not export
+/// them, and a validator that reported a different figure from the loader would be worse
+/// than one that reported none: if the loader's cap moves, this has to move with it.
+constexpr int kMaxPackPresets = 64;
+constexpr int kMaxPackPresetValues = 64;
+
+int reportImageParamPresets(QTextStream& out, const QJsonObject& root)
+{
+    // The ANIMATION and SURFACE arms parse a pack's presets before its sourceDir is
+    // stamped, so parsePackPresets cannot resolve an image path and refuses every
+    // image-typed preset value for the whole pack. The value is simply absent by the time
+    // the shared lint walks the parsed map, so nothing there can report it — but the
+    // DECLARATION is right here in the metadata, and that is what makes it decidable.
+    //
+    // Only worth a line when the pack actually carries a preset value for such a param:
+    // an unused image declaration is already covered by the per-arm unknown-type lint.
+    //
+    // The keys come from the RAW presets block, not from the parsed map: the parsed map is
+    // where the value has already been dropped, so gating on it would make this lint as
+    // blind as the one it exists to supplement.
+    QStringList presetValueKeys;
+    const QJsonValue presetsValue = root.value(QLatin1String("presets"));
+    if (presetsValue.isObject()) {
+        const QJsonObject presets = presetsValue.toObject();
+        for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
+            presetValueKeys += it.value().toObject().keys();
+        }
+    }
+    QStringList lints;
+    for (const QJsonValue& value : root.value(QLatin1String("parameters")).toArray()) {
+        const QJsonObject param = value.toObject();
+        if (param.value(QLatin1String("type")).toString() != QLatin1String("image")) {
+            continue;
+        }
+        const QString id = param.value(QLatin1String("id")).toString();
+        if (!presetValueKeys.contains(id)) {
+            continue;
+        }
+        lints << QStringLiteral(
+                     "preset value for image parameter '%1' is dropped at load: this family resolves a "
+                     "pack's presets before its directory is known, so no image-typed preset value is "
+                     "kept. Declare the texture in the top-level `textures` array instead")
+                     .arg(id);
+    }
+    if (!lints.isEmpty()) {
+        out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
+        for (const QString& l : lints) {
+            out << "    " << l << "\n";
+        }
+    }
+    return static_cast<int>(lints.size());
+}
+
+int reportRawPresetProblems(QTextStream& out, const QJsonObject& root)
+{
+    // The faults that are invisible ONCE THE PARSE HAS RUN, so they cannot live in the
+    // shared lint below: it receives the parsed map, which is already empty (a non-object
+    // `presets`) or already truncated (both count caps). Each of these costs the author
+    // every preset or several of them, with only a log line nobody reads.
+    const QJsonValue presetsValue = root.value(QLatin1String("presets"));
+    if (presetsValue.isUndefined() || presetsValue.isNull()) {
+        return 0;
+    }
+    QStringList lints;
+    if (!presetsValue.isObject()) {
+        lints << QStringLiteral("`presets` is not an object, so it is ignored at load and the pack ships none");
+    } else {
+        const QJsonObject presets = presetsValue.toObject();
+        if (presets.size() > kMaxPackPresets) {
+            lints << QStringLiteral("declares %1 presets; only the first %2 are loaded and the rest are dropped")
+                         .arg(presets.size())
+                         .arg(kMaxPackPresets);
+        }
+        for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
+            if (!it.value().isObject()) {
+                continue;
+            }
+            const int valueCount = it.value().toObject().size();
+            if (valueCount > kMaxPackPresetValues) {
+                lints << QStringLiteral("preset '%1' sets %2 values; only the first %3 are loaded")
+                             .arg(it.key())
+                             .arg(valueCount)
+                             .arg(kMaxPackPresetValues);
+            }
+        }
+    }
+    if (!lints.isEmpty()) {
+        out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
+        for (const QString& l : lints) {
+            out << "    " << l << "\n";
+        }
+    }
+    return static_cast<int>(lints.size());
+}
+
 int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
                          const QList<PresetLintParam>& declared)
 {
@@ -421,10 +517,11 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
             // — `%` is neither a control character nor a separator, and this branch
             // also runs for a merely over-long key) would be replaced by the count.
             lints << QStringLiteral(
-                         "preset '%1' has an unusable id: it must be non-blank, at most %2 characters, free of "
-                         "control or formatting characters, and free of path separators. The id is also the name "
-                         "the picker renders, and it is what an assignment stores. The runtime does not refuse "
-                         "this — the pack would ship and render with an unreadable preset row")
+                         "preset '%1' has an unusable id: it must be non-blank (and not only whitespace), "
+                         "must not begin with a dot, at most %2 characters, free of control or formatting "
+                         "characters, and free of path separators. The id is also the name the picker renders, "
+                         "and it is what an assignment stores. The runtime does not refuse this — the pack "
+                         "would ship and render with an unreadable preset row")
                          .arg(presetName, QString::number(PhosphorShaders::ShaderPreset::MaxNameChars));
             ++problems;
             // NOT a `continue`: the values are independent of the key, so reporting
@@ -500,14 +597,20 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 // `"tex": "../../../etc/passwd"` reaches this loop with no `tex` entry
                 // at all.
                 //
-                // That is also one of THREE gaps with the same shape, all of them
-                // per-entry drops the parse makes before this lint runs, each leaving
-                // only a log line: an escaping texture path, a JSON `null` value, and
-                // a non-object preset BODY (which drops the whole preset). All three
-                // land the author in the same "the preset did nothing" state, and
-                // closing any of them means surfacing refusals out of
-                // `parsePackPresets` rather than re-deriving them here, where they
-                // cannot fire.
+                // That is one of FOUR gaps with the same shape, all of them drops the parse
+                // makes before this lint runs, each leaving only a log line: an escaping
+                // texture path, a JSON `null` value, a non-object preset BODY (which drops
+                // the whole preset), and — on the ANIMATION and SURFACE arms only — every
+                // image-typed value, because both parse the metadata BEFORE stamping
+                // sourceDir, so parsePackPresets' fail-closed refuseAllImages guard fires
+                // for the whole pack. That last one mirrors the runtime exactly (the
+                // registries stamp sourceDir after fromJson too), so it is not a
+                // validator-vs-runtime divergence; it is an unreported runtime fallback,
+                // and the arms lint the DECLARATION instead (see reportImageParamPresets).
+                // All four land the author in the same "the preset did nothing" state, and
+                // closing the first three means surfacing refusals out of
+                // `parsePackPresets` rather than re-deriving them here, where they cannot
+                // fire.
                 //
                 // EXISTENCE this can check, and nothing did: a value that survives the
                 // parse is an absolute in-pack path, and a preset naming a texture the
@@ -517,15 +620,36 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 if (param.type == QLatin1String("image") && !packDir.isEmpty()) {
                     const QString declaredPath = value.toString();
                     if (!declaredPath.isEmpty() && !QFileInfo::exists(QDir(packDir).absoluteFilePath(declaredPath))) {
-                        // Printed RELATIVE to the pack. What the lint holds is the
-                        // parse's resolved absolute path, so the raw value named a
-                        // string the author cannot find anywhere in their metadata.json
-                        // — unlike every sibling lint, which quotes what they wrote.
-                        lints << QStringLiteral("preset '%1' sets '%2' to '%3', which the pack does not contain")
+                        // Printed RELATIVE to the pack, because what the lint holds is the
+                        // parse's resolved path and an absolute one named a string the
+                        // author cannot find anywhere in their metadata.json. It is the
+                        // pack-relative spelling rather than their literal one: the parse
+                        // cleans the join, so `./a/../absent.png` prints as `absent.png`.
+                        // Worded for BOTH faults it can mean. The raw type is gone by the time the
+                        // lint runs (parsePackPresets stringifies every image value), so
+                        // `"tex": true` arrives as the string "true" and a containment-only
+                        // message named the wrong problem.
+                        lints << QStringLiteral(
+                                     "preset '%1' sets '%2' to '%3', which names no file the pack ships "
+                                     "(an image parameter's preset value is a pack-relative texture path)")
                                      .arg(presetName, vit.key(), QDir(packDir).relativeFilePath(declaredPath));
                         ++problems;
                     }
                 }
+                continue;
+            }
+
+            // An UNKNOWN declared type lands here too, because this arm is the
+            // fall-through: a param whose `type` is a typo ("flaot", "vec3") has no
+            // vocabulary arm of its own, and reporting its preset value as "non-numeric"
+            // complained about the value when the fault is the declaration. The per-arm
+            // unknown-type lint already names that, so say which one this is and stop.
+            if (!kValidParamTypes.contains(param.type)) {
+                lints << QStringLiteral(
+                             "preset '%1' sets '%2', whose declared type '%3' is not one this family "
+                             "binds, so its value cannot be checked (see the parameter lints above)")
+                             .arg(presetName, vit.key(), param.type);
+                ++problems;
                 continue;
             }
 

@@ -116,23 +116,21 @@ ColumnLayout {
     property bool shaderOwnsPack: false
     /// True when this event inherits its PACK but owns every parameter VALUE.
     ///
-    /// A third state rather than a shade of the second, because the storage
-    /// really is three-valued and the difference is what the user needs to
-    /// know. `ShaderProfile::overlay` replaces the parameter map wholesale
-    /// rather than merging keys, so the moment a slider moves on an inheriting
-    /// event that event stops following the ancestor's parameter edits while
-    /// still following its pack. Reporting that as "Following the inherited
-    /// value" understated what the event owns, which is the same class of
-    /// mistake the remove button's label made.
+    /// A third state rather than a shade of the second, because the storage really is
+    /// three-valued and the difference is what the user needs to know.
+    /// `ShaderProfile::overlay` replaces the parameter map wholesale rather than merging
+    /// keys, so the moment a slider moves on an inheriting event it stops following the
+    /// ancestor's parameter edits while still following its pack. Reporting that as
+    /// "Following the inherited value" understated what the event owns.
     property bool shaderOwnsParamsOnly: false
     /// True when this event stores only a PRESET of its own, still following its
     /// pack and holding no parameters.
     ///
-    /// The third independent axis. `setShaderPresetOnPaths` deliberately stores a
-    /// preset on an event that inherits its pack, and that IS an override which
-    /// changes what renders, so the caption has to say so rather than reporting pure
-    /// inheritance. Supplied by the host, like its two siblings, because this editor
-    /// is fed the RESOLVED preset id and cannot tell an inherited one from its own.
+    /// The third independent axis. `setShaderPresetOnPaths` deliberately stores a preset on
+    /// an event that inherits its pack, and that IS an override which changes what renders,
+    /// so the caption says so rather than reporting pure inheritance. Supplied by the host,
+    /// like its two siblings, because this editor is fed the RESOLVED preset id and cannot
+    /// tell an inherited one from its own.
     property bool shaderOwnsPresetOnly: false
     /// True when this event stores a preset of its own, WHETHER OR NOT it also stores
     /// parameters. The "only" sibling excludes the parameter case by construction,
@@ -233,7 +231,7 @@ ColumnLayout {
     /// delta map reported it "Modified", marked every inherited row "Changed here",
     /// and offered an Update-preset that would have written the ancestor's values
     /// into the shared preset.
-    property var shaderOwnParams: ({})
+    required property var shaderOwnParams
     // ── Computed ────────────────────────────────────────────────────
     /// Whether the shader section has anything to reveal (full
     /// description or a parameter editor). Mirrors the decoration
@@ -988,6 +986,9 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.bottomMargin: Kirigami.Units.smallSpacing
                 packId: root.shaderEffectId
+                // The pack's human name, so the preset combo names its pack rather than a
+                // raw machine id.
+                packDisplayName: root.shaderName
                 // Consumer-fed so this editor does not reach a global context; the
                 // consumer binds it to shaderParameters(shaderEffectId) with a tick dep.
                 parameters: root.shaderParamSchema

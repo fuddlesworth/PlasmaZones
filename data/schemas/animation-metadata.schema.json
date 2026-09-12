@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:animation-metadata",
     "title": "PlasmaZones Animation Shader Metadata",
-    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. Optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid), named parameter presets and descriptive metadata (description, author, version, category) are allowed through.",
+    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. Optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid), named parameter presets and descriptive metadata (description, author, version, category) are allowed through. Unknown top-level keys are accepted rather than rejected, so this schema will not catch a mis-spelled key such as \"preset\" for \"presets\". The loader ignores anything it does not know.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
     "properties": {

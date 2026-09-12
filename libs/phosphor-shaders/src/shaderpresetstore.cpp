@@ -165,6 +165,21 @@ int migrateLegacyOverlayPresets(const QString& root)
         }
         preset.packId = packId;
         preset.params = obj.value(QLatin1String(LegacyFieldShaderParams)).toObject().toVariantMap();
+        // BOUNDED here too, the same two caps fromJson applies on the read. Without them
+        // the migration wrote a file that every later read silently shortened, so the name
+        // cap's own argument about the asymmetric half of a defensive pair applied to the
+        // params map as well.
+        if (preset.params.size() > ShaderPreset::MaxParams) {
+            auto cut = preset.params.begin();
+            std::advance(cut, ShaderPreset::MaxParams);
+            preset.params.erase(cut, preset.params.end());
+        }
+        for (auto it = preset.params.begin(); it != preset.params.end(); ++it) {
+            if (it.value().typeId() == QMetaType::QString
+                && it.value().toString().size() > ShaderPreset::MaxValueChars) {
+                it.value() = it.value().toString().left(ShaderPreset::MaxValueChars);
+            }
+        }
 
         const QString targetPath = targetDir + QLatin1Char('/') + preset.id + QStringLiteral(".json");
 

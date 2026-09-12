@@ -906,8 +906,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // nothing — the cursor stays undecorated until a pointer chain is set
         // at that exact path. setProfile short-circuits on an unchanged
         // profile, so a tree edit elsewhere does not restart a live trail.
-        m_pointerPass.setProfile(resolveDecorationProfile(PhosphorSurfaceShaders::decorationPointerPath(),
-                                                          PhosphorShaders::ShaderFamily::Pointer));
+        m_pointerPass.setProfile(resolvedPointerProfile());
         updateAllDecorations();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();

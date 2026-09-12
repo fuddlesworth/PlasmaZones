@@ -652,9 +652,9 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata       OK\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
     } else {
-        out << "  metadata       ERROR\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -672,6 +672,11 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // Preset lint: every preset key must name a declared parameter, and every
     // value must match that parameter's declared type and range.
+    errors += reportRawPresetProblems(out, doc.object());
+    // The image-parameter gap: this arm parses presets before sourceDir is stamped, so an
+    // image-typed preset value is refused fail-closed and vanishes before the shared lint
+    // runs. Report the declaration instead.
+    errors += reportImageParamPresets(out, doc.object());
     errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
 
     // ── fragment stage ──
@@ -715,7 +720,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // so: a multipass pack is a daemon-and-preview feature, and its final
     // stage runs alone wherever the compositor attaches it.
     if (eff.isMultipass) {
-        out << "  note           multipass buffer passes run on the daemon and the preview only; the compositor "
+        out << "  " << padLabel(QStringLiteral("note"))
+            << "multipass buffer passes run on the daemon and the preview only; the compositor "
                "runs the final stage alone\n";
         for (const QString& declaredBuf : eff.bufferShaderPaths) {
             // fromJson leaves these RELATIVE (unlike the fragment path, which

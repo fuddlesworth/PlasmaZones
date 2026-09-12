@@ -30,6 +30,7 @@
  */
 
 #include <QFile>
+#include <QRegularExpression>
 #include <QString>
 #include <QTest>
 
@@ -43,7 +44,18 @@ QString read(const QString& path)
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return {};
     }
-    return QString::fromUtf8(f.readAll());
+    QString text = QString::fromUtf8(f.readAll());
+    // COMMENTS STRIPPED, because this guard scrapes text and a comment is text: the
+    // disconnect check below passed on the literal `disconnect(registry, nullptr, this,
+    // nullptr)` that appears inside a comment in the very function under test, so
+    // deleting the real call left it green. Block comments go too, and the `://` guard
+    // keeps a URL in a comment from eating the rest of a line that carries a real call.
+    static const QRegularExpression blockComment(QStringLiteral("/\\*.*?\\*/"),
+                                                 QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression lineComment(QStringLiteral("(?<![:\"'])//[^\n]*"));
+    text.remove(blockComment);
+    text.remove(lineComment);
+    return text;
 }
 
 /// The body of @p function in @p source, from its opening brace to the matching close.
@@ -118,6 +130,13 @@ private Q_SLOTS:
         // set-time call, which left a `contains` check green.
         const QList<int> depths = depthsOf(body, QStringLiteral("applyShaderProfilesToAnimator("));
         QVERIFY2(!depths.isEmpty(), "setPresetRegistry does not call applyShaderProfilesToAnimator at all");
+        // And it comes AFTER the subscription, which is where the set-time apply belongs:
+        // depth alone would also accept a call moved into the teardown branch or an early
+        // return, both of which are depth-2 blocks that never run on the set path.
+        QVERIFY2(body.lastIndexOf(QStringLiteral("applyShaderProfilesToAnimator("))
+                     > body.indexOf(QStringLiteral("presetsChanged")),
+                 "the set-time apply must follow the presetsChanged subscription, not precede it in a guard or "
+                 "teardown branch");
         QVERIFY2(*std::min_element(depths.cbegin(), depths.cend()) <= 2,
                  "setPresetRegistry must call applyShaderProfilesToAnimator at SET TIME, not only from the "
                  "presetsChanged handler: setSettings' body is gated on a pointer that never changes, so on an "
@@ -140,8 +159,11 @@ private Q_SLOTS:
         QVERIFY2(!source.isEmpty(), "cannot read src/daemon/overlayservice/shader.cpp");
         const QString body = functionBody(source, QStringLiteral("void OverlayService::setPresetRegistry("));
         QVERIFY2(!body.isEmpty(), "setPresetRegistry not found");
-        QVERIFY2(body.contains(QStringLiteral("disconnect(")),
-                 "setPresetRegistry must disconnect from the outgoing registry before overwriting the borrow");
+        // The HELD HANDLE by name, not any `disconnect(`: the blanket form this function
+        // deliberately avoids is named in its own comment, so a looser check read that
+        // comment as the code. Comments are stripped above as well; both halves matter.
+        QVERIFY2(body.contains(QStringLiteral("disconnect(m_presetsChangedConnection)")),
+                 "setPresetRegistry must disconnect the held presetsChanged handle before overwriting the borrow");
     }
 };
 

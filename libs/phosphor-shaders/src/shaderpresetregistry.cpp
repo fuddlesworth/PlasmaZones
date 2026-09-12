@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace PhosphorShaders {
 
@@ -139,18 +140,51 @@ void ShaderPresetRegistry::clampToBounds(const QString& key, QVariantMap& values
         if (range == boundsIt->constEnd()) {
             continue;
         }
-        // Numbers only. A colour, a path or a bool has no declared range, and
-        // canConvert would happily turn "4" into 4 and write the number back.
+        // Numbers only, and a STRING that is a number counts. A colour or a path has no
+        // declared range so it never reaches here, and a bool is handled by its own
+        // branch; what is left is a value whose variant type is incidental. The schemas
+        // allow a string preset value, and the uniform upload reads every custom param
+        // through `toFloat(&ok)` and takes it when ok — so `"octaves": "9999"` on a
+        // ranged parameter reached the shader unclamped while every numeric spelling of
+        // the same value was bounded. A numeric string is clamped and written back AS A
+        // NUMBER, which is what the consumer reads anyway; a genuinely non-numeric
+        // string is left alone.
         const QMetaType::Type type = static_cast<QMetaType::Type>(it.value().typeId());
+        bool numericString = false;
+        if (type == QMetaType::QString) {
+            it.value().toString().toDouble(&numericString);
+        }
         const bool numeric = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
-            || type == QMetaType::ULongLong || type == QMetaType::Double || type == QMetaType::Float;
+            || type == QMetaType::ULongLong || type == QMetaType::Double || type == QMetaType::Float || numericString;
         if (!numeric) {
             continue;
         }
-        const bool hasMin = range->first.isValid();
-        const bool hasMax = range->second.isValid();
-        const double min = hasMin ? range->first.toDouble() : 0.0;
-        const double max = hasMax ? range->second.toDouble() : 0.0;
+        // A declared bound is only a bound when it is a NUMBER. `presetBoundsFrom`
+        // inserts whatever the pack wrote and `isValid()` is true for a QString, so
+        // `"min": "abc"` used to read as min 0.0 and silently clamp every value for that
+        // parameter to >= 0 — and two bad sides pinned everything to exactly 0. Only the
+        // animation and wallpaper registries schema-validate at load, so a user-installed
+        // surface or pointer pack reaches this ungated. Same class as the inverted range
+        // below, on the other axis: a bound that cannot be read is no bound.
+        const auto numericBound = [&key, &it](const QVariant& side, const char* which) -> std::optional<double> {
+            if (!side.isValid()) {
+                return std::nullopt;
+            }
+            bool ok = false;
+            const double value = side.toDouble(&ok);
+            if (!ok || !std::isfinite(value)) {
+                qCWarning(lcPresetRegistry) << "ShaderPresetRegistry: pack" << key << "declares a non-numeric" << which
+                                            << "for" << it.key() << "(" << side << "); ignoring that bound";
+                return std::nullopt;
+            }
+            return value;
+        };
+        const std::optional<double> minBound = numericBound(range->first, "min");
+        const std::optional<double> maxBound = numericBound(range->second, "max");
+        const bool hasMin = minBound.has_value();
+        const bool hasMax = maxBound.has_value();
+        const double min = minBound.value_or(0.0);
+        const double max = maxBound.value_or(0.0);
         // An INVERTED range is refused rather than applied. Nothing validates
         // min <= max — `presetBoundsFrom` inserts whatever the pack declared —
         // and applying max() then min() to a declared min 5 / max 1 leaves the
@@ -164,13 +198,31 @@ void ShaderPresetRegistry::clampToBounds(const QString& key, QVariantMap& values
         }
 
         double value = it.value().toDouble();
+        // NON-FINITE first. std::max(NaN, min) returns NaN (the `a < b ? b : a` shape),
+        // so a NaN or infinity walked through the clamp untouched and reached the uniform.
+        // JSON cannot carry one — Qt's parser refuses both spellings — but a D-Bus or
+        // QVariantMap write can, and this is the only place a declared range is enforced.
+        // Treated as "no usable value": the parameter falls back to its declared default
+        // by having its entry dropped, which is what an unparseable colour already does.
+        if (!std::isfinite(value)) {
+            qCWarning(lcPresetRegistry) << "ShaderPresetRegistry: pack" << key << "received a non-finite value for"
+                                        << it.key() << "; dropping it so the declared default applies";
+            it = values.erase(it);
+            if (it == values.end()) {
+                break;
+            }
+            --it;
+            continue;
+        }
         if (hasMin) {
             value = std::max(value, min);
         }
         if (hasMax) {
             value = std::min(value, max);
         }
-        if (type == QMetaType::Double || type == QMetaType::Float) {
+        // A numeric STRING comes back as a number: the consumer reads it as one either
+        // way, and leaving it a string would mean the next clamp has to re-parse it.
+        if (type == QMetaType::Double || type == QMetaType::Float || numericString) {
             it.value() = value;
             continue;
         }
@@ -190,7 +242,12 @@ void ShaderPresetRegistry::clampToBounds(const QString& key, QVariantMap& values
         // range narrower than 1, which is most float ranges) keep the clamped
         // double. The declared bound is the guarantee; the variant's incidental
         // integrality is not.
-        double rounded = static_cast<double>(qRound(value));
+        // qRound64, not qRound: qRound returns INT and Qt's checked conversion asserts in
+        // debug and is undefined in release for a value outside int's range — reachable
+        // with a one-sided declared range (presetBoundsFrom inserts whichever side the
+        // pack gave) and a hand-edited 1e12. The value is already clamped to whatever
+        // bounds exist, so this only has to survive the unbounded side.
+        double rounded = static_cast<double>(qRound64(value));
         if (hasMin && rounded < min) {
             rounded = std::ceil(min);
         }
@@ -252,7 +309,17 @@ bool ShaderPresetRegistry::applyPackBucket(const QString& key, const QString& pa
         // for it, and renaming one in a pack update is indistinguishable from
         // deleting one and adding another — which is the honest reading.
         preset.id = it.key();
+        // The key is the id AND the display name, and only the id half is identity: a
+        // 5000-character key from a hand-written metadata.json rendered unbounded in every
+        // picker row. fromJson caps a user preset's name for exactly this reason, and the
+        // offline validator's diagnostic is for the author, not a runtime refusal.
         preset.name = it.key();
+        if (preset.name.size() > ShaderPreset::MaxNameChars) {
+            preset.name.truncate(ShaderPreset::MaxNameChars);
+            if (!preset.name.isEmpty() && preset.name.back().isHighSurrogate()) {
+                preset.name.chop(1);
+            }
+        }
         preset.packId = packId;
         preset.params = it.value();
         preset.readOnly = true;

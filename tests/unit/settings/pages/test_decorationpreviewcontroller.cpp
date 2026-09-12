@@ -137,6 +137,13 @@ private Q_SLOTS:
                                                               {QStringLiteral("type"), QStringLiteral("float")},
                                                               {QStringLiteral("default"), 16.0}}}}}));
 
+        // An INVERTED declared range, and a COLOUR param that also declares one: the two
+        // skips in clampToDeclaredRanges, neither reachable from any other fixture here.
+        QVERIFY(writePack(root, QStringLiteral("glow-inverted"),
+                          QJsonObject{{QStringLiteral("paddingParam"), QStringLiteral("glowSize")},
+                                      {QStringLiteral("parameters"),
+                                       QJsonArray{floatParam(QStringLiteral("glowSize"), 16.0, 60.0, 4.0)}}}));
+
         // Backdrop-sampling multipass pack, modelled on the shipping glass /
         // blur family. Without one of these the multipass and needsBackdrop
         // branches are unreachable and asserting on them only pins a constant.
@@ -280,6 +287,32 @@ private Q_SLOTS:
         const double unbounded =
             c.previewOuterPadding(QStringLiteral("glow-unbounded"), {{QStringLiteral("glowSize"), 100000.0}});
         QCOMPARE(unbounded, static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+    }
+
+    /// The two SKIPS in the declared-range clamp, each deliberate and each otherwise
+    /// unreachable from this file's fixtures, so deleting either was a silent behaviour
+    /// change.
+    void previewClampSkipsAnInvertedRangeAndNonNumericValues()
+    {
+        DecorationPreviewController c(&m_registry, nullptr);
+
+        // An inverted declared range (min 60, max 4) is left alone rather than applied:
+        // applying both ends in order moves the value outside BOTH of them, which is the
+        // same decision the library's clamp makes.
+        QCOMPARE(c.previewOuterPadding(QStringLiteral("glow-inverted"), {{QStringLiteral("glowSize"), 30.0}}), 30.0);
+
+        // The clamp's OTHER skip — a non-numeric value on a parameter that declares a
+        // range — has no assertion here, deliberately, and that is worth stating rather
+        // than faking: `translateSurfaceParams` routes params by DECLARED TYPE, so a
+        // string on a float parameter never reaches the composed stage map whether the
+        // clamp touched it or not. The skip exists so the clamp does not coerce such a
+        // value into a number (which is what the library's clamp refuses for the same
+        // reason), and the only honest observation of it is that composing does not crash
+        // or drop the rest of the stage.
+        const QVariantList stages =
+            c.previewChain(QStringLiteral("glow-inverted"), {{QStringLiteral("glowSize"), QStringLiteral("wide")}});
+        QVERIFY(!stages.isEmpty());
+        QVERIFY(!stages.first().toMap().value(QStringLiteral("source")).toString().isEmpty());
     }
 
     /// The same identity check against the SHIPPING packs rather than the

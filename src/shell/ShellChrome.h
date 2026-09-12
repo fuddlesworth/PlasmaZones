@@ -3,6 +3,8 @@
 #pragma once
 
 #include <PhosphorShaders/ShaderPresetStore.h>
+
+#include <QHash>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -73,6 +75,16 @@ public:
     /// resolved chain ({source, vertexSource, preamble, params, animated,
     /// ...} as SurfaceDecoration reads them). Empty when undecorated.
     [[nodiscard]] Q_INVOKABLE QVariantList chainFor(const QString& surfacePath) const;
+    /// `m_tree.resolve(path)` with every layer's preset flattened in, memoised per path
+    /// for the life of one revision.
+    ///
+    /// QML calls `chainFor` AND `outerPaddingFor` for every surface on each `revision`
+    /// bump (a palette change, a settings refetch, a pack reload, a preset retune), and
+    /// each used to run its own tree walk plus its own preset flatten. The cache is
+    /// cleared in `bump()`, which is the one place anything either of them reads can
+    /// change, so a stale entry is not reachable: the revision IS the invalidation.
+    [[nodiscard]] const PhosphorSurfaceShaders::DecorationProfile& resolvedProfile(const QString& surfacePath) const;
+
     /// The chain's largest declared outer margin, logical px, clamped.
     [[nodiscard]] Q_INVOKABLE double outerPaddingFor(const QString& surfacePath) const;
 
@@ -110,6 +122,9 @@ private:
     /// Declared AFTER m_registry: the seeding connection below reads the registry, and
     /// reverse member destruction tears this down first.
     std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
+    /// Flattened profiles for this revision; see `resolvedProfile`. Mutable because both
+    /// readers are const and the cache is a memo, not state a caller can observe.
+    mutable QHash<QString, PhosphorSurfaceShaders::DecorationProfile> m_resolvedCache;
     PhosphorSurfaceShaders::DecorationProfileTree m_tree;
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;

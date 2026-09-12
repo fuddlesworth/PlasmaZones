@@ -37,9 +37,14 @@ namespace {
 /// by its own test.
 ///
 /// Open-coded rather than routed through resolveParams, because that needs a preset
-/// registry this controller has no handle on and the question here has no preset in
-/// it: the values come from the editor's own sliders. The RULE is the same one, and
-/// it is the pack's own metadata either way.
+/// registry this controller has no handle on and the question here has no preset in it:
+/// the values come from the editor's own sliders. The BOUND is the same one — the pack's
+/// own declared range — but the writeback is not identical: this always writes a double,
+/// where the library's clamp keeps an integral variant integral and rounds toward the
+/// interval. Safe here because nothing on the preview path branches on the variant type
+/// (non-colour params reach float slots through translateSurfaceParams, and
+/// paddingRequest reads toDouble), and stated rather than implied so the next reader does
+/// not take the two for byte-identical.
 QVariantMap clampToDeclaredRanges(const PhosphorSurfaceShaders::SurfaceShaderEffect& effect, QVariantMap params)
 {
     for (const auto& p : effect.parameters) {

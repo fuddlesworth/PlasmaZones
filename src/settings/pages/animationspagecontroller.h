@@ -507,6 +507,19 @@ public:
     /// supplied. The caller knows which, because it knows whether the preset it is
     /// showing is this path's own or inherited — and the combo shows the RESOLVED
     /// one, so on an inheriting event only the blocking reading does anything.
+    /// Write the engaged-EMPTY preset sentinel at @p rawPaths, unconditionally.
+    ///
+    /// Not the same call as `setShaderPresetOnPaths(paths, "", blockInherited)`, and the
+    /// difference is why this exists. That one's `blockInherited` is a HEURISTIC for the
+    /// interactive combo: it writes the sentinel only where nothing is stored, because
+    /// picking "None" on a path that already owns a preset means "clear mine". A motion
+    /// set apply has no heuristic to apply — it has to reproduce what the capture
+    /// recorded, and an empty `presetId` in a set IS the sentinel, so applying one onto a
+    /// path that owns a preset must store the block rather than reset the slot and let an
+    /// ancestor's preset back in.
+    ///
+    /// Returns the number of paths written, or -1 on refusal, like its sibling.
+    int setShaderPresetSentinelOnPaths(const QStringList& rawPaths);
     Q_INVOKABLE int setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,
                                            bool blockInherited = false);
 

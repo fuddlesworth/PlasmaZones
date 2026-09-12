@@ -65,9 +65,10 @@ RowLayout {
     property bool supportsPresets: true
     /// The assignment's current preset id, or empty for none.
     property string presetId: ""
-    /// The assignment's live parameter values — preset ⊕ deltas — used to save a
-    /// new preset and to update the current one. These are the values the rows
-    /// show, so saving from them captures the whole tuning.
+    /// The assignment's live parameter values — preset ⊕ deltas — as the rows show them.
+    /// Used for the modified-state comparison, and for the SAVE payload only at a host
+    /// with no assignment behind it; an assignment host's writes compose from its own
+    /// deltas instead (see `_savePayload`).
     property var currentValues: ({})
     /// The assignment's OWN stored parameter map, REQUIRED, or `null` from a host
     /// that has no assignment behind it.
@@ -115,6 +116,26 @@ RowLayout {
     // it.
     property var _rows: []
     property var _presetParams: ({})
+
+    /// What Update-preset and Save-as-new WRITE.
+    ///
+    /// For an assignment host — one that supplies `deltas` — this is the preset's own
+    /// values with this assignment's OWN edits over the top, NOT `currentValues`. At the
+    /// animation host `currentValues` is the resolved walk-up, so writing it put an
+    /// ANCESTOR's inherited values into the shared preset the moment an inheriting event
+    /// owned a single delta (which is exactly when Update becomes available). That is the
+    /// same leak `ownValues` was introduced to end on the marking side, and the write side
+    /// was left on the old footing.
+    ///
+    /// For a host with no assignment behind it (`deltas` null — the pack browser's
+    /// preview) `currentValues` IS the answer: there are no deltas to compose, and the
+    /// browser has already filtered its map to what the preset names plus what the user
+    /// moved.
+    readonly property var _savePayload: {
+        if (root.deltas === undefined || root.deltas === null)
+            return root.currentValues || {};
+        return Object.assign({}, root._presetParams || {}, root.deltas);
+    }
 
     readonly property bool _hasPreset: root.presetId.length > 0
     readonly property bool _presetMissing: root._hasPreset && _indexOfId(root.presetId) < 0
@@ -321,7 +342,7 @@ RowLayout {
         QQC2.ToolTip.visible: hovered
         QQC2.ToolTip.text: i18nc("@info:tooltip", "Save these values into the preset, for everything using it")
         onClicked: {
-            if (root.presetBridge.updatePreset(root.presetId, root.currentValues)) {
+            if (root.presetBridge.updatePreset(root.presetId, root._savePayload)) {
                 root.revertRequested();
             }
         }
@@ -429,7 +450,7 @@ RowLayout {
                     root.presetSelected(copyId);
                 }
             } else {
-                const id = root.presetBridge.savePreset(root.packId, nameField.text, root.currentValues);
+                const id = root.presetBridge.savePreset(root.packId, nameField.text, root._savePayload);
                 if (id.length > 0) {
                     // Select what was just saved and drop the deltas: the new
                     // preset IS these values, so nothing is layered on it yet.

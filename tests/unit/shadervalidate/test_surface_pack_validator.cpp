@@ -120,6 +120,32 @@ private Q_SLOTS:
     /// The surface arm runs the shared preset lint, which was the point of
     /// building this harness: the surface arm had no slots of its own, so the lint
     /// could have been deleted from it without a single test noticing.
+    void anImagePresetValueIsReportedRatherThanSilentlyDropped()
+    {
+        // This arm parses a pack's presets BEFORE its directory is stamped, so
+        // parsePackPresets' fail-closed guard refuses every image-typed preset value and
+        // the value is gone before any other lint sees the map. That mirrors the runtime,
+        // so the fix is a REPORT rather than a change: the declaration is in the metadata
+        // and that is what this lints.
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-image-preset"),
+            QJsonArray{surfaceParam(QStringLiteral("tex"), QStringLiteral("image"), QStringLiteral(""), 0.0, 0.0)});
+        obj.insert(QStringLiteral("presets"),
+                   QJsonObject{{QStringLiteral("Textured"),
+                                QJsonObject{{QStringLiteral("tex"), QStringLiteral("noise.png")}}}});
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-image-preset"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("is dropped at load")), qPrintable(r.report));
+
+        // A pack declaring the image param but setting no preset value for it draws
+        // nothing from this lint: an unused declaration is the type lint's business.
+        obj.remove(QStringLiteral("presets"));
+        const PackResult quiet = validateSurface(tmp, QStringLiteral("sf-image-preset"), obj, surfaceBodyReading({}));
+        QVERIFY2(!quiet.report.contains(QStringLiteral("is dropped at load")), qPrintable(quiet.report));
+    }
+
     void thePresetLintRunsOnTheSurfaceArm()
     {
         QTemporaryDir tmp;

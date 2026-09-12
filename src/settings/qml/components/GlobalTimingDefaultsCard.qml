@@ -179,6 +179,12 @@ SettingsCard {
             // below is required.
             shaderPresetBridge: null
             shaderSupportsPresets: false
+            // Bound explicitly because the property is REQUIRED, and the value says what
+            // this host is: a global-defaults card has no per-event assignment behind it,
+            // so there is no own map to mark rows from. Stated rather than defaulted, which
+            // is the whole point of the property being required — a host that simply forgot
+            // it should fail to build rather than silently mark nothing.
+            shaderOwnParams: ({})
             eventLabel: i18n("Global animation defaults")
             onValueChanged: card._commitEditor()
         }

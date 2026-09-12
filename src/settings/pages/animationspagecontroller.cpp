@@ -90,18 +90,31 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // existing one with nothing.
         //
         // Applied AFTER whichever pack/params branch below runs, because those go
-        // through setShaderOverride, which builds a fresh ShaderProfile and keeps
-        // nothing of what was stored. Written with blockInherited true when the
-        // captured id is empty, since an engaged-empty presetId is the blocking
-        // sentinel the capture recorded and reproducing the set means reproducing
-        // that, not clearing it.
+        // through setShaderOverride, which builds a fresh ShaderProfile and keeps nothing
+        // of what was stored. An EMPTY captured id goes through the sentinel writer rather
+        // than the combo's heuristic, for the reason stated at the call.
         const bool carriesPreset = shader.contains(JsonShaderPresetIdKey);
         const QString presetId = shader.value(JsonShaderPresetIdKey).toString();
         const auto applyPreset = [this, path, carriesPreset, presetId](bool ok) {
-            if (ok && carriesPreset) {
-                setShaderPresetOnPaths({path}, presetId, /*blockInherited=*/presetId.isEmpty());
+            if (!ok || !carriesPreset) {
+                return ok;
             }
-            return ok;
+            // An EMPTY captured id is the blocking sentinel, written through the dedicated
+            // writer rather than through the combo's blockInherited heuristic: that
+            // heuristic stores the block only where nothing is stored, so applying a set
+            // onto a path that already owned a preset reset the slot and let an ancestor's
+            // preset back in — the opposite of what the set recorded.
+            const int written = presetId.isEmpty() ? setShaderPresetSentinelOnPaths({path})
+                                                   : setShaderPresetOnPaths({path}, presetId,
+                                                                            /*blockInherited=*/false);
+            // A REFUSAL (-1, an over-long id) fails the entry rather than reporting success
+            // with the preset half silently missing: this closure's caller is the whole-set
+            // apply, whose promise is that an entry commits completely or not at all.
+            if (written < 0) {
+                qCWarning(lcConfig) << "motion set: refusing an entry whose preset id could not be written for" << path;
+                return false;
+            }
+            return true;
         };
 
         // ── De-seed, the counterpart of the snapshot capturing built-in

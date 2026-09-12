@@ -2028,20 +2028,20 @@ private:
     /// (seedDecorationTreeBaseline) — nothing is auto-inserted, because border
     /// and title-bar appearance resolve through resolveEffectiveWindowAppearance
     /// rather than through this tree; replaced wholesale when the setting
-    /// arrives. Do not read this as "populated by default":
-    /// hasDecorationTreeContent() is false until the user has actually applied
-    /// surface packs, which is load-bearing for the invalidation gates that
-    /// consult it.
+    /// arrives. NOT "populated by default": hasDecorationTreeContent() is false until the
+    /// user has applied surface packs, which the invalidation gates depend on.
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
 
-    /// `m_decorationTree.resolve(path)` with each layer's preset flattened in.
-    /// Every consumer that reads PARAMETERS goes through here, so "what does this
-    /// surface render with" has one answer; reading the tree raw skips the preset.
-    /// (hasDecorationTreeContent reads raw, correctly: no preset gates a chain.)
-    /// @p family is `Pointer` for the cursor chain, `Surface` for the rest.
+    /// `m_decorationTree.resolve(path)` with each layer's preset flattened in. Every
+    /// consumer that reads PARAMETERS goes through here, so "what does this surface render
+    /// with" has one answer; the tree raw skips the preset (hasDecorationTreeContent reads
+    /// raw, correctly: no preset gates a chain). @p family is `Pointer` for the cursor chain.
     PhosphorSurfaceShaders::DecorationProfile
     resolveDecorationProfile(const QString& path,
                              PhosphorShaders::ShaderFamily family = PhosphorShaders::ShaderFamily::Surface) const;
+    /// The POINTER pair spelled once: the family argument above defaults to Surface, so a
+    /// caller omitting it resolves the cursor chain against the wrong family, silently.
+    [[nodiscard]] PhosphorSurfaceShaders::DecorationProfile resolvedPointerProfile() const;
 
     /// Compiled surface-shader packs keyed by pack id (CompiledSurfacePack holds
     /// the main MapTexture shader, contract uniform locations, pack-declared
@@ -2191,17 +2191,17 @@ private:
     void onEffectAudioSpectrum(const QVector<float>& spectrum);
 
     /// Start/stop/reconfigure the effect's cava instance to match the run gate
-    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() ||
-    /// hasAudioReactiveAnimation())). Lazily creates m_audioProvider on first run.
-    /// Prefer scheduleEffectAudioSync from high-frequency callers.
+    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() || hasAudioReactiveAnimation())).
+    /// Lazily creates m_audioProvider; prefer scheduleEffectAudioSync from hot callers.
     void syncEffectAudioState();
 
-    /// Coalesced, deferred syncEffectAudioState: latch plus one queued evaluation, so
-    /// a remove-then-readd or the two async settings replies settle to ONE net
-    /// decision at event-loop return, off the compositor thread's synchronous path.
+    /// Coalesced, deferred syncEffectAudioState: latch plus one queued evaluation, so a
+    /// remove-then-readd or the two async settings replies settle to ONE net decision at
+    /// event-loop return, off the compositor thread's synchronous path.
     void scheduleEffectAudioSync();
 
-    /// Coalescing latches for the preset-retune sweeps; see `schedulePresetSweep`.
+    /// The in-handler re-seed flag and the two sweep latches; see `schedulePresetSweep`.
+    bool m_seedingPresetsInline = false;
     bool m_surfacePresetSweepScheduled = false;
     bool m_pointerPresetSweepScheduled = false;
     void schedulePresetSweep(PhosphorShaders::ShaderFamily family);

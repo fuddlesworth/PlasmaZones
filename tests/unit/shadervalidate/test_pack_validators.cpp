@@ -877,6 +877,52 @@ private Q_SLOTS:
         QCOMPARE(r.errors, 2);
     }
 
+    void theRawPresetsBlockIsLintedForWhatTheParseHides()
+    {
+        // Three faults the PARSED map cannot show, because by then they have already
+        // happened: a non-object `presets` is ignored wholesale (the pack ships none), and
+        // both loader caps truncate silently. Each cost the author presets with only a log
+        // line, and the shared lint receives the result rather than the declaration.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        // A non-object block.
+        QJsonObject obj = basePack(QStringLiteral("raw-presets"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        obj.insert(QStringLiteral("presets"), QJsonArray{});
+        PackResult r = validate(tmp, QStringLiteral("raw-presets"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("`presets` is not an object")), qPrintable(r.report));
+        QCOMPARE(r.errors, 1);
+
+        // More presets than the loader keeps.
+        QJsonObject many;
+        for (int i = 0; i < 70; ++i) {
+            many.insert(QStringLiteral("p%1").arg(i), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        }
+        obj.insert(QStringLiteral("presets"), many);
+        r = validate(tmp, QStringLiteral("raw-presets"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("declares 70 presets")), qPrintable(r.report));
+
+        // More values in one preset than the loader keeps. The declared-parameter lints
+        // fire for the undeclared ids too, so assert on this diagnostic rather than a count.
+        QJsonObject fat;
+        for (int i = 0; i < 70; ++i) {
+            fat.insert(QStringLiteral("v%1").arg(i), 1.0);
+        }
+        obj.insert(QStringLiteral("presets"), QJsonObject{{QStringLiteral("Fat"), fat}});
+        r = validate(tmp, QStringLiteral("raw-presets"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("sets 70 values")), qPrintable(r.report));
+
+        // And a well-formed block draws none of the three.
+        obj.insert(QStringLiteral("presets"),
+                   QJsonObject{{QStringLiteral("Fine"), QJsonObject{{QStringLiteral("speed"), 1.5}}}});
+        r = validate(tmp, QStringLiteral("raw-presets"), obj);
+        QVERIFY2(!r.report.contains(QStringLiteral("is not an object")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("presets;")), qPrintable(r.report));
+        QCOMPARE(r.errors, 0);
+    }
+
     void theOverlayArmLintsPresetsToo()
     {
         // The preset lint is wired into all four validator arms, but every test
@@ -948,7 +994,7 @@ private Q_SLOTS:
         // The in-pack path that does not exist IS reported. This is the half of the
         // image branch that can fire.
         QVERIFY2(r.report.contains(QStringLiteral("preset 'Missing'")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not contain")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("names no file the pack ships")), qPrintable(r.report));
         QVERIFY(r.errors >= 1);
         // The two ESCAPING paths are not reported, and that is the parse's doing, not
         // a miss in the lint: parsePackPresets refuses them and drops the entries, so

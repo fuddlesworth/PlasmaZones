@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QSet>
 
 namespace PhosphorSurfaceShaders {
 
@@ -84,6 +85,66 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
         return false;
     };
 
+    /// The pack ids this tree PINS a preset on at @p surfacePath or anywhere on its
+    /// walk-up, as a set.
+    ///
+    /// PER PACK, not per field, because presetIds and parameters are both per-pack maps:
+    /// a whole-map gate meant picking a preset on ONE chain layer suppressed the seed's
+    /// parameters for EVERY layer, so a preset on `shadow` silently dropped the seeded
+    /// `border` tuning and the border stopped tracking the theme.
+    ///
+    /// Only a NON-EMPTY id counts as pinning. An engaged-empty map, and a map whose
+    /// entries are all the empty-string blocking sentinel, pin nothing: the flatten
+    /// treats an empty id as a block rather than as a preset, so the seed's values are
+    /// exactly what should apply there.
+    const auto presetPinnedPacks = [this](const QString& surfacePath) {
+        QSet<QString> pinned;
+        const auto collect = [&pinned](const DecorationProfile& profile) {
+            if (!profile.presetIds) {
+                return;
+            }
+            for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
+                if (!it.value().toString().isEmpty()) {
+                    pinned.insert(it.key());
+                }
+            }
+        };
+        if (!decorationPathIsBaselineIsolated(surfacePath)) {
+            collect(m_store.baseline());
+        }
+        QString cursor = surfacePath;
+        while (!cursor.isEmpty()) {
+            if (const DecorationProfile* at = m_store.findOverride(cursor)) {
+                collect(*at);
+            }
+            cursor = decorationParentPath(cursor);
+        }
+        return pinned;
+    };
+
+    /// @p seedParams with the packs in @p pinned removed, or nullopt when that leaves
+    /// nothing to inject. Keeping the unpinned packs is the whole point: the seed's
+    /// border tuning must survive a preset chosen on the shadow layer.
+    const auto seedParamsExcluding = [](const std::optional<QVariantMap>& seedParams,
+                                        const QSet<QString>& pinned) -> std::optional<QVariantMap> {
+        if (!seedParams) {
+            return std::nullopt;
+        }
+        if (pinned.isEmpty()) {
+            return seedParams;
+        }
+        QVariantMap kept;
+        for (auto it = seedParams->constBegin(); it != seedParams->constEnd(); ++it) {
+            if (!pinned.contains(it.key())) {
+                kept.insert(it.key(), it.value());
+            }
+        }
+        if (kept.isEmpty()) {
+            return std::nullopt;
+        }
+        return kept;
+    };
+
     DecorationProfileTree merged = *this;
 
     // Baseline: the empty path's walk collapses to the baseline's own slots,
@@ -98,15 +159,16 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
             baseline.chain = seedBaseline.chain;
             changed = true;
         }
-        // A user-engaged presetIds blocks the seed's PARAMETERS as well as its own
-        // field. The flatten treats every entry in `parameters` as the delta set, so a
-        // seed's hard-coded values would pin over the preset the user just chose —
-        // keep-equal-deltas is the right rule for values the user typed, and these are
-        // values the user never typed.
-        if (seedBaseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)
-            && !fieldEngagedOnWalk(QString(), &DecorationProfile::presetIds)) {
-            baseline.parameters = seedBaseline.parameters;
-            changed = true;
+        // A user-pinned preset blocks the seed's PARAMETERS for THAT PACK. The flatten
+        // treats every entry in `parameters` as the delta set, so a seed's hard-coded
+        // values would pin over the preset the user just chose — keep-equal-deltas is
+        // the right rule for values the user typed, and these are values the user never
+        // typed. Per pack, so the seed's tuning for the OTHER layers still lands.
+        if (seedBaseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)) {
+            if (const auto injected = seedParamsExcluding(seedBaseline.parameters, presetPinnedPacks(QString()))) {
+                baseline.parameters = injected;
+                changed = true;
+            }
         }
         if (seedBaseline.presetIds && !fieldEngagedOnWalk(QString(), &DecorationProfile::presetIds)) {
             baseline.presetIds = seedBaseline.presetIds;
@@ -135,16 +197,22 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
             target.chain = seed.chain;
             changed = true;
         }
-        // presetIds blocks parameters here too, for the reason the baseline block
-        // above gives. This is the live half: the four seeded card surfaces (osd,
-        // popup.layoutPicker, popup.zoneSelector, popup.cheatsheet) carry the seed's
-        // borderWidth / useSystemAccent / edgeSoftness and the shadow map, so before
-        // this a preset picked on one of them resolved with those four keys pinned
-        // over it.
-        if (seed.parameters && !fieldEngagedOnWalk(path, &DecorationProfile::parameters)
-            && !fieldEngagedOnWalk(path, &DecorationProfile::presetIds)) {
-            target.parameters = seed.parameters;
-            changed = true;
+        // A pinned preset blocks the seed's parameters for that pack here too, for the
+        // reason the baseline block above gives. This is the live half: the four seeded
+        // card surfaces (osd, popup.layoutPicker, popup.zoneSelector, popup.cheatsheet)
+        // carry seeded values for BOTH chain packs, so before this a preset picked on
+        // either layer resolved with the seed's keys pinned over it — and a whole-map
+        // gate then went too far the other way, dropping the seeded tuning of the layer
+        // the user had not touched.
+        // The pinned set once per path, not once per arm: withSeedDefaults runs on EVERY
+        // read of this tree (the settings getters carry no parse cache), and both arms
+        // below want the same answer.
+        const QSet<QString> pinned = presetPinnedPacks(path);
+        if (seed.parameters && !fieldEngagedOnWalk(path, &DecorationProfile::parameters)) {
+            if (const auto injected = seedParamsExcluding(seed.parameters, pinned)) {
+                target.parameters = injected;
+                changed = true;
+            }
         }
         if (seed.presetIds && !fieldEngagedOnWalk(path, &DecorationProfile::presetIds)) {
             target.presetIds = seed.presetIds;

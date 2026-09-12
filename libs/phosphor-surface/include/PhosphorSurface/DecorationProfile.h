@@ -14,6 +14,7 @@
 // For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
 // rather than relied on through another Qt header: the unity build hides a missing
 // include, and the non-unity build is the only place it surfaces.
+#include <QMutex>
 #include <QSet>
 #include <QtGlobal>
 
@@ -144,7 +145,18 @@ public:
                 if (it.value().toString().isEmpty()) {
                     continue;
                 }
+                // Guarded: this getter is const on a value type whose class doc says it is not
+                // internally synchronized, and contains()+insert() on a shared QSet is not
+                // atomic (only the static's INITIALISATION is). The set is bounded by the
+                // user's own config, so growth is not the concern; a torn read is.
+                //
+                // The latch is process-wide, which is why no test asserts "warns exactly
+                // once": a slot doing that would pass or fail on slot ORDER within the
+                // binary. A test that wants to see the warning has to use a (pack, preset)
+                // pair no earlier slot has touched, which the key makes possible.
+                static QMutex latchMutex;
                 static QSet<QString> reported;
+                const QMutexLocker latchLock(&latchMutex);
                 const QString key = it.key() + QLatin1Char('\x1f') + it.value().toString();
                 if (!reported.contains(key)) {
                     reported.insert(key);

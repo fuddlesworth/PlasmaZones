@@ -75,10 +75,9 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
     for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
         if (kept >= kMaxPresetsPerPack) {
             qCWarning(log).noquote() << "Shader pack" << packDir.dirName() << "declares more than" << kMaxPresetsPerPack
-                                     << "presets; ignoring the rest from" << it.key();
+                                     << "usable presets; ignoring the rest from" << it.key();
             break;
         }
-        ++kept;
         // Same reasoning one level down: a non-object preset BODY yielded an empty
         // value map and the preset was then dropped by the isEmpty() test below,
         // with no diagnostic — unlike the refused-image case, which deliberately
@@ -104,14 +103,20 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
                                      << "is not an object; ignoring it";
             continue;
         }
+        // COUNTED after the shape check above, not before it: counting on entry spent the
+        // budget on presets that were then discarded, so a pack with 64 malformed entries
+        // followed by one good one lost the good one and the warning miscounted.
+        ++kept;
         const QJsonObject values = it.value().toObject();
         QVariantMap presetValues;
         QStringList refusedImageEntries;
         for (auto vit = values.begin(); vit != values.end(); ++vit) {
-            // The per-preset cap, the same number ShaderPreset::fromJson applies to a
-            // user preset file. A key past it names no declared parameter in any
-            // realistic pack (48 is the declared-parameter ceiling) and is inert at
-            // resolve, so there is nothing to salvage by keeping it.
+            // The per-preset cap, the same number ShaderPreset::fromJson applies to a user
+            // preset file. Deliberately ABOVE the schemas' own `maxProperties: 48` for a
+            // preset body, for the reason ShaderPreset::MaxParams gives: 48 is the
+            // declared-parameter ceiling, so a key past it names no declared parameter and
+            // is inert at resolve, and refusing the whole preset over one would discard
+            // the usable keys beside it.
             if (presetValues.size() >= PhosphorShaders::ShaderPreset::MaxParams) {
                 qCWarning(log).noquote() << "Shader pack" << packDir.dirName() << "preset" << it.key()
                                          << "declares more than" << PhosphorShaders::ShaderPreset::MaxParams
@@ -170,19 +175,22 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
         //     it from the offline validator — which lints the PARSED struct, so the
         //     effect headers that point an author at the validator for a typo were
         //     promising coverage it could not give.
-        //   • every value DROPPED means the preset cannot do what it says. Keeping it
-        //     would offer the user a preset that silently does nothing; each drop is
-        //     already named in the log above. Two kinds of drop reach here: an
-        //     escaping texture path, and a JSON null value. Both are decided per
-        //     entry, so a preset that declared values and kept none of them is empty
-        //     with a non-empty `values`, which is what distinguishes it from the
-        //     author-declared `{}`.
+        //   • every value REFUSED (an escaping texture path) means the preset cannot do
+        //     what it says. Keeping it would offer the user a preset that silently does
+        //     nothing; the refusal is already named in the log above.
         //
-        // The test is therefore on the DECLARED map being empty. A second
-        // `refusedImageEntries.isEmpty()` conjunct used to sit beside it, which could
-        // never be false when `values` was empty (a refusal requires a visited entry)
-        // and made the rule read as two independent conditions.
-        if (!presetValues.isEmpty() || values.isEmpty()) {
+        // A JSON `null` is NOT a refusal, and that distinction is what the test below
+        // turns on. The schemas say a null "means the preset says nothing about that
+        // parameter, so it keeps the pack's default" — which is exactly what omitting the
+        // key means, so a preset whose every value is null is the author-declared `{}`
+        // written the long way and is KEPT. Dropping it made the loader contradict the
+        // schema prose on the one case that prose describes.
+        //
+        // So the test is on whether anything was REFUSED, not on whether the declared map
+        // was empty. (An earlier pass removed this conjunct as dead, which was true while
+        // a refusal was the only way to empty a non-empty map; the null drop is the second
+        // way, and it must not be treated like the first.)
+        if (!presetValues.isEmpty() || refusedImageEntries.isEmpty()) {
             presets[it.key()] = presetValues;
         }
     }

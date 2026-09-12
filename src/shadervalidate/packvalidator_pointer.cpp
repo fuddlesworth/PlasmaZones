@@ -574,14 +574,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // and changes nothing. Nothing repairs this at load, which is why it needs
     // saying here: the pack works, and the control is dead.
     //
-    // Every stage is scanned, not just the fragment, since a parameter may
-    // legitimately be read only by a buffer pass or the vertex stage. A
-    // buffer pass gets no p_<id> preamble on any runtime, so it can only reach
-    // the parameters through their raw customParams / customColors lanes; a
-    // buffer stage that reads a pool by slot is therefore taken to read every
-    // parameter in that pool, because by-name attribution is impossible there
-    // and the alternative is a lint that fires on every multipass pack that
-    // does the only thing it can.
+    // Every stage is scanned, not just the fragment, since a parameter may legitimately be
+    // read only by a buffer pass or the vertex stage. A buffer pass gets no p_<id>
+    // preamble on any runtime, so it reaches the parameters only through their raw
+    // customParams / customColors lanes; a buffer stage that reads a pool by slot is
+    // therefore taken to read every parameter in that pool, because by-name attribution is
+    // impossible there and the alternative is a lint that fires on every multipass pack
+    // doing the only thing it can.
     if (anyStage) {
         const bool bufferReadsScalars = mentionsToken(bufferText, QStringLiteral("customParams"));
         const bool bufferReadsColors = mentionsToken(bufferText, QStringLiteral("customColors"));
@@ -1031,9 +1030,9 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata       OK\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
     } else {
-        out << "  metadata       ERROR\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -1044,6 +1043,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // plus the installed shared helpers.
     const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
     const QStringList paramNames = declaredParamNames(eff.parameters);
+    errors += reportRawPresetProblems(out, root);
     errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
     // A stage with no p_<id> preamble cannot use any, so no did-you-mean hint.
     const QStringList noParams;

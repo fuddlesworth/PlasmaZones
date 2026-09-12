@@ -182,6 +182,26 @@ PSS::DecorationProfile boundedDecorationProfile(const PSS::DecorationProfile& pr
 
 } // namespace
 
+// The `kMaxShaderOverrides` break in both sanitizers below is UNREACHABLE for these two
+// trees, and that is worth stating rather than testing. Both iterate
+// `in.overriddenPaths()`, which `fromJson` has already de-duplicated AND filtered to the
+// supported taxonomy — a fixed list of event paths for the shader tree and of decorable
+// surface paths for the decoration one, both well under a hundred entries. So the distinct
+// count cannot approach 1024 however many array entries a hand-edited config carries, and a
+// fixture for the cap would be asserting on a branch no input can reach.
+//
+// It stays because the OVERLAY twin's cap is genuinely live (its keys are layout UUIDs, so
+// the count is unbounded) and that one IS pinned, in test_settings_overlay_shader_tree.cpp.
+// Keeping the three sanitizers the same shape is worth more than removing two dead guards
+// that would have to come back the day either taxonomy becomes open-ended.
+QVariant sanitizeMotionProfileTree(const QVariant& v)
+{
+    // One line, deliberately: the rules live in `canonicalMotionProfileTree` beside the
+    // setter that also calls it, because the canonicalisation and the bound have to run on
+    // the same pass. See settingsschema.h for why the setter alone was not enough.
+    return QVariant(canonicalMotionProfileTree(v.toMap()));
+}
+
 QVariant sanitizeShaderProfileTree(const QVariant& v)
 {
     const PAS::ShaderProfileTree in = PAS::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(v.toMap()));

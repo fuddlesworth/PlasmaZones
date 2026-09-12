@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
@@ -58,6 +59,43 @@ bool writeSurfacePreset(const QString& presetId, const QString& packId, const QV
         return false;
     }
     return file.write(QJsonDocument(obj).toJson()) > 0;
+}
+
+/// Write a pack into @p dir that DECLARES a preset, so the pack-declared half of the
+/// preset feature has something to seed from.
+///
+/// No bundled surface pack declares presets (grep data/ — only phosphor-gate does, and it
+/// is an animation pack), so without a fixture like this the `seedPackPresets` call in
+/// ShellChrome's constructor can be deleted with this whole file still green.
+bool writePackWithPreset(const QString& dir, const QString& packId, const QString& presetName, int glowSize)
+{
+    if (!QDir().mkpath(dir + QLatin1Char('/') + packId)) {
+        return false;
+    }
+    QJsonObject param;
+    param.insert(QStringLiteral("id"), QStringLiteral("glowSize"));
+    param.insert(QStringLiteral("name"), QStringLiteral("glowSize"));
+    param.insert(QStringLiteral("type"), QStringLiteral("float"));
+    param.insert(QStringLiteral("default"), 24);
+    param.insert(QStringLiteral("min"), 4);
+    param.insert(QStringLiteral("max"), 64);
+    QJsonObject metadata;
+    metadata.insert(QStringLiteral("id"), packId);
+    metadata.insert(QStringLiteral("name"), packId);
+    metadata.insert(QStringLiteral("fragmentShader"), QStringLiteral("effect.frag"));
+    metadata.insert(QStringLiteral("paddingParam"), QStringLiteral("glowSize"));
+    metadata.insert(QStringLiteral("parameters"), QJsonArray{param});
+    metadata.insert(QStringLiteral("presets"),
+                    QJsonObject{{presetName, QJsonObject{{QStringLiteral("glowSize"), glowSize}}}});
+
+    const auto write = [&](const QString& name, const QByteArray& body) {
+        QFile file(dir + QLatin1Char('/') + packId + QLatin1Char('/') + name);
+        return file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(body) > 0;
+    };
+    return write(QStringLiteral("metadata.json"), QJsonDocument(metadata).toJson())
+        && write(
+               QStringLiteral("effect.frag"),
+               QByteArrayLiteral("vec4 pSurface(vec2 uv)\n{\n    return vec4(float(p_glowSize), 0.0, 0.0, 1.0);\n}\n"));
 }
 
 } // namespace
@@ -156,13 +194,30 @@ private Q_SLOTS:
         QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 18.0);
     }
 
+    void aPackDeclaredPresetSuppliesTheSurfacesParameters()
+    {
+        // The PACK-DECLARED half, which `seedPackPresets` is the only thing that puts in
+        // the registry. The user-preset slots below cover the store's directory load; this
+        // one covers the seed, and it needs its own fixture pack because no bundled surface
+        // pack declares a preset.
+        QTemporaryDir packs;
+        QVERIFY(packs.isValid());
+        QVERIFY(writePackWithPreset(packs.path(), QStringLiteral("seeded-glow"), QStringLiteral("Wide"), 52));
+
+        ShellChrome chrome({packs.path()}, nullptr);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("seeded-glow")}, {},
+                                            {{QStringLiteral("seeded-glow"), QStringLiteral("Wide")}})));
+        // The PRESET's value, not the pack's declared default of 24.
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 52.0);
+    }
+
     void aPresetSuppliesTheShellSurfacesParameters()
     {
-        // The shell resolves presets too, and nothing asserted it: this whole file
-        // mentioned no preset, so deleting ShellChrome's store load, its
-        // seedPackPresets call or its presetsChanged connection left the suite green —
-        // while the CHANGELOG promises that editing a preset moves everything using it
-        // straight away.
+        // The USER-preset half: the store's directory load plus the flatten. The
+        // pack-declared half is the slot above, which needs its own fixture pack because
+        // no bundled surface pack declares a preset — so between them the three arms
+        // (store load, seedPackPresets, presetsChanged) are all covered, where before this
+        // file mentioned no preset at all and any of the three could be deleted green.
         //
         // glow declares glowSize default 24, and it is the pack's paddingParam, so the
         // resolved padding is the cheapest observable for "which values did the chain

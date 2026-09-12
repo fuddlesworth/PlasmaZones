@@ -605,16 +605,14 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
             // path QML uses, and the map rides to disk beside the id.
             if (!bounded.isEmpty())
                 profile.parameters = bounded;
-            // Carry the preset reference across a PROMOTION — the same pack the
-            // path already resolved to, becoming owned rather than inherited.
-            // This builds a fresh profile rather than copying `stored`, so
-            // without this the preset was silently dropped every time the user
-            // promoted an inherited pack, which is the case the parameters were
-            // already carefully carried through for. A genuine pack SWITCH must
-            // still drop it, because presets are keyed by pack.
-            //
-            // Same predicate the overlay writer uses (OverlaysPageController::
-            // setShaderOverride), so the two trees cannot drift again.
+            // Carry the preset reference across a RE-WRITE of the pack this path already
+            // OWNS: the profile is rebuilt fresh, so without this every slider edge on an
+            // owned pack dropped the preset. `stored` is the DIRECT override, so this
+            // cannot fire on a genuine promotion from an inherited pack — there an
+            // inherited preset survives through ShaderProfile::overlay's per-slot cascade
+            // instead, which is why the animation tree needs no seeding step here and the
+            // overlay tree does. A genuine pack SWITCH still drops the reference, because
+            // presets are keyed by pack.
             if (stored.effectId.has_value() && *stored.effectId == effectId)
                 profile.presetId = stored.presetId;
             return profile;
@@ -730,6 +728,21 @@ int AnimationsPageController::setShaderParameterOnPaths(const QStringList& rawPa
                 return std::nullopt;
             return profile;
         });
+}
+
+int AnimationsPageController::setShaderPresetSentinelOnPaths(const QStringList& rawPaths)
+{
+    using namespace PhosphorAnimationShaders;
+
+    // UNCONDITIONAL, which is the whole difference from the call below: see the header.
+    // A motion set reproduces what it captured, so an empty captured id stores the block
+    // whether or not the path already owns a preset.
+    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderPresetSentinelOnPaths"), {},
+                                 [](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+                                     ShaderProfile profile = stored;
+                                     profile.presetId = QString();
+                                     return profile;
+                                 });
 }
 
 int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,

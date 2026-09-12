@@ -134,9 +134,8 @@ void OverlayService::setSettings(ISettings* settings)
             // applyDecoration is null-safe per slot, so screens without a wired
             // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
             // sub-second, so a live re-decorate has no observable effect.
-            connect(m_settings, &ISettings::decorationProfileTreeChanged, this, [this]() {
-                reapplyVisiblePopupDecorations();
-            });
+            connect(m_settings, &ISettings::decorationProfileTreeChanged, this,
+                    &OverlayService::reapplyVisiblePopupDecorations);
 
             // Zone-overlay shader tree: an assignment edit in the settings
             // app can flip a screen between rectangle and shader overlay

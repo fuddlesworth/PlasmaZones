@@ -476,6 +476,7 @@ Item {
                     // overlayPresets the row would have rendered and its Save, Update,
                     // Rename and Delete buttons would each have called through it.
                     packId: root._editShaderId
+                    packDisplayName: root._shaderName(root._editShaderId)
                     presetBridge: settingsController.overlayPresets
                     presetId: root._editPresetId
                     currentValues: root._effectiveParams

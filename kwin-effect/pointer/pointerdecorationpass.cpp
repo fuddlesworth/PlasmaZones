@@ -683,6 +683,15 @@ void PointerDecorationPass::repaintCurrentReach()
     // cursor (any `layer: above` pack, and every halo) is on screen in that state
     // regardless of what the history says about motion.
     //
+    // ONLY for a chain that actually draws at rest. `isActive()` is true while the trail
+    // is live or a cursor hide is held, so for a trail-only chain (no `layer: above`) the
+    // pass is not in the paint chain once the history empties — the band would buy a
+    // compositor frame over a (2*reach)² region that paints nothing. The `above` case,
+    // which is the one this function exists for, holds the hide and does paint.
+    if (!m_anyAboveLayer) {
+        return;
+    }
+
     // Built in logical px, since that is the unit reach is declared in and the unit
     // addRepaint takes; the sprite comes back in output canvas px and is converted.
     const qreal scale = m_output->scale();

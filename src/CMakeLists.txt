@@ -295,8 +295,8 @@ target_link_libraries(plasmazones_core
         PhosphorSurface::PhosphorSurface
         # PhosphorRegistry: PathKeyedOverrides — the shared baseline + keyed
         # overrides container. PUBLIC because core/types/overlayshadertree.h
-        # includes the header and holds one by unique_ptr as a member, so anything
-        # that #includes that header needs the include path and the link edge.
+        # includes the header and holds one BY VALUE as a member, so anything that
+        # #includes that header needs the include path and the link edge.
         PhosphorRegistry::PhosphorRegistry
         # PhosphorRules: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a RuleStore for the per-mode
@@ -837,7 +837,7 @@ if(BUILD_PHOSPHOR_SHELL)
             # ShellChrome: the decoration tree + pack registry (PhosphorSurface), the
             # preset store it flattens through (PhosphorShaders — declared rather than
             # taken transitively, because ShellChrome.h includes ShaderPresetStore.h and
-            # holds one by value), the SurfaceShaderItem stage
+            # holds one by unique_ptr), the SurfaceShaderItem stage
             # (plasmazones_rendering) and the shared SurfaceDecoration.qml host
             # (org.plasmazones.common) that draws a pack chain on the chrome.
             PhosphorShaders::PhosphorShaders

@@ -14,14 +14,15 @@ namespace PhosphorRegistry {
  *
  * The container the shader-assignment trees each re-derived: a global baseline,
  * a map of per-key overrides, the order they were added in, and the handful of
- * mutators and accessors over both. `PhosphorAnimationShaders::ShaderProfileTree`,
- * `PhosphorSurfaceShaders::DecorationProfileTree` and
- * `PlasmaZones::OverlayShaderTree` all hold one of these now and forward to it.
+ * mutators and accessors over both. All FOUR assignment trees hold one of these now
+ * and forward to it: `PhosphorAnimationShaders::ShaderProfileTree`,
+ * `PhosphorSurfaceShaders::DecorationProfileTree`, `PlasmaZones::OverlayShaderTree`
+ * and `PhosphorAnimation::ProfileTree`, the motion tree, which was the last to
+ * convert.
  *
  * ## What this deliberately does NOT do
  *
- * It is not an attempt to make the four assignment trees — the three named above
- * plus `PhosphorAnimation::ProfileTree`, the motion tree — one type. They
+ * It is not an attempt to make the four assignment trees named above one TYPE. They
  * genuinely differ in key space (dot-paths against layout UUIDs), inheritance
  * model (a full walk-up against a single override-or-baseline step), payload
  * shape (per-field optionals against a plain struct) and parse dependency, and

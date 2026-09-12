@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QJsonObject>
+#include <QMutex>
 #include <QSet>
 #include <QString>
 // For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
@@ -127,7 +128,18 @@ public:
         // reason; latching keeps the louder level, which is right for a contract
         // violation, without the flood.
         if (presetId && !presetId->isEmpty()) {
+            // Guarded: this getter is const on a value type whose class doc says it is not
+            // internally synchronized, and contains()+insert() on a shared QSet is not
+            // atomic (only the static's INITIALISATION is). The set is bounded by the
+            // user's own config, so growth is not the concern; a torn read is.
+            //
+            // The latch is process-wide, which is why no test asserts "warns exactly
+            // once": a slot doing that would pass or fail on slot ORDER within the
+            // binary. A test that wants to see the warning has to use a (pack, preset)
+            // pair no earlier slot has touched, which the key makes possible.
+            static QMutex latchMutex;
             static QSet<QString> reported;
+            const QMutexLocker latchLock(&latchMutex);
             const QString key = effectId.value_or(QString()) + QLatin1Char('\x1f') + *presetId;
             if (!reported.contains(key)) {
                 reported.insert(key);

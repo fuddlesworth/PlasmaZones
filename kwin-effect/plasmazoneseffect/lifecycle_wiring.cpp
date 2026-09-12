@@ -27,6 +27,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopedValueRollback>
 #include <QTimer>
 #include <QVarLengthArray>
 
@@ -161,9 +162,15 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                 // this handler's own work re-resolves against them. See the preset
                 // block at the end of this function for why the seed lives inside the
                 // consumer rather than in a connection of its own.
-                PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
-                                                 PhosphorShaders::ShaderFamily::Animation,
-                                                 m_shaderManager.m_animationShaderRegistry.availableEffects());
+                {
+                    // RAII, so the flag cannot outlive the seed: see schedulePresetSweep
+                    // for why the presetsChanged it emits synchronously must not schedule
+                    // a sweep this handler is about to perform itself.
+                    const QScopedValueRollback<bool> seeding(m_seedingPresetsInline, true);
+                    PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
+                                                     PhosphorShaders::ShaderFamily::Animation,
+                                                     m_shaderManager.m_animationShaderRegistry.availableEffects());
+                }
                 // Make the GL context current FIRST. This fires from the registry's file
                 // watcher, between frames, where the compositor's context is not current
                 // — and everything below is GL: endShaderTransition hands the redirect
@@ -297,9 +304,12 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // RE-SEED first, for the reason the animation handler above gives: the
         // updateAllDecorations() at the end of this handler re-resolves every
         // window's profile, and it must see the reloaded packs' presets.
-        PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
-                                         PhosphorShaders::ShaderFamily::Surface,
-                                         m_surfaceShaderRegistry.availableEffects());
+        {
+            const QScopedValueRollback<bool> seeding(m_seedingPresetsInline, true);
+            PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
+                                             PhosphorShaders::ShaderFamily::Surface,
+                                             m_surfaceShaderRegistry.availableEffects());
+        }
         // This fires from the registry's file watcher between frames, where the
         // compositor's GL context is NOT current. m_compiledPacks owns GLShaders
         // and m_surfaceMultipass owns GLTextures, so their destruction issues
@@ -348,9 +358,12 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     connect(&m_pointerPass.registry(), &PhosphorPointerShaders::PointerShaderRegistry::effectsChanged, this, [this]() {
         // RE-SEED first: invalidateShaderCache below rebuilds the chain and flattens
         // the profile against these presets. Same reasoning as the two handlers above.
-        PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
-                                         PhosphorShaders::ShaderFamily::Pointer,
-                                         m_pointerPass.registry().availableEffects());
+        {
+            const QScopedValueRollback<bool> seeding(m_seedingPresetsInline, true);
+            PhosphorShaders::seedPackPresets(m_shaderManager.presetStore().registry(),
+                                             PhosphorShaders::ShaderFamily::Pointer,
+                                             m_pointerPass.registry().availableEffects());
+        }
         // Fires from the registry's file watcher between frames, where
         // the compositor's GL context is NOT current, and the cached
         // packs own GLShaders, GLTextures and GLFramebuffers.

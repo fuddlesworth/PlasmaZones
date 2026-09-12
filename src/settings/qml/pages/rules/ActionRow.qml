@@ -515,7 +515,13 @@ ColumnLayout {
             delegate: Loader {
                 required property var modelData
 
-                Layout.fillWidth: true
+                // A null source still occupies a slot in the RowLayout, so a kind this row
+                // deliberately renders nothing for (a decoration-chain action's
+                // `shaderPreset`, whose presets are authored per layer in the ChainEditor
+                // below) would otherwise leave one inter-item spacing gap behind. Collapse
+                // to zero width instead of fighting it with a negative margin.
+                Layout.fillWidth: sourceComponent !== null
+                Layout.preferredWidth: sourceComponent !== null ? -1 : 0
                 Layout.alignment: Qt.AlignVCenter
                 sourceComponent: {
                     if (modelData.kind === "enum")

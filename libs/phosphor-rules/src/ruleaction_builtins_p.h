@@ -352,6 +352,14 @@ inline bool paramsBlobIsSane(const QJsonValue& params)
             if (it.key().size() > MaxChainPackIdLength) {
                 return false;
             }
+            // An ARRAY value is refused at EVERY level. No pack declares an array
+            // parameter on either axis, and leaving it unchecked meant the whole size
+            // bound was bypassable: `{"p": [ …megabytes, arbitrarily nested… ]}` passed
+            // a key-count and key-length test that never looked inside the value. The
+            // config twin (boundedShaderParams) drops list values for the same reason.
+            if (it.value().isArray()) {
+                return false;
+            }
             if (it.value().isString() && it.value().toString().size() > MaxChainPackIdLength) {
                 return false;
             }

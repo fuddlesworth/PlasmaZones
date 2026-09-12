@@ -7,7 +7,6 @@
 // is constructor wiring. The connection that calls schedulePresetSweep is made there.
 
 #include "plasmazoneseffect.h"
-#include "compositor/effectlogging.h"
 
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
@@ -15,6 +14,12 @@
 #include <effect/effecthandler.h>
 
 namespace PlasmaZones {
+
+PhosphorSurfaceShaders::DecorationProfile PlasmaZonesEffect::resolvedPointerProfile() const
+{
+    return resolveDecorationProfile(PhosphorSurfaceShaders::decorationPointerPath(),
+                                    PhosphorShaders::ShaderFamily::Pointer);
+}
 
 // COALESCED, one sweep per family per event-loop turn.
 //
@@ -37,6 +42,16 @@ namespace PlasmaZones {
 // latch-and-defer idiom as scheduleEffectAudioSync.
 void PlasmaZonesEffect::schedulePresetSweep(PhosphorShaders::ShaderFamily family)
 {
+    // The re-seed inside each effectsChanged handler emits presetsChanged SYNCHRONOUSLY, so
+    // a pack reload that really did change a preset set lands here while that handler is
+    // still running — and that handler goes on to do the sweep's own work itself. Dropping
+    // the request in that window keeps a hot-reload from paying for a second full surface
+    // sweep (compiled-pack clear, fold invalidation, addRepaintFull, updateAllDecorations)
+    // on the compositor thread. A retune that arrives by any OTHER route (a preset file
+    // saved in this process or another) is not inside that window and still schedules.
+    if (m_seedingPresetsInline) {
+        return;
+    }
     // Animation re-resolves per transition, and overlay is the daemon's to render —
     // the effect never reads it. Neither needs a sweep.
     switch (family) {
@@ -124,8 +139,7 @@ void PlasmaZonesEffect::applyPointerPresetSweep()
     // profile really had moved. The unchanged case is the one that still needs it:
     // the compiled pack holds baked parameter values that a retune invalidates even
     // when the profile compares equal.
-    const bool profileChanged = m_pointerPass.setProfile(resolveDecorationProfile(
-        PhosphorSurfaceShaders::decorationPointerPath(), PhosphorShaders::ShaderFamily::Pointer));
+    const bool profileChanged = m_pointerPass.setProfile(resolvedPointerProfile());
     if (!profileChanged) {
         m_pointerPass.invalidateShaderCache();
     }
