@@ -124,9 +124,23 @@ void Daemon::setupShaderPresets()
     // below this point, which left its lambda live across the replacement holding a
     // reference into the store being destroyed. stop() does it in this order
     // already; this is the same discipline on the re-init path.
-    if (m_overlayPresetSyncConnection) {
-        disconnect(m_overlayPresetSyncConnection);
-        m_overlayPresetSyncConnection = {};
+    // All THREE sync connections are held and severed, not just the overlay one. The
+    // other two used to be left unheld on the argument that their senders are
+    // recreated each init — true today only because init() happens to call
+    // setupAnimationShaderEffects() and setupSurfaceShaderEffects() immediately
+    // before this, and those two `make_unique` their registries. Nothing enforces
+    // that ordering; these are three independent private phase methods, and the very
+    // next phase in this file takes the opposite stance for the same reason ("a
+    // caller reaching this function outside that ordering must skip rather than
+    // crash"). Re-running this one alone double-connected both, and a double seed is
+    // idempotent but emits presetsChanged twice, which in the daemon is two
+    // refreshVisibleWindows and two animator rebuilds per pack reload.
+    for (QMetaObject::Connection* held :
+         {&m_overlayPresetSyncConnection, &m_animationPresetSyncConnection, &m_surfacePresetSyncConnection}) {
+        if (*held) {
+            disconnect(*held);
+            *held = {};
+        }
     }
     m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
     // Scans the user preset directories with live reload, and imports any
@@ -203,12 +217,14 @@ void Daemon::setupShaderPresets()
             connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, syncOverlayPresets);
     }
     if (m_animationShaderRegistry) {
-        connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
-                this, syncAnimationPresets);
+        m_animationPresetSyncConnection =
+            connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
+                    this, syncAnimationPresets);
     }
     if (m_surfaceShaderRegistry) {
-        connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
-                syncSurfacePresets);
+        m_surfacePresetSyncConnection =
+            connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                    syncSurfacePresets);
     }
 
     // The overlay service resolves an assignment's presetId through this, and

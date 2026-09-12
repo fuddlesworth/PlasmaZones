@@ -55,6 +55,9 @@ GridLayout {
     // ── The pack ─────────────────────────────────────────────────────────
     /// The pack being configured. Identifies it to both children.
     required property string packId
+    /// A human name for the pack, forwarded to PresetRow so a screen reader can tell
+    /// one expanded chain layer's preset combo from the next. Defaults to the id.
+    property string packDisplayName: packId
     /// The pack's declared parameter schema.
     property var parameters: []
     /// The user's current values for them.
@@ -297,6 +300,7 @@ GridLayout {
     PresetRow {
         Layout.fillWidth: true
         packId: root.packId
+        packDisplayName: root.packDisplayName
         presetBridge: root.presetBridge
         supportsPresets: root.supportsPresets
         presetId: root.presetId

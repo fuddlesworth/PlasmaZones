@@ -1344,6 +1344,16 @@ target_compile_definitions(test_connect_sweep_ordering
 target_link_libraries(test_connect_sweep_ordering PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME test_connect_sweep_ordering COMMAND test_connect_sweep_ordering)
 
+# Same shape and same reason as the sweep-ordering guard above: OverlayService cannot be
+# stood up in a fixture (QGuiApplication plus a Wayland transport), and the behaviour it
+# pins — setPresetRegistry applying at set time, not only subscribing — fires only on a
+# second init(), so the suite could not see it either way. The file states that limitation.
+add_executable(test_preset_registry_wiring daemon/test_preset_registry_wiring.cpp)
+target_compile_definitions(test_preset_registry_wiring
+                           PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_preset_registry_wiring PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_preset_registry_wiring COMMAND test_preset_registry_wiring)
+
 # XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
 # public contract while the adaptors are handwritten — this compares each
 # adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
@@ -2713,7 +2723,7 @@ if(TARGET PhosphorTheme::PhosphorTheme)
             PhosphorProtocol::PhosphorProtocol
             # Declared rather than taken transitively through PhosphorSurface:
             # ShellChrome.h includes <PhosphorShaders/ShaderPresetStore.h> and holds
-            # the store by value, so the edge belongs to this target too.
+            # the store by unique_ptr, so the edge belongs to this target too.
             PhosphorShaders::PhosphorShaders
             PhosphorSurface::PhosphorSurface
             PhosphorTheme::PhosphorTheme

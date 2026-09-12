@@ -387,12 +387,12 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
             "without an animator cannot run hideSlot)");
     }
 
-    // phosphor_roles.h defines nine roles. PassiveShell is not counted here:
+    // phosphor_roles.h defines eight roles. PassiveShell is not counted here:
     // it is the HOST surface, and its doc records that per-content motion is
     // resolved through the role-override beginShow / beginHide overloads, so
-    // it never carries an animation config of its own. Of the eight per-content
+    // it never carries an animation config of its own. Of the seven per-content
     // roles that remain, applyShaderProfilesToAnimator registers five (Osd,
-    // LayoutPicker, ZoneSelector, SnapAssist, Cheatsheet) and these three do
+    // LayoutPicker, ZoneSelector, SnapAssist, Cheatsheet) and these two do
     // NOT have a per-role config, so they fall back to the empty default (no
     // shader effect, the library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the

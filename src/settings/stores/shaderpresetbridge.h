@@ -122,7 +122,10 @@ public:
 
     /// Absolute path of this family's preset directory, for a "show me the
     /// files" affordance.
-    Q_INVOKABLE QString presetDirectory() const;
+    /// Public for `commit()` and the tests, NOT exposed to QML: the "show me the
+    /// files" affordance its doc used to promise was removed with the preview
+    /// controller's save/load API, and no QML site calls this.
+    QString presetDirectory() const;
 
 Q_SIGNALS:
     /// The set of presets for @p packId changed. Relayed from the registry, so

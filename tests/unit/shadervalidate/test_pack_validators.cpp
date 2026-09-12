@@ -40,6 +40,8 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include <PhosphorShaders/ShaderPreset.h>
+
 #include "packvalidatortesthelpers.h"
 
 using namespace PackValidatorTest;
@@ -663,7 +665,7 @@ private Q_SLOTS:
 
         const PackResult r = validate(tmp, QStringLiteral("preset-type"), obj);
         QVERIFY2(r.report.contains(QStringLiteral("non-numeric value")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("non-boolean")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("a bool parameter wants true or false")), qPrintable(r.report));
     }
 
     void aValidPresetDrawsNoDiagnostic()
@@ -811,6 +813,9 @@ private Q_SLOTS:
         presets.insert(longId, QJsonObject{{QStringLiteral("count"), 2}});
         presets.insert(QStringLiteral("Huge"), QJsonObject{{QStringLiteral("count"), 1e18}});
         presets.insert(QStringLiteral("NotAColour"), QJsonObject{{QStringLiteral("tint"), 7}});
+        // A non-finite value is deliberately NOT among these: Qt's JSON parser refuses
+        // one (`1e400` fails the whole document with "illegal number", verified with a
+        // probe), so such a pack never loads and there is nothing for a lint to catch.
         presets.insert(QStringLiteral("Tidy"), QJsonObject{{QStringLiteral("count"), 3}});
         obj.insert(QStringLiteral("presets"), presets);
 
@@ -818,10 +823,58 @@ private Q_SLOTS:
         QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("does not fit in an int parameter")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("to a non-color value")), qPrintable(r.report));
-        QVERIFY(r.errors >= 3);
+        // EXACTLY three, not "at least": the count is knowable, and `>=` is satisfied
+        // by a lint that fires on everything.
+        QCOMPARE(r.errors, 3);
         // And the clean preset beside them is untouched, so none of the three is
         // firing on everything it sees.
         QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
+    }
+
+    void thePresetIdLengthBoundIsExact()
+    {
+        // The id lint's length half at its boundary. The slot above drives it with a
+        // 200-character key, which `> MaxNameChars` and `>= MaxNameChars` both refuse,
+        // so nothing stopped the comparison from drifting by one.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        const qsizetype cap = PhosphorShaders::ShaderPreset::MaxNameChars;
+        QJsonObject obj = basePack(QStringLiteral("preset-idcap"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        QJsonObject presets;
+        presets.insert(QString(cap, QLatin1Char('n')), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+        const PackResult atCap = validate(tmp, QStringLiteral("preset-idcap"), obj);
+        QVERIFY2(!atCap.report.contains(QStringLiteral("has an unusable id")), qPrintable(atCap.report));
+
+        QJsonObject over;
+        over.insert(QString(cap + 1, QLatin1Char('n')), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        obj.insert(QStringLiteral("presets"), over);
+        const PackResult overCap = validate(tmp, QStringLiteral("preset-idcap"), obj);
+        QVERIFY2(overCap.report.contains(QStringLiteral("has an unusable id")), qPrintable(overCap.report));
+    }
+
+    void anUnusableIdStillGetsItsValuesChecked()
+    {
+        // The id branch reports and carries on rather than skipping the preset's
+        // values: they are independent of the key, so an author who fixes the name
+        // should not then get a fresh round of value errors.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-both"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 4)});
+        QJsonObject presets;
+        presets.insert(QString(200, QLatin1Char('n')), QJsonObject{{QStringLiteral("count"), 1.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validate(tmp, QStringLiteral("preset-both"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("truncates to 1")), qPrintable(r.report));
+        QCOMPARE(r.errors, 2);
     }
 
     void theOverlayArmLintsPresetsToo()

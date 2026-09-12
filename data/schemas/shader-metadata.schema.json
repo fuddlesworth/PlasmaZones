@@ -22,11 +22,11 @@
         "presets": {
             "type": "object",
             "maxProperties": 64,
-            "description": "Named parameter presets. Each value is a map of parameter id to value. A preset id is its key here, and it is also the label the picker shows, so it has to read as a name. That rules out control and bidi-formatting characters, and anything longer than a label can show. Unlike a user preset id it never becomes a filename, because duplicating a pack preset mints a fresh UUID. Those rules are checked by plasmazones-shader-validate rather than here, because the vendored JSON-schema validator rejects every name under a propertyNames rule, legitimate ones included. Image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
+            "description": "Named parameter presets. Each value is a map of parameter id to value. A preset id is its key here, and it is also the label the picker shows, so it has to read as a name. That rules out control and bidi-formatting characters, and anything longer than a label can show. Unlike a user preset id it never becomes a filename, because duplicating a pack preset mints a fresh UUID. A null value is allowed and means the preset says nothing about that parameter, so it keeps the pack's default; the loader drops the entry. Those rules are checked by plasmazones-shader-validate rather than here, because the vendored JSON-schema validator rejects every name under a propertyNames rule, legitimate ones included. Image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
             "additionalProperties": {
                 "type": "object",
                 "maxProperties": 48,
-                "additionalProperties": { "type": ["number", "string", "boolean"] }
+                "additionalProperties": { "type": ["number", "string", "boolean", "null"] }
             }
         },
         "multipass": { "type": "boolean" },

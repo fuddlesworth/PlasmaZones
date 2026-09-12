@@ -150,12 +150,17 @@ void ProfileTree::overlay(Profile& dst, const Profile& src)
 QJsonObject ProfileTree::toJson() const
 {
     QJsonObject root;
-    // Omitted when it carries nothing. fromJson treats an absent baseline the
-    // same as an empty one, and always emitting it wrote a dead `"baseline":{}`
-    // into every stored tree, which is then copied on every read and joins
-    // every settings-profile delta. Config's own canonicalisation strips it
-    // afterwards, but only when `overrides` is empty too, so the usual tree
-    // kept it.
+    // Omitted when it carries nothing. fromJson treats an absent baseline the same as an
+    // empty one, and always emitting it wrote a dead `"baseline":{}` into every stored
+    // tree, copied on every read and joining every settings-profile delta.
+    //
+    // Only this tree of the four does it, which is a gap rather than a decision: the
+    // shader and decoration trees still insert an empty baseline unconditionally
+    // (shaderprofiletree.cpp, decorationprofiletree.cpp), and the same argument applies
+    // to them. The reason it was fixed here first is that this tree's setter is the one
+    // with no schema validator behind it, so nothing downstream tidied the key — the
+    // others are canonicalised by Settings on the way to disk. Worth doing for all four;
+    // doing it blind would need each tree's own round-trip pinned first.
     const QJsonObject baseline = m_store.baseline().toJson();
     if (!baseline.isEmpty()) {
         root.insert(QLatin1String("baseline"), baseline);

@@ -534,7 +534,21 @@ void TestShaderPresetBridge::everyPresetBridgeCallFromTheSettingsQmlIsReachable(
     static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
                                                    QRegularExpression::DotMatchesEverythingOption);
     static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
-    static const QRegularExpression callRe(QStringLiteral("\\bpresetBridge\\.([A-Za-z_][A-Za-z0-9_]*)"));
+    // Every spelling a host reaches a preset bridge by, not just the literal
+    // `presetBridge`. Three real call sites went unchecked under that one name —
+    // `_shaderPresetBridge` (ActionShaderParamsEditor), `_bridge` (ActionPresetEditor)
+    // and a local in OverlayShaderAssignmentCard, since renamed to `presetBridge` so it
+    // is swept rather than special-cased — and a missed site is exactly the silent
+    // runtime TypeError this guard exists to catch.
+    //
+    // A receiver-name alternation rather than "any identifier": scraping every `x.y(`
+    // in the QML tree collects hundreds of names this bridge has no business answering
+    // (CurvePresets.curveLabel, a springPresets array's .length) and the assertion
+    // becomes noise. A host that invents a new spelling adds it here, a one-line change
+    // the failure message points at.
+    static const QRegularExpression callRe(
+        QStringLiteral("\\b(?:presetBridge|_bridge|_shaderPresetBridge|animationPresets|overlayPresets"
+                       "|decorationPresets|pointerPresets)\\.([A-Za-z_][A-Za-z0-9_]*)"));
 
     QSet<QString> used;
     QDirIterator sweep(qmlRoot, QStringList{QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
@@ -550,7 +564,7 @@ void TestShaderPresetBridge::everyPresetBridgeCallFromTheSettingsQmlIsReachable(
             used.insert(it.next().captured(1));
         }
     }
-    QVERIFY2(!used.isEmpty(), "scraped no presetBridge.* names — the QML tree or the receiver name moved");
+    QVERIFY2(!used.isEmpty(), "scraped no preset-bridge call names — the QML tree or every receiver name moved");
 
     const QMetaObject* meta = m_bridge->metaObject();
     QStringList unreachable;

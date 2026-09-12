@@ -17,9 +17,61 @@
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QGuiApplication>
+#include <QMetaType>
 #include <QPalette>
 
+#include <algorithm>
+
 namespace PlasmaZones {
+
+namespace {
+
+/// @p params with every numeric value clamped to the pack's DECLARED range.
+///
+/// The preview's whole claim is that it "describes a chain stage exactly as the
+/// daemon does", and the declared range was the one place it did not: every render
+/// path flattens through `ShaderPresetRegistry::resolveParams`, which clamps, while
+/// the preview fed the slider's raw map straight into composeStageMap and
+/// paddingRequest. The visible divergence was a padding of 128 in the preview
+/// against 64 on the real surface for the same scenario, each asserted as correct
+/// by its own test.
+///
+/// Open-coded rather than routed through resolveParams, because that needs a preset
+/// registry this controller has no handle on and the question here has no preset in
+/// it: the values come from the editor's own sliders. The RULE is the same one, and
+/// it is the pack's own metadata either way.
+QVariantMap clampToDeclaredRanges(const PhosphorSurfaceShaders::SurfaceShaderEffect& effect, QVariantMap params)
+{
+    for (const auto& p : effect.parameters) {
+        const auto it = params.find(p.id);
+        if (it == params.end()) {
+            continue;
+        }
+        const QMetaType::Type type = static_cast<QMetaType::Type>(it.value().typeId());
+        const bool numeric = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
+            || type == QMetaType::ULongLong || type == QMetaType::Double || type == QMetaType::Float;
+        if (!numeric) {
+            continue;
+        }
+        double value = it.value().toDouble();
+        // An inverted declared range is left alone rather than applied, the same
+        // decision clampToBounds makes: applying both ends of a backwards pair moves
+        // the value outside both of them.
+        if (p.minValue.isValid() && p.maxValue.isValid() && p.minValue.toDouble() > p.maxValue.toDouble()) {
+            continue;
+        }
+        if (p.minValue.isValid()) {
+            value = std::max(value, p.minValue.toDouble());
+        }
+        if (p.maxValue.isValid()) {
+            value = std::min(value, p.maxValue.toDouble());
+        }
+        it.value() = value;
+    }
+    return params;
+}
+
+} // namespace
 
 DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
                                                          ISettings* settings, QObject* parent)
@@ -130,7 +182,9 @@ QVariantList DecorationPreviewController::previewChain(const QString& packId, co
     // makes them illegible in the browser thumbnail that draws that canvas at
     // a reduced size. The zone/overlay preview is the opposite case and scales, see
     // ShaderPreviewController::translateShaderParams.
-    QVariantMap resolved = friendlyParams;
+    // Clamped to the pack's declared ranges first, so the preview composes the same
+    // values the real surface will (see clampToDeclaredRanges).
+    QVariantMap resolved = clampToDeclaredRanges(effect, friendlyParams);
     const QPalette pal = QGuiApplication::palette();
     const QColor highlight =
         m_settings ? m_settings->highlightColor() : pal.color(QPalette::Active, QPalette::Highlight);
@@ -168,7 +222,11 @@ double DecorationPreviewController::previewOuterPadding(const QString& packId, c
     }
     // Same clamp the daemon and compositor apply — a typo'd or hostile pack
     // must not be able to demand an absurd preview canvas either.
-    return qBound(0.0, PhosphorSurfaceShaders::paddingRequest(effect, friendlyParams),
+    // The declared range FIRST, then the absolute ceiling. Both bounds are real and
+    // they are not the same bound: the declared one is what every render path applies
+    // through resolveParams, and the ceiling is the last-resort cap against a hostile
+    // pack that declares no maximum at all.
+    return qBound(0.0, PhosphorSurfaceShaders::paddingRequest(effect, clampToDeclaredRanges(effect, friendlyParams)),
                   static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
 }
 

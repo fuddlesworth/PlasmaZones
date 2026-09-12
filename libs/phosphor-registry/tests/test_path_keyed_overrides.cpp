@@ -72,7 +72,7 @@ private Q_SLOTS:
     void keysAreInInsertionOrderNotSortedOrder()
     {
         // Non-alphabetical, so an implementation that sorted would fail rather than
-        // coincide. Two of the four trees serialise their overrides as a JSON ARRAY,
+        // coincide. Three of the four trees serialise their overrides as a JSON ARRAY,
         // where this order is user-visible and round-trips.
         Store store;
         store.setOverride(QStringLiteral("zeta"), Value{1});
@@ -156,7 +156,7 @@ private Q_SLOTS:
     {
         // The shared half of serialisation. An implementation that walked the
         // underlying hash would pass every other assertion in this file and still
-        // make both array-form trees order-unstable on disk.
+        // make the three array-form trees order-unstable on disk.
         Store store;
         store.setOverride(QStringLiteral("zeta"), Value{1});
         store.setOverride(QStringLiteral("alpha"), Value{2});

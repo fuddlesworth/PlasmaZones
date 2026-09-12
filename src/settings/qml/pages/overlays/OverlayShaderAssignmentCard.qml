@@ -111,8 +111,11 @@ Item {
         // that one is the overlays page controller. Shadowing it here read as
         // a call on the page controller both to a human and to the QML-contract
         // guard test.
-        const presets = settingsController.overlayPresets;
-        if (!presets || root._editPresetId.length === 0 || root._editShaderId.length === 0) {
+        // Named `presetBridge`, the spelling the QML-reachability guard in
+        // test_shaderpresetbridge.cpp sweeps for: a local called something else put this
+        // call site outside the one check that catches a renamed bridge method.
+        const presetBridge = settingsController.overlayPresets;
+        if (!presetBridge || root._editPresetId.length === 0 || root._editShaderId.length === 0) {
             root._effectiveParams = deltas;
             return;
         }
@@ -120,7 +123,7 @@ Item {
         // the same one the daemon resolves through, so this card cannot disagree
         // with what is actually drawn. It also applies the pack's declared-range
         // clamp, which the hand-written overlay this replaced did not.
-        root._effectiveParams = presets.effectiveParams(root._editShaderId, root._editPresetId, deltas);
+        root._effectiveParams = presetBridge.effectiveParams(root._editShaderId, root._editPresetId, deltas);
     }
 
     on_EditParamsChanged: root._recomputeEffectiveParams()

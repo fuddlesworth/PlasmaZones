@@ -472,7 +472,12 @@ void ActionRegistry::registerBuiltinsEngine()
                 // An over-long id is inert rather than dangerous (it resolves to
                 // no preset), but rules.json is hand-editable and the asymmetry
                 // with MaxFontFamilyLength and friends is the kind that drifts.
-                return preset.toString().size() <= MaxShaderPresetIdLength;
+                if (preset.toString().size() > MaxShaderPresetIdLength) {
+                    return false;
+                }
+                // The `params` blob, which nothing bounded at all until now. See
+                // paramsBlobIsSane: same axis as PresetIds above, same reason.
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params),
@@ -627,7 +632,10 @@ void ActionRegistry::registerBuiltinsEngine()
                 if (!preset.isUndefined() && !preset.isString()) {
                     return false;
                 }
-                return preset.toString().size() <= MaxShaderPresetIdLength;
+                if (preset.toString().size() > MaxShaderPresetIdLength) {
+                    return false;
+                }
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring

@@ -109,6 +109,11 @@ WideComboBox {
     valueRole: "id"
     // A NAME as well as a description: without one the combo announces with no
     // name at all, and every name-worthy sibling in ActionRow sets it.
+    //
+    // Unqualified on purpose, unlike PresetRow's, which names its pack: there is
+    // exactly ONE of these per action row (the scalar shader actions carry a single
+    // pack), so nothing sits beside it to be confused with. The chain case, where
+    // several layers each show a combo, is PresetRow's.
     Accessible.name: i18nc("@label:listbox", "Shader preset")
     Accessible.description: _param.label
     currentIndex: {

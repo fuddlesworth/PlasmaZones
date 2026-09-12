@@ -7,27 +7,32 @@
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 //
-// FILE-SIZE EXCEPTION (sanctioned), CEILING 1300 LINES: what remains here after
-// that split is the root object QML binds to. Its Q_PROPERTY surface IS the QML
-// contract, so moving another group of properties out means either a new child
-// controller every page URL and binding has to be rewritten for, or a second
-// root QML cannot see. The implementation is already split across
-// settingscontroller_*.cpp by concern, same shape as daemon.h.
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1370 LINES: what remains here after that
+// split is the root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
+// moving another group of properties out means either a new child controller every page
+// URL and binding has to be rewritten for, or a second root QML cannot see. The
+// implementation is already split across settingscontroller_*.cpp, same shape as
+// daemon.h.
 //
-// The number above is a real budget, not a description of wherever the file
-// happens to sit: the exception is for the QML contract, so a new declaration
-// that pushes past it has to buy its room by removing another (a retired
-// Q_INVOKABLE, a property that moved to a child controller). It does NOT
-// license a comment block — those belong on the definition in the matching
-// settingscontroller_*.cpp when they will not fit here.
+// The number above is a real budget, not a description of wherever the file happens to
+// sit: the exception is for the QML contract, so a new declaration that pushes past it
+// buys its room by removing another (a retired Q_INVOKABLE, a property moved to a child
+// controller). It does NOT license a comment block — those belong on the definition in
+// the matching settingscontroller_*.cpp when they will not fit here.
 //
-// The 1300 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
+// The 1370 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
 // file, the same way the repo's other sanctioned file-size exceptions do, so
-// sitting between the two figures is not a review finding here. (Raised from
-// 1215 when the per-screen selector stores grew their per-card sub-domain
-// has/clear pairs — chip-invoked Q_INVOKABLEs that belong on the root the
-// scope chips call by method name; the drift before that raise is
-// acknowledged, not licensed.)
+// sitting between the two figures is not a review finding here.
+//
+// Raise history, because each raise has to say what bought the room. From 1215 when the
+// per-screen selector stores grew their per-card has/clear pairs (chip-invoked
+// Q_INVOKABLEs belonging on the root the chips call by method name). Then to 1370 for
+// the named-parameter-presets work: four ShaderPresetBridge members, one per family,
+// plus the Q_PROPERTY accessors QML binds them through. That IS the QML contract this
+// exception exists for, since every preset surface reads
+// `settingsController.<family>Presets`, so it cannot move to a child controller without
+// rewriting the binding at every call site. Splitting this class by page group is the
+// follow-up the ceiling is asking for.
 
 #pragma once
 
@@ -267,16 +272,14 @@ public:
         return !m_dirtyPages.isEmpty();
     }
     QStringList dirtyPages() const;
-    /// Returns true if the page (or any of its children, for parent categories
-    /// like "snapping" / "tiling") currently has unsaved changes. For pages in
-    /// the per-page config manifest (@ref pageOwnedConfigKeys) the answer is
-    /// value-based — any owned key differing from the committed baseline —
-    /// which stays correct across a per-page Discard/Reset. The ordering,
-    /// shortcuts, virtual-screens, animation and decoration pages are
-    /// value-based too, each against its own staged state rather than the
-    /// manifest, and the condensed simple pages (@ref simplePageBackingPages)
-    /// answer with the union of their backing pages. Only a page in none of
-    /// those groups falls back to the m_dirtyPages membership set.
+    /// Returns true if the page (or any child, for parent categories like "snapping" /
+    /// "tiling") has unsaved changes. For pages in the per-page config manifest (@ref
+    /// pageOwnedConfigKeys) the answer is value-based — any owned key differing from the
+    /// committed baseline — which stays correct across a per-page Discard/Reset. The
+    /// ordering, shortcuts, virtual-screens, animation and decoration pages are
+    /// value-based too, each against its own staged state, and the condensed simple pages
+    /// (@ref simplePageBackingPages) answer with the union of their backing pages. Only a
+    /// page in none of those groups falls back to the m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -622,14 +625,13 @@ public:
     /// The staged (not yet applied) assignment for the (screen × desktop ×
     /// activity) context, as a map of only the fields that are actually staged.
     ///
-    /// Key ABSENCE is meaningful and spans three files: staging collapses an
-    /// EMPTY id to "not staged" on the way in (StagingService maps it to
-    /// nullopt), so once an entry is staged, an absent "layoutId" or
-    /// "algorithmId" here is the echo of a staged CLEAR of that field. A
-    /// present key always carries a non-empty id, and a producer must never
-    /// insert an empty-string value expecting it to read back as a distinct
-    /// clear state — there is no such state on this map. An absent "mode"
-    /// means neither an explicit mode nor an inferable one was staged.
+    /// Key ABSENCE is meaningful and spans three files: staging collapses an EMPTY id to
+    /// "not staged" on the way in (StagingService maps it to nullopt), so once an entry
+    /// is staged, an absent "layoutId" or "algorithmId" here is the echo of a staged
+    /// CLEAR of that field. A present key always carries a non-empty id, and a producer
+    /// must never insert an empty string expecting it to read back as a distinct clear
+    /// state: there is no such state on this map. An absent "mode" means neither an
+    /// explicit mode nor an inferable one was staged.
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 
@@ -814,9 +816,9 @@ Q_SIGNALS:
     /// branches emit it for unrelated reasons the shell must word differently:
     ///   * `ReasonDaemonUnreachable` — a value resetPage must READ first is
     ///     unavailable, currently the daemon's quick-layout slot map.
-    ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or
-    ///     decoration override could not be cleared (an async discard still owns
-    ///     the snapshot map, or a file could not be removed). The daemon is fine.
+    ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or decoration
+    ///     override could not be cleared (an async discard still owns the snapshot map,
+    ///     or a file could not be removed), with the daemon fine.
     /// @p reason is one of the Reason* constants above, NOT user-facing text:
     /// the shell wires i18n in QML and branches on the token.
     void pageResetFailed(const QString& page, const QString& reason);
@@ -951,18 +953,16 @@ private:
     // entry on the simple leaf the edit was attributed to while the user was
     // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
-    /// Set @p page's m_dirtyPages membership to @p dirty, returning whether the
-    /// membership actually flipped. The one place a SINGLE page's membership is
-    /// written: the reconcile helpers, setNeedsSave, and the Reset/Discard
-    /// branches that own their own staged state all go through this, so
-    /// insert/remove and "did anything change" can never drift apart. Does not
-    /// emit — the caller owns the batching.
+    /// Set @p page's m_dirtyPages membership to @p dirty, returning whether it actually
+    /// flipped. The one place a SINGLE page's membership is written: the reconcile
+    /// helpers, setNeedsSave and the Reset/Discard branches that own their own staged
+    /// state all go through this, so insert/remove and "did anything change" cannot
+    /// drift apart. Does not emit — the caller owns the batching.
     ///
     /// Whole-set operations are the exception and do not route through it:
-    /// setNeedsSave(false) clears the set outright (load() and save() reach
-    /// it that way), and defaults() replaces the set with a full recompute.
-    /// Neither is a per-page decision, and both compare the whole set before
-    /// emitting.
+    /// setNeedsSave(false) clears the set outright (load() and save() reach it that way),
+    /// and defaults() replaces it with a full recompute. Neither is a per-page decision,
+    /// and both compare the whole set before emitting.
     bool syncDirtyMembership(const QString& page, bool dirty);
     /// RAII batch window for the above: defers dirtyPagesChanged for the
     /// enclosing scope so a delegated Reset/Discard that walks several backing

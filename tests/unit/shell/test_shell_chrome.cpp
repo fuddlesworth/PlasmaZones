@@ -7,10 +7,13 @@
 
 #include "shell/ShellChrome.h"
 
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <QDir>
+#include <QFile>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -19,7 +22,8 @@ using namespace PhosphorSurfaceShaders;
 
 namespace {
 
-QString treeJson(const QString& path, const QStringList& chain, const QVariantMap& params = {})
+QString treeJson(const QString& path, const QStringList& chain, const QVariantMap& params = {},
+                 const QVariantMap& presetIds = {})
 {
     DecorationProfileTree tree;
     DecorationProfile profile;
@@ -27,8 +31,33 @@ QString treeJson(const QString& path, const QStringList& chain, const QVariantMa
     if (!params.isEmpty()) {
         profile.parameters = params;
     }
+    if (!presetIds.isEmpty()) {
+        profile.presetIds = presetIds;
+    }
     tree.setOverride(path, profile);
     return QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+}
+
+/// Write a user preset file for @p packId into the SURFACE family's directory under
+/// the test's own XDG_DATA_HOME (phosphor_apply_test_isolation gives each target
+/// one), which is exactly where ShellChrome's store scans.
+bool writeSurfacePreset(const QString& presetId, const QString& packId, const QVariantMap& params)
+{
+    const QString dir = PhosphorShaders::userPresetDirectory(PhosphorShaders::standardUserPresetRoot(),
+                                                             PhosphorShaders::ShaderFamily::Surface);
+    if (!QDir().mkpath(dir)) {
+        return false;
+    }
+    QJsonObject obj;
+    obj.insert(QStringLiteral("id"), presetId);
+    obj.insert(QStringLiteral("name"), presetId);
+    obj.insert(QStringLiteral("packId"), packId);
+    obj.insert(QStringLiteral("params"), QJsonObject::fromVariantMap(params));
+    QFile file(dir + QLatin1Char('/') + presetId + QStringLiteral(".json"));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return file.write(QJsonDocument(obj).toJson()) > 0;
 }
 
 } // namespace
@@ -125,6 +154,62 @@ private Q_SLOTS:
         QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(),
                                             {QStringLiteral("no-such-pack"), QStringLiteral("glow")}, params)));
         QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 18.0);
+    }
+
+    void aPresetSuppliesTheShellSurfacesParameters()
+    {
+        // The shell resolves presets too, and nothing asserted it: this whole file
+        // mentioned no preset, so deleting ShellChrome's store load, its
+        // seedPackPresets call or its presetsChanged connection left the suite green —
+        // while the CHANGELOG promises that editing a preset moves everything using it
+        // straight away.
+        //
+        // glow declares glowSize default 24, and it is the pack's paddingParam, so the
+        // resolved padding is the cheapest observable for "which values did the chain
+        // actually compose with".
+        QVERIFY(writeSurfacePreset(QStringLiteral("shell-wide"), QStringLiteral("glow"),
+                                   {{QStringLiteral("glowSize"), 48}}));
+
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, {},
+                                            {{QStringLiteral("glow"), QStringLiteral("shell-wide")}})));
+        // The PRESET's value, not the pack's default of 24.
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 48.0);
+
+        // An assignment's own value still wins over the preset, which is the delta rule
+        // every other surface follows.
+        QVariantMap own;
+        own.insert(QStringLiteral("glow"), QVariantMap{{QStringLiteral("glowSize"), 12}});
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, own,
+                                            {{QStringLiteral("glow"), QStringLiteral("shell-wide")}})));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 12.0);
+
+        // And a preset id naming nothing degrades to the pack's default rather than
+        // rendering nothing.
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, {},
+                                            {{QStringLiteral("glow"), QStringLiteral("gone-away")}})));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 24.0);
+    }
+
+    void retuningAPresetOnDiskRevisesTheShellChrome()
+    {
+        // The `presetsChanged` → `bump()` connection, which is what makes a retune
+        // reach a live shell surface. Without it the new values sit in the registry and
+        // nothing re-reads them until something else happens to revise.
+        QVERIFY(writeSurfacePreset(QStringLiteral("shell-live"), QStringLiteral("glow"),
+                                   {{QStringLiteral("glowSize"), 40}}));
+
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, {},
+                                            {{QStringLiteral("glow"), QStringLiteral("shell-live")}})));
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 40.0);
+
+        QSignalSpy revised(&chrome, &ShellChrome::revisionChanged);
+        QVERIFY(writeSurfacePreset(QStringLiteral("shell-live"), QStringLiteral("glow"),
+                                   {{QStringLiteral("glowSize"), 56}}));
+        // The store watches the directory, so the revision arrives asynchronously.
+        QVERIFY2(revised.wait(5000), "a retuned preset must revise the chrome");
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 56.0);
     }
 
     void outerPaddingIsBoundedByTheDeclaredRange()

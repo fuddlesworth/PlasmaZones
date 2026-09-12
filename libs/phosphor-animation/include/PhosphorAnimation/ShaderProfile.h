@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 // For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
 // rather than relied on through QString: this header is pulled in by the unity
@@ -119,12 +120,24 @@ public:
     /// and it is recorded as the follow-up rather than attempted here.
     QVariantMap effectiveParameters() const
     {
+        // ONCE per (effectId, presetId), not per call. These getters are read from render
+        // and install paths, so a single genuinely-unflattened consumer would otherwise
+        // repeat the warning for the life of the session and bury everything around it.
+        // The decoration tree's own parser chose qCDebug over a warning for exactly that
+        // reason; latching keeps the louder level, which is right for a contract
+        // violation, without the flood.
         if (presetId && !presetId->isEmpty()) {
-            qWarning(
-                "PhosphorAnimation: ShaderProfile::effectiveParameters() read on a profile whose preset is NOT "
-                "yet applied (effectId=%s presetId=%s). The preset's values are missing from the result — flatten "
-                "with withPresetsResolved() after the tree walk-up, never per node.",
-                qUtf8Printable(effectId.value_or(QString())), qUtf8Printable(*presetId));
+            static QSet<QString> reported;
+            const QString key = effectId.value_or(QString()) + QLatin1Char('\x1f') + *presetId;
+            if (!reported.contains(key)) {
+                reported.insert(key);
+                qWarning(
+                    "PhosphorAnimation: ShaderProfile::effectiveParameters() read on a profile whose preset is NOT "
+                    "yet applied (effectId=%s presetId=%s). The preset's values are missing from the result — "
+                    "flatten with withPresetsResolved() after the tree walk-up, never per node. Reported once per "
+                    "pack and preset.",
+                    qUtf8Printable(effectId.value_or(QString())), qUtf8Printable(*presetId));
+            }
         }
         return parameters.value_or(QVariantMap());
     }

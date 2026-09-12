@@ -320,5 +320,64 @@ inline const QStringList& engineModeOptions()
     return s_options;
 }
 
+/// Whether @p params is a `params` blob this library will persist.
+///
+/// Four action descriptors allow `ActionParam::Params` and NONE of them validated
+/// it: no object check, no key count, no key length, no value length. That is the
+/// same axis `PresetIds` bounds three lines from one of them, with the same
+/// justification — rules.json is hand-editable and this validator is the only
+/// boundary — and the config twin of this blob is bounded too (boundedShaderParams,
+/// 64 keys / 1024 chars). Unbounded, a hand-edited `params` of thousands of
+/// megabyte keys loaded, persisted and was re-serialised on every rules.json write,
+/// and a SCALAR `params` loaded and was then silently swallowed by the consumer's
+/// `.toObject()`, which is the failure the PresetIds type check was added to stop.
+///
+/// Absent is fine (the key is optional everywhere it is allowed). One nesting level
+/// is accepted because the decoration action's form is `{packId: {paramId: value}}`,
+/// while the three scalar-pack actions carry `{paramId: value}`; the same bounds
+/// apply at both levels.
+inline bool paramsBlobIsSane(const QJsonValue& params)
+{
+    if (params.isUndefined()) {
+        return true;
+    }
+    if (!params.isObject()) {
+        return false;
+    }
+    const auto levelIsSane = [](const QJsonObject& obj) {
+        if (obj.size() > MaxDecorationChainEntries) {
+            return false;
+        }
+        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+            if (it.key().size() > MaxChainPackIdLength) {
+                return false;
+            }
+            if (it.value().isString() && it.value().toString().size() > MaxChainPackIdLength) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const QJsonObject top = params.toObject();
+    if (!levelIsSane(top)) {
+        return false;
+    }
+    for (auto it = top.constBegin(); it != top.constEnd(); ++it) {
+        if (it.value().isObject() && !levelIsSane(it.value().toObject())) {
+            return false;
+        }
+        // Deeper than two levels is not a shape any pack produces.
+        if (it.value().isObject()) {
+            const QJsonObject inner = it.value().toObject();
+            for (auto inner_it = inner.constBegin(); inner_it != inner.constEnd(); ++inner_it) {
+                if (inner_it.value().isObject() || inner_it.value().isArray()) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace detail
 } // namespace PhosphorRules

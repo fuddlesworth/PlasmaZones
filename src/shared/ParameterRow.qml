@@ -459,6 +459,12 @@ Item {
 
             visible: paramDelegate.enableImage && paramDelegate.isSvgImage
             Accessible.name: i18nc("@label SVG render resolution", "SVG size")
+            // The override hint rides this control too. Its `<id>_svgSize` companion
+            // key is not itself a schema parameter, so the row's mark is never about
+            // it — but it is focusable and sits inside a row that IS marked, and a
+            // screen-reader user tabbing through should hear the same thing here as on
+            // the image button beside it rather than nothing.
+            Accessible.description: paramDelegate.overrideHint
             from: 64
             to: 4096
             stepSize: 128

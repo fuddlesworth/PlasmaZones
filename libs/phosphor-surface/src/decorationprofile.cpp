@@ -159,6 +159,11 @@ void DecorationProfile::overlay(DecorationProfile& dst, const DecorationProfile&
 
 bool DecorationProfile::operator==(const DecorationProfile& other) const
 {
+    // presetIds rides the raw compare with chain and disabledPacks rather than the
+    // normalisation `parameters` gets below, and that asymmetry is deliberate: both
+    // writers of this field put a QString in it (fromJson keeps only `isString` values,
+    // setChainPreset inserts a QString), so there is no numeric category for a round
+    // trip to change. A new writer that stores anything else here has to revisit this.
     if (chain != other.chain || disabledPacks != other.disabledPacks || presetIds != other.presetIds) {
         return false;
     }

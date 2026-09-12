@@ -20,13 +20,11 @@ import "../../js/FontUtils.js" as FontUtils
  * Drives both the animation-shaders browser and the snapping-overlay-shaders
  * browser via a `bridge`.
  *
- * When the bridge also exposes a `previewController`, the right pane is a
- * LIVE preview (selected by the bridge's `previewKind`: a ZoneShaderItem
- * render for zone/overlay, the composed chain for decorations, a driven
- * transition for animations) and the left column an editable
- * ParameterEditor whose changes are transient (never persisted). A bridge
- * with no previewController shows no preview pane — just a read-only
- * parameter list.
+ * When the bridge also exposes a `previewController`, the right pane is a LIVE
+ * preview (selected by the bridge's `previewKind`: a ZoneShaderItem render for
+ * zone/overlay, the composed chain for decorations, a driven transition for
+ * animations) and the left column an editable ParameterEditor whose changes are
+ * transient. A bridge with no previewController shows a read-only parameter list.
  *
  * Required:
  *   - `effect`: var — set by the host before calling `open()`.
@@ -187,7 +185,35 @@ Kirigami.Dialog {
             next[def.id] = (preset[def.id] !== undefined) ? preset[def.id] : def["default"];
         }
         root._liveParams = next;
+        // Remembered so a SAVE from here writes what the preset is about rather than
+        // the whole defaults-filled preview map. See `_presetSaveValues`.
+        root._presetNamedKeys = Object.keys(preset);
+        root._appliedValues = next;
         root._recompute();
+    }
+
+    /// Which keys the loaded preset named, and the map loading it produced.
+    property var _presetNamedKeys: []
+    property var _appliedValues: ({})
+
+    /// What a save or update from here stores: the keys the preset already names plus
+    /// whatever the user has moved since it loaded. NOT `_liveParams`, which
+    /// `_applyPresetToPreview` fills with every declared default so the PREVIEW shows
+    /// what the preset specifies; handing that to PresetRow expanded a two-parameter
+    /// preset into one pinning all of them, and no-delta assignments then followed
+    /// those defaults rather than their own values.
+    readonly property var _presetSaveValues: {
+        const live = root._liveParams || {};
+        const applied = root._appliedValues || {};
+        const named = root._presetNamedKeys || [];
+        const out = {};
+        for (let i = 0; i < named.length; ++i)
+            if (live[named[i]] !== undefined)
+                out[named[i]] = live[named[i]];
+        for (const key in live)
+            if (applied[key] === undefined || live[key] !== applied[key])
+                out[key] = live[key];
+        return out;
     }
 
     // T3.2: drives the preview-renderer Loader. Toggled off→on in _resetPreview
@@ -296,42 +322,29 @@ Kirigami.Dialog {
 
     // ── The ONE preview lifecycle, shared by both panes ────────────────────
     //
-    // One reused dialog serves two preview panes, and three regressions in a
-    // row came from arming or tearing one of them down in a place the other
-    // did not know about. So the lifecycle now lives here, in one pair of
-    // functions, and the panes' Loaders gate on flags that ONLY these
-    // functions write.
+    // One reused dialog serves two preview panes, and three regressions in a row came
+    // from arming or tearing one down somewhere the other did not know about. The
+    // lifecycle lives here, in one pair of functions, and the panes' Loaders gate on
+    // flags only these functions write. The contract:
     //
-    // The contract:
+    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It cannot rely
+    //     on `visible` dropping: a QQC2 Popup keeps `visible` true until its EXIT
+    //     transition finishes, so reopening on another pack mid-close never
+    //     deactivated a `visible`-gated Loader and the old pack's stale composition
+    //     survived into the new open. That was the stale / unavailable flicker.
     //
-    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It
-    //     cannot rely on `visible` dropping: a QQC2 Popup keeps `visible`
-    //     true until its EXIT transition finishes, so reopening on another
-    //     pack while the close animation still runs never deactivated a
-    //     `visible`-gated Loader — the old pack's pane survived into the new
-    //     open and its stale composition showed until the recompose caught
-    //     up. That was the stale / unavailable / preview flicker.
+    //   - ARM is per pane, because the two build differently, which is what kept
+    //     breaking. Decoration arms a TICK after teardown (Qt.callLater, so the Loader
+    //     destroys the old item first): its chain composes asynchronously and its pane
+    //     covers itself until ready, so deferring it to `opened` is what made the card
+    //     arrive bare and decorate late. Zone arms from onOpened, after the enter
+    //     transition, because creating a ZoneShaderItem compiles and links
+    //     synchronously and doing that before the popup is on screen spent the compile
+    //     on a window nobody could see.
     //
-    //   - ARM is per pane, because the two build differently and that
-    //     difference is exactly what kept breaking:
-    //
-    //       decoration — armed a TICK after teardown (Qt.callLater, so the
-    //       Loader actually destroys the old item first). Its chain composes
-    //       asynchronously and its pane covers itself until ready, so it can
-    //       and should build during the enter transition: deferring it to
-    //       `opened` is what made the card arrive bare and decorate late.
-    //
-    //       zone — armed from onOpened, after the enter transition. Creating
-    //       a ZoneShaderItem compiles and links a shader synchronously, so
-    //       arming it before the popup is on screen spends the compile on a
-    //       window nobody can see: the dialog appeared only once the preview
-    //       was finished and the placeholder phase never happened.
-    //
-    // Net effect, identical for both browsers: popup appears, "Preview
-    // unavailable" covers, preview reveals when ready. If you are about to
-    // move one of these lines, the contract test in
-    // test_animations_qml_contracts.cpp names the symptom you are about to
-    // reintroduce.
+    // Net effect for both: popup appears, "Preview unavailable" covers, preview
+    // reveals when ready. The contract test in test_animations_qml_contracts.cpp names
+    // the symptom you would reintroduce by moving one of these lines.
     function _teardownPanes() {
         _rendererActive = false; // zone
         _decorationArmed = false; // decoration
@@ -466,7 +479,9 @@ Kirigami.Dialog {
                 packId: root.effect ? root.effect.id : ""
                 presetBridge: root._presetBridge
                 presetId: root._browsePresetId
-                currentValues: root._liveParams
+                // The filtered map, not the defaults-filled preview one: see
+                // `_presetSaveValues`.
+                currentValues: root._presetSaveValues
                 deltas: null // no assignment here; see PresetRow's `deltas` doc
                 // The browser tunes a PREVIEW, not an assignment, so picking a
                 // preset loads its values into the live map rather than storing

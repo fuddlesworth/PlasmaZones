@@ -529,6 +529,62 @@ private Q_SLOTS:
         QCOMPARE(secondPass.overriddenPaths(), inserted);
         QCOMPARE(secondPass, firstPass);
     }
+
+    /// The MOTION tree's root, which this PR started bounding and which no test
+    /// reached: the only callers of `setMotionProfileTree` in the whole test tree
+    /// write a well-formed tree, so neither the root-baseline bound nor the
+    /// root-key drop had coverage.
+    ///
+    /// That key has no schema validator either (it is registered with no coercion),
+    /// so the setter is the single boundary, and `ProfileTree::fromJson` ignores an
+    /// unknown key rather than pruning it — anything that survives the setter is
+    /// persisted for good.
+    void testMotionProfileTree_rootIsBoundedAndStrayKeysDropped()
+    {
+        IsolatedConfigGuard guard;
+        Settings a;
+
+        QVariantMap baseline;
+        baseline.insert(QStringLiteral("curve"), QString(4000, QLatin1Char('c')));
+        baseline.insert(QStringLiteral("junk"), 1);
+        QVariantMap entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.open"));
+        QVariantMap body;
+        body.insert(QStringLiteral("duration"), 200);
+        body.insert(QStringLiteral("alsoJunk"), QStringLiteral("x"));
+        entry.insert(QStringLiteral("profile"), body);
+        entry.insert(QStringLiteral("note"), QString(2000, QLatin1Char('n')));
+
+        QVariantMap tree;
+        tree.insert(QStringLiteral("baseline"), baseline);
+        tree.insert(QStringLiteral("overrides"), QVariantList{entry});
+        tree.insert(QStringLiteral("strayRoot"), 1);
+        a.setMotionProfileTree(tree);
+
+        const QVariantMap stored = a.motionProfileTree();
+        // Only the two keys this tree defines survive at the root.
+        QCOMPARE(QStringList(stored.keys()), (QStringList{QStringLiteral("overrides")}));
+        // The baseline bounded to nothing (its only known field was over-long, its
+        // other key unknown), and an EMPTY baseline is not written at all — the
+        // library's toJson stopped emitting one for the same reason.
+        QVERIFY(!stored.contains(QStringLiteral("baseline")));
+
+        // The override ENTRY is rebuilt from its two fields, so a third key does not
+        // ride along...
+        const QVariantList entries = stored.value(QStringLiteral("overrides")).toList();
+        QCOMPARE(entries.size(), 1);
+        const QVariantMap storedEntry = entries.constFirst().toMap();
+        QCOMPARE(QStringList(storedEntry.keys()), (QStringList{QStringLiteral("path"), QStringLiteral("profile")}));
+        // ...and the profile body keeps its known field while the unknown one goes.
+        const QVariantMap storedBody = storedEntry.value(QStringLiteral("profile")).toMap();
+        QCOMPARE(storedBody.value(QStringLiteral("duration")).toInt(), 200);
+        QVERIFY(!storedBody.contains(QStringLiteral("alsoJunk")));
+
+        // Idempotent: a second pass over the sanitizer's own output changes nothing,
+        // which is what makes the setter's equality gate reachable.
+        a.setMotionProfileTree(stored);
+        QCOMPARE(a.motionProfileTree(), stored);
+    }
 };
 
 QTEST_MAIN(TestSettingsShaderTree)

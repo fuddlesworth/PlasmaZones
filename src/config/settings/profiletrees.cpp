@@ -251,8 +251,25 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
         // Root keys outside the two this tree defines are dropped for the same
         // reason. Nothing reads them, and carrying them forward would persist
         // whatever a hand edit put there.
-        canonical.insert(QLatin1String("baseline"),
-                         boundedProfileMap(canonical.value(QLatin1String("baseline")).toMap(), QString()));
+        // Inserted only when it has content. An unconditional insert GAVE a tree that
+        // arrived without a baseline an empty one, and the cleanup below removes that
+        // key only when `overrides` is empty too — so for the ordinary tree (overrides
+        // present, no baseline) the dead key reached disk, was copied on every read,
+        // and joined every settings-profile delta. ProfileTree::toJson stopped emitting
+        // it for exactly that reason in this same branch, and this line was re-creating
+        // what that fix removed.
+        //
+        // The path argument is "(baseline)" rather than an empty string so a dropped
+        // field's warning says where it was dropped from; an empty one read as
+        // "dropping unknown field X at" with nothing after "at", indistinguishable from
+        // an override at an empty path.
+        const QVariantMap boundedBaseline =
+            boundedProfileMap(canonical.value(QLatin1String("baseline")).toMap(), QStringLiteral("(baseline)"));
+        if (boundedBaseline.isEmpty()) {
+            canonical.remove(QLatin1String("baseline"));
+        } else {
+            canonical.insert(QLatin1String("baseline"), boundedBaseline);
+        }
         for (const QString& key : canonical.keys()) {
             if (key != QLatin1String("baseline") && key != QLatin1String("overrides")) {
                 canonical.remove(key);
@@ -263,11 +280,24 @@ void Settings::setMotionProfileTree(const QVariantMap& tree)
         QVariantList filtered;
         filtered.reserve(entries.size());
         for (const QVariant& entryVar : entries) {
-            QVariantMap entry = entryVar.toMap();
+            const QVariantMap entry = entryVar.toMap();
             const QString path = entry.value(QLatin1String("path")).toString();
-            entry.insert(QLatin1String("profile"),
-                         boundedProfileMap(entry.value(QLatin1String("profile")).toMap(), path));
-            filtered.append(entry);
+            // An entry with no path is no override. ProfileTree::fromJson skips it on
+            // read, so keeping it only persisted something nothing can use.
+            if (path.isEmpty()) {
+                continue;
+            }
+            // REBUILT from the two fields this tree defines rather than re-inserted
+            // with a bounded profile laid over it. The entry LEVEL was the one rung
+            // this helper left unbounded: a hand edit adding any third key (a 64 KB
+            // "note", say) survived every read and every rewrite forever, because
+            // fromJson ignores an unknown key rather than pruning it — which is the
+            // argument boundedProfileMap's own docblock makes one level down.
+            QVariantMap canonicalEntry;
+            canonicalEntry.insert(QLatin1String("path"), path);
+            canonicalEntry.insert(QLatin1String("profile"),
+                                  boundedProfileMap(entry.value(QLatin1String("profile")).toMap(), path));
+            filtered.append(canonicalEntry);
         }
         if (!filtered.isEmpty()) {
             canonical.insert(QLatin1String("overrides"), filtered);

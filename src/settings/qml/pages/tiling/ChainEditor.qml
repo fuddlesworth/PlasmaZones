@@ -28,15 +28,21 @@ import org.plasmazones.common as PZCommon
  *
  * Pure props-and-signals — the component owns no persistence. The host
  * (DecorationSurfaceCard) feeds:
- *   - availableShaders: QVariantList of effect maps (id / name / parameters)
- *   - chain:            QStringList of pack ids in order
- *   - packParameters:   { packId -> { paramId -> value } } override map
+ *   - availableShaders:   QVariantList of effect maps (id / name / parameters)
+ *   - chain:              QStringList of pack ids in order
+ *   - packParameters:     { packId -> { paramId -> value } } override map
+ *   - packOwnParameters:  the same shape, REQUIRED, holding only what this node
+ *                         stores itself (packParameters may be a resolved walk-up)
+ *   - presetBridge:       the family's ShaderPresetBridge, REQUIRED
+ *   - packPresetIds:      { packId -> presetId } for this chain
  * and listens for:
  *   - chainChangeRequested(newChain)          — add / remove / reorder
  *   - paramChangeRequested(packId, id, value) — a per-pack parameter edit
  *   - paramsRandomizeRequested(packId, rolled) — a whole-pack randomize roll
  *   - paramsResetRequested(packId, defaults)  — a whole-pack reset to defaults
  *   - layerEnabledChangeRequested(packId, on) — per-pack enable toggle
+ *   - presetChangeRequested(packId, presetId) — a per-pack preset pick
+ *   - presetRevertRequested(packId)           — drop this pack's own deltas
  *
  * The host routes those signals into the DecorationPageController's
  * setChain / setChainParam mutators (with its own surface path), then
@@ -113,6 +119,11 @@ ColumnLayout {
     /// `supportsPresets` carrying the opt-out a host actually means.
     required property QtObject presetBridge
     /// Whether this host has a preset axis at all; forwarded to each layer.
+    ///
+    /// Provision for a host that has no preset support, rather than a description of
+    /// one that exists: every host of this component passes a real bridge today (the
+    /// rules embed included), so nothing sets this false. The animation side has the
+    /// live equivalent, GlobalTimingDefaultsCard's `shaderSupportsPresets: false`.
     property bool supportsPresets: true
     /// Per-pack preset ids for this chain, shaped `{ packId: presetId }`, the
     /// same shape `packParameters` already has.
@@ -371,6 +382,9 @@ ColumnLayout {
                         Layout.fillWidth: true
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
                         packId: packDelegate.packId
+                        // The pack's display name, so each layer's preset combo
+                        // announces which layer it belongs to.
+                        packDisplayName: root._displayName(packDelegate.packId)
                         parameters: packDelegate._schema
                         currentValues: packDelegate._values
                         ownValues: packDelegate._ownValues

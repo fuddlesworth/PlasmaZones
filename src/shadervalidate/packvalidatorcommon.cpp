@@ -416,20 +416,32 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
         // the length bound here is the stricter NAME one, not its own id bound.
         if (!PhosphorShaders::ShaderPreset::isUsableId(presetName)
             || presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars) {
+            // One multi-arg .arg, not a chain: a chained one substitutes into the
+            // result of the previous substitution, so a `%2` inside the KEY (reachable
+            // — `%` is neither a control character nor a separator, and this branch
+            // also runs for a merely over-long key) would be replaced by the count.
             lints << QStringLiteral(
                          "preset '%1' has an unusable id: it must be non-blank, at most %2 characters, free of "
                          "control or formatting characters, and free of path separators. The id is also the name "
                          "the picker renders, and it is what an assignment stores. The runtime does not refuse "
                          "this — the pack would ship and render with an unreadable preset row")
-                         .arg(presetName)
-                         .arg(PhosphorShaders::ShaderPreset::MaxNameChars);
+                         .arg(presetName, QString::number(PhosphorShaders::ShaderPreset::MaxNameChars));
             ++problems;
-            continue;
+            // NOT a `continue`: the values are independent of the key, so reporting
+            // them in the same run spares the author a second round of errors after
+            // they rename the preset.
         }
         for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
             const auto found = byId.constFind(vit.key());
             if (found == byId.constEnd()) {
-                lints << QStringLiteral("preset '%1' sets '%2', which the pack does not declare")
+                // "does not declare" also covers declared-and-DROPPED: this reads the
+                // post-load parameter list, so a duplicate or invalid id, or an
+                // image-typed parameter on the pointer arm (whose vocabulary has no
+                // image type), is absent here too. Each arm lints the dropped
+                // declaration separately, so the two lines appear together.
+                lints << QStringLiteral(
+                             "preset '%1' sets '%2', which the pack does not declare (or declared and "
+                             "the loader dropped it; see the parameter lints above)")
                              .arg(presetName, vit.key());
                 ++problems;
                 continue;
@@ -440,15 +452,26 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
 
             if (param.type == QLatin1String("bool")) {
                 if (value.typeId() != QMetaType::Bool) {
-                    lints << QStringLiteral("preset '%1' sets '%2' to a non-boolean").arg(presetName, vit.key());
+                    // An AUTHORING rule, not a runtime break: every consumer reads this
+                    // through QVariant::toBool, which accepts a number. Worded so it
+                    // does not imply the pack would misbehave.
+                    lints << QStringLiteral("preset '%1' sets '%2' to %3; a bool parameter wants true or false")
+                                 .arg(presetName, vit.key(), value.toString());
                     ++problems;
                 }
                 continue;
             }
             if (param.type == QLatin1String("color") || param.type == QLatin1String("image")) {
-                if (value.typeId() != QMetaType::QString) {
-                    lints << QStringLiteral("preset '%1' sets '%2' to a non-%3 value")
-                                 .arg(presetName, vit.key(), param.type);
+                // COLOUR only. An image-typed value cannot fail this test, because
+                // parsePackPresets coerces every image value with
+                // `.toVariant().toString()` before the lint ever sees the map — so
+                // `"tex": 7` arrives as the string "7" and is reported below as a
+                // missing FILE, and `"tex": {}` arrives as "" and is accepted as "no
+                // texture for this slot". Checking the raw JSON is the only way to
+                // report those as type errors, and that means surfacing them out of
+                // the parse rather than re-deriving them here.
+                if (param.type == QLatin1String("color") && value.typeId() != QMetaType::QString) {
+                    lints << QStringLiteral("preset '%1' sets '%2' to a non-color value").arg(presetName, vit.key());
                     ++problems;
                     continue;
                 }
@@ -477,11 +500,14 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 // `"tex": "../../../etc/passwd"` reaches this loop with no `tex` entry
                 // at all.
                 //
-                // That is also the one real remaining gap for a pack author. The
-                // refusal is named in the log and nowhere in this report, because a
-                // dropped entry leaves no trace in the struct the validator lints.
-                // Closing it means surfacing refusals out of `parsePackPresets`, not
-                // re-deriving containment here where it cannot fire.
+                // That is also one of THREE gaps with the same shape, all of them
+                // per-entry drops the parse makes before this lint runs, each leaving
+                // only a log line: an escaping texture path, a JSON `null` value, and
+                // a non-object preset BODY (which drops the whole preset). All three
+                // land the author in the same "the preset did nothing" state, and
+                // closing any of them means surfacing refusals out of
+                // `parsePackPresets` rather than re-deriving them here, where they
+                // cannot fire.
                 //
                 // EXISTENCE this can check, and nothing did: a value that survives the
                 // parse is an absolute in-pack path, and a preset naming a texture the
@@ -491,8 +517,12 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 if (param.type == QLatin1String("image") && !packDir.isEmpty()) {
                     const QString declaredPath = value.toString();
                     if (!declaredPath.isEmpty() && !QFileInfo::exists(QDir(packDir).absoluteFilePath(declaredPath))) {
+                        // Printed RELATIVE to the pack. What the lint holds is the
+                        // parse's resolved absolute path, so the raw value named a
+                        // string the author cannot find anywhere in their metadata.json
+                        // — unlike every sibling lint, which quotes what they wrote.
                         lints << QStringLiteral("preset '%1' sets '%2' to '%3', which the pack does not contain")
-                                     .arg(presetName, vit.key(), declaredPath);
+                                     .arg(presetName, vit.key(), QDir(packDir).relativeFilePath(declaredPath));
                         ++problems;
                     }
                 }
@@ -509,6 +539,15 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 continue;
             }
             const double v = value.toDouble();
+            // NO non-finite check, deliberately, and this is the note that keeps one
+            // from being added as "defensive": every value here came through
+            // QJsonDocument, whose parser refuses a non-finite number outright — a
+            // literal `NaN` / `Infinity` token and an overflowing decimal like `1e400`
+            // both fail the whole document with "illegal number", so the pack does not
+            // load at all and the metadata gate reports that instead. Verified with a
+            // Qt6 probe rather than assumed. A branch here could never fire, which is
+            // the same dead-code-claiming-coverage the containment check above was.
+            //
             // An int-typed parameter reaches the shader through a C++ cast that
             // TRUNCATES, so `"count": 1.5` silently becomes 1 and the author's
             // declared value is not the one that renders. A fractional literal

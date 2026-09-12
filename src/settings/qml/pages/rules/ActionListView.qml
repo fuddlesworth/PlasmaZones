@@ -43,6 +43,29 @@ ColumnLayout {
     /// receives. May be null while the page is still wiring things up
     /// — resolution falls back to the raw wire string in that case.
     property var appSettings: null
+    /// Bumped whenever either preset bridge reports a change, so the summary rows
+    /// below re-resolve a preset NAME they read imperatively.
+    ///
+    /// `_resolveParamValue` asks the bridge for the pack's presets, and a bridge call
+    /// is not a binding dependency: a preset renamed or deleted anywhere left this
+    /// read-only summary showing the old name until something unrelated happened to
+    /// re-evaluate. Every editing surface holds its rows imperatively against the same
+    /// hazard (PresetRow, ActionPresetEditor); a revision counter is the read-only
+    /// equivalent, and the same `void (rev)` idiom AnimationEventCard uses for the
+    /// shader registry.
+    property int _presetRev: 0
+    Connections {
+        target: root.appSettings ? root.appSettings.animationPresets : null
+        function onPresetsChanged() {
+            ++root._presetRev;
+        }
+    }
+    Connections {
+        target: root.appSettings ? root.appSettings.overlayPresets : null
+        function onPresetsChanged() {
+            ++root._presetRev;
+        }
+    }
     /// Tree visualisation constants — kept in lockstep with
     /// MatchExpressionView's equivalents so the WHEN and THEN trees
     /// look like one consistent tree visualisation.
@@ -282,6 +305,10 @@ ColumnLayout {
             return rawStr;
         }
         if (kind === "shaderPreset") {
+            // Read the revision so the text binding below re-runs when a preset is
+            // renamed or deleted. The bridge lookups in this arm are imperative calls
+            // and register no dependency of their own.
+            void root._presetRev;
             // Without this arm the value fell through to the raw string and the
             // summary showed a machine id — a bare UUID for a user preset — in a
             // view whose contract is that values resolve to the same labels the

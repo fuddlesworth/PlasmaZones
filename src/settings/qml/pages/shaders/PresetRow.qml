@@ -37,6 +37,13 @@ RowLayout {
     /// The pack whose presets these are. Presets are only ever offered for
     /// their own pack: parameter ids mean nothing across packs.
     required property string packId
+    /// A human name for the pack, used to qualify what a screen reader announces.
+    ///
+    /// Several expanded chain layers each show one of these combos, and with a bare
+    /// "Shader preset" they were indistinguishable by ear where the sighted reading is
+    /// disambiguated by the row the combo sits in. Defaults to `packId`, which is worse
+    /// than a display name and far better than nothing.
+    property string packDisplayName: packId
     /// The family's `ShaderPresetBridge`, REQUIRED of every host.
     ///
     /// Required on purpose, and it is the one property here that used to default
@@ -201,7 +208,7 @@ RowLayout {
         // every time a longer name was picked. The popup is not bound by this
         // width (see above), so a long name stays readable when the list is open.
         Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-        Accessible.name: i18nc("@label:listbox", "Shader preset")
+        Accessible.name: root.packDisplayName.length > 0 ? i18nc("@label:listbox preset picker for one pack", "Shader preset for %1", root.packDisplayName) : i18nc("@label:listbox", "Shader preset")
         // The modified state is shown beside the combo as its own label, which a
         // screen reader reaches only by moving on. Fold it in here too, so a user
         // who tabs to the combo is told the assignment diverges from the preset —

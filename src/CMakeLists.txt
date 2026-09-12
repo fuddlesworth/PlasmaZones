@@ -295,7 +295,7 @@ target_link_libraries(plasmazones_core
         PhosphorSurface::PhosphorSurface
         # PhosphorRegistry: PathKeyedOverrides — the shared baseline + keyed
         # overrides container. PUBLIC because core/types/overlayshadertree.h
-        # includes the header and holds one by value as a member, so anything
+        # includes the header and holds one by unique_ptr as a member, so anything
         # that #includes that header needs the include path and the link edge.
         PhosphorRegistry::PhosphorRegistry
         # PhosphorRules: the unified LGPL rule engine. PUBLIC since

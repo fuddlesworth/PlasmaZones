@@ -166,8 +166,11 @@ struct PresetLintParam
 /// unindented error line and then `metadata OK` directly below it, while still
 /// returning a non-zero error count.
 ///
-/// @p packDir is the pack's directory, used to containment-check an image-typed
-/// preset value. Pass an empty string to skip that check.
+/// @p packDir is the pack's directory, used to check that an image-typed preset
+/// value names a file the pack actually ships. NOT a containment check: the parse
+/// has already dropped an escaping path, so there is nothing left here to refuse
+/// (see the implementation). Every arm passes a real directory today; an empty one
+/// skips the existence check.
 ///
 /// Deliberately NOT an error for a preset to omit parameters: a preset is a
 /// partial tuning by design, and the ones it says nothing about fall back to

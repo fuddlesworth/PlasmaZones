@@ -14,6 +14,7 @@
 // For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
 // rather than relied on through another Qt header: the unity build hides a missing
 // include, and the non-unity build is the only place it surfaces.
+#include <QSet>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -133,17 +134,27 @@ public:
     /// flattened profile that carries one.
     QVariantMap effectiveParameters() const
     {
+        // ONCE per (pack, presetId). This getter is read from the compositor's decorate
+        // path and the shell's chain resolve, so an unflattened consumer would repeat the
+        // warning every frame it draws. The animation twin latches the same way, and for
+        // the reason the decoration parser nearby chose qCDebug: the level is right for a
+        // contract violation, the repetition is not.
         if (presetIds) {
             for (auto it = presetIds->constBegin(); it != presetIds->constEnd(); ++it) {
                 if (it.value().toString().isEmpty()) {
                     continue;
                 }
-                qWarning(
-                    "PhosphorSurface: DecorationProfile::effectiveParameters() read on a profile whose preset "
-                    "is NOT yet applied (pack=%s presetId=%s). The preset's values are missing from the result "
-                    "and its declared range is unenforced — flatten with withPresetsResolved() after the tree "
-                    "walk-up, never per node.",
-                    qUtf8Printable(it.key()), qUtf8Printable(it.value().toString()));
+                static QSet<QString> reported;
+                const QString key = it.key() + QLatin1Char('\x1f') + it.value().toString();
+                if (!reported.contains(key)) {
+                    reported.insert(key);
+                    qWarning(
+                        "PhosphorSurface: DecorationProfile::effectiveParameters() read on a profile whose preset "
+                        "is NOT yet applied (pack=%s presetId=%s). The preset's values are missing from the result "
+                        "and its declared range is unenforced — flatten with withPresetsResolved() after the tree "
+                        "walk-up, never per node. Reported once per pack and preset.",
+                        qUtf8Printable(it.key()), qUtf8Printable(it.value().toString()));
+                }
                 break;
             }
         }

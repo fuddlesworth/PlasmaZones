@@ -570,6 +570,87 @@ private Q_SLOTS:
         QJsonObject scalar{{QString(ActionParam::Chain), QJsonArray{QStringLiteral("border")}},
                            {QString(ActionParam::PresetId), QStringLiteral("a1b2c3")}};
         QVERIFY(!loads(ActionType::OverrideDecorationChain, scalar));
+
+        // The other two axes this validator bounds, neither of which had a case, so
+        // deleting either bound passed green. The KEY length first...
+        QJsonObject longKey{{QString(ActionParam::Chain), QJsonArray{QStringLiteral("border")}}};
+        longKey.insert(QString(ActionParam::PresetIds),
+                       QJsonObject{{QString(MaxChainPackIdLength, QLatin1Char('k')), QStringLiteral("a1")}});
+        QVERIFY2(loads(ActionType::OverrideDecorationChain, longKey), "exactly at the key cap must load");
+        longKey.insert(QString(ActionParam::PresetIds),
+                       QJsonObject{{QString(MaxChainPackIdLength + 1, QLatin1Char('k')), QStringLiteral("a1")}});
+        QVERIFY(!loads(ActionType::OverrideDecorationChain, longKey));
+
+        // ...then the object SIZE, at the cap and one over it.
+        QJsonObject atCap;
+        for (int i = 0; i < MaxDecorationChainEntries; ++i) {
+            atCap.insert(QStringLiteral("p%1").arg(i), QStringLiteral("a1"));
+        }
+        QJsonObject sized{{QString(ActionParam::Chain), QJsonArray{QStringLiteral("border")}},
+                          {QString(ActionParam::PresetIds), atCap}};
+        QVERIFY2(loads(ActionType::OverrideDecorationChain, sized), "exactly at the entry cap must load");
+        QJsonObject overCap = atCap;
+        overCap.insert(QStringLiteral("one-too-many"), QStringLiteral("a1"));
+        sized.insert(QString(ActionParam::PresetIds), overCap);
+        QVERIFY(!loads(ActionType::OverrideDecorationChain, sized));
+
+        // And an id EXACTLY at the value cap loads, so `<=` cannot become `<`.
+        QJsonObject atValueCap{
+            {QString(ActionParam::Chain), QJsonArray{QStringLiteral("border")}},
+            {QString(ActionParam::PresetIds),
+             QJsonObject{{QStringLiteral("border"), QString(MaxShaderPresetIdLength, QLatin1Char('x'))}}}};
+        QVERIFY2(loads(ActionType::OverrideDecorationChain, atValueCap), "exactly at the id cap must load");
+    }
+
+    /// The `params` blob on every action that allows it, which NO validator checked:
+    /// not the shape, not the key count, not the key or value length.
+    ///
+    /// A scalar loaded and was then silently swallowed by the consumer's `.toObject()`,
+    /// which is the same failure the PresetIds type check exists to stop, and an
+    /// unbounded object was persisted and re-serialised on every rules.json write.
+    void theParamsBlobIsBoundedOnEveryActionThatAllowsIt()
+    {
+        // The nested form (decoration chain) and the flat form (the scalar shader
+        // actions and SetAlgorithmParam) are both accepted.
+        QJsonObject nested{{QString(ActionParam::Chain), QJsonArray{QStringLiteral("border")}},
+                           {QString(ActionParam::Params),
+                            QJsonObject{{QStringLiteral("border"), QJsonObject{{QStringLiteral("borderWidth"), 2}}}}}};
+        QVERIFY(loads(ActionType::OverrideDecorationChain, nested));
+
+        // A scalar blob is refused on each of the four.
+        nested.insert(QString(ActionParam::Params), QStringLiteral("fast"));
+        QVERIFY(!loads(ActionType::OverrideDecorationChain, nested));
+        QVERIFY(!loads(ActionType::OverrideAnimationShader,
+                       QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")},
+                                   {QString(ActionParam::Params), QStringLiteral("fast")}}));
+        QVERIFY(!loads(
+            ActionType::OverrideOverlayShader,
+            QJsonObject{{QString(ActionParam::LayoutId), QStringLiteral("grid")}, {QString(ActionParam::Params), 7}}));
+        QVERIFY(!loads(ActionType::SetAlgorithmParam,
+                       QJsonObject{{QString(ActionParam::Algorithm), QStringLiteral("bsp")},
+                                   {QString(ActionParam::Params), QJsonArray{}}}));
+
+        // Over the entry cap, and an over-long key.
+        QJsonObject big;
+        for (int i = 0; i <= MaxDecorationChainEntries; ++i) {
+            big.insert(QStringLiteral("p%1").arg(i), i);
+        }
+        QVERIFY(!loads(ActionType::OverrideAnimationShader,
+                       QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")},
+                                   {QString(ActionParam::Params), big}}));
+        QVERIFY(!loads(ActionType::OverrideAnimationShader,
+                       QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")},
+                                   {QString(ActionParam::Params),
+                                    QJsonObject{{QString(MaxChainPackIdLength + 1, QLatin1Char('k')), 1}}}}));
+        // An over-long string VALUE.
+        QVERIFY(!loads(
+            ActionType::OverrideAnimationShader,
+            QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")},
+                        {QString(ActionParam::Params),
+                         QJsonObject{{QStringLiteral("tex"), QString(MaxChainPackIdLength + 1, QLatin1Char('x'))}}}}));
+        // Absent stays valid: the key is optional wherever it is allowed.
+        QVERIFY(loads(ActionType::OverrideAnimationShader,
+                      QJsonObject{{QString(ActionParam::Event), QStringLiteral("window.open")}}));
     }
 
     /// Every preset-carrying action declares its preset key as a ParamSchema

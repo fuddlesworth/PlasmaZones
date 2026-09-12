@@ -389,7 +389,11 @@ void ActionRegistry::registerBuiltinsAppearance()
                         }
                     }
                 }
-                return true;
+                // And the per-pack `params` blob beside them, which was the one key
+                // here nothing checked — not even that it is an object. Its nested
+                // `{packId: {paramId: value}}` form is why paramsBlobIsSane accepts
+                // one level of nesting.
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
         // PresetIds, not PresetId: nested `{packId: presetId}`, mirroring how
@@ -682,7 +686,13 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::AlgorithmParams),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Algorithm);
+                if (!hasNonEmptyString(p, ActionParam::Algorithm)) {
+                    return false;
+                }
+                // The custom-parameter values are validated against the algorithm's
+                // declared schema at apply time, but their SHAPE and size are this
+                // validator's job — it is the only boundary rules.json crosses.
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Algorithm), QString(ActionParam::Params)},

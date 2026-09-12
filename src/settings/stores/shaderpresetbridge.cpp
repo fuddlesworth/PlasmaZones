@@ -24,11 +24,11 @@ namespace {
 /// would type and far below the cost of letting an unbounded string reach disk.
 constexpr int kMaxPresetNameChars = 128;
 
-/// Caps on a preset's parameter map, mirroring the assignment trees' schema
-/// bounds. A preset file is read back and merged into an assignment's effective
-/// values, so it is the same input boundary the animation writer bounds its map
-/// at for the same stated reason: persisted close to verbatim, and copied back in
-/// without validation on read.
+/// Caps on a preset's parameter map. A preset file is read back and merged into an
+/// assignment's effective values, so it is the same input boundary the animation writer
+/// bounds its map at for the same reason: persisted close to verbatim and copied back
+/// in on read.
+///
 /// Taken FROM the library rather than written again here. The read side
 /// (ShaderPreset::fromJson) applies the same two caps, and a private copy is how the
 /// two halves drift: the bridge bounded what it wrote while a hand-written file
@@ -78,6 +78,31 @@ void fillRow(const PhosphorShaders::ShaderPreset& preset, QVariantMap& out)
 /// nothing. Not a user-facing refusal — the file IS on disk and the next watcher
 /// tick picks it up — but a log line naming the family is what points a developer
 /// at the missing load().
+/// Whether @p path resolves inside @p dir.
+///
+/// Both are canonicalised, so a symlink anywhere along either is followed before the
+/// comparison: what is being asked is where the write or unlink would LAND, not how it
+/// is spelled. An unresolvable path (a dangling link, a parent that does not exist)
+/// answers false, which is the fail-closed reading.
+///
+/// Shared by commit() and deletePreset(). The write side checked it and the delete side
+/// did not, which is the asymmetric half of a defensive pair even though no reachable
+/// escape was found on the delete path (the store has one absolute user root, pack
+/// presets are refused above it as read-only, and QFile::remove unlinks a link rather
+/// than its target).
+bool pathIsInside(const QString& dir, const QString& path)
+{
+    if (dir.isEmpty() || path.isEmpty()) {
+        return false;
+    }
+    const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
+    const QString canonicalPath = QFileInfo(path).canonicalFilePath();
+    if (canonicalDir.isEmpty() || canonicalPath.isEmpty()) {
+        return false;
+    }
+    return canonicalPath.startsWith(canonicalDir + QLatin1Char('/'));
+}
+
 void rescanOrWarn(PhosphorShaders::ShaderPresetStore* store, PhosphorShaders::ShaderFamily family)
 {
     if (store && !store->rescanNow(family)) {
@@ -204,10 +229,7 @@ bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
     // preset directory pointing out of it would otherwise let QSaveFile follow it.
     QString path = dir + QLatin1Char('/') + preset.id + QStringLiteral(".json");
     if (!preset.sourcePath.isEmpty()) {
-        const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
-        const QString canonicalSource = QFileInfo(preset.sourcePath).canonicalFilePath();
-        if (!canonicalDir.isEmpty() && !canonicalSource.isEmpty()
-            && canonicalSource.startsWith(canonicalDir + QLatin1Char('/'))) {
+        if (pathIsInside(dir, preset.sourcePath)) {
             path = preset.sourcePath;
         } else {
             qCWarning(lcConfig)
@@ -225,6 +247,11 @@ bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
     // Refusing rather than unlinking: a symlink in here is either a deliberate
     // arrangement by the user or an attempt to redirect the write, and neither is
     // something this code should resolve on its own.
+    //
+    // The check is on the leaf FILE only, so a symlinked preset DIRECTORY is followed
+    // and written through. Deliberate: that directory is the user's own XDG tree, a
+    // symlink at that level is the ordinary way to keep presets elsewhere, and the
+    // containment test above canonicalises, so it agrees rather than fighting it.
     if (QFileInfo(path).isSymLink()) {
         const QString error = PhosphorI18n::tr("Could not write the preset to disk.", "@info");
         qCWarning(lcConfig) << "ShaderPresetBridge: refusing to write through a symlink in the preset directory" << path
@@ -258,7 +285,11 @@ bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
 
 QString ShaderPresetBridge::savePreset(const QString& packId, const QString& name, const QVariantMap& params)
 {
-    if (packId.isEmpty()) {
+    if (packId.isEmpty() || packId.size() > kMaxPresetStringChars) {
+        // Bounded as well as non-empty. Every other string this bridge persists is, and
+        // this one reaches disk verbatim through `commit()` — `duplicatePreset` forwards
+        // a packId read back from a hand-editable file, so "the UI supplies it" is not
+        // true of every path in.
         Q_EMIT presetWriteFailed(PhosphorI18n::tr("No shader pack selected.", "@info"));
         return {};
     }
@@ -341,6 +372,13 @@ bool ShaderPresetBridge::renamePreset(const QString& presetId, const QString& na
 
 bool ShaderPresetBridge::deletePreset(const QString& presetId)
 {
+    // Takes no packId, and does not need one: every QML consumer filters
+    // `presetsChanged(family, packId)` on its own pack, and the rescan below reaches
+    // that signal through `setUserPresets`, whose diff sweeps the union of the packs it
+    // held and the packs it just read. A pack whose last preset was the deleted one
+    // therefore appears in that sweep with an empty `after`, and the pack id is
+    // recovered from the scope key — so the emission names the right pack rather than
+    // an empty one, and the rows that listed the preset refresh.
     const PhosphorShaders::ShaderPreset preset = m_store->registry().presetById(m_family, presetId);
     if (!preset.isValid()) {
         return false;
@@ -357,7 +395,16 @@ bool ShaderPresetBridge::deletePreset(const QString& presetId)
         rescanOrWarn(m_store, m_family);
         return true;
     }
-    if (preset.sourcePath.isEmpty() || !QFile::remove(preset.sourcePath)) {
+    if (!pathIsInside(presetDirectory(), preset.sourcePath)) {
+        // The same containment test commit() applies, rather than trusting the
+        // loader's stamp on one path and re-checking it on the other.
+        const QString error = PhosphorI18n::tr("Could not delete the preset.", "@info");
+        qCWarning(lcConfig) << "ShaderPresetBridge: refusing to delete outside the preset directory"
+                            << preset.sourcePath;
+        Q_EMIT presetWriteFailed(error);
+        return false;
+    }
+    if (!QFile::remove(preset.sourcePath)) {
         const QString error = PhosphorI18n::tr("Could not delete the preset.", "@info");
         qCWarning(lcConfig) << "ShaderPresetBridge: cannot remove" << preset.sourcePath;
         Q_EMIT presetWriteFailed(error);

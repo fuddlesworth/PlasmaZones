@@ -11,10 +11,13 @@
 // consumer of `PhosphorRules/RuleAction.h` keeps compiling unchanged.
 //
 // The bounds constants live here rather than in the private
-// ruleaction_builtins_p.h because they are shared across library boundaries:
-// the descriptor validators check them at load, and the daemon-side and
-// compositor-side consumers re-check the same numbers on the way out, so a
-// private copy in either would drift by hand-mirroring.
+// ruleaction_builtins_p.h because some are shared across library boundaries: the
+// descriptor validators check every one of them at load, and the APPEARANCE numbers
+// (MaxBorderWidth, MaxAnimationDurationMs) are re-checked on the way out by the
+// compositor, which static_asserts against these very constants
+// (kwin-effect/plasmazoneseffect/shader_resolve.cpp). The chain and preset bounds
+// below are enforced at this load boundary ONLY — no consumer re-derives them — so
+// they live here for one vocabulary rather than for a second check.
 //
 // The companion splits are ActionTypes.h (action type ids) and ActionSlots.h
 // (slot ids).

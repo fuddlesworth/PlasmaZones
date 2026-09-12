@@ -127,6 +127,16 @@ private Q_SLOTS:
                                       {QStringLiteral("parameters"),
                                        QJsonArray{floatParam(QStringLiteral("glowSize"), 16.0, 0.0, 64.0)}}}));
 
+        // A padding pack that declares NO maximum, which is what leaves the absolute
+        // ceiling reachable: with a declared max the range clamp answers first.
+        QVERIFY(writePack(root, QStringLiteral("glow-unbounded"),
+                          QJsonObject{{QStringLiteral("paddingParam"), QStringLiteral("glowSize")},
+                                      {QStringLiteral("parameters"),
+                                       QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("glowSize")},
+                                                              {QStringLiteral("name"), QStringLiteral("glowSize")},
+                                                              {QStringLiteral("type"), QStringLiteral("float")},
+                                                              {QStringLiteral("default"), 16.0}}}}}));
+
         // Backdrop-sampling multipass pack, modelled on the shipping glass /
         // blur family. Without one of these the multipass and needsBackdrop
         // branches are unreachable and asserting on them only pins a constant.
@@ -251,15 +261,25 @@ private Q_SLOTS:
         QCOMPARE(c.previewOuterPadding(QStringLiteral("glow"), {{QStringLiteral("glowSize"), 40.0}}), 40.0);
     }
 
-    /// Clamped like the daemon and compositor: a hostile or typo'd value must
-    /// not be able to demand an absurd preview canvas.
-    void previewOuterPadding_is_clamped_to_the_shared_maximum()
+    /// Clamped like every render path, and by the DECLARED range first.
+    ///
+    /// This used to assert the absolute ceiling (128) for a pack whose own metadata
+    /// caps glowSize at 64, which made the preview disagree with the real surface for
+    /// the same scenario — ShellChrome flattens through resolveParams and answered 64,
+    /// and both figures were pinned as correct in their own test files. The declared
+    /// range is the first bound; the ceiling is the last-resort one for a pack that
+    /// declares no maximum at all, which the `glow-unbounded` fixture is for.
+    void previewOuterPadding_is_clamped_to_the_declared_range_then_the_ceiling()
     {
         DecorationPreviewController c(&m_registry, nullptr);
         const double huge = c.previewOuterPadding(QStringLiteral("glow"), {{QStringLiteral("glowSize"), 100000.0}});
-        QCOMPARE(huge, static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+        QCOMPARE(huge, 64.0);
         const double negative = c.previewOuterPadding(QStringLiteral("glow"), {{QStringLiteral("glowSize"), -50.0}});
         QCOMPARE(negative, 0.0);
+
+        const double unbounded =
+            c.previewOuterPadding(QStringLiteral("glow-unbounded"), {{QStringLiteral("glowSize"), 100000.0}});
+        QCOMPARE(unbounded, static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
     }
 
     /// The same identity check against the SHIPPING packs rather than the

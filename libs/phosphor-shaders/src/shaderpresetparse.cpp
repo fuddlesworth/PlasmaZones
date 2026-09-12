@@ -4,6 +4,9 @@
 #include <PhosphorShaders/ShaderPresetParse.h>
 
 #include <PhosphorShaders/ShaderPackPaths.h>
+// MaxParams, so the per-preset value cap is the ONE number the read side applies
+// whether the map came from a pack's metadata or from a user preset file.
+#include <PhosphorShaders/ShaderPreset.h>
 
 #include <QJsonValue>
 #include <QLoggingCategory>
@@ -58,7 +61,24 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
     }
 
     const QJsonObject presetsObj = presetsValue.toObject();
+    // COUNT-bounded here, not only in the schemas. The schemas cap `presets` and each
+    // preset's value map, but only the animation and wallpaper registries validate
+    // against a schema at load — the surface and pointer ones do not, so for those two
+    // families a user-installed pack's unbounded `presets` object was parsed whole and
+    // held for the session. Every other preset path in this feature bounds at its own
+    // boundary rather than trusting a gate upstream, and this is that boundary.
+    //
+    // Truncating rather than refusing, like the directory loader's entry cap: a pack
+    // that merely declares too many presets still offers the ones that fit.
+    static constexpr qsizetype kMaxPresetsPerPack = 64;
+    int kept = 0;
     for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
+        if (kept >= kMaxPresetsPerPack) {
+            qCWarning(log).noquote() << "Shader pack" << packDir.dirName() << "declares more than" << kMaxPresetsPerPack
+                                     << "presets; ignoring the rest from" << it.key();
+            break;
+        }
+        ++kept;
         // Same reasoning one level down: a non-object preset BODY yielded an empty
         // value map and the preset was then dropped by the isEmpty() test below,
         // with no diagnostic — unlike the refused-image case, which deliberately
@@ -88,6 +108,16 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
         QVariantMap presetValues;
         QStringList refusedImageEntries;
         for (auto vit = values.begin(); vit != values.end(); ++vit) {
+            // The per-preset cap, the same number ShaderPreset::fromJson applies to a
+            // user preset file. A key past it names no declared parameter in any
+            // realistic pack (48 is the declared-parameter ceiling) and is inert at
+            // resolve, so there is nothing to salvage by keeping it.
+            if (presetValues.size() >= PhosphorShaders::ShaderPreset::MaxParams) {
+                qCWarning(log).noquote() << "Shader pack" << packDir.dirName() << "preset" << it.key()
+                                         << "declares more than" << PhosphorShaders::ShaderPreset::MaxParams
+                                         << "values; ignoring the rest from" << vit.key();
+                break;
+            }
             if (imageParamIds.contains(vit.key())) {
                 const QString declared = vit.value().toVariant().toString();
                 if (declared.isEmpty()) {
