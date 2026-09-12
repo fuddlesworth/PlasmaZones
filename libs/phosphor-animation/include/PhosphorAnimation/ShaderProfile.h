@@ -7,6 +7,11 @@
 
 #include <QJsonObject>
 #include <QString>
+// For qWarning / qUtf8Printable in effectiveParameters() below. Named explicitly
+// rather than relied on through QString: this header is pulled in by the unity
+// build everywhere, where a neighbour's include hides a missing one, and the
+// non-unity build is the only place it shows up.
+#include <QtGlobal>
 #include <QVariantMap>
 
 #include <optional>
@@ -81,11 +86,12 @@ public:
     }
     /// The stored parameter map, without judgement.
     ///
-    /// For the two callers that legitimately want the RAW values while a preset is
-    /// still engaged: the flatten itself, which needs them as the delta set, and an
-    /// editor showing the user what this assignment stores of its own. Named so
-    /// those reads state their intent instead of sharing a spelling with the reads
-    /// that want the effective answer.
+    /// For a caller that legitimately wants the RAW values while a preset is still
+    /// engaged. Today there is exactly one, the flatten itself, which needs them as
+    /// the delta set; an editor showing what an assignment stores of its own is the
+    /// other shape that belongs here, and it reaches the raw map through the tree
+    /// rather than through a profile. Named so such a read states its intent
+    /// instead of sharing a spelling with the reads that want the effective answer.
     QVariantMap storedParameters() const
     {
         return parameters.value_or(QVariantMap());

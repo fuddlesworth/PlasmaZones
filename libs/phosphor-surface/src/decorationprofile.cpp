@@ -148,46 +148,109 @@ void DecorationProfile::overlay(DecorationProfile& dst, const DecorationProfile&
 
 bool DecorationProfile::operator==(const DecorationProfile& other) const
 {
-    return chain == other.chain && parameters == other.parameters && disabledPacks == other.disabledPacks
-        && presetIds == other.presetIds;
+    if (chain != other.chain || disabledPacks != other.disabledPacks || presetIds != other.presetIds) {
+        return false;
+    }
+    // ENGAGEMENT first, then the contents, the same policy ShaderProfile,
+    // OverlayShaderProfile and ShaderPreset all apply. This type used to compare
+    // `parameters` as raw QVariants while its three siblings JSON-normalised, which
+    // is a drift rather than a decision: the settings setter on this tree compares a
+    // map BUILT in C++ against one read back from disk, so a value whose type
+    // changed CATEGORY on the way through (a bool stored as 1, a number stored as
+    // "1") failed the no-op gate and re-emitted.
+    //
+    // Raw compare first and normalise only on a miss, for the reason written out in
+    // the animation twin: QVariantMap equality cannot report a false EQUAL, only a
+    // false unequal, and the normalisation is what costs.
+    if (parameters.has_value() != other.parameters.has_value()) {
+        return false;
+    }
+    if (!parameters.has_value() || *parameters == *other.parameters) {
+        return true;
+    }
+    return QJsonObject::fromVariantMap(*parameters) == QJsonObject::fromVariantMap(*other.parameters);
 }
 
 DecorationProfile withPresetsResolved(const DecorationProfile& profile,
                                       const PhosphorShaders::ShaderPresetRegistry& presets,
                                       PhosphorShaders::ShaderFamily family)
 {
-    if (!profile.presetIds || profile.presetIds->isEmpty()) {
+    // Every pack's entry goes through resolveParams, including the ones naming no
+    // preset, because that call is also where the pack's declared min/max is
+    // applied. Early-returning on "no presets here" left a hand-edited or
+    // schema-predating parameter value to reach the uniform unbounded, which is the
+    // one thing this function is positioned to prevent: the flatten is the last
+    // place the declared ranges and the stored values are both in hand.
+    if ((!profile.presetIds || profile.presetIds->isEmpty())
+        && (!profile.parameters || profile.parameters->isEmpty())) {
         return profile;
     }
 
     DecorationProfile out = profile;
     QVariantMap params = out.effectiveParameters();
     bool resolvedAny = false;
-    for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
-        const QString packId = it.key();
-        const QString presetId = it.value().toString();
-        if (presetId.isEmpty()) {
-            continue;
-        }
+    // Keyed on the PARAMETER map, so a pack with stored values and no preset is
+    // clamped, and then on any preset-only pack the map does not mention.
+    for (auto it = params.begin(); it != params.end(); ++it) {
+        const QString presetId = profile.presetIds ? profile.presetIds->value(it.key()).toString() : QString();
         // The pack's own entry in `parameters` is the DELTA set, so it is the
-        // second argument: preset values first, this layer's edits on top.
-        params.insert(packId, presets.resolveParams(family, packId, presetId, params.value(packId).toMap()));
-        resolvedAny = true;
+        // second argument: preset values first, this layer's edits on top. An empty
+        // presetId resolves to the deltas alone, clamped.
+        it.value() = presets.resolveParams(family, it.key(), presetId, it.value().toMap());
+        if (!presetId.isEmpty()) {
+            resolvedAny = true;
+        }
     }
-    // Only ENGAGE parameters when something was actually resolved into them.
-    // Assigning unconditionally turned a nullopt map into an engaged-empty one,
-    // and the two are not the same statement: engaged-empty is "no parameters
-    // here, and do not inherit any", which this function has no business
-    // inventing. Reachable whenever every entry in presetIds holds an empty
-    // string, which is the sentinel an assignment writes to BLOCK an inherited
-    // preset without naming one of its own — so the flatten of a
-    // blocking-only profile used to silently also block inherited parameters.
-    if (resolvedAny) {
+    if (profile.presetIds) {
+        for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
+            const QString presetId = it.value().toString();
+            if (presetId.isEmpty() || params.contains(it.key())) {
+                continue;
+            }
+            params.insert(it.key(), presets.resolveParams(family, it.key(), presetId, QVariantMap()));
+            resolvedAny = true;
+        }
+    }
+    // Never INVENT engagement, but do keep the clamp on a map that was already
+    // engaged. nullopt and engaged-empty are different statements — engaged-empty
+    // is "no parameters here, and do not inherit any" — and assigning
+    // unconditionally turned the first into the second, which this function has no
+    // business doing. Reachable whenever every entry in presetIds holds an empty
+    // string, the sentinel an assignment writes to BLOCK an inherited preset
+    // without naming one of its own, so the flatten of a blocking-only profile used
+    // to silently also block inherited parameters.
+    //
+    // `has_value()` as well as `resolvedAny`, because the loop above now clamps a
+    // stored map even when no preset was named, and gating that on resolvedAny
+    // would have thrown the clamp away again.
+    if (resolvedAny || profile.parameters.has_value()) {
         out.parameters = params;
     }
-    // Cleared so a second flatten is a no-op rather than a double application
-    // the moment anything overlays two already-flattened profiles.
-    out.presetIds.reset();
+    // Drop only the entries this flatten CONSUMED, and keep the blocking ones.
+    //
+    // An empty presetId is the sentinel an assignment writes to block an inherited
+    // preset without naming one of its own, which the paragraph above already
+    // relies on. Resetting the whole map revoked those blocks: a profile saying
+    // "this pack follows no preset" came out of the flatten saying nothing at all,
+    // so a later overlay was free to re-apply the ancestor's preset. The animation
+    // twin avoids this by returning unchanged on an engaged-empty presetId; here
+    // the map is per-pack, so one profile can block one pack and resolve another
+    // and neither an early return nor a wholesale reset is right.
+    //
+    // Idempotent for the same reason it was before: a second flatten over the
+    // result finds only empty presetIds, resolves nothing, and preserves them.
+    QVariantMap blocking;
+    const QVariantMap declaredPresetIds = profile.presetIds.value_or(QVariantMap());
+    for (auto it = declaredPresetIds.constBegin(); it != declaredPresetIds.constEnd(); ++it) {
+        if (it.value().toString().isEmpty()) {
+            blocking.insert(it.key(), QString());
+        }
+    }
+    if (blocking.isEmpty()) {
+        out.presetIds.reset();
+    } else {
+        out.presetIds = blocking;
+    }
     return out;
 }
 

@@ -93,25 +93,51 @@ bool ShaderProfile::operator==(const ShaderProfile& other) const
     if (!parameters.has_value()) {
         return true;
     }
-    // Normalised through JSON rather than compared as raw QVariants, the same
-    // way the overlay profile does and for the same reason: the settings setters
-    // compare a map BUILT in C++ against one read back from disk, and a value
-    // whose type changed CATEGORY on the way through (a bool stored as 1, a
-    // number stored as "1") would not compare equal, so the no-op gate would
-    // fail open and every repeat write would emit.
+    // Raw compare FIRST, and normalise only when it misses. Two maps that are
+    // already identical are the overwhelmingly common case — a repeat write, a
+    // whole-tree compare where one path moved — and the normalisation below builds
+    // a QJsonObject per side. PathKeyedOverrides::sameOverrides runs this once per
+    // override, and the tree's sanitizer bounds are 1024 overrides of 64 params, so
+    // without this an unchanged tree built ~2048 QJsonObjects on every write, at
+    // slider-drag rate. QVariantMap::operator== cannot report a false EQUAL here,
+    // only a false unequal, so skipping the normalisation on a hit is safe.
+    if (*parameters == *other.parameters) {
+        return true;
+    }
+    // Normalised through JSON rather than compared as raw QVariants, the same way
+    // the overlay profile and ShaderPreset do, so that equality means the same
+    // thing on all three: a value whose type changed CATEGORY (a bool arriving as
+    // 1, a number as "1") compares equal here even though QVariant says otherwise.
     //
-    // Not a live bug today: QVariant equality promotes across int, qlonglong and
-    // double, which is the only difference the current round trip produces. This
-    // is the cheap insurance against the next type that travels differently, and
-    // it matters because the signal on the other side of that gate reaches the
-    // daemon and the compositor.
+    // Deliberately NOT justified by naming a caller that drifts. The one this
+    // comment used to cite, Settings::setShaderProfileTree, builds BOTH sides
+    // through fromJson(QJsonObject::fromVariantMap(...)), so no category drift is
+    // possible there — the comment was describing a hazard its own example could
+    // not produce. The guarantee is worth having anyway: a no-op gate that fails
+    // open re-emits to the daemon and the compositor, and the cost of being wrong
+    // is paid by a caller this type cannot see.
     return QJsonObject::fromVariantMap(*parameters) == QJsonObject::fromVariantMap(*other.parameters);
 }
 
 ShaderProfile withPresetsResolved(const ShaderProfile& profile, const PhosphorShaders::ShaderPresetRegistry& presets)
 {
     if (!profile.presetId || profile.presetId->isEmpty()) {
-        return profile;
+        // No preset to apply, but resolveParams is also where the pack's declared
+        // min/max is enforced, so returning unchanged left a hand-edited or
+        // schema-predating value to reach the uniform unbounded. The flatten is the
+        // last place the declared ranges and the stored values are both in hand.
+        //
+        // An empty presetId resolves to the deltas alone, clamped. `has_value()`
+        // gates it so nullopt is never turned into an engaged-empty map, which is a
+        // different statement on this type, and so an assignment that stores nothing
+        // stays exactly as it was.
+        if (!profile.parameters.has_value() || profile.parameters->isEmpty()) {
+            return profile;
+        }
+        ShaderProfile out = profile;
+        out.parameters = presets.resolveParams(PhosphorShaders::ShaderFamily::Animation, profile.effectiveEffectId(),
+                                               QString(), *profile.parameters);
+        return out;
     }
 
     ShaderProfile out = profile;

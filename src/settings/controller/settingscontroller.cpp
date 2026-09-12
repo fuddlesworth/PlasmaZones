@@ -326,6 +326,19 @@ SettingsController::~SettingsController()
             m_rulesPage->model()->refreshLabels();
     }
 
+    // Drop the preset bridges, then the store. This is what makes the
+    // `if (m_presetStore)` guard on the three seeding lambdas a real guard: they
+    // are connected with `this` as context, so Qt severs them in ~QObject, which
+    // runs AFTER these unique_ptr members are destroyed — without this the guard
+    // could only ever have read an already-destroyed pointer, which is the
+    // failure it was written to prevent. Bridges first, because each BORROWS the
+    // store by reference (the same reason they are declared after it).
+    m_animationPresets.reset();
+    m_surfacePresets.reset();
+    m_pointerPresets.reset();
+    m_overlayPresets.reset();
+    m_presetStore.reset();
+
     // Drop the registry's borrow of the template store, the same posture the
     // lookups above take: the injection is a raw pointer with no owner-side
     // notification, so anything reaching the registry during the remainder of

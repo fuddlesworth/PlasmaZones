@@ -48,7 +48,12 @@ PHOSPHORSHADERS_EXPORT QString userPresetDirectory(const QString& root, ShaderFa
 PHOSPHORSHADERS_EXPORT int migrateLegacyOverlayPresets(const QString& root);
 
 /**
- * @brief One object per process holding every shader preset, for every family.
+ * @brief One per consumer, holding every shader preset for every family it names.
+ *
+ * One per consumer rather than one per process, and that is a convention, not an
+ * invariant: nothing here refuses a second instance. Two would double the
+ * directory watchers and parse every preset file twice, which is wasteful rather
+ * than wrong, so the three consumers each keep exactly one.
  *
  * The whole preset side of a consumer's wiring: the registry, one publisher per
  * family, and the one-shot import of the pre-existing overlay preset files.
@@ -181,6 +186,11 @@ private:
     /// Index of @p family in `m_publishers`. The enum is contiguous from zero,
     /// which is what lets one slot per family be an array rather than a hash a
     /// second entry could be inserted into.
+    ///
+    /// In-bounds by construction rather than by inspection: the array is sized by
+    /// `ShaderFamilyCount`, which is static_asserted against the enum beside its
+    /// declaration, so adding a family grows the array instead of indexing past
+    /// its end. That is why this needs no per-caller guard.
     static constexpr std::size_t slotOf(ShaderFamily family)
     {
         return static_cast<std::size_t>(family);
@@ -195,7 +205,7 @@ private:
 
     /// One slot per family, so "two publishers for one family" is not
     /// representable. See the class doc.
-    std::array<Publisher, 4> m_publishers;
+    std::array<Publisher, ShaderFamilyCount> m_publishers;
 
     QString m_root;
 };

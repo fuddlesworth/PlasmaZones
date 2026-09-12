@@ -35,9 +35,14 @@ using PackPresets = QMap<QString, QVariantMap>;
 ///
 /// @p imageParamIds names the pack's image-typed parameters, whose preset
 /// values are pack-declared PATHS rather than plain values. Only the overlay
-/// family has an `image` parameter type; animation, surface and pointer packs
-/// declare textures in a separate top-level list and pass an empty set here,
-/// which reduces the path branch below to a no-op for them.
+/// family has a SUPPORTED `image` parameter type, and the other three carry
+/// textures in a separate top-level list — but none of them passes a statically
+/// empty set here. All four derive this set from their declared parameter types,
+/// and `type` is read raw from a hand-editable metadata.json with no enum
+/// validation, so a pack writing `"type": "image"` under any family turns the path
+/// branch below on. That is why the branch is not a no-op anywhere and why the
+/// empty-pack-directory refusal in the implementation is a fail-closed guard
+/// rather than a formality.
 ///
 /// Image-typed preset values must be containment-checked at PARSE time with the
 /// Reject policy, exactly like an image param's `default`. They cannot be
@@ -49,23 +54,32 @@ using PackPresets = QMap<QString, QVariantMap>;
 /// value's true (pack) provenance is known.
 ///
 /// A refused image value is DROPPED from the preset, so that parameter falls
-/// back to its declared default rather than binding an arbitrary file. A preset
-/// left with no values at all is omitted entirely.
+/// back to its declared default rather than binding an arbitrary file.
 ///
-/// ## If a non-overlay family ever gains an image parameter, read this first
+/// An author-declared empty preset (`"Default": {}`) is KEPT: it legitimately
+/// means "this preset is the pack's declared defaults", and dropping it also hid
+/// it from the offline validator, which lints the parsed map. A preset left empty
+/// only because every one of its values was refused IS omitted, because it cannot
+/// do what it says. The implementation states that rule beside the test that
+/// distinguishes the two.
 ///
-/// Two things are correct today ONLY because the other three families pass an
-/// empty @p imageParamIds, so their preset maps never hold a resolved path:
+/// ## If a non-overlay family ever SUPPORTS an image parameter, read this first
+///
+/// Two things are correct today ONLY because no non-overlay family binds a preset
+/// image: the overlay family is the one whose loader honours the type, and the
+/// other three either refuse it (pointer) or reach this function with a pack
+/// directory the fail-closed guard rejects.
 ///
 ///  - `AnimationShaderEffect::toJson` writes its preset map out verbatim, while
 ///    `fromJson` re-parses every path under `AbsolutePathPolicy::Reject`. The
 ///    values here are ABSOLUTE once resolved, so the round trip would silently
 ///    drop them and `fromJson(toJson(x)) != x`.
-///  - `PointerShaderRegistry::effectContentSignature` catches a preset edit
-///    because a pack's presets live inside its metadata.json, which the
-///    signature covers. A preset-declared TEXTURE is a different file, and only
-///    DECLARED texture paths reach `effectWatchPaths` — so retuning a preset's
-///    image would not re-register the pack.
+///  - `PointerShaderRegistry::effectContentSignature` does catch a preset being
+///    RETUNED, because a pack's presets live inside its metadata.json and the
+///    signature hashes that file. What it cannot catch is an edit to the image
+///    FILE a preset names: only DECLARED texture paths reach `effectWatchPaths`,
+///    so repainting a preset-declared texture neither re-registers nor reloads
+///    the pack.
 ///
 /// Neither is reachable now, and neither is cheap to notice later: the first is
 /// a silent value loss and the second a stale pack. Handle both in the same

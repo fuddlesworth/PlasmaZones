@@ -293,6 +293,11 @@ target_link_libraries(plasmazones_core
         # ConfigDefaults baseline), so consumers linking plasmazones_core need
         # the include path + link edge.
         PhosphorSurface::PhosphorSurface
+        # PhosphorRegistry: PathKeyedOverrides — the shared baseline + keyed
+        # overrides container. PUBLIC because core/types/overlayshadertree.h
+        # includes the header and holds one by value as a member, so anything
+        # that #includes that header needs the include path and the link edge.
+        PhosphorRegistry::PhosphorRegistry
         # PhosphorRules: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a RuleStore for the per-mode
         # disable lists, the RuleAdaptor exposes the store on D-Bus, and

@@ -141,7 +141,18 @@ OverlayShaderProfile withPresetsResolved(const OverlayShaderProfile& profile,
                                          const PhosphorShaders::ShaderPresetRegistry& presets)
 {
     if (profile.presetId.isEmpty()) {
-        return profile;
+        // No preset to apply, but resolveParams is also where the pack's declared
+        // min/max is enforced, so returning unchanged left a hand-edited or
+        // schema-predating value to reach the uniform unbounded. An empty presetId
+        // resolves to the assignment's own values alone, clamped. Nothing to do when
+        // it stores none.
+        if (profile.parameters.isEmpty()) {
+            return profile;
+        }
+        OverlayShaderProfile clamped = profile;
+        clamped.parameters = presets.resolveParams(PhosphorShaders::ShaderFamily::Overlay, profile.shaderId, QString(),
+                                                   profile.parameters);
+        return clamped;
     }
     OverlayShaderProfile out = profile;
     // The profile's own parameters are the DELTA set, so they are the last

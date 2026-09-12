@@ -19,6 +19,7 @@
 #include <QStringList>
 #include <QUuid>
 
+#include <algorithm>
 #include <any>
 
 namespace PhosphorShaders {
@@ -27,12 +28,20 @@ namespace {
 Q_LOGGING_CATEGORY(lcPresetStore, "phosphorshaders.presetstore")
 
 /// Every family, in one place, so adding one cannot leave a slot unconsidered.
-constexpr std::array<ShaderFamily, 4> kAllFamilies{
+/// Sized by ShaderFamilyCount and static_asserted below, so this list and the
+/// enum cannot drift apart silently.
+constexpr std::array<ShaderFamily, ShaderFamilyCount> kAllFamilies{
     ShaderFamily::Animation,
     ShaderFamily::Surface,
     ShaderFamily::Pointer,
     ShaderFamily::Overlay,
 };
+// A braced list shorter than the array default-initialises the tail, which would
+// make a missing family read as Animation rather than fail to compile. Checking
+// the last slot catches that: adding an enumerator anywhere moves the highest
+// value and leaves this slot holding a default.
+static_assert(kAllFamilies.back() == static_cast<ShaderFamily>(ShaderFamilyCount - 1),
+              "kAllFamilies must list every ShaderFamily, in enum order");
 } // namespace
 
 QString standardUserPresetRoot()
@@ -70,9 +79,21 @@ int migrateLegacyOverlayPresets(const QString& root)
     if (!rootDir.exists()) {
         return 0;
     }
-    const QStringList candidates = rootDir.entryList({QStringLiteral("*.json")}, QDir::Files);
+    QStringList candidates = rootDir.entryList({QStringLiteral("*.json")}, QDir::Files);
     if (candidates.isEmpty()) {
         return 0;
+    }
+    // Same entry cap the rest of the preset path inherits from DirectoryLoader,
+    // and for the same reason. The per-file byte cap below bounded how much each
+    // file could cost but nothing bounded HOW MANY, and this scan runs at startup
+    // in three processes over a user-writable directory: fifty thousand junk JSON
+    // files would stall the daemon, the effect and the settings window before any
+    // of them drew. Truncating rather than refusing, so a directory that is merely
+    // large still migrates what it can.
+    if (candidates.size() > PhosphorFsLoader::DirectoryLoader::kMaxEntries) {
+        qCWarning(lcPresetStore) << "Legacy preset directory holds" << candidates.size() << "files; migrating the first"
+                                 << PhosphorFsLoader::DirectoryLoader::kMaxEntries << "and leaving the rest:" << root;
+        candidates = candidates.mid(0, PhosphorFsLoader::DirectoryLoader::kMaxEntries);
     }
 
     const QString targetDir = userPresetDirectory(root, ShaderFamily::Overlay);
@@ -130,6 +151,13 @@ int migrateLegacyOverlayPresets(const QString& root)
         preset.name = obj.value(QLatin1String(LegacyFieldName)).toString();
         if (preset.name.isEmpty()) {
             preset.name = QFileInfo(fileName).completeBaseName();
+        }
+        // Truncate at the write, the same bound ShaderPreset::fromJson applies at
+        // the read. Without it the migration produced a file fromJson would then
+        // silently shorten, so the name on disk and the name in every picker row
+        // disagreed — the asymmetric half of a defensive pair.
+        if (preset.name.size() > ShaderPreset::MaxNameChars) {
+            preset.name.truncate(ShaderPreset::MaxNameChars);
         }
         preset.packId = packId;
         preset.params = obj.value(QLatin1String(LegacyFieldShaderParams)).toObject().toVariantMap();
@@ -328,6 +356,23 @@ void ShaderPresetStore::load(const QString& root, const QList<ShaderFamily>& fam
     // is the same hazard with a mkpath that succeeds.
     if (root.isEmpty() || !QDir::isAbsolutePath(root)) {
         qCWarning(lcPresetStore) << "Refusing to load presets from a root that is not an absolute path:" << root;
+        return;
+    }
+
+    // Refuse a SECOND root once anything is publishing, rather than overwriting
+    // m_root. The publisher slots are left alone below when they are already
+    // occupied, so a changed root would have moved what `directoryFor()` hands to
+    // the bridge while the watcher stayed on the old directory: a save would land
+    // in the new tree, the rescan would re-read the old one, and the preset would
+    // come back invisible with `rescanNow()` still answering true. Nothing calls
+    // load() twice with different roots today, which is exactly why this needs to
+    // be stated rather than assumed.
+    const bool anyPublishing = std::any_of(m_publishers.cbegin(), m_publishers.cend(), [](const Publisher& p) {
+        return p.active();
+    });
+    if (anyPublishing && root != m_root) {
+        qCWarning(lcPresetStore) << "Refusing to re-root an already-publishing preset store; keeping" << m_root
+                                 << "and ignoring" << root;
         return;
     }
 

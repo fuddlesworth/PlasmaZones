@@ -13,6 +13,7 @@
 #include <QVariant>
 #include <QVariantMap>
 
+#include <cstddef>
 #include <optional>
 
 namespace PhosphorShaders {
@@ -30,6 +31,17 @@ enum class ShaderFamily {
     Pointer,
     Overlay,
 };
+
+/// How many families there are, for the one-slot-per-family arrays that index by
+/// `static_cast<std::size_t>(family)`.
+///
+/// Declared beside the enum, and static_asserted against it, so adding a family
+/// cannot leave a four-element array behind: the array grows with the constant
+/// instead of silently indexing past its end. The assert is what makes the
+/// coupling a compile error rather than a convention.
+constexpr std::size_t ShaderFamilyCount = 4;
+static_assert(static_cast<std::size_t>(ShaderFamily::Overlay) + 1 == ShaderFamilyCount,
+              "ShaderFamilyCount must match the number of ShaderFamily enumerators");
 
 /// Wire token for @p family: "animation" / "surface" / "pointer" / "overlay".
 PHOSPHORSHADERS_EXPORT QLatin1StringView shaderFamilyToken(ShaderFamily family);

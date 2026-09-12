@@ -326,12 +326,12 @@ public:
     // languages meant two places to keep in step. Each read is also taken once
     // per call here rather than once per reader, which is what let the card
     // drop its own per-path snapshot caches, and `divergentPathCount` reads
-    // the shader tree once for the whole group. Neither tree accessor is
-    // memoised — each rebuilds on every call — which is precisely why anything
-    // here must read one once and pass it down rather than call the accessor
-    // in a loop. And each is now
-    // directly testable without driving QML.
-    // Why it is not memoised is in animationspagecontroller_groupwrites.cpp.
+    // the shader tree once for the whole group. The shader tree IS memoised (see
+    // m_shaderTreeCache), so the accessor is cheap, but a per-path COPY is not,
+    // which is why anything here still reads one once and passes it down rather
+    // than calling the accessor in a loop. And each is now directly testable
+    // without driving QML.
+    // What the memo rests on is in animationspagecontroller_groupwrites.cpp.
     //
     // What deliberately stays in the card: the `_committing` /
     // `_committingShader` re-entrancy latches and the refresh that follows a
@@ -517,11 +517,12 @@ public:
     /// than summed, so a group holding both an ancestor and its descendant
     /// cannot report an override twice that the clear removes once.
     ///
-    /// Exists because the per-path shaderOverrideDescendantCount rebuilds the
-    /// whole shader tree on every call (a store read, a JSON parse and a prune
-    /// walk; `rawShaderProfile` is not memoised), and a card called it once per
-    /// write path inside a refresh that runs at drag rate. That is precisely
-    /// the read-in-a-loop shape the block comment above forbids.
+    /// Exists because the per-path shaderOverrideDescendantCount walks the whole
+    /// shader tree on every call, and a card called it once per write path inside
+    /// a refresh that runs at drag rate. The tree read itself is memoised now
+    /// (m_shaderTreeCache), so the saving is the repeated descendant WALK rather
+    /// than a repeated parse, but it is the same read-in-a-loop shape the block
+    /// comment above forbids.
     /// @return the number of DISTINCT shadowing descendants, UNIONED across the
     /// group rather than summed, so one shared by two paths counts once. 0 with
     /// no ISettings, never negative: this reads and cannot be refused.

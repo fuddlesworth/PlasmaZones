@@ -31,25 +31,26 @@
 
 namespace PlasmaZones {
 
-// WHY THE SHADER TREE IS NOT MEMOISED, since the cost is real enough that
-// someone will try: a rebuild is a store read, a QVariantMap to QJsonObject
-// conversion, a parse and a prune walk, and one card refresh takes several.
+// HOW THE SHADER TREE IS MEMOISED, and on what. The cost is real: a rebuild is a
+// store read, a QVariantMap to QJsonObject conversion, a parse and a prune walk,
+// and one card refresh takes several. `m_shaderTreeCache` holds the parsed tree
+// and `liveShaderTree()` serves from it, so the writers below read it once per
+// change rather than once per call.
 //
-// Not because the invalidation signal is too narrow. Be careful here, because
-// it looks narrow and is not: grepping for Q_EMIT finds a single site,
-// Settings::setShaderProfileTree, but `shaderProfileTreeJson` is a NOTIFY
-// Q_PROPERTY, so Settings::load() and applyConfigOverlayStaged re-fire
-// shaderProfileTreeChanged through emitChangedNotifyProperties whenever the
-// value moved — a reload and a settings-profile switch both reach it without
-// any explicit emit.
+// Invalidated on shaderProfileTreeChanged, and that signal is broader than it
+// looks: grepping for Q_EMIT finds a single site, Settings::setShaderProfileTree,
+// but `shaderProfileTreeJson` is a NOTIFY Q_PROPERTY, so Settings::load() and
+// applyConfigOverlayStaged re-fire it through emitChangedNotifyProperties
+// whenever the value moved. A reload and a settings-profile switch both reach it
+// with no explicit emit. That enumeration is what the memo rests on, and it is
+// the thing to re-check before adding a new way for the store to move: a stale
+// TREE is shown to the user, where a stale dirty verdict merely self-corrects on
+// the next write (which is why m_treeDirtyCache can memoise on the same signal,
+// helped by also invalidating on baseline capture).
 //
-// What is missing is the ENUMERATION. Nobody has established that the signal
-// covers every path the store can move under a memo, and a stale TREE is shown
-// to the user where a stale dirty verdict merely self-corrects on the next
-// write (which is why m_treeDirtyCache can be memoised on it, helped by also
-// invalidating on baseline capture). Reading fresh is unconditionally correct.
-// Anyone adding the memo owes that enumeration first, not this comment's
-// former claim that one emit site made it impossible.
+// The memo does not make the reads below free, so each still takes its read once
+// for the whole group and passes it down rather than calling the accessor in a
+// loop: the accessor is cheap, a per-path copy is not.
 
 using namespace animations_controller_detail;
 
@@ -436,9 +437,10 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
         return false;
     const QStringList paths = distinctPaths(rawPaths);
     using namespace PhosphorAnimationShaders;
-    // ONE tree read for the whole group, like divergentPathCount — the header's
-    // rule is that nothing here calls `rawShaderProfile` in a loop, because each
-    // call rebuilds the tree.
+    // ONE tree read for the whole group, like divergentPathCount. The header's
+    // rule is that nothing here calls `rawShaderProfile` in a loop: the tree read
+    // is memoised, but each call still copies a profile out of it into a
+    // QVariantMap.
     const ShaderProfileTree& tree = shaderTree();
     // Whether any member was actually compared. A group in which every path is
     // skipped below would otherwise fall through to `return true` having tested

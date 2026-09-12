@@ -62,6 +62,24 @@ void fillRow(const PhosphorShaders::ShaderPreset& preset, QVariantMap& out)
     out.insert(QStringLiteral("name"), preset.name);
     out.insert(QStringLiteral("readOnly"), preset.readOnly);
 }
+
+/// Rescan the family's directory and say something when it did not happen.
+///
+/// `rescanNow()` answers false when no publisher was ever created for the family,
+/// and its bool was discarded at all three call sites. That is safe only because
+/// the settings controller loads every family: the day one is dropped from that
+/// list, commit() still returns true, QML selects the id it just saved, and
+/// `presetsFor()` still answers the old list, so the picker silently selects
+/// nothing. Not a user-facing refusal — the file IS on disk and the next watcher
+/// tick picks it up — but a log line naming the family is what points a developer
+/// at the missing load().
+void rescanOrWarn(PhosphorShaders::ShaderPresetStore* store, PhosphorShaders::ShaderFamily family)
+{
+    if (store && !store->rescanNow(family)) {
+        qCWarning(lcConfig) << "ShaderPresetBridge: nothing publishes the" << PhosphorShaders::shaderFamilyToken(family)
+                            << "family, so a just-saved preset will not be listed until the directory watcher fires";
+    }
+}
 } // namespace
 
 ShaderPresetBridge::ShaderPresetBridge(PhosphorShaders::ShaderPresetStore& store, PhosphorShaders::ShaderFamily family,
@@ -212,7 +230,7 @@ bool ShaderPresetBridge::commit(const PhosphorShaders::ShaderPreset& preset)
     // Synchronous, not the debounced requestRescan: the caller is about to
     // select what it just saved, and a picker that does not yet list it would
     // silently select nothing.
-    m_store->rescanNow(m_family);
+    rescanOrWarn(m_store, m_family);
     return true;
 }
 
@@ -298,7 +316,7 @@ bool ShaderPresetBridge::deletePreset(const QString& presetId)
     // went wrong when the end state is exactly what they asked for, and skipped the
     // rescan, so the stale row lingered until the watcher fired.
     if (!preset.sourcePath.isEmpty() && !QFile::exists(preset.sourcePath)) {
-        m_store->rescanNow(m_family);
+        rescanOrWarn(m_store, m_family);
         return true;
     }
     if (preset.sourcePath.isEmpty() || !QFile::remove(preset.sourcePath)) {
@@ -307,7 +325,7 @@ bool ShaderPresetBridge::deletePreset(const QString& presetId)
         Q_EMIT presetWriteFailed(error);
         return false;
     }
-    m_store->rescanNow(m_family);
+    rescanOrWarn(m_store, m_family);
     return true;
 }
 

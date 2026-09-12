@@ -8,6 +8,7 @@
 #include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <QHash>
+#include <QSet>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -162,6 +163,15 @@ private:
     /// `resolveParams` clamps to. Seeded beside the pack-declared presets,
     /// because the consumer doing that already holds the declarations.
     QHash<QString, PresetValueBounds> m_packBounds;
+
+    /// "<family>/<id>" for every duplicate preset id already reported, so the
+    /// warning is once per clash rather than once per rescan. The watcher rescans
+    /// a family on every save and on every external edit, so without this one
+    /// hand-written duplicate produced an identical line for the life of the
+    /// process and buried everything else in the log. Pruned per family on each
+    /// batch to whatever still clashes, so resolving a clash and re-introducing it
+    /// warns again.
+    QSet<QString> m_reportedIdClashes;
 
     static QString scopeKey(ShaderFamily family, const QString& packId);
     QList<ShaderPreset> mergedFor(ShaderFamily family, const QString& packId) const;

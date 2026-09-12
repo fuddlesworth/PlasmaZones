@@ -974,7 +974,15 @@ private Q_SLOTS:
 
         const DecorationProfile flat = withPresetsResolved(p, registry, PhosphorShaders::ShaderFamily::Surface);
         QVERIFY(!flat.parameters.has_value());
-        QVERIFY(!flat.presetIds.has_value());
+        // The BLOCKING entry survives the flatten, and that is the point of this
+        // assertion rather than an accident of it. The flatten clears the entries it
+        // consumed so a second pass cannot double-apply, but an empty presetId was
+        // never consumed: it is the user saying "this pack follows no preset".
+        // Clearing the whole map revoked that, so a flattened-and-overlaid child
+        // re-inherited the very preset it had blocked.
+        QVERIFY(flat.presetIds.has_value());
+        QCOMPARE(flat.presetIds->size(), 1);
+        QVERIFY(flat.presetIds->value(QStringLiteral("border")).toString().isEmpty());
 
         // A profile that DID engage an empty map keeps it: that one is the
         // user's statement and the flatten must not revoke it either.
@@ -984,6 +992,72 @@ private Q_SLOTS:
             withPresetsResolved(blocking, registry, PhosphorShaders::ShaderFamily::Surface);
         QVERIFY(flatBlocking.parameters.has_value());
         QVERIFY(flatBlocking.parameters->isEmpty());
+    }
+
+    void testFlattenKeepsBlockingEntriesAndDropsConsumedOnes()
+    {
+        // One profile blocking one pack and resolving another is the case neither an
+        // early return nor a wholesale reset gets right, so pin both halves at once.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::PackPresets presets;
+        presets.insert(QStringLiteral("Night"), QVariantMap{{QStringLiteral("width"), 7}});
+        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Surface, {{QStringLiteral("shadow"), presets}},
+                                         {});
+
+        DecorationProfile p;
+        p.chain = QStringList{QStringLiteral("border"), QStringLiteral("shadow")};
+        p.presetIds = QVariantMap{
+            {QStringLiteral("border"), QString()},
+            {QStringLiteral("shadow"), QStringLiteral("Night")},
+        };
+
+        const DecorationProfile flat = withPresetsResolved(p, registry, PhosphorShaders::ShaderFamily::Surface);
+        // Consumed: gone, so a second flatten cannot apply it twice.
+        QVERIFY(flat.presetIds.has_value());
+        QVERIFY(!flat.presetIds->contains(QStringLiteral("shadow")));
+        // Blocking: kept.
+        QVERIFY(flat.presetIds->contains(QStringLiteral("border")));
+        QVERIFY(flat.presetIds->value(QStringLiteral("border")).toString().isEmpty());
+        QCOMPARE(
+            flat.effectiveParameters().value(QStringLiteral("shadow")).toMap().value(QStringLiteral("width")).toInt(),
+            7);
+
+        // Idempotent: the second pass finds only the blocking entry, resolves
+        // nothing and preserves it.
+        const DecorationProfile again = withPresetsResolved(flat, registry, PhosphorShaders::ShaderFamily::Surface);
+        QCOMPARE(again.presetIds, flat.presetIds);
+        QCOMPARE(again.effectiveParameters(), flat.effectiveParameters());
+    }
+
+    void testFlattenClampsOwnValuesWithNoPresetEngaged()
+    {
+        // resolveParams is where a pack's declared min/max is enforced, and the
+        // flatten used to early-return before reaching it when no preset was named.
+        // A value that arrived by any door other than the settings slider — a
+        // hand-edited config.json, a D-Bus write, a config predating a narrowed
+        // range — therefore reached the uniform unbounded.
+        PhosphorShaders::ShaderPresetRegistry registry;
+        PhosphorShaders::PresetValueBounds bounds;
+        bounds.insert(QStringLiteral("width"), {1, 10});
+        registry.setPackPresetsForFamily(PhosphorShaders::ShaderFamily::Surface, {},
+                                         {{QStringLiteral("border"), bounds}});
+
+        DecorationProfile p;
+        p.chain = QStringList{QStringLiteral("border")};
+        p.parameters = QVariantMap{{QStringLiteral("border"), QVariantMap{{QStringLiteral("width"), 9999}}}};
+        QVERIFY(!p.presetIds.has_value());
+
+        const DecorationProfile flat = withPresetsResolved(p, registry, PhosphorShaders::ShaderFamily::Surface);
+        QCOMPARE(
+            flat.effectiveParameters().value(QStringLiteral("border")).toMap().value(QStringLiteral("width")).toInt(),
+            10);
+        // Still no preset axis invented, and still no engagement invented either.
+        QVERIFY(!flat.presetIds.has_value());
+
+        DecorationProfile bare;
+        bare.chain = QStringList{QStringLiteral("border")};
+        const DecorationProfile flatBare = withPresetsResolved(bare, registry, PhosphorShaders::ShaderFamily::Surface);
+        QVERIFY(!flatBare.parameters.has_value());
     }
 };
 

@@ -172,9 +172,20 @@ QVariantMap ShaderPresetRegistry::resolveParams(ShaderFamily family, const QStri
 
     // Clamp on the way out, not on the way in, so this covers all three
     // provenances at one site: a pack-declared preset, a hand-written user
-    // preset file, and the assignment's own deltas. A pack's declared min/max
-    // was otherwise enforced only by the settings slider, and several bundled
-    // overlay packs feed a parameter straight into a GLSL loop bound.
+    // preset file, and the assignment's own deltas. A pack's declared min/max was
+    // otherwise enforced only by the settings slider, so any value arriving by
+    // another door (a hand-edited config.json, a D-Bus write, a config predating a
+    // narrowed range) reached the uniform unbounded.
+    //
+    // Belt and braces rather than a stall fix, and worth stating because an earlier
+    // review of this work claimed otherwise: no bundled pack derives a GLSL loop
+    // bound from an unclamped parameter. Every consuming loop carries its own
+    // in-shader cap (`i < octaves && i < 8` in data/overlays/shared/common.glsl, the
+    // `&& li < 8` logo loops, neon-venom's `&& i < 20`, chrome-protocol's
+    // clamp(...,16,96)), and the one uncapped fbm loop is only ever reached with a
+    // literal octave count. What this prevents is an out-of-range value reaching a
+    // shader that trusts its declared range, which is a correctness guarantee, not
+    // a performance one.
     if (!found.isValid()) {
         // No preset, or one that has since been deleted or dropped by a pack
         // update. Either way the assignment's own values are the whole answer,
@@ -267,6 +278,16 @@ void ShaderPresetRegistry::setPackPresetsForFamily(ShaderFamily family, const QH
             touched.insert(scopeKey(family, it.key()));
         }
     }
+    // Bounds-bearing packs too, and NOT only the ones that also declare presets.
+    // Most packs declare a parameter range and no preset at all, so keying this
+    // loop on `byPackId` alone silently discarded every one of their ranges: the
+    // pack never entered `touched`, applyPackBucket never ran for it, and
+    // resolveParams then had nothing to clamp a hand-edited value against.
+    for (auto it = boundsByPackId.constBegin(); it != boundsByPackId.constEnd(); ++it) {
+        if (!it.key().isEmpty()) {
+            touched.insert(scopeKey(family, it.key()));
+        }
+    }
 
     // Sorted, so the order the signals fire in is the same on every run.
     QStringList keys(touched.constBegin(), touched.constEnd());
@@ -293,19 +314,35 @@ void ShaderPresetRegistry::setUserPresets(ShaderFamily family, const QList<Shade
     // on it (`presetById` resolves a record to write back). Nothing enforces it
     // for a hand-written file, so say so rather than resolving it silently.
     QHash<QString, QString> seenIdSource;
+    // Once per clash, not once per rescan. The watcher re-reads the whole family
+    // on every save and on every external edit, so one hand-written duplicate used
+    // to emit an identical line for the life of the process.
+    const QString clashPrefix = QString(shaderFamilyToken(family)) + QLatin1Char('/');
+    QSet<QString> clashingNow;
     for (const ShaderPreset& preset : presets) {
         if (!preset.isValid()) {
             continue;
         }
         const auto clash = seenIdSource.constFind(preset.id);
         if (clash != seenIdSource.constEnd()) {
-            qCWarning(lcPresetRegistry).noquote()
-                << "Two" << shaderFamilyToken(family) << "presets share the id" << preset.id << "—" << *clash << "and"
-                << preset.sourcePath << ". Editing either may write over the other; give one a different id.";
+            const QString clashKey = clashPrefix + preset.id;
+            clashingNow.insert(clashKey);
+            if (!m_reportedIdClashes.contains(clashKey)) {
+                m_reportedIdClashes.insert(clashKey);
+                qCWarning(lcPresetRegistry).noquote()
+                    << "Two" << shaderFamilyToken(family) << "presets share the id" << preset.id << "—" << *clash
+                    << "and" << preset.sourcePath
+                    << ". Editing either may write over the other; give one a different id.";
+            }
         } else {
             seenIdSource.insert(preset.id, preset.sourcePath);
         }
         next[scopeKey(family, preset.packId)].insert(preset.id, preset);
+    }
+    // Forget this family's resolved clashes, so fixing one and then re-introducing
+    // it warns again rather than staying silent for the rest of the process.
+    for (auto it = m_reportedIdClashes.begin(); it != m_reportedIdClashes.end();) {
+        it = (it->startsWith(clashPrefix) && !clashingNow.contains(*it)) ? m_reportedIdClashes.erase(it) : ++it;
     }
 
     // Every pack that had user presets before OR has them now, so a pack whose

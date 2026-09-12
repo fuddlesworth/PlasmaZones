@@ -4,7 +4,6 @@
 #pragma once
 
 #include <QHash>
-#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 
@@ -125,11 +124,6 @@ public:
     bool hasNoOverrides() const
     {
         return m_overrides.isEmpty();
-    }
-
-    int overrideCount() const
-    {
-        return m_overrides.size();
     }
 
     // ─────── Ordered traversal ───────

@@ -60,7 +60,23 @@ bool ShaderPreset::isUsableId(const QString& id)
     if (id == QLatin1String(".") || id == QLatin1String("..")) {
         return false;
     }
-    return !id.contains(QLatin1Char('/')) && !id.contains(QLatin1Char('\\')) && !id.contains(QLatin1Char('\0'));
+    // Also refuse ids that are legal filenames but INVISIBLE ones. A whitespace-only
+    // id, an id carrying a newline or a bidi override, or one starting with a dot
+    // all produce a file the user cannot find, name or delete from a file manager,
+    // and for a pack-declared preset the id doubles as the picker's label (see
+    // applyPackBucket), where a control character mangles the row. `canUsePresetName`
+    // screens the NAME on the settings side and nothing screened the ID.
+    if (id.trimmed().isEmpty() || id.startsWith(QLatin1Char('.'))) {
+        return false;
+    }
+    // Other_Control subsumes the embedded NUL this used to test for separately, so
+    // the separator test below is all that is left of the original three.
+    for (const QChar ch : id) {
+        if (ch.category() == QChar::Other_Control || ch.category() == QChar::Other_Format) {
+            return false;
+        }
+    }
+    return !id.contains(QLatin1Char('/')) && !id.contains(QLatin1Char('\\'));
 }
 
 ShaderPreset ShaderPreset::fromJson(const QJsonObject& obj, const QString& fallbackId)

@@ -1017,9 +1017,8 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // identifiers exist only in the preview's UBO branch: on the compositor
     // the stage fails to compile and the pack silently falls back to the
     // built-in vertex source, so the preview and the preview bake both pass
-    // while the declared stage is dead where the pack ships. The compositor
-    // bake below would fail it too, but with a bare undeclared-identifier
-    // error that does not say why.
+    // while the declared stage is dead where the pack ships. The compositor bake
+    // below would fail it too, but with a bare undeclared-identifier error.
     if (!vertText.isEmpty()
         && (mentionsToken(vertText, QStringLiteral("qt_Matrix"))
             || mentionsToken(vertText, QStringLiteral("qt_Opacity")))) {
