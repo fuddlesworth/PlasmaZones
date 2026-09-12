@@ -89,12 +89,23 @@ inline PhosphorEngine::DesktopSpanQuery makeDesktopSpanQuery(PhosphorEngine::Win
     };
 }
 
-/// Re-run the per-desktop membership pass for one screen.
-inline void reconcileMembershipsForScreen(PhosphorEngine::IPlacementEngine* scrollEngine,
+/// Re-run the per-desktop membership pass for one screen on both
+/// tiling-family engines. Each no-ops for a screen it does not own, so the
+/// caller need not know which mode the screen is in; the snap engine has no
+/// per-desktop membership and inherits the interface's no-op.
+inline void reconcileMembershipsForScreen(PhosphorEngine::IPlacementEngine* autotileEngine,
+                                          PhosphorEngine::IPlacementEngine* scrollEngine,
                                           PhosphorEngine::WindowRegistry* registry, const QString& screenId)
 {
-    if (scrollEngine && !screenId.isEmpty()) {
-        scrollEngine->reconcileDesktopMemberships(screenId, makeDesktopSpanQuery(registry));
+    if (screenId.isEmpty()) {
+        return;
+    }
+    const auto spanOf = makeDesktopSpanQuery(registry);
+    if (autotileEngine) {
+        autotileEngine->reconcileDesktopMemberships(screenId, spanOf);
+    }
+    if (scrollEngine) {
+        scrollEngine->reconcileDesktopMemberships(screenId, spanOf);
     }
 }
 
@@ -105,6 +116,7 @@ inline void reconcileMembershipsForScreen(PhosphorEngine::IPlacementEngine* scro
 /// it. Scoped to the window's own screen: stickiness is a property of the
 /// window, and the other outputs' strips are unaffected.
 inline void wireStickyMembershipUpdates(QObject* owner, WindowTrackingAdaptor* adaptor,
+                                        PhosphorEngine::IPlacementEngine* autotileEngine,
                                         PhosphorEngine::IPlacementEngine* scrollEngine,
                                         PhosphorEngine::WindowRegistry* registry)
 {
@@ -116,14 +128,17 @@ inline void wireStickyMembershipUpdates(QObject* owner, WindowTrackingAdaptor* a
         return;
     }
     QObject::connect(service, &PhosphorPlacement::WindowTrackingService::windowStickyChanged, owner,
-                     [scrollEngine, registry](const QString& windowId, bool) {
+                     [autotileEngine, scrollEngine, registry](const QString& windowId, bool) {
                          // heldScreenForWindow, not wherever the window sits
-                         // now: one this engine does not track has no
+                         // now: an engine that does not track it has no
                          // membership to reconcile, and the empty answer gates
-                         // exactly that.
-                         reconcileMembershipsForScreen(scrollEngine, registry,
-                                                       scrollEngine ? scrollEngine->heldScreenForWindow(windowId)
-                                                                    : QString());
+                         // exactly that. Ask both — the window is on one
+                         // screen in one mode, and only that engine answers.
+                         QString screenId = autotileEngine ? autotileEngine->heldScreenForWindow(windowId) : QString();
+                         if (screenId.isEmpty() && scrollEngine) {
+                             screenId = scrollEngine->heldScreenForWindow(windowId);
+                         }
+                         reconcileMembershipsForScreen(autotileEngine, scrollEngine, registry, screenId);
                      });
 }
 

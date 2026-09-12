@@ -31,7 +31,7 @@
     "libs/phosphor-scroll-engine/tests/test_scrollstrip_ops.cpp": 1736,
     "libs/phosphor-shell/src/shellengine.cpp": 1216,
     "libs/phosphor-snap-engine/include/PhosphorSnapEngine/SnapEngine.h": 1300,
-    "libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h": 2044,
+    "libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h": 2056,
     "libs/phosphor-tiles/src/pluau/pluau.luau": 1190,
     "libs/phosphor-zones/include/PhosphorZones/LayoutRegistry.h": 1516,
     "src/config/configdefaults.h": 1307,

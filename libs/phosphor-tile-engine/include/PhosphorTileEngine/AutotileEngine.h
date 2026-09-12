@@ -370,6 +370,14 @@ public:
     void updateStickyScreenPins(const PhosphorEngine::StickyPredicate&, PhosphorEngine::StickyPinPhase) override;
 
     /**
+     * @brief Give a window a tile on every desktop it occupies
+     *
+     * Driven off the desktop SPAN, so {1,2} is handled like sticky. The other
+     * sticky modes grant nothing: shouldTileWindow refuses them.
+     */
+    void reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery&) override;
+
+    /**
      * @brief Prune PhosphorTiles::TilingState and saved floating entries for a removed desktop
      *
      * Removes all states where key.desktop == removedDesktop. Called when a
@@ -1419,6 +1427,10 @@ private:
     /// insertion-order setting (End / AfterFocused / AsMaster). Shared by
     /// insertWindow's new-window path and handoffReceive's cross-engine adopt.
     void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
+    /// Per-desktop membership; see src/autotileengine/membership.cpp.
+    void installContextResolver();
+    bool adoptIntoContext(const QString& windowId, const PhosphorEngine::TilingStateKey& key);
+    void releaseMembership(const QString& windowId, const PhosphorEngine::TilingStateKey& key);
     void removeWindow(const QString& windowId);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,

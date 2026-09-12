@@ -402,10 +402,10 @@ void Daemon::connectDesktopActivity()
                 // are done before the managed set is recomputed and announced.
                 applyStickyScreenPins(m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
                                       PhosphorEngine::StickyPinPhase::Release);
-                // [SEQ C¾] Give the desktop just entered its share of every
-                // window spanning it. After the pins: a pinned key does not
-                // follow the switch, so the context has to settle first.
-                reconcileMembershipsForScreen(m_scrollEngine.get(), m_windowRegistry.get(), screenId);
+                // [SEQ C¾] The desktop just entered gets its share of every
+                // window spanning it. After the pins: a pinned key does not follow the switch.
+                reconcileMembershipsForScreen(m_autotileEngine.get(), m_scrollEngine.get(), m_windowRegistry.get(),
+                                              screenId);
                 // [SEQ D] Per-screen layout/overlay resolution context needs no
                 // push anymore: the layout registry (and the overlay service
                 // through it) resolves per-output desktops via the injected

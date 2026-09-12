@@ -33,6 +33,7 @@ add_library(PhosphorTileEngine SHARED
     src/autotileengine/engine_internal.h
     src/autotileengine/core.cpp
     src/autotileengine/context.cpp
+    src/autotileengine/membership.cpp
     src/autotileengine/algorithm_state.cpp
     src/autotileengine/config.cpp
     src/autotileengine/retile.cpp
