@@ -15,9 +15,9 @@ on:
         description: 'Tag to release (e.g. v3.0.0). Must already exist.'
         required: true
       pkgrel:
-        description: 'Package revision (Arch pkgrel / RPM Release / deb revision). Bump for a rebuild-only republish of an already-released tag, e.g. after a KWin or Qt bump breaks the installed binaries. Leave at 1 for a normal release.'
+        description: 'Package revision (Arch pkgrel / RPM Release / deb revision). Leave empty for a normal release. A rebuild-only republish normally carries its revision in the tag itself (v3.4.17-r2, see the version job); set this only to republish a MUTABLE release under its original tag.'
         required: false
-        default: '1'
+        default: ''
 
 # Default scope is read-only. Only the `release` job and the AUR publish
 # need writes — they opt in via per-job permissions blocks.
@@ -43,6 +43,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       pkgrel: ${{ steps.version.outputs.pkgrel }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
       - name: Extract version from tag
         id: version
@@ -68,7 +69,7 @@ jobs:
               echo "Error: refusing to release from non-tag ref: $REF" >&2
               exit 1
           fi
-          VERSION="${REF#refs/tags/v}"
+          RELEASE_TAG="${REF#refs/tags/}"
           # Strict format gate: anything that interpolates this into a
           # `run:` body downstream (PKGBUILD heredoc, sed `s/^Version:/`,
           # tarball filenames) must not allow shell metacharacters. Tags
@@ -76,10 +77,26 @@ jobs:
           # pre-release suffix requires either no digits (`-rc`) or at
           # least one digit (`-rc1` / `-rc.1`) — a trailing dot like
           # `v3.0.0-rc.` is rejected as malformed.
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.?[0-9]+)?)?$ ]]; then
-              echo "Error: VERSION '$VERSION' is not in <major>.<minor>.<patch>[-alpha|beta|rc[.N|N]] form" >&2
+          #
+          # A trailing `-r<N>` (N >= 2) is a package-revision tag: the same
+          # source as v<version>, republished as package revision N. It is
+          # how a rebuild ships on a repo with immutable releases, where the
+          # original tag's release can never take new assets and the tag
+          # itself can never be reused. The revision tag points at the same
+          # commit, gets its own release, and the packages inside carry
+          # <version>-<N>, so apt/dnf/zypper/pacman see an upgrade. The
+          # kwin-rebuild-watch workflow cuts these on its own when a distro
+          # moves KWin.
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.?[0-9]+)?)?(-r[2-9][0-9]*)?$ ]]; then
+              echo "Error: tag '$RELEASE_TAG' is not v<major>.<minor>.<patch>[-alpha|beta|rc[.N|N]][-r<N>]" >&2
               exit 1
           fi
+          TAG_PKGREL=""
+          if [[ "$RELEASE_TAG" =~ -r([2-9][0-9]*)$ ]]; then
+              TAG_PKGREL="${BASH_REMATCH[1]}"
+          fi
+          VERSION="${RELEASE_TAG#v}"
+          VERSION="${VERSION%-r"$TAG_PKGREL"}"
           # Pre-release detection: canonical semver-ish suffixes (-alpha
           # / -alpha1 / -beta.3 / -rc / -rc1 / -rc.1). A tag like
           # v3.0.0-arch1 is rejected by the gate above as non-semver.
@@ -87,58 +104,73 @@ jobs:
           if [[ "$VERSION" =~ -(alpha|beta|rc)(\.?[0-9]+)?$ ]]; then
               IS_PRE=true
           fi
-          # Package revision: Arch pkgrel, RPM Release, deb revision. A tag
-          # push always means a fresh version, so it starts at 1; only a
-          # manual dispatch can raise it, and that is the rebuild-only path
-          # — same source, same tag, new packages.
+          # Package revision: Arch pkgrel, RPM Release, deb revision. A plain
+          # tag push always means a fresh version, so it starts at 1. A
+          # revision tag carries its own (v3.4.17-r2 is revision 2). The
+          # dispatch input can raise it for a mutable release, and must agree
+          # with the tag when both are given.
           #
-          # What forces it is a dependency ABI moving under an installed
-          # build. KWin is the routine one: the effect plugin's IID embeds
-          # KWin's exact upstream version, and KWin refuses to load an
-          # effect whose IID does not match, so the overlay goes missing on
-          # every KWin bump until a rebuild. Qt is the sharp one: the
-          # layer-shell QPA plugin compiles against Qt private headers whose
-          # class layouts carry no ABI guarantee, so a qt6 patch bump can
-          # leave the daemon reading members at stale offsets and crashing.
+          # What forces a rebuild is a dependency ABI moving under an
+          # installed build. KWin is the routine one: the effect plugin's
+          # IID embeds KWin's exact upstream version, and KWin refuses to
+          # load an effect whose IID does not match, so the overlay goes
+          # missing on every KWin bump until a rebuild. Qt is the sharp one:
+          # the layer-shell QPA plugin compiles against Qt private headers
+          # whose class layouts carry no ABI guarantee, so a qt6 patch bump
+          # can leave the daemon reading members at stale offsets and
+          # crashing.
           #
           # Digits only, for the same script-injection reason the tag is
           # gated above.
-          PKGREL="${INPUT_PKGREL:-1}"
-          if [[ ! "$PKGREL" =~ ^[1-9][0-9]*$ ]]; then
-              echo "Error: PKGREL '$PKGREL' is not a positive integer" >&2
+          if [[ -n "${INPUT_PKGREL:-}" && ! "$INPUT_PKGREL" =~ ^[1-9][0-9]*$ ]]; then
+              echo "Error: PKGREL '$INPUT_PKGREL' is not a positive integer" >&2
               exit 1
+          fi
+          if [[ -n "$TAG_PKGREL" ]]; then
+              if [[ -n "${INPUT_PKGREL:-}" && "$INPUT_PKGREL" != "$TAG_PKGREL" ]]; then
+                  echo "Error: tag $RELEASE_TAG is package revision $TAG_PKGREL but pkgrel input says $INPUT_PKGREL" >&2
+                  exit 1
+              fi
+              PKGREL="$TAG_PKGREL"
+          else
+              PKGREL="${INPUT_PKGREL:-1}"
           fi
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRE" >> "$GITHUB_OUTPUT"
           echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION (prerelease=$IS_PRE, pkgrel=$PKGREL)"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION (prerelease=$IS_PRE, pkgrel=$PKGREL, release tag $RELEASE_TAG)"
 
-      # A rebuild-only republish reuses a tag that already shipped. If that
-      # tag's release is immutable the assets cannot be replaced, and — the
-      # part that actually bites — GitHub keeps the tag reserved even after
-      # the release is deleted, so nothing can be published under it ever
-      # again. Refuse here, before six package builds run and before the
-      # release job's create path gets anywhere near the existing release.
+      # A rebuild-only republish under the ORIGINAL tag reuses a tag that
+      # already shipped. If that tag's release is immutable the assets cannot
+      # be replaced, and — the part that actually bites — GitHub keeps the
+      # tag reserved even after the release is deleted, so nothing can be
+      # published under it ever again. Refuse here, before six package
+      # builds run and before the release job's create path gets anywhere
+      # near the existing release. A revision tag (v<version>-r<N>) never
+      # hits this: it is its own tag with its own release.
       - name: Refuse a rebuild against an immutable release
         if: steps.version.outputs.pkgrel != '1'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          PKGREL: ${{ steps.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          if ! RELEASE_JSON="$(gh release view "v$VERSION" --json isImmutable 2>/dev/null)"; then
-              echo "No existing release for v$VERSION — nothing to conflict with." >&2
+          if ! RELEASE_JSON="$(gh release view "$RELEASE_TAG" --json isImmutable 2>/dev/null)"; then
+              echo "No existing release for $RELEASE_TAG — nothing to conflict with." >&2
               exit 0
           fi
           if [[ "$(jq -r '.isImmutable' <<<"$RELEASE_JSON")" == "true" ]]; then
               {
-                  echo "Error: the release for v$VERSION is immutable, so its assets cannot be"
+                  echo "Error: the release for $RELEASE_TAG is immutable, so its assets cannot be"
                   echo "replaced and the tag cannot be reused for a new release."
                   echo ""
-                  echo "A rebuild-only republish is not possible for this tag. Cut a new version"
-                  echo "tag instead; the source AUR package still rebuilds from the tag archive,"
-                  echo "but every prebuilt channel needs a new release to publish under."
+                  echo "Republish under a revision tag instead: tag the same commit as"
+                  echo "v$VERSION as v$VERSION-r$PKGREL and dispatch this workflow with that"
+                  echo "tag. The kwin-rebuild-watch workflow does exactly that on its own."
               } >&2
               exit 1
           fi
@@ -883,9 +915,10 @@ jobs:
 
       # Merge the per-channel KWin baselines into one release asset. The
       # kwin-rebuild-watch workflow reads this back from the latest release,
-      # probes each channel's current KWin, and dispatches a rebuild (pkgrel +
-      # 1) when any of them has moved. pkgrel is recorded so the watcher
-      # knows what to bump from. Every channel must be present: a missing one
+      # probes each channel's current KWin, and dispatches a rebuild as
+      # package revision pkgrel + 1 (under a v<version>-r<N> tag when the
+      # release is immutable) when any of them has moved. pkgrel is recorded
+      # so the watcher knows what to bump from. Every channel must be present: a missing one
       # would silently drop that distro from the watch. And every baseline a
       # build job uploaded must be in the list: a channel that is probed but
       # never recorded reads as moved on every run, so the watcher would
@@ -931,11 +964,17 @@ jobs:
           cat artifacts/kwin-baseline.json
 
       - name: Generate release notes from CHANGELOG.md
+        env:
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           {
             echo "## PlasmaZones v${VERSION}"
             echo ""
+            if [[ "$PKGREL" != "1" ]]; then
+              echo "This is package revision ${PKGREL} of ${VERSION}. The source is unchanged. The packages were rebuilt because a distribution moved to a KWin the previous packages were not compiled against, and the KWin effect only loads against the exact version it was built for. Install it as you would any update and the overlay comes back. The notes below are those of ${VERSION}."
+              echo ""
+            fi
             bash packaging/generate-changelog.sh notes "$VERSION"
             echo ""
             echo "### Installation"
@@ -1026,9 +1065,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           IS_PRERELEASE: ${{ needs.version.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ needs.version.outputs.release_tag }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          VERSION="v${{ needs.version.outputs.version }}"
+          # The release lives on the tag that was pushed or dispatched: the
+          # plain v<version> tag for a normal release, the v<version>-r<N>
+          # revision tag for a rebuild. A revision tag gets its own release,
+          # which is the only way a rebuild can publish when releases are
+          # immutable.
+          VERSION="$RELEASE_TAG"
+          TITLE="PlasmaZones v${{ needs.version.outputs.version }}"
+          if [[ "$PKGREL" != "1" ]]; then
+              TITLE="$TITLE (package revision $PKGREL)"
+          fi
           # Source the pre-release verdict from the version job so this
           # workflow has one regex / one decision point — see the version
           # job's `is_prerelease` output.
@@ -1066,13 +1116,13 @@ jobs:
           if gh release view "$VERSION" >/dev/null 2>&1; then
               echo "Release $VERSION exists — updating in place"
               gh release edit "$VERSION" \
-                --title "PlasmaZones $VERSION" \
+                --title "$TITLE" \
                 --notes-file release_notes.md \
                 "${RELEASE_FLAGS[@]}"
               gh release upload "$VERSION" --clobber "${ASSETS[@]}"
           else
               gh release create "$VERSION" \
-                --title "PlasmaZones $VERSION" \
+                --title "$TITLE" \
                 --notes-file release_notes.md \
                 "${RELEASE_FLAGS[@]}" \
                 "${ASSETS[@]}"
@@ -1140,6 +1190,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           PKGREL: ${{ needs.version.outputs.pkgrel }}
+          RELEASE_TAG: ${{ needs.version.outputs.release_tag }}
           SHA256: ${{ steps.hash.outputs.sha256 }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones-bin.git /tmp/aur-bin
@@ -1155,6 +1206,10 @@ jobs:
           # `source=` entries don't silently leave a stale second hash.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
+          # The tarball is downloaded from the release that carries it, which
+          # on a rebuild is the v<version>-r<N> release, not v<version>.
+          sed -i "s/^_release=.*/_release=$RELEASE_TAG/" PKGBUILD
+          grep -q "^_release=$RELEASE_TAG\$" PKGBUILD
           awk -v sum="$SHA256" '
             # Single-line form: sha256sums=(\047hash\047) — replace inline.
             /^sha256sums=\(.*\)$/ {

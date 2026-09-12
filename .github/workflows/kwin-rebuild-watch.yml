@@ -14,10 +14,22 @@
 # every channel separately: it reads the per-channel KWin baseline the
 # release pipeline records (the kwin-baseline.json asset on the latest
 # release), probes each channel's repos for the KWin it ships today, and if
-# ANY channel has moved it dispatches release.yml for the same tag with the
-# package revision bumped. That rebuilds every channel from the tag, so the
-# ones that did not move get a harmless revision bump and the one that did
-# gets a plugin that loads again.
+# ANY channel has moved it dispatches release.yml with the package revision
+# bumped. That rebuilds every channel from the tag, so the ones that did not
+# move get a harmless revision bump and the one that did gets a plugin that
+# loads again.
+#
+# Where the rebuild publishes depends on the release. A mutable release
+# takes the new assets in place, so release.yml is dispatched for the same
+# tag with pkgrel bumped. An immutable release (the default on this repo)
+# can never take new assets, and its tag can never be reused, so the watch
+# tags the SAME commit as v<version>-r<N> (N = pkgrel + 1) and dispatches
+# release.yml for that tag. release.yml reads the revision out of the tag,
+# builds <version>-<N> packages from the unchanged source, and publishes
+# them as their own release, which then becomes the latest release the next
+# run reads its baseline from. The tag is created through the API with the
+# workflow token, which deliberately does not trigger release.yml's tag-push
+# path, so the dispatch below is the one and only run.
 #
 # Channels here must match the list the release job's "Assemble KWin baseline
 # manifest" step in release.yml merges: `arch` (the Arch package, the generic
@@ -31,8 +43,9 @@
 # what this covers.
 #
 # Bootstrapping: a release published before the manifest existed has no
-# baseline, so the first rebuild has to be dispatched by hand:
-#   gh workflow run release.yml -f tag=v<version> -f pkgrel=2
+# baseline, so the first rebuild has to be cut by hand: tag the release's
+# commit as v<version>-r2 and run
+#   gh workflow run release.yml -f tag=v<version>-r2
 # That run records the manifest and every later bump is automatic.
 
 name: KWin rebuild watch
@@ -71,6 +84,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.read.outputs.tag }}
+      version_tag: ${{ steps.read.outputs.version_tag }}
+      sha: ${{ steps.read.outputs.sha }}
       pkgrel: ${{ steps.read.outputs.pkgrel }}
       has_baseline: ${{ steps.read.outputs.has_baseline }}
       immutable: ${{ steps.read.outputs.immutable }}
@@ -86,23 +101,45 @@ jobs:
           set -euo pipefail
           # releases/latest is the newest non-draft, non-prerelease release,
           # which is the one every prebuilt channel points users at.
+          # The latest release is either a plain v<version> or a revision
+          # v<version>-r<N> that an earlier rebuild published. Both carry a
+          # baseline; the version tag is what the next revision is named
+          # from.
           TAG="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: latest release tag '$TAG' is not v<major>.<minor>.<patch>" >&2
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-r[2-9][0-9]*)?$ ]]; then
+              echo "Error: latest release tag '$TAG' is not v<major>.<minor>.<patch>[-r<N>]" >&2
               exit 1
           fi
+          TAG_PKGREL=""
+          if [[ "$TAG" =~ -r([2-9][0-9]*)$ ]]; then
+              TAG_PKGREL="${BASH_REMATCH[1]}"
+          fi
+          VERSION_TAG="${TAG%-r"$TAG_PKGREL"}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
           echo "Latest release: $TAG"
 
+          # The commit the release was built from. A revision tag must point
+          # here too, so the rebuild is the same source. The commits endpoint
+          # peels an annotated tag to its commit.
+          SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Error: could not resolve $TAG to a commit (got '$SHA')" >&2
+              exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "$TAG is at $SHA"
+
           # An immutable release cannot have its assets replaced, and the tag
-          # can never be reused, so no rebuild can ever be published for it.
-          # Surface that instead of dispatching a run that would only refuse.
+          # can never be reused, so a rebuild of it publishes under a fresh
+          # v<version>-r<N> tag instead of in place. The dispatch step
+          # branches on this.
           IMMUTABLE="$(gh release view "$TAG" --json isImmutable --jq .isImmutable)"
           echo "immutable=$IMMUTABLE" >> "$GITHUB_OUTPUT"
 
           mkdir -p baseline
           if ! gh release download "$TAG" --pattern kwin-baseline.json --dir baseline 2>/dev/null; then
-              echo "::warning::$TAG has no kwin-baseline.json asset. Dispatch one rebuild by hand (gh workflow run release.yml -f tag=$TAG -f pkgrel=2) to record it; the watch takes over from there."
+              echo "::warning::$TAG has no kwin-baseline.json asset. Cut one rebuild by hand (tag $SHA as $VERSION_TAG-r2, then gh workflow run release.yml -f tag=$VERSION_TAG-r2) to record it; the watch takes over from there."
               echo "has_baseline=false" >> "$GITHUB_OUTPUT"
               echo "pkgrel=0" >> "$GITHUB_OUTPUT"
               exit 0
@@ -112,13 +149,17 @@ jobs:
           # the asset on this release came from some other run, and a pkgrel
           # bumped from it would be bumped from the wrong number.
           MANIFEST_VERSION="$(jq -r .version baseline/kwin-baseline.json)"
-          if [[ "v$MANIFEST_VERSION" != "$TAG" ]]; then
+          if [[ "v$MANIFEST_VERSION" != "$VERSION_TAG" ]]; then
               echo "Error: kwin-baseline.json on $TAG records version '$MANIFEST_VERSION'" >&2
               exit 1
           fi
           PKGREL="$(jq -r .pkgrel baseline/kwin-baseline.json)"
           if [[ ! "$PKGREL" =~ ^[1-9][0-9]*$ ]]; then
               echo "Error: manifest pkgrel '$PKGREL' is not a positive integer" >&2
+              exit 1
+          fi
+          if [[ -n "$TAG_PKGREL" && "$PKGREL" != "$TAG_PKGREL" ]]; then
+              echo "Error: $TAG is package revision $TAG_PKGREL but its kwin-baseline.json records pkgrel $PKGREL" >&2
               exit 1
           fi
           echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
@@ -231,7 +272,8 @@ jobs:
     if: ${{ !cancelled() && needs.baseline.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Creating the v<version>-r<N> tag when the release is immutable.
+      contents: write
       # workflow_dispatch of release.yml.
       actions: write
     steps:
@@ -324,30 +366,19 @@ jobs:
               echo "moved=${MOVED[*]}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Refuse when the release is immutable
-        if: steps.compare.outputs.rebuild == 'true' && needs.baseline.outputs.immutable == 'true'
-        env:
-          TAG: ${{ needs.baseline.outputs.tag }}
-          MOVED: ${{ steps.compare.outputs.moved }}
-        run: |
-          echo "::error::KWin moved on $MOVED but the release for $TAG is immutable, so no rebuild can be published under it. Cut a new version tag."
-          exit 1
-
       - name: Dispatch rebuild
         if: steps.compare.outputs.rebuild == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
-          # Same as the baseline job: nothing is checked out here either.
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.baseline.outputs.tag }}
+          VERSION_TAG: ${{ needs.baseline.outputs.version_tag }}
+          SHA: ${{ needs.baseline.outputs.sha }}
           PKGREL: ${{ needs.baseline.outputs.pkgrel }}
+          IMMUTABLE: ${{ needs.baseline.outputs.immutable }}
           MOVED: ${{ steps.compare.outputs.moved }}
         run: |
           set -euo pipefail
-          # A rebuild already running (or queued) will record a fresh
-          # baseline when it lands; dispatching another on top of it would
-          # only race it for the same assets. The next scheduled run
-          # re-checks.
           for status in queued in_progress waiting pending requested; do
               n="$(gh run list --workflow release.yml --status "$status" --json databaseId --jq length)"
               if (( n > 0 )); then
@@ -357,15 +388,6 @@ jobs:
                   exit 0
               fi
           done
-          # The baseline was read minutes ago, before the probes ran. A
-          # rebuild that was in flight then and has landed since has already
-          # replaced the manifest, so the comparison above was against a
-          # baseline that no longer exists and PKGREL + 1 is the revision it
-          # just published. The same goes for a new version tagged since:
-          # the tag this run compared is no longer the one users are pointed
-          # at, and a rebuild of it would spend half an hour of CI on assets
-          # nobody installs. Re-read both and dispatch only if nothing moved
-          # under us; otherwise the next scheduled run compares afresh.
           LATEST="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
           if [[ "$LATEST" != "$TAG" ]]; then
               echo "::notice::$LATEST was released while this run was probing $TAG; not dispatching a rebuild of a superseded tag. Re-checked on the next schedule."
@@ -386,21 +408,60 @@ jobs:
               exit 0
           fi
           NEXT=$((PKGREL + 1))
-          echo "Dispatching release.yml for $TAG with pkgrel=$NEXT (KWin moved on: $MOVED)"
-          gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f "tag=$TAG" -f "pkgrel=$NEXT"
+
+          if [[ "$IMMUTABLE" != "true" ]]; then
+              # A mutable release takes the new assets in place.
+              echo "Dispatching release.yml for $TAG with pkgrel=$NEXT (KWin moved on: $MOVED)"
+              gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f "tag=$TAG" -f "pkgrel=$NEXT"
+              {
+                  echo ""
+                  echo "Dispatched a rebuild of $TAG as package revision $NEXT (KWin moved on: $MOVED)."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+          fi
+
+          # An immutable release can never take new assets, so the rebuild
+          # gets its own tag at the same commit and its own release.
+          NEXT_TAG="$VERSION_TAG-r$NEXT"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$NEXT_TAG" >/dev/null 2>&1; then
+              # A previous run cut the tag and its release run failed or was
+              # cancelled before publishing (had it published, $NEXT_TAG
+              # would be the latest release and we would not be here).
+              # Reuse the tag if it is where it should be; never move it.
+              EXISTING_COMMIT="$(gh api "repos/$GITHUB_REPOSITORY/commits/$NEXT_TAG" --jq .sha)"
+              if [[ "$EXISTING_COMMIT" != "$SHA" ]]; then
+                  echo "::error::$NEXT_TAG already exists at $EXISTING_COMMIT, but $TAG was built from $SHA. A revision tag must point at the release's commit. Resolve by hand."
+                  exit 1
+              fi
+              echo "::notice::$NEXT_TAG already exists at $SHA; reusing it for the dispatch."
+          else
+              echo "Tagging $SHA as $NEXT_TAG"
+              gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+                  -f "ref=refs/tags/$NEXT_TAG" -f "sha=$SHA" >/dev/null
+          fi
+          echo "Dispatching release.yml for $NEXT_TAG (package revision $NEXT of $VERSION_TAG; KWin moved on: $MOVED)"
+          gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f "tag=$NEXT_TAG"
           {
               echo ""
-              echo "Dispatched a rebuild of $TAG as package revision $NEXT (KWin moved on: $MOVED)."
+              echo "$TAG is immutable, so the rebuild was cut as $NEXT_TAG at the same commit ($SHA) and release.yml was dispatched for it (KWin moved on: $MOVED)."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dry run
         if: steps.compare.outputs.rebuild == 'true' && inputs.dry_run == true
         env:
           TAG: ${{ needs.baseline.outputs.tag }}
+          VERSION_TAG: ${{ needs.baseline.outputs.version_tag }}
+          SHA: ${{ needs.baseline.outputs.sha }}
           PKGREL: ${{ needs.baseline.outputs.pkgrel }}
+          IMMUTABLE: ${{ needs.baseline.outputs.immutable }}
           MOVED: ${{ steps.compare.outputs.moved }}
         run: |
-          echo "::notice::Dry run: would dispatch release.yml for $TAG with pkgrel=$((PKGREL + 1)) (KWin moved on: $MOVED)"
+          NEXT=$((PKGREL + 1))
+          if [[ "$IMMUTABLE" == "true" ]]; then
+              echo "::notice::Dry run: $TAG is immutable; would tag $SHA as $VERSION_TAG-r$NEXT and dispatch release.yml for it (KWin moved on: $MOVED)"
+          else
+              echo "::notice::Dry run: would dispatch release.yml for $TAG with pkgrel=$NEXT (KWin moved on: $MOVED)"
+          fi
 
       # Last, so a moved channel is still acted on above before the run goes
       # red for the one that could not be read. A red run is the signal that

@@ -66,8 +66,19 @@ awk -v sum="$SHA256" '
 
 sed -i "s/^pkgrel=.*/pkgrel=$PKGREL/" "$PKGBUILD"
 
+# The binary PKGBUILD downloads from a named GitHub release. A revision
+# beyond 1 lives on its own v<version>-r<N> release (a published release is
+# immutable and cannot take new assets), so point it there.
+if grep -q '^_release=' "$PKGBUILD"; then
+    if [[ "$PKGREL" == "1" ]]; then
+        sed -i "s/^_release=.*/_release=v$VERSION/" "$PKGBUILD"
+    else
+        sed -i "s/^_release=.*/_release=v$VERSION-r$PKGREL/" "$PKGBUILD"
+    fi
+fi
+
 echo "Updated $PKGBUILD:"
-grep -E "^(pkgver|pkgrel|sha256sums)" "$PKGBUILD" | head -5
+grep -E "^(pkgver|pkgrel|_release|sha256sums)" "$PKGBUILD" | head -6
 
 # Generate .SRCINFO
 if command -v makepkg &> /dev/null; then
