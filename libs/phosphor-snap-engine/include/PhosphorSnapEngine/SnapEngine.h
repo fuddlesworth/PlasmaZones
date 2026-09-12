@@ -606,6 +606,14 @@ public:
 
     void setCurrentDesktop(int desktop) override;
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
+    /// A window on several desktops holds its own zone on each. Membership
+    /// only: snapping places nothing itself. See membership.cpp.
+    void reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery&) override;
+    /// Point the container's primary resolution at currentKeyForScreen.
+    void installContextResolver();
+    /// Re-seed a restored record's other desktops' zones into their stores.
+    void seedPersistedDesktopZones(const QString& windowId, const PhosphorEngine::EngineSlot& slot,
+                                   const QString& screenId, int restoreDesktop);
     void setCurrentActivity(const QString& activity) override;
 
     // Reclaim per-(screen,desktop,activity) stores whose context no longer exists.

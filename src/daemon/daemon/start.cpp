@@ -404,8 +404,8 @@ void Daemon::connectDesktopActivity()
                                       PhosphorEngine::StickyPinPhase::Release);
                 // [SEQ C¾] The desktop just entered gets its share of every
                 // window spanning it. After the pins: a pinned key does not follow the switch.
-                reconcileMembershipsForScreen(m_autotileEngine.get(), m_scrollEngine.get(), m_windowRegistry.get(),
-                                              screenId);
+                reconcileMembershipsForScreen(m_autotileEngine.get(), m_scrollEngine.get(), m_snapEngine.get(),
+                                              m_windowRegistry.get(), screenId);
                 // [SEQ D] Per-screen layout/overlay resolution context needs no
                 // push anymore: the layout registry (and the overlay service
                 // through it) resolves per-output desktops via the injected

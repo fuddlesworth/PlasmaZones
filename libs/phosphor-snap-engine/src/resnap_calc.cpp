@@ -163,53 +163,69 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
     // preserves every window's recorded desktop through the commit by
     // construction — see the matching stamp in calculateResnapFromPreviousLayout.
     int totalAssignments = 0;
-    forEachSnapAssignment(
-        [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int desktop) {
-            ++totalAssignments;
-            if (zoneIds.isEmpty()) {
-                return;
-            }
-            // Skip windows floating in SNAPPING mode, read from this engine's
-            // own store.
-            //
-            // NOT m_windowTracker->isWindowFloating: that is the mode-routed
-            // resolver, which dispatches on the window's screen's CURRENT mode
-            // and answers with the autotile or scroll engine's float bit for a
-            // screen still reported as tiling. This function IS the
-            // tiling-to-snapping toggle path, where that ordering is exactly
-            // what is in flux — so the routed read let a tiling-mode float
-            // verdict drop a window from the snap batch, leaving it unmanaged
-            // with no geometry applied. Float is per engine: a window floated
-            // in a tiling mode is not floating for snapping.
-            if (isFloating(windowId)) {
-                return;
-            }
+    forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                              int desktop) {
+        ++totalAssignments;
+        if (zoneIds.isEmpty()) {
+            return;
+        }
+        // Skip windows floating in SNAPPING mode, read from this engine's
+        // own store.
+        //
+        // NOT m_windowTracker->isWindowFloating: that is the mode-routed
+        // resolver, which dispatches on the window's screen's CURRENT mode
+        // and answers with the autotile or scroll engine's float bit for a
+        // screen still reported as tiling. This function IS the
+        // tiling-to-snapping toggle path, where that ordering is exactly
+        // what is in flux — so the routed read let a tiling-mode float
+        // verdict drop a window from the snap batch, leaving it unmanaged
+        // with no geometry applied. Float is per engine: a window floated
+        // in a tiling mode is not floating for snapping.
+        if (isFloating(windowId)) {
+            return;
+        }
 
-            if (!screenMatches(screenId)) {
-                return;
-            }
+        if (!screenMatches(screenId)) {
+            return;
+        }
 
-            QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
-            if (!geo.isValid()) {
-                return;
-            }
+        // A window present on several desktops holds one assignment PER
+        // desktop, and they are not alternatives to pick between — each
+        // belongs to its own context. Emitting them all sends the window
+        // through every zone in turn and leaves it in whichever was
+        // applied last, which is the whole window jumping to another
+        // desktop's zone. Only the context the screen is actually showing
+        // may be applied.
+        //
+        // Gated on the window HAVING several memberships so nothing
+        // changes for the ordinary single-assignment case: a window
+        // recorded on a desktop that is not current still resnaps, which
+        // is what the layout-switch and startup-restore callers depend on.
+        if (m_states.membershipsForWindow(windowId).size() > 1 && desktop != currentKeyForScreen(screenId).desktop) {
+            return;
+        }
 
-            ZoneAssignmentEntry entry;
-            entry.windowId = windowId;
-            entry.sourceZoneId = QString();
-            entry.targetZoneId = zoneIds.first();
-            if (zoneIds.size() > 1)
-                entry.targetZoneIds = zoneIds;
-            entry.targetGeometry = geo;
-            // Stamp the authoritative target screen so processBatchEntries skips
-            // re-derivation from geometry.center(). If the layout's geometry ever
-            // resolved to a stale fallback (e.g. a transient cache miss), the
-            // re-derivation could land in a sibling VS and clobber the stored
-            // assignment. Trust the source screen we already read above.
-            entry.targetScreenId = screenId;
-            entry.virtualDesktop = desktop;
-            result.append(entry);
-        });
+        QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
+        if (!geo.isValid()) {
+            return;
+        }
+
+        ZoneAssignmentEntry entry;
+        entry.windowId = windowId;
+        entry.sourceZoneId = QString();
+        entry.targetZoneId = zoneIds.first();
+        if (zoneIds.size() > 1)
+            entry.targetZoneIds = zoneIds;
+        entry.targetGeometry = geo;
+        // Stamp the authoritative target screen so processBatchEntries skips
+        // re-derivation from geometry.center(). If the layout's geometry ever
+        // resolved to a stale fallback (e.g. a transient cache miss), the
+        // re-derivation could land in a sibling VS and clobber the stored
+        // assignment. Trust the source screen we already read above.
+        entry.targetScreenId = screenId;
+        entry.virtualDesktop = desktop;
+        result.append(entry);
+    });
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "Resnap from current assignments:" << result.size() << "windows"

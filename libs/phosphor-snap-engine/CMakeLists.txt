@@ -28,6 +28,7 @@ add_library(PhosphorSnapEngine SHARED
     src/INavigationStateProvider.cpp
     src/IZoneAdjacencyResolver.cpp
     src/SnapEngine.cpp
+    src/membership.cpp
     src/SnapState.cpp
     src/calculate.cpp
     src/commit.cpp

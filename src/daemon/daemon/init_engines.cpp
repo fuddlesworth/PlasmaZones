@@ -1223,7 +1223,7 @@ void Daemon::initEnginesAndWiring()
     // the desktop in view (see TilingAdaptor::setWindowRegistry).
     m_tilingAdaptor->setWindowRegistry(m_windowRegistry.get());
     wireStickyMembershipUpdates(this, m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
-                                m_windowRegistry.get());
+                                m_snapEngine.get(), m_windowRegistry.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
     // The wheel's view step reads ShortcutManager's narrow getter over

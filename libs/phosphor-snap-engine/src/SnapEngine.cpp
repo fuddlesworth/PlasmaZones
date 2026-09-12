@@ -37,6 +37,7 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
     // carries no zone/screen assignments — only the still-global last-used-zone and
     // user-snapped scalars, plus any screenless float bookkeeping.
     m_states.insertState(PhosphorEngine::PlacementStateKey{}, m_globals);
+    installContextResolver();
 }
 
 void SnapEngine::setWindowRegistry(QObject* registryObject)
@@ -117,23 +118,37 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
         const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
         owner = ensureStateForKey(key);
         if (owner && !key.screenId.isEmpty()) {
-            m_states.setKeyForWindow(canonical, key);
+            // ADD, not replace. A window can hold a zone on several desktops
+            // at once, and setKeyForWindow would drop every membership but
+            // this one — including the ones a restart's
+            // seedPersistedDesktopZones just put back, which is how a
+            // restored per-desktop zone silently became a single-desktop one
+            // again. For a window with no membership yet this is identical to
+            // the replace it supersedes.
+            m_states.addMembership(canonical, key);
         }
     }
-    // Single-owner invariant: a window's zone/screen/desktop data must live in
-    // exactly ONE store. Re-keying a window moves only the reverse-map pointer —
+    // One owner PER CONTEXT: a window's zone/screen/desktop data must live only
+    // in stores it is a member of. Re-keying moves only the reverse-map pointer —
     // PerScreenStates::migrate / setKeyForWindow deliberately "do not touch state
-    // objects" — so a former owner store can retain stale data for the window. That
-    // phantom is invisible to owner-map reads (like the autotile engine's) but the
-    // snap resnap's forEachZoneAssignedWindow raw-scans every store and would read
-    // the phantom's stale desktop, resnapping a window off its real desktop (the
+    // objects" — so a store it has left can retain stale data. That phantom is
+    // invisible to owner-map reads (like the autotile engine's) but the snap
+    // resnap's forEachZoneAssignedWindow raw-scans every store and would read the
+    // phantom's stale desktop, resnapping a window off its real desktop (the
     // cross-desktop leak). Since every write path resolves its store through here
-    // first, evicting the window from every non-owner store at resolution time keeps
-    // the phantom from ever forming. removeWindowData is a no-op where absent, so the
-    // common single-store case costs only a handful of empty hash lookups.
+    // first, evicting at resolution time keeps the phantom from ever forming.
+    //
+    // MEMBERSHIP is what separates a phantom from a legitimate second home. A
+    // window present on several desktops holds a membership in each, and the zone
+    // it occupies there is real data the user chose — evicting it would be the
+    // very overwrite that made a sticky window share one zone across every
+    // desktop. A store the window is NOT a member of can only hold a leftover.
+    // removeWindowData is a no-op where absent, so the common single-membership
+    // case still costs only a handful of empty hash lookups.
     if (owner) {
-        for (SnapState* state : m_states.states()) {
-            if (state && state != owner) {
+        for (auto it = m_states.states().cbegin(); it != m_states.states().cend(); ++it) {
+            SnapState* state = it.value();
+            if (state && state != owner && !m_states.hasMembership(canonical, it.key())) {
                 state->removeWindowData(canonical);
             }
         }
