@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Phosphor.Theme
 import Phosphor.Widgets
 
@@ -12,7 +13,6 @@ ShellSurface {
     readonly property bool controllable: player !== null && player.canControl
     implicitWidth: 402
     implicitHeight: 106
-    clip: true
     RowLayout {
         x: 17
         y: 17
@@ -24,11 +24,24 @@ ShellSurface {
             color: Qt.alpha(Appearance.accent, .15)
             radius: Appearance.radius * .35
             clip: true
+            Rectangle {
+                id: artMask
+                anchors.fill: parent
+                radius: parent.radius
+                color: "white"
+                visible: false
+                layer.enabled: true
+            }
             Image {
                 anchors.fill: parent
                 source: root.player ? root.player.trackArtUrl : ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: artMask
+                }
             }
             ShellIcon {
                 anchors.centerIn: parent
@@ -101,9 +114,9 @@ ShellSurface {
     SpectrumVisualizer {
         x: 17
         width: parent.width - 34
-        height: 32
+        height: 26
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: -6
+        anchors.bottomMargin: 0
         opacity: .7
         spectrum: root.spectrum
         playing: root.player !== null && root.player.isPlaying

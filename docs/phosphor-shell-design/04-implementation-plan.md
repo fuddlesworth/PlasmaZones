@@ -129,6 +129,33 @@ The connected-corner geometry (`BarCanvas`, `ConnectedShape`,
 and the bar-canvas demo are gone, with the v1 mockups. These documents were
 rewritten for the shell that exists.
 
+### v3 lock screen (September 2026)
+
+- `2617e2aff`: replace the placement-map outlines and region finder with the
+  approved abstract panes, clock and unlock card. Add persistent lock layout,
+  media privacy and notification-count preferences.
+- `eb02114a0`: connect the shared PAM controller, authenticated account name,
+  compositor Caps Lock and keyboard layout, battery, notification count, MPRIS
+  and session actions. Preserve the lock-before-sleep and release handshakes
+  and the `shell.phosphor.lock` surface-pack slot.
+- Native verification: both compositions and all three presets at 1440×900,
+  plus an 800×600 output, optional media, keyboard navigation, confirmation,
+  masked input, retry, busy and release states. The short layout keeps the
+  whole unlock card visible and scrolls optional content into view on focus.
+
+`scripts/nested-shell/lock-preview.sh run` uses production components with
+fixture auth/media/power services on an existing nested session. Its config
+and IPC socket are separate from the ordinary shell. Use the same script
+with `call preview.result --arg name=error`, `success` or `idle` to drive the
+outcome. Success hides the preview windows after the exit; idle shows them
+again. The actual session-lock protocol is unavailable in virtual KWin, so
+PAM and compositor-lock lifecycle validation comes from the service tests.
+
+The final build passed. The full suite ran 541 cases: 540 passed and the
+existing surface-decoration orientation test was skipped. Real nested
+keyboard events confirmed Caps Lock, typing, submit, retry focus, and the
+power confirmation flow without invoking host session actions.
+
 ## What each phase proved live
 
 | Verified in the nested harness | Not verifiable there |

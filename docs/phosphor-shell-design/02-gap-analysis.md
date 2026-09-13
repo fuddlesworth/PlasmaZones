@@ -34,7 +34,7 @@ requirements for this redesign.
 
 | Gap | Notes |
 |---|---|
-| Lock screen in the nested harness | The virtual KWin backend does not advertise `ext_session_lock_manager_v1`; the lock path is unit-tested only. |
+| Lock screen in the nested harness | The virtual KWin backend does not advertise `ext_session_lock_manager_v1`. The production lock UI is visually testable through `scripts/nested-shell/lock-preview.sh`; PAM and compositor-lock lifecycle remain service-test coverage. |
 | Polkit prompt in the nested harness | The host session's agent owns the seat; the prompt stays inert under the harness. |
 | Real touchpad gestures | The virtual backend cannot inject swipes; the relay is driven by calling `CompositorBridge.reportGesture` directly. |
 

@@ -168,6 +168,18 @@ TestCase {
         verify(power.y + power.height <= 640);
     }
 
+    function test_shortOutputShowsTheWholeUnlockCard() {
+        const s = makeScene();
+        s.screen.width = 800;
+        s.screen.height = 600;
+        waitForRendering(s.screen);
+        const card = findChild(s.screen, "lockCard");
+        tryVerify(() => {
+            const top = card.mapToItem(s.screen, 0, 0).y;
+            return top >= 80 && top + card.height <= s.screen.height - 90;
+        }, 1000, "the card footer fits above the fixed power row");
+    }
+
     function test_sharedPasswordAcrossOutputsAndLongInput() {
         const s = makeScene();
         const second = createTemporaryObject(screenComponent, testCase, {

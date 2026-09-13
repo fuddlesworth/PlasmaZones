@@ -100,7 +100,26 @@ Item {
             Repeater {
                 model: root.actions
                 ShellButton {
+                    id: actionButton
                     required property var modelData
+                    contentItem: RowLayout {
+                        spacing: 12
+                        ShellIcon {
+                            Layout.preferredWidth: 16
+                            Layout.preferredHeight: 16
+                            source: actionButton.iconName
+                            color: Appearance.text
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: actionButton.text
+                            color: Appearance.text
+                            font.family: Tokens.font_family_ui
+                            font.pixelSize: 12
+                        }
+                    }
+                    leftPadding: 7
+                    rightPadding: 7
                     objectName: "lockAction-" + modelData.id
                     Layout.fillWidth: true
                     implicitHeight: 38

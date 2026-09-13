@@ -66,16 +66,54 @@ FocusScope {
         implicitHeight: 40
         cornerRadius: Appearance.radius * .35
         label: qsTr("Unlock")
-        iconName: root.phase === "authenticating" ? "view-refresh" : "arrow-right"
+        opacity: root.phase === "authenticating" || enabled ? 1 : .45
         enabled: !!root.controller && root.controller.locked && root.dotCount > 0 && root.phase !== "authenticating" && root.phase !== "dismissing"
         onClicked: root.controller.submit()
-        RotationAnimator {
-            target: submit.contentItem
-            from: 0
-            to: 360
-            duration: 800
-            loops: Animation.Infinite
-            running: root.phase === "authenticating" && Appearance.motion
+        contentItem: Item {
+            ShellIcon {
+                anchors.centerIn: parent
+                width: 18
+                height: 18
+                source: "arrow-right"
+                color: Appearance.text
+                visible: root.phase !== "authenticating"
+            }
+            Canvas {
+                id: spinner
+                anchors.centerIn: parent
+                width: 16
+                height: 16
+                visible: root.phase === "authenticating"
+                onVisibleChanged: if (visible)
+                    requestPaint()
+                Connections {
+                    target: Appearance
+                    function onAccentChanged() {
+                        spinner.requestPaint();
+                    }
+                }
+                onPaint: {
+                    const ctx = getContext("2d");
+                    ctx.reset();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = Appearance.outline;
+                    ctx.beginPath();
+                    ctx.arc(8, 8, 6, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.strokeStyle = Appearance.accent;
+                    ctx.beginPath();
+                    ctx.arc(8, 8, 6, -Math.PI / 2, 0);
+                    ctx.stroke();
+                }
+                RotationAnimator {
+                    target: spinner
+                    from: 0
+                    to: 360
+                    duration: 800
+                    loops: Animation.Infinite
+                    running: spinner.visible && Appearance.motion
+                }
+            }
         }
     }
 }

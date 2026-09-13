@@ -8,12 +8,21 @@ The current reference is [`mockups-v3/`](mockups-v3/), including Navigator,
 Stage, the quick-settings shelf, calendar, visualizers and scrolling with
 four and ten windows.
 
-The [lock-screen proposal](mockups-v3/index.html#navigator/lockscreen) is an
-interactive prototype awaiting design review. It includes password entry,
-retry and unlocking states, Caps Lock, optional media, and split or centered
-compositions in all three presets. Use the sample password `demo` to return
-to the desktop. Authentication and power actions are simulated; this study
-does not change the QML lock screen.
+The approved [lock-screen study](mockups-v3/index.html#navigator/lockscreen)
+is implemented by `Phosphor.Lock`. It shares the shell's colors, materials,
+fonts, density and surface packs, with split and centered compositions.
+Appearance includes lock-screen layout, opt-in media and notification-count
+controls. The production screen uses PAM, compositor keyboard state, MPRIS
+and logind; notification content stays hidden. The browser study still uses
+`demo` and simulated power actions for design review.
+
+For native visual review, start the nested harness and run
+`scripts/nested-shell/lock-preview.sh run` with the same `PZ_NESTED_SESSION`.
+It renders the production QML with fixture authentication, media and power
+services in its own config directory. `lock-preview.sh call preview.state`
+reports the state without exposing the password. The virtual compositor
+cannot exercise the real session-lock protocol; service tests cover the
+PAM and release handshake.
 
 The shell is Qt6/QML on the reusable `phosphor-*` libraries. This branch
 integrates with the PlasmaZones daemon and KWin effect; the nested harness

@@ -163,7 +163,8 @@ FocusScope {
                 objectName: "lockClock"
                 now: root.now
                 centered: root.centered
-                timeSize: root.centered ? (root.height < 800 ? 80 : 116) : 154
+                compact: root.centered && root.height < 720
+                timeSize: compact ? 56 : root.centered ? (root.height < 800 ? 80 : 116) : 154
                 width: root.centered ? Math.min(600, root.width - 40) : Math.min(600, root.width * .42)
                 x: root.centered ? (root.width - width) / 2 : root.width * .091667
                 y: root.centered ? Math.max(0, (root.height - 900) / 2 + (root.showMedia ? 82 : 134) - viewport.y) : Math.max(0, root.height * .325556 - viewport.y)
@@ -178,7 +179,7 @@ FocusScope {
                 width: Math.min(382, root.width - root.edgeInset * 2)
                 height: implicitHeight
                 x: root.centered ? (root.width - width) / 2 : Math.min(root.width - width - root.edgeInset, root.width * .618056)
-                y: root.centered ? clock.y + clock.height + (root.showMedia ? 46 : 52) : Math.max(0, root.height * .331111 - viewport.y)
+                y: root.centered ? clock.y + clock.height + (clock.compact ? 18 : root.showMedia ? 46 : 52) : Math.max(0, Math.min(root.height * .331111 - viewport.y, viewport.height - height - 8))
             }
             Column {
                 id: extras
@@ -235,11 +236,11 @@ FocusScope {
             ShellIcon {
                 width: 13
                 height: 13
-                source: "object-locked"
+                source: viewport.contentHeight > viewport.height ? "go-down" : "object-locked"
                 color: Appearance.muted
             }
             Text {
-                text: qsTr("Your session stays here.")
+                text: viewport.contentHeight > viewport.height ? qsTr("Scroll for more") : qsTr("Your session stays here.")
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: 10

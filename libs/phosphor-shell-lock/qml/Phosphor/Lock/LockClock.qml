@@ -7,6 +7,7 @@ Column {
     id: root
     property date now: new Date()
     property bool centered: false
+    property bool compact: false
     property int timeSize: centered ? 116 : 154
     spacing: 0
     Text {
@@ -38,6 +39,7 @@ Column {
         Accessible.name: Qt.formatTime(root.now, "HH:mm")
     }
     Row {
+        visible: !root.compact
         x: root.centered ? (parent.width - width) / 2 : 9
         topPadding: root.centered ? 8 : 12
         spacing: 13
