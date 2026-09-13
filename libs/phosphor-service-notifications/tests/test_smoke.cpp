@@ -71,6 +71,8 @@ private Q_SLOTS:
     void invokeActionEmitsActivationTokenBeforeAction();
     void replaceUpdatesExpiry();
     void invokeActionUnknownIdIsNoop();
+    void pausePreservesLifetimeAndReplacement();
+    void replyRequiresAnAdvertisedAction();
     void modelSeedsFromServer();
     void modelInsertsOnAdd();
     void modelRemovesOnClose();
@@ -147,9 +149,10 @@ void NotificationsSmokeTest::capabilitiesAdvertiseExactSet()
     // body-markup stays out until a renderer exists (GetCapabilities documents
     // the same). Pin the full set so a capability silently dropped from — or
     // added to — the server is caught.
-    QCOMPARE(QSet<QString>(caps.begin(), caps.end()),
-             (QSet<QString>{QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static"),
-                            QStringLiteral("persistence")}));
+    QCOMPARE(
+        QSet<QString>(caps.begin(), caps.end()),
+        (QSet<QString>{QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static"),
+                       QStringLiteral("persistence"), QStringLiteral("body-images"), QStringLiteral("inline-reply")}));
 }
 
 void NotificationsSmokeTest::notifyAllocatesMonotonicNonZeroIds()
@@ -448,7 +451,7 @@ void NotificationsSmokeTest::invokeActionKeepsResidentOpen()
     QVariantMap hints;
     hints.insert(QStringLiteral("resident"), true);
     const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("r"), QString(),
-                                   {QStringLiteral("more")}, hints, 0);
+                                   {QStringLiteral("more"), QStringLiteral("More")}, hints, 0);
 
     server->invokeAction(id, QStringLiteral("more"));
 
@@ -470,7 +473,7 @@ void NotificationsSmokeTest::invokeActionEmitsActivationTokenBeforeAction()
     QSignalSpy tokenSpy(server.get(), &NotificationServer::ActivationToken);
 
     const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("a"), QString(),
-                                   {QStringLiteral("default")}, {}, 0);
+                                   {QStringLiteral("default"), QStringLiteral("Open")}, {}, 0);
     server->invokeAction(id, QStringLiteral("default"), QStringLiteral("tok-123"));
 
     QCOMPARE(tokenSpy.count(), 1);
@@ -634,6 +637,40 @@ void NotificationsSmokeTest::modelClearsWhenServerDestroyed()
     server.reset();
     QCOMPARE(model.rowCount(), 0);
     QVERIFY(model.server() == nullptr);
+}
+
+void NotificationsSmokeTest::pausePreservesLifetimeAndReplacement()
+{
+    auto server = makeServer();
+    QSignalSpy closed(server.get(), &NotificationServer::NotificationClosed);
+    const uint id = server->Notify(QStringLiteral("app"), 0, {}, QStringLiteral("Read me"), {}, {}, {}, 100);
+    server->setExpiryPaused(id, true);
+    QTest::qWait(160);
+    QCOMPARE(closed.count(), 0);
+    server->Notify(QStringLiteral("app"), id, {}, QStringLiteral("Still reading"), {}, {}, {}, 120);
+    QTest::qWait(160);
+    QCOMPARE(closed.count(), 0);
+    server->setExpiryPaused(id, false);
+    QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 1000);
+    QCOMPARE(closed.first()[1].toUInt(), 1u);
+}
+void NotificationsSmokeTest::replyRequiresAnAdvertisedAction()
+{
+    auto server = makeServer();
+    QSignalSpy replied(server.get(), &NotificationServer::replySent);
+    QSignalSpy actions(server.get(), &NotificationServer::ActionInvoked);
+    uint id = server->Notify(QStringLiteral("chat"), 0, {}, {}, {}, {QStringLiteral("default"), QStringLiteral("Open")},
+                             {}, 0);
+    QVERIFY(!server->reply(id, QStringLiteral("Hello")));
+    server->invokeAction(id, QStringLiteral("missing"));
+    QCOMPARE(actions.count(), 0);
+    id = server->Notify(QStringLiteral("chat"), 0, {}, {}, {},
+                        {QStringLiteral("inline-reply"), QStringLiteral("Reply")}, {}, 0);
+    QVERIFY(!server->reply(id, QStringLiteral("  ")));
+    QVERIFY(server->reply(id, QStringLiteral("Hello")));
+    QCOMPARE(replied.count(), 1);
+    QCOMPARE(replied.first()[1].toString(), QStringLiteral("Hello"));
+    QVERIFY(!server->reply(id, QStringLiteral("Again")));
 }
 
 QTEST_GUILESS_MAIN(NotificationsSmokeTest)

@@ -23,6 +23,8 @@
 #include <PhosphorServiceNotifications/NotificationServer.h>
 
 #include <QCoreApplication>
+#include <QTemporaryDir>
+#include <PhosphorServiceIconTheme/IconImageProvider.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -54,6 +56,9 @@ private Q_SLOTS:
     void actingOnAClosedEntryIsRefused();
     void newestIsFirst();
     void focusRetainsNotificationsWithoutToasting();
+    void unreadCountFollowsRetentionAndUndo();
+    void richContentSurvivesExpiry();
+    void groupedPresentationAndSuppression();
 
 private:
     /// Send a Notify over the wire and return the id the server assigned.
@@ -90,6 +95,9 @@ void TestNotificationController::init()
     // ids keep climbing across cases, which is why nothing below asserts on
     // a literal id; the list, however, has to start empty or every case
     // would have to be written count-agnostically for no benefit.
+    m_controller.reset();
+    for (auto* n : m_server->notifications())
+        m_server->CloseNotification(n->id());
     m_controller = std::make_unique<NotificationController>(m_server.get());
 }
 
@@ -253,4 +261,84 @@ void TestNotificationController::focusRetainsNotificationsWithoutToasting()
     notify(QStringLiteral("Show this now"));
     QCOMPARE(toasts.count(), 1);
     QCOMPARE(m_controller->rowCount(), 2);
+}
+
+void TestNotificationController::unreadCountFollowsRetentionAndUndo()
+{
+    for (int i = 0; i < 55; ++i)
+        notify(QString::number(i));
+    QCOMPARE(m_controller->rowCount(), 50);
+    QCOMPARE(m_controller->unreadCount(), 50);
+    const uint id = m_controller->index(0).data(NotificationController::IdRole).toUInt();
+    m_controller->markRead(id);
+    QCOMPARE(m_controller->unreadCount(), 49);
+    m_controller->clear();
+    QCOMPARE(m_controller->unreadCount(), 0);
+    QVERIFY(m_controller->canUndo());
+    const uint latest = notify(QStringLiteral("Arrived after clear"));
+    m_controller->undoClear();
+    QCOMPARE(m_controller->rowCount(), 50);
+    QCOMPARE(m_controller->unreadCount(), 49);
+    QCOMPARE(m_controller->index(0).data(NotificationController::IdRole).toUInt(), latest);
+    QVERIFY(!m_controller->index(1).data(NotificationController::LiveRole).toBool());
+    QVERIFY(m_controller->index(1)
+                .data(NotificationController::PayloadRole)
+                .toMap()
+                .value(QStringLiteral("actions"))
+                .toList()
+                .isEmpty());
+    m_controller->dismiss(latest);
+    QCOMPARE(m_controller->unreadCount(), 48);
+}
+void TestNotificationController::richContentSurvivesExpiry()
+{
+    QTemporaryDir dir;
+    QImage picture(30, 20, QImage::Format_RGB32);
+    picture.fill(Qt::red);
+    const QString path = dir.filePath(QStringLiteral("picture.png"));
+    QVERIFY(picture.save(path));
+    QSignalSpy arrivals(m_controller.get(), &NotificationController::notificationArrived);
+    QSignalSpy updates(m_controller.get(), &NotificationController::notificationUpdated);
+    const auto actions = QStringList{QStringLiteral("open"), QStringLiteral("Open"), QStringLiteral("inline-reply"),
+                                     QStringLiteral("Reply")};
+    const uint id =
+        m_server->Notify(QStringLiteral("Chat"), 0, QStringLiteral("mail-message"), QStringLiteral("Picture"),
+                         QString(2000, QLatin1Char('x')), actions, {{QStringLiteral("image-path"), path}}, 0);
+    const auto payload = arrivals.first().first().toMap();
+    QCOMPARE(payload.value(QStringLiteral("id")).toUInt(), id);
+    QCOMPARE(payload.value(QStringLiteral("actions")).toList().size(), 2);
+    QCOMPARE(payload.value(QStringLiteral("appIcon")).toString(), QStringLiteral("mail-message"));
+    const auto url = payload.value(QStringLiteral("imageSource")).toString();
+    QVERIFY(!url.isEmpty());
+    m_server->CloseNotification(id);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    auto archived = m_controller->index(0).data(NotificationController::PayloadRole).toMap();
+    QCOMPARE(archived.value(QStringLiteral("body")).toString().size(), 2000);
+    QCOMPARE(archived.value(QStringLiteral("imageSource")).toString(), url);
+    QVERIFY(archived.value(QStringLiteral("actions")).toList().isEmpty());
+    PhosphorServiceIconTheme::IconImageProvider provider;
+    QSize size;
+    QVERIFY(!provider.requestImage(url.mid(url.indexOf(QLatin1Char('/'), 8) + 1), &size, {}).isNull());
+    QCOMPARE(size, QSize(30, 20));
+}
+void TestNotificationController::groupedPresentationAndSuppression()
+{
+    QSignalSpy arrivals(m_controller.get(), &NotificationController::notificationArrived);
+    m_controller->setPopupsSuppressed(true);
+    const uint a = notify(QStringLiteral("One"));
+    notify(QStringLiteral("Two"));
+    QCOMPARE(arrivals.count(), 0);
+    auto rows = m_controller->presentation(false, true, {});
+    QCOMPARE(rows.size(), 4); // Date, app group, newest card, earlier flap.
+    const QString key =
+        rows[1].toMap().value(QStringLiteral("payload")).toMap().value(QStringLiteral("groupKey")).toString();
+    QCOMPARE(m_controller->presentation(false, true, {key}).size(), 5);
+    QCOMPARE(m_controller->presentation(false, false, {}).size(), 3);
+    m_controller->markRead(a);
+    QCOMPARE(m_controller->presentation(true, false, {}).size(), 2);
+    m_controller->clearGroup(QStringLiteral("test-app"));
+    QCOMPARE(m_controller->rowCount(), 0);
+    m_controller->undoClear();
+    QCOMPARE(m_controller->rowCount(), 2);
+    QCOMPARE(m_controller->unreadCount(), 1);
 }

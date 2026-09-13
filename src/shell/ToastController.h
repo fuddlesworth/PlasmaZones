@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QVariantMap>
 
 namespace PhosphorShellApp {
 
@@ -34,6 +35,10 @@ public:
     // host when none is marked primary. Returns the toast id the host
     // assigned, or -1 when no host is attached or a rule suppressed it.
     Q_INVOKABLE int send(const QString& summary, const QString& body);
+    int show(const QVariantMap& notification);
+    void update(const QVariantMap& notification);
+    void remove(uint id);
+    void clear();
 
 private:
     struct Host

@@ -2441,6 +2441,7 @@ if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
             Qt6::Core
             Qt6::DBus
             PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
     )
     target_include_directories(test_notification_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
     add_test(NAME test_notification_controller COMMAND test_notification_controller)

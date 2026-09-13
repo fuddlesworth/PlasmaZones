@@ -616,14 +616,14 @@ int main(int argc, char* argv[])
     engine.addEngineHook([&notificationController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"), &notificationController);
     });
-    // One source, two surfaces. Every notification the server accepts both
-    // enters the centre and raises a toast; before this the two were fed by
-    // different paths and disagreed — a real notification appeared in the
-    // centre with no toast, and a scripted one toasted with no record.
     QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationArrived,
-                     &toastController, [&toastController](const QString& summary, const QString& body) {
-                         toastController.send(summary, body);
-                     });
+                     &toastController, &PhosphorShellApp::ToastController::show);
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationUpdated,
+                     &toastController, &PhosphorShellApp::ToastController::update);
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationRemoved,
+                     &toastController, &PhosphorShellApp::ToastController::remove);
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::dismissAllArrivals,
+                     &toastController, &PhosphorShellApp::ToastController::clear);
     engine.addEngineHook([&dashboardMedia](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("DashboardMedia"), &dashboardMedia);
     });
