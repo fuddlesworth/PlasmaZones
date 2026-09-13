@@ -8,6 +8,7 @@
 <title>Phosphor / Identity, interaction, expression</title>
 <link rel="stylesheet" href="studies.css">
 <link rel="stylesheet" href="lockscreen.css">
+<link rel="stylesheet" href="notifications.css">
 </head>
 <body>
 <header class="review-header">
@@ -20,7 +21,7 @@
 <div class="review-toolbar">
   <nav aria-label="Preview state" class="view-switch">
     <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button>
-    <button data-view="controls">Quick settings</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button>
+    <button data-view="controls">Quick settings</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button>
   </nav>
   <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
   <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Customize this shell</button>
@@ -31,6 +32,14 @@
   <button data-lock-caps aria-pressed="false">Caps Lock</button>
   <p>Use <code>demo</code> to preview unlocking. Use a made-up password here.</p>
   <span id="lock-preview-feedback" role="status"></span>
+</div>
+<div id="notification-preview-controls" class="notification-preview-controls hidden" aria-label="Notification prototype controls">
+  <span>PREVIEW INBOX</span>
+  <nav aria-label="Notification scenario"><button data-notification-scenario="everyday" aria-pressed="true">Everyday</button><button data-notification-scenario="busy" aria-pressed="false">Busy · 30 notifications</button><button data-notification-scenario="empty" aria-pressed="false">Empty</button></nav>
+  <button data-notification-inbox aria-pressed="true">Open center</button>
+  <label>Arrival <select id="notification-arrival-type" aria-label="New arrival content"><option value="text">App icon + message</option><option value="picture">With picture</option><option value="long">Long message</option><option value="rich" selected>Picture + long message</option></select></label>
+  <button data-notification-arrive>＋ New arrival</button>
+  <p>Simulated notifications. Arrival previews stay open until dismissed.</p>
 </div>
 <div class="review-layout">
 <main class="frame" aria-label="Interactive desktop mock">
@@ -57,6 +66,13 @@
 <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
 <symbol id="previous" viewBox="0 0 24 24"><path d="M5 5v14m14-14L7 12l12 7Z"/></symbol>
 <symbol id="next" viewBox="0 0 24 24"><path d="M19 5v14M5 5l12 7L5 19Z"/></symbol>
+<symbol id="message" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z M7 9h10M7 13h6"/></symbol>
+<symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6ZM12 8v5m0 3v.1"/></symbol>
+<symbol id="close-icon" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
+<symbol id="check-all" viewBox="0 0 24 24"><path d="m2 12 4 4L16 6m-5 9 2 2L23 7"/></symbol>
+<symbol id="picture" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
 </defs></svg>
   <div class="wallpaper" aria-hidden="true"><div class="orb"></div><div class="landscape"></div><div class="contour"></div></div>
   <div class="desktop-watermark">PHOSPHOR<span>your windows, in place</span></div>
@@ -67,6 +83,8 @@
   <section id="controls" class="hidden" aria-label="Quick settings"></section>
   <section id="launcher" class="hidden" aria-label="Launcher"></section>
   <section id="datetime" class="hidden" aria-label="Date and time"></section>
+  <section id="notifications" class="hidden" aria-label="Notification center" role="dialog"></section>
+  <section id="notification-arrival" class="hidden" aria-label="New notification"></section>
   <section id="session" class="hidden" aria-label="Session actions" role="dialog" aria-modal="true"></section>
   <div id="osd" class="osd hidden" role="status"></div>
   <div id="toast" class="toast material hidden" role="status"></div>
@@ -92,6 +110,10 @@
     <label class="check"><input data-setting="lockMedia" type="checkbox"> Show media while locked</label>
     <label class="check"><input data-setting="lockNotifications" type="checkbox" checked> Show notification count</label>
   </fieldset>
+  <fieldset class="notification-customization"><legend>Notification center</legend>
+    <label>Organization<select data-setting="notificationGrouping"><option value="app">Group by application</option><option value="time">Chronological list</option></select></label>
+    <label class="check"><input data-setting="notificationPreviews" type="checkbox" checked> Show notification previews</label>
+  </fieldset>
   <div class="customizer-actions"><button id="export">Export preset ↓</button><button id="reset">Reset</button></div>
   <div class="customizer-note">The signature is the relationship between map, windows, and color field. The default palette is a starting point; the geometry and focus cues still work in every preset.</div>
 </aside>
@@ -105,6 +127,7 @@
 <footer class="review-footer">Browser interaction studies with simulated windows and devices. Mode changes, window focus, workspace switching, and customization are functional in the mock. No system settings are changed.</footer>
 <script src="visualizer.js"></script>
 <script src="lockscreen.js"></script>
+<script src="notifications.js"></script>
 <script src="studies.js"></script>
 </body>
 </html>
