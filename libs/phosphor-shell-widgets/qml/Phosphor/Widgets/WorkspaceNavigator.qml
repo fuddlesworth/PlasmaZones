@@ -17,8 +17,8 @@ FocusScope {
     readonly property bool scrolling: map && map.mode === 2
     readonly property bool wide: width >= 540
     signal activated(string windowId)
-    implicitWidth: 620
-    implicitHeight: wide ? 250 : 360
+    implicitWidth: 654
+    implicitHeight: (wide ? 222 : 456) + (scrolling ? 44 : 0)
 
     function select(index) {
         if (!windows.length) {
@@ -81,106 +81,88 @@ FocusScope {
     GridLayout {
         anchors.fill: parent
         columns: root.wide ? 2 : 1
-        columnSpacing: 18
+        columnSpacing: 20
         rowSpacing: 12
-        ColumnLayout {
+        Rectangle {
+            id: mapCanvas
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: root.wide ? root.width * 0.52 : root.width
-            spacing: 8
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.minimumHeight: root.wide ? 155 : 108
-                radius: Math.min(12, Appearance.radius)
-                color: Qt.alpha(Appearance.text, 0.04)
-                border.width: 1
-                border.color: Appearance.outline
-                PlacementMiniature {
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    model: root.map
-                    interactive: true
-                    labels: !root.scrolling
-                    onCellClicked: id => {
-                        const cell = root.map.cells.find(c => c.id === id);
-                        const index = cell ? root.windows.findIndex(w => w.windowId === cell.windowId) : -1;
+            Layout.preferredWidth: root.wide ? (root.width - 20) * 1.7 / 2.7 : root.width
+            Layout.preferredHeight: 222
+            Layout.minimumWidth: 0
+            color: Appearance.recess
+            radius: Appearance.radius * 0.6
+            clip: true
+            Repeater {
+                model: !root.scrolling && root.map ? root.map.cells : []
+                WindowMapCard {
+                    id: card
+                    required property var modelData
+                    required property int index
+                    colorIndex: index
+                    windowInfo: modelData
+                    x: 5 + modelData.x * (mapCanvas.width - 10)
+                    y: 5 + modelData.y * (mapCanvas.height - 10)
+                    width: Math.max(1, modelData.w * (mapCanvas.width - 10) - 4)
+                    height: Math.max(1, modelData.h * (mapCanvas.height - 10) - 4)
+                    selected: !!modelData.windowId && root.selectedId === modelData.windowId
+                    draggable: !!modelData.windowId
+                    onClicked: {
+                        const index = root.windows.findIndex(w => w.windowId === modelData.windowId);
                         if (index >= 0)
                             root.choose(index);
+                        else if (root.map && root.selectedWindow)
+                            root.map.placeNavigationWindowInZone(root.selectedId, modelData.id);
                         else if (root.map)
-                            root.map.activate(id);
+                            root.map.activate(modelData.id);
                     }
-                    onCellMoved: (fromId, toId) => root.map.moveCell(fromId, toId)
-                    onCellFloatToggled: id => root.map.toggleFloat(id)
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                visible: root.scrolling
-                ShellButton {
-                    iconName: "go-previous"
-                    label: qsTr("Previous window")
-                    enabled: root.selectedIndex > 0
-                    onClicked: root.select(root.selectedIndex - 1)
-                }
-                Text {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("%1 of %2 windows").arg(root.selectedIndex + 1).arg(root.windows.length)
-                    color: Appearance.muted
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: 11
-                }
-                ShellButton {
-                    iconName: "go-next"
-                    label: qsTr("Next window")
-                    enabled: root.selectedIndex >= 0 && root.selectedIndex < root.windows.length - 1
-                    onClicked: root.select(root.selectedIndex + 1)
+                    onDragFinished: (localX, localY) => {
+                        const point = card.mapToItem(mapCanvas, localX, localY);
+                        const x = (point.x - 5) / (mapCanvas.width - 10), y = (point.y - 5) / (mapCanvas.height - 10);
+                        const target = root.map.cells.find(c => x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h);
+                        if (target && target.id !== modelData.id)
+                            root.map.moveCell(modelData.id, target.id);
+                    }
                 }
             }
             ListView {
                 id: strip
                 objectName: "windowStrip"
-                Layout.fillWidth: true
-                Layout.preferredHeight: 64
+                anchors.fill: parent
+                anchors.margins: 5
                 visible: root.scrolling
                 orientation: ListView.Horizontal
-                spacing: 7
+                spacing: 8
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                model: root.windows
-                ScrollBar.horizontal: ScrollBar {}
-                delegate: AbstractButton {
+                model: root.scrolling ? root.windows : []
+                ScrollBar.horizontal: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    height: 5
+                }
+                delegate: WindowMapCard {
                     required property var modelData
                     required property int index
-                    width: 112
-                    height: 58
-                    Accessible.name: modelData.title || modelData.appId || qsTr("Window %1").arg(index + 1)
+                    width: 104
+                    height: 196
+                    colorIndex: index
+                    windowInfo: modelData
+                    selected: root.selectedId === modelData.windowId
                     onClicked: root.choose(index)
-                    background: Rectangle {
-                        radius: Math.min(10, Appearance.radius)
-                        color: Qt.alpha(Appearance.at(modelData.t), root.selectedId === modelData.windowId ? 0.27 : 0.10)
-                        border.width: 1
-                        border.color: root.selectedId === modelData.windowId ? Appearance.at(modelData.t) : Appearance.outline
+                }
+                Rectangle {
+                    parent: strip.contentItem
+                    x: {
+                        const index = root.windows.findIndex(w => !w.offscreen && !w.minimized);
+                        return Math.max(0, index) * 112 - 2;
                     }
-                    contentItem: Column {
-                        spacing: 4
-                        Text {
-                            width: parent.width
-                            text: String(index + 1).padStart(2, "0") + (modelData.offscreen ? "  ·  " + qsTr("Offscreen") : "")
-                            color: Appearance.muted
-                            font.pixelSize: 10
-                            elide: Text.ElideRight
-                        }
-                        Text {
-                            width: parent.width
-                            text: modelData.appId || modelData.title || qsTr("Window")
-                            color: Appearance.text
-                            font.pixelSize: 11
-                            elide: Text.ElideRight
-                        }
-                    }
-                    padding: 8
+                    y: -2
+                    width: Math.max(1, root.windows.filter(w => !w.offscreen && !w.minimized).length) * 112 - 4
+                    height: 204
+                    visible: root.windows.length > 0
+                    radius: 8
+                    color: "transparent"
+                    border.width: 2
+                    border.color: Qt.alpha(Appearance.text, 0.65)
                 }
             }
         }
@@ -188,65 +170,26 @@ FocusScope {
             id: titles
             objectName: "windowTitles"
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: root.width * 0.44
-            Layout.minimumHeight: 120
-            Layout.maximumHeight: 250
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: root.wide ? (root.width - 20) / 2.7 : root.width
+            Layout.preferredHeight: 222
             clip: true
-            spacing: 5
+            spacing: 6
             boundsBehavior: Flickable.StopAtBounds
             model: root.windows
             ScrollBar.vertical: ScrollBar {
                 active: titles.contentHeight > titles.height
             }
-            delegate: AbstractButton {
-                id: row
+            delegate: WindowMapCard {
                 required property var modelData
                 required property int index
                 width: titles.width
                 height: 56
-                padding: 10
-                Accessible.name: modelData.title || modelData.appId || qsTr("Window %1").arg(index + 1)
+                row: true
+                colorIndex: index
+                windowInfo: modelData
+                selected: root.selectedId === modelData.windowId
                 onClicked: root.choose(index)
-                background: Rectangle {
-                    radius: Math.min(11, Appearance.radius)
-                    color: root.selectedId === row.modelData.windowId ? Qt.alpha(Appearance.at(row.modelData.t), 0.18) : row.hovered ? Appearance.card : "transparent"
-                    border.width: root.selectedId === row.modelData.windowId || row.visualFocus ? 1 : 0
-                    border.color: row.visualFocus ? Appearance.text : Qt.alpha(Appearance.at(row.modelData.t), 0.55)
-                }
-                contentItem: RowLayout {
-                    spacing: 10
-                    Kirigami.Icon {
-                        Layout.preferredWidth: 22
-                        Layout.preferredHeight: 22
-                        source: row.modelData.appId || "application-x-executable"
-                        fallback: "application-x-executable"
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
-                        Text {
-                            Layout.fillWidth: true
-                            text: row.modelData.appId || qsTr("Window %1").arg(row.index + 1)
-                            color: Appearance.text
-                            font.family: Tokens.font_family_ui
-                            font.pixelSize: 12
-                            elide: Text.ElideRight
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: row.modelData.title || (row.modelData.minimized ? qsTr("Minimized") : qsTr("Untitled window"))
-                            color: Appearance.muted
-                            font.family: Tokens.font_family_ui
-                            font.pixelSize: 10
-                            elide: Text.ElideRight
-                        }
-                    }
-                    Text {
-                        text: row.modelData.urgent ? "●" : row.modelData.offscreen ? "↗" : ""
-                        color: Appearance.at(row.modelData.t)
-                    }
-                }
             }
             Text {
                 anchors.centerIn: parent
@@ -256,7 +199,35 @@ FocusScope {
                 wrapMode: Text.WordWrap
                 horizontalAlignment: Text.AlignHCenter
                 color: Appearance.muted
-                font.pixelSize: 12
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 11
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.columnSpan: root.wide ? 2 : 1
+            Layout.preferredHeight: 32
+            visible: root.scrolling
+            ShellButton {
+                text: qsTr("← Previous")
+                labelSize: 10
+                enabled: root.selectedIndex > 0
+                onClicked: root.select(root.selectedIndex - 1)
+            }
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                text: qsTr("Window %1 of %2 · Drag scrollbar to browse").arg(Math.max(0, root.selectedIndex + 1)).arg(root.windows.length)
+                color: Appearance.muted
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 10
+                elide: Text.ElideRight
+            }
+            ShellButton {
+                text: qsTr("Next →")
+                labelSize: 10
+                enabled: root.selectedIndex >= 0 && root.selectedIndex < root.windows.length - 1
+                onClicked: root.select(root.selectedIndex + 1)
             }
         }
     }

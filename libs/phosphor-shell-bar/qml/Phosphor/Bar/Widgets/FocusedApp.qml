@@ -7,7 +7,8 @@ import Phosphor.Shell
 BarWidget {
     id: root
     property real railT: 0.15
-    readonly property var activeWindow: Toplevels.activeToplevel
+    readonly property var placementMap: Screen.name ? PlacementMap.forScreen(Screen.name) : null
+    readonly property var activeWindow: Toplevels.activeToplevel || (placementMap ? placementMap.windows.find(w => w.focused) : null)
     readonly property string appId: activeWindow ? activeWindow.appId.split(".").pop() : ""
     readonly property string appName: appId ? appId.charAt(0).toUpperCase() + appId.slice(1) : qsTr("Desktop")
     contentWidth: label.width

@@ -28,6 +28,7 @@ TestCase {
                 }
             ]
             property var cells: []
+            property rect workArea: Qt.rect(0, 76, 1440, 824)
             property int mode: 1
             property var lens: ({})
             property int overflowLeft: 0
@@ -65,16 +66,24 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(map.activated, "b");
     }
-    function test_previewFitsAndPreservesAspect() {
-        const stage = createTemporaryObject(stageComponent, testCase);
+    function test_workAreaMapsToPreviewAcrossOutputShapes() {
+        const map = createTemporaryObject(mapComponent, testCase);
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            mapFor: () => map
+        });
         for (const size of [[1440, 900], [800, 600], [900, 1440]]) {
             stage.width = size[0];
             stage.height = size[1];
+            map.workArea = Qt.rect(0, 76, stage.width, stage.height - 76);
             verify(stage.previewRect.x > 0);
             verify(stage.previewRect.y > 0);
             verify(stage.previewRect.x + stage.previewRect.width < stage.width);
             verify(stage.previewRect.y + stage.previewRect.height < stage.height - 80);
-            fuzzyCompare(stage.previewRect.width / stage.previewRect.height, stage.width / stage.height, 0.001);
+            const sx = stage.nativeRect.width / stage.width, sy = stage.nativeRect.height / stage.height;
+            fuzzyCompare(stage.nativeRect.x + map.workArea.x * sx, stage.previewRect.x, 0.001);
+            fuzzyCompare(stage.nativeRect.y + map.workArea.y * sy, stage.previewRect.y, 0.001);
+            fuzzyCompare(map.workArea.width * sx, stage.previewRect.width, 0.001);
+            fuzzyCompare(map.workArea.height * sy, stage.previewRect.height, 0.001);
         }
     }
 }

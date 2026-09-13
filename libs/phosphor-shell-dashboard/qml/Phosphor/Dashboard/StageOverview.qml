@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Phosphor.Theme
 import Phosphor.Widgets
 
@@ -11,6 +12,7 @@ FocusScope {
     property string screenName: ""
     property var workspaces: null
     property var mapFor: null
+    property var surfaceEffects: null
     property bool open: false
     readonly property bool fullScreen: true
     readonly property int desktopCount: workspaces ? workspaces.count : 0
@@ -21,13 +23,19 @@ FocusScope {
     readonly property int selectedIndex: windows.findIndex(w => w.windowId === selectedId)
     readonly property var selectedWindow: selectedIndex >= 0 ? windows[selectedIndex] : null
     readonly property bool compact: width < 1100
-    readonly property real sideWidth: compact ? 108 : 168
-    readonly property real inspectorWidth: compact ? 212 : 268
-    readonly property real inset: Appearance.gap + 8
-    // Preserve the output's aspect so the compositor uses a uniform scale.
-    readonly property real previewWidth: Math.max(100, width - sideWidth - inspectorWidth - 4 * inset)
-    readonly property real previewHeight: previewWidth * height / Math.max(1, width)
-    readonly property rect previewRect: Qt.rect(sideWidth + 2 * inset, Math.max(106, (height - previewHeight) / 2 - 20), previewWidth, previewHeight)
+    readonly property real sideWidth: compact ? 112 : 170
+    readonly property real inspectorWidth: compact ? 180 : 210
+    readonly property real inset: compact ? 18 : 30
+    readonly property real previewLeft: compact ? 150 : 228
+    readonly property real previewTop: Math.min(174, height * 0.22)
+    readonly property rect previewRect: Qt.rect(previewLeft, previewTop, Math.max(100, width - previewLeft - inspectorWidth - (compact ? 40 : 54)), Math.max(120, height - previewTop - Math.min(178, height * 0.2)))
+    readonly property rect workArea: map && map.workArea && map.workArea.width > 0 && map.workArea.height > 0 ? map.workArea : Qt.rect(0, 0, width, height)
+    // The reference fits the work area into the preview. The native effect
+    // transforms output coordinates, including the bar's reserved inset.
+    readonly property rect nativeRect: Qt.rect(previewRect.x - workArea.x * previewRect.width / workArea.width, previewRect.y - workArea.y * previewRect.height / workArea.height, width * previewRect.width / workArea.width, height * previewRect.height / workArea.height)
+    readonly property rect barRect: Qt.rect(Appearance.barInset, Appearance.bottom ? height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset, width - Appearance.barInset * 2, Appearance.barHeight)
+    readonly property bool scrolling: map && map.mode === 2
+    readonly property string selectedApp: selectedWindow ? appName(selectedWindow.appId) : qsTr("No window selected")
     signal closeRequested
     signal released
     property real progress: 0
@@ -51,10 +59,15 @@ FocusScope {
             release.restart();
         }
     }
-    onPreviewRectChanged: if (open)
+    onNativeRectChanged: if (open)
         Qt.callLater(refreshPreview)
+    onPreviewRectChanged: Qt.callLater(refreshSurface)
+    onBarRectChanged: Qt.callLater(refreshSurface)
+    onSurfaceEffectsChanged: Qt.callLater(refreshSurface)
+    Window.onWindowChanged: Qt.callLater(refreshSurface)
     Component.onCompleted: {
         reconcile();
+        refreshSurface();
         if (open) {
             progress = 1;
             refreshPreview();
@@ -79,7 +92,15 @@ FocusScope {
         if (open && map && typeof map.refreshGeometry === "function")
             map.refreshGeometry();
         if (open && width > 0 && height > 0)
-            desktop.show(screenName, Qt.rect(previewRect.x / width, previewRect.y / height, previewRect.width / width, previewRect.height / height), !Motion.reducedMotion);
+            desktop.show(screenName, Qt.rect(nativeRect.x / width, nativeRect.y / height, nativeRect.width / width, nativeRect.height / height), !Motion.reducedMotion);
+    }
+    function refreshSurface() {
+        if (surfaceEffects)
+            surfaceEffects.setOverviewRegions(root, barRect, previewRect);
+    }
+    function appName(id) {
+        const name = String(id || "").replace(/\.desktop$/, "").split(".").pop();
+        return name ? name.charAt(0).toUpperCase() + name.slice(1).replace(/[-_]/g, " ") : qsTr("Window");
     }
     function reconcile() {
         select(selectedIndex < 0 ? Math.max(0, windows.findIndex(w => w.focused)) : selectedIndex);
@@ -130,76 +151,124 @@ FocusScope {
         event.accepted = true;
     }
 
-    // Four bands leave a transparent aperture onto the live, scaled desktop.
-    Repeater {
-        model: [Qt.rect(0, 0, root.width, root.previewRect.y), Qt.rect(0, root.previewRect.y, root.previewRect.x, root.previewRect.height), Qt.rect(root.previewRect.x + root.previewRect.width, root.previewRect.y, root.width - root.previewRect.x - root.previewRect.width, root.previewRect.height), Qt.rect(0, root.previewRect.y + root.previewRect.height, root.width, root.height - root.previewRect.y - root.previewRect.height)]
-        Rectangle {
-            required property var modelData
-            x: modelData.x
-            y: modelData.y
-            width: modelData.width
-            height: modelData.height
-            color: Qt.alpha(Appearance.surface, 0.96)
-            TapHandler {
-                onTapped: root.closeRequested()
+    // An aperture preserves the live desktop and the bar. The matching
+    // input region lets clicks reach the bar's own layer surface.
+    Shape {
+        anchors.fill: parent
+        ShapePath {
+            strokeWidth: 0
+            fillColor: Qt.alpha(Appearance.recess, 0.76)
+            fillRule: ShapePath.OddEvenFill
+            PathSvg {
+                path: {
+                    function rect(r) {
+                        return "M " + r.x + " " + r.y + " h " + r.width + " v " + r.height + " h " + (-r.width) + " Z ";
+                    }
+                    return rect(Qt.rect(0, 0, root.width, root.height)) + rect(root.previewRect) + rect(root.barRect);
+                }
             }
         }
     }
+    MouseArea {
+        anchors.fill: parent
+        onClicked: root.closeRequested()
+    }
     Column {
-        x: root.previewRect.x
-        y: Math.max(24, root.previewRect.y - 68)
+        x: root.previewRect.x + 2
+        y: root.previewRect.y - 72
         spacing: 8
         Text {
             text: qsTr("WORKSPACE %1 / %2").arg(String(root.currentDesktop + 1).padStart(2, "0")).arg(root.modeName(root.map ? root.map.mode : -1).toUpperCase())
             color: Appearance.muted
-            font.pixelSize: 10
-            font.letterSpacing: 1.2
-        }
-        Text {
-            text: qsTr("Shape your space")
-            color: Appearance.text
             font.family: Tokens.font_family_ui
-            font.pixelSize: root.compact ? 23 : 30
+            font.pixelSize: 9
+            font.letterSpacing: 2
             font.weight: Font.DemiBold
         }
+        Text {
+            text: root.workspaces ? root.workspaces.activeName : qsTr("Workspace %1").arg(root.currentDesktop + 1)
+            color: Appearance.text
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 28
+            font.weight: Font.Medium
+        }
+    }
+    Text {
+        x: root.previewRect.x
+        y: root.previewRect.y - 50
+        width: root.previewRect.width - 4
+        horizontalAlignment: Text.AlignRight
+        visible: !root.compact
+        text: qsTr("Click to select · Enter or double-click to open")
+        color: Appearance.muted
+        font.family: Tokens.font_family_ui
+        font.pixelSize: 11
     }
     ListView {
+        id: workspaceList
         x: root.inset
-        y: 104
+        y: root.previewRect.y
         width: root.sideWidth
-        height: root.height - 190
+        height: root.height - y - 80
         clip: true
-        spacing: 12
-        model: root.desktopCount
+        spacing: 14
+        model: root.workspaces ? root.workspaces.model : null
+        boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
         delegate: AbstractButton {
             id: workspace
             required property int index
+            required property string name
+            required property string workspaceId
+            required property bool isActive
             readonly property var map: root.mapFor ? root.mapFor(index) : null
-            width: ListView.view.width
-            height: width * 0.66 + 30
-            padding: 10
-            Accessible.name: qsTr("Workspace %1").arg(index + 1)
-            onClicked: if (root.map)
-                root.map.switchDesktop(index)
+            width: workspaceList.width
+            height: root.compact ? 98 : 116
+            padding: 12
+            Accessible.name: name
+            onClicked: root.workspaces.switchTo(workspaceId)
             background: Rectangle {
-                radius: Math.min(14, Appearance.radius)
-                color: Appearance.card
+                radius: Appearance.radius * 0.7
+                color: Appearance.surface
                 border.width: 1
-                border.color: workspace.index === root.currentDesktop || workspace.visualFocus ? Appearance.accent : Appearance.outline
+                border.color: workspace.isActive || workspace.visualFocus ? Appearance.accent : Appearance.outline
             }
             contentItem: ColumnLayout {
-                spacing: 10
-                PlacementMiniature {
+                spacing: 9
+                Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    model: workspace.map
-                    interactive: false
+                    radius: 5
+                    color: Appearance.recess
+                    PlacementMiniature {
+                        anchors.fill: parent
+                        anchors.margins: 3
+                        model: workspace.map
+                        interactive: false
+                    }
                 }
-                Text {
-                    text: qsTr("Workspace %1").arg(workspace.index + 1)
-                    color: Appearance.text
-                    font.pixelSize: 11
+                RowLayout {
+                    spacing: 9
+                    Text {
+                        text: String(workspace.index + 1).padStart(2, "0")
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 11
+                        color: Appearance.muted
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: workspace.name
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 11
+                        color: workspace.isActive ? Appearance.text : Appearance.muted
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        text: workspace.map ? workspace.map.windows.length : ""
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 11
+                        color: Appearance.muted
+                    }
                 }
             }
         }
@@ -210,15 +279,8 @@ FocusScope {
         width: root.previewRect.width
         height: root.previewRect.height
         clip: true
-        Rectangle {
-            anchors.fill: parent
-            color: desktop.active ? "transparent" : Appearance.surface
-            border.width: 1
-            border.color: Appearance.outline
-        }
         PlacementMiniature {
             anchors.fill: parent
-            anchors.margins: 12
             visible: !desktop.active
             model: root.map
             interactive: true
@@ -227,6 +289,8 @@ FocusScope {
                 const cell = root.map.cells.find(c => c.id === id);
                 if (cell && cell.windowId)
                     root.selectedId = cell.windowId;
+                else if (root.selectedWindow)
+                    root.map.placeNavigationWindowInZone(root.selectedId, id);
                 else
                     root.map.activate(id);
             }
@@ -234,36 +298,59 @@ FocusScope {
         Repeater {
             model: desktop.active ? root.windows : []
             delegate: AbstractButton {
+                id: liveWindow
                 required property var modelData
                 required property int index
-                readonly property var area: root.map.workArea
-                // Placement cells use work-area fractions; Stage transforms
-                // the whole output, including the reserved bar inset.
-                x: (area.x + modelData.x * area.width) * root.previewRect.width / root.width
-                y: (area.y + modelData.y * area.height) * root.previewRect.height / root.height
-                width: modelData.w * area.width * root.previewRect.width / root.width
-                height: modelData.h * area.height * root.previewRect.height / root.height
+                x: modelData.x * root.previewRect.width
+                y: modelData.y * root.previewRect.height
+                width: modelData.w * root.previewRect.width
+                height: modelData.h * root.previewRect.height
                 visible: !modelData.offscreen && !modelData.minimized
                 Accessible.name: modelData.title || modelData.appId
                 onClicked: root.select(index)
                 onDoubleClicked: root.openSelected()
                 background: Rectangle {
+                    radius: Appearance.radius
                     color: "transparent"
-                    border.width: root.selectedId === modelData.windowId ? 2 : 0
-                    border.color: Appearance.at(modelData.t)
+                    border.width: root.selectedId === liveWindow.modelData.windowId ? 1 : 0
+                    border.color: Appearance.windowColor(liveWindow.index)
+                }
+                contentItem: Item {
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.rightMargin: 15
+                        anchors.bottomMargin: 14
+                        width: Math.min(parent.width - 20, label.implicitWidth + 20)
+                        height: 28
+                        radius: 6
+                        color: Appearance.card
+                        Text {
+                            id: label
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            text: root.selectedId === liveWindow.modelData.windowId ? qsTr("Selected · Enter to open") : qsTr("Click to select")
+                            font.family: Tokens.font_family_ui
+                            font.pixelSize: 10
+                            color: Appearance.text
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
                 }
             }
         }
     }
     ShellSurface {
-        x: root.width - root.inspectorWidth - root.inset
-        y: 104
+        x: root.width - root.inspectorWidth - root.inset + (root.compact ? 0 : 2)
+        y: root.previewRect.y
         width: root.inspectorWidth
-        height: root.height - 184
+        height: Math.min(inspector.implicitHeight + 40, root.height - y - 80)
         railT: 0.82
         Flickable {
             anchors.fill: parent
-            anchors.margins: 16
+            anchors.margins: 20
             contentWidth: width
             contentHeight: inspector.implicitHeight
             clip: true
@@ -272,75 +359,151 @@ FocusScope {
             ColumnLayout {
                 id: inspector
                 width: parent.width
-                spacing: 12
+                spacing: 0
                 Text {
                     text: qsTr("THIS WORKSPACE")
                     color: Appearance.muted
-                    font.pixelSize: 10
-                    font.letterSpacing: 1
-                }
-                Text {
-                    text: qsTr("Placement")
-                    color: Appearance.text
-                    font.pixelSize: 20
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                    font.letterSpacing: 2
                     font.weight: Font.DemiBold
                 }
-                Repeater {
+                Text {
+                    Layout.topMargin: 8
+                    text: qsTr("Shape the space")
+                    color: Appearance.text
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 15
+                    font.weight: Font.Medium
+                }
+                Text {
+                    Layout.topMargin: 18
+                    text: qsTr("Placement")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 10
+                }
+                ShellComboBox {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    implicitHeight: 33
                     model: [qsTr("Snapping"), qsTr("Tiling"), qsTr("Scrolling")]
-                    ShellButton {
-                        required property int index
-                        required property string modelData
-                        Layout.fillWidth: true
-                        text: modelData
-                        highlighted: root.map && root.map.mode === index
-                        onClicked: root.map.setPlacementMode(index)
-                    }
+                    currentIndex: root.map ? root.map.mode : -1
+                    displayText: currentIndex < 0 ? qsTr("Off") : currentText
+                    Accessible.name: qsTr("Placement")
+                    onActivated: root.map.setPlacementMode(currentIndex)
+                }
+                Text {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 20
+                    text: root.map && root.map.mode === 0 ? qsTr("Place windows into the zones you choose.") : root.scrolling ? qsTr("Windows flow across an open strip. Scroll to find your place.") : qsTr("A main window with a supporting stack.")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 11
+                    lineHeightMode: Text.FixedHeight
+                    lineHeight: 17.6
+                    wrapMode: Text.WordWrap
                 }
                 Rectangle {
                     Layout.fillWidth: true
+                    Layout.topMargin: 17
+                    Layout.bottomMargin: 17
                     height: 1
                     color: Appearance.outline
                 }
                 Text {
                     text: qsTr("SELECTED WINDOW")
                     color: Appearance.muted
-                    font.pixelSize: 10
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                    font.letterSpacing: 0.8
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: root.selectedWindow ? root.selectedWindow.title || root.selectedWindow.appId : qsTr("No window selected")
+                    Layout.topMargin: 12
+                    text: root.selectedApp
                     color: Appearance.text
+                    font.family: Tokens.font_family_ui
                     font.pixelSize: 12
-                    wrapMode: Text.WordWrap
+                    elide: Text.ElideRight
                 }
-                ShellButton {
+                Text {
                     Layout.fillWidth: true
-                    text: qsTr("Open window")
-                    enabled: !!root.selectedWindow
-                    onClicked: root.openSelected()
+                    Layout.topMargin: 7
+                    text: root.selectedWindow ? root.selectedWindow.title : ""
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
                 }
-                ShellButton {
+                Rectangle {
                     Layout.fillWidth: true
-                    text: qsTr("Toggle floating")
-                    enabled: !!root.selectedWindow
-                    onClicked: root.map.toggleFloat(root.selectedWindow.id)
+                    Layout.topMargin: 17
+                    Layout.bottomMargin: 17
+                    height: 1
+                    color: Appearance.outline
                 }
                 Text {
                     text: qsTr("MOVE TO WORKSPACE")
                     color: Appearance.muted
-                    font.pixelSize: 10
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                    font.letterSpacing: 0.8
                 }
                 Flow {
                     Layout.fillWidth: true
-                    spacing: 6
+                    Layout.topMargin: 12
+                    spacing: 7
                     Repeater {
                         model: root.desktopCount
                         ShellButton {
                             required property int index
+                            width: 50
+                            height: 34
                             text: String(index + 1).padStart(2, "0")
                             label: qsTr("Move to workspace %1").arg(index + 1)
+                            outlined: true
+                            flat: true
+                            labelSize: 10
                             enabled: !!root.selectedWindow && index !== root.currentDesktop
-                            onClicked: root.map.moveToDesktop(root.selectedWindow.id, index)
+                            onClicked: root.map.moveNavigationWindowToDesktop(root.selectedId, index)
+                        }
+                    }
+                }
+                Rectangle {
+                    visible: root.map && root.map.mode === 0
+                    Layout.fillWidth: true
+                    Layout.topMargin: 17
+                    Layout.bottomMargin: 17
+                    height: 1
+                    color: Appearance.outline
+                }
+                Text {
+                    visible: root.map && root.map.mode === 0
+                    text: qsTr("PLACE IN ZONE")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                    font.letterSpacing: 0.8
+                }
+                Flow {
+                    visible: root.map && root.map.mode === 0
+                    Layout.fillWidth: true
+                    Layout.topMargin: 12
+                    spacing: 7
+                    Repeater {
+                        model: root.map && root.map.mode === 0 ? root.map.cells : []
+                        ShellButton {
+                            required property var modelData
+                            width: 36
+                            height: 34
+                            text: String(modelData.zoneNumber)
+                            label: qsTr("Place selected window in zone %1").arg(modelData.zoneNumber)
+                            labelSize: 10
+                            flat: true
+                            outlined: true
+                            enabled: !!root.selectedWindow
+                            onClicked: root.map.placeNavigationWindowInZone(root.selectedId, modelData.id)
                         }
                     }
                 }
@@ -351,44 +514,78 @@ FocusScope {
         id: windowList
         onWidthChanged: Qt.callLater(root.reconcile)
         x: root.previewRect.x
-        y: root.previewRect.y + root.previewRect.height + 16
+        y: root.previewRect.y + root.previewRect.height + 8
         width: root.previewRect.width
-        height: 64
+        height: 36
+        visible: root.scrolling
         orientation: ListView.Horizontal
         spacing: 8
         clip: true
+        boundsBehavior: Flickable.StopAtBounds
         model: root.windows
         ScrollBar.horizontal: ScrollBar {}
         delegate: ShellButton {
             required property var modelData
             required property int index
             width: 144
-            height: 52
-            label: modelData.title || modelData.appId
+            height: 30
+            text: (index + 1) + "  " + (modelData.title || modelData.appId)
+            labelSize: 10
             highlighted: root.selectedId === modelData.windowId
             onClicked: root.select(index)
             onDoubleClicked: root.openSelected()
-            contentItem: Text {
-                text: (index + 1) + "  " + (modelData.title || modelData.appId)
-                color: Appearance.text
-                font.pixelSize: 11
-                elide: Text.ElideRight
-                verticalAlignment: Text.AlignVCenter
-            }
         }
     }
-    RowLayout {
-        x: root.previewRect.x
-        y: root.height - 56
-        width: root.width - x - root.inset
-        Text {
-            Layout.fillWidth: true
-            text: root.compact ? qsTr("Enter Open · Esc Return") : qsTr("← → Select window · Enter Open · Esc Return")
-            color: Appearance.muted
-            font.pixelSize: 11
+    Item {
+        x: root.previewRect.x + 2
+        y: root.height - Math.min(130, root.height * 0.14)
+        width: root.previewRect.width - 4
+        height: 20
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+            Keycap {
+                text: "←"
+            }
+            Keycap {
+                text: "→"
+            }
+            Text {
+                text: qsTr("Select window")
+                color: Appearance.muted
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 11
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Keycap {
+                text: "Enter"
+            }
+            Text {
+                text: qsTr("Open")
+                color: Appearance.muted
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 11
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Keycap {
+                text: "Esc"
+            }
+            Text {
+                text: qsTr("Return")
+                color: Appearance.muted
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 11
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
         ShellButton {
-            text: qsTr("Return to desktop")
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !root.compact
+            text: qsTr("Return to desktop ↗")
+            labelSize: 10
+            foreground: Appearance.accent
+            flat: true
             onClicked: root.closeRequested()
         }
     }

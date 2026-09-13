@@ -10,6 +10,8 @@
 #include <PhosphorLayer/SurfaceFactory.h>
 
 #include <QColor>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QLoggingCategory>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -71,31 +73,18 @@ void LayerPopoutTransport::setDecorationProvider(DecorationProvider provider)
 
 void LayerPopoutTransport::drain()
 {
-    // Note this DEFERS destruction: destroyEntry deleteLater()s each Surface,
-    // so the surfaces and their hosts outlive this call by at least one event
-    // loop turn, and on the reload path they outlive the QQmlEngine that made
-    // them (ShellEngine::teardown resets the engine synchronously right after
-    // aboutToReload). What makes that safe is destroyEntry's DISCONNECT, not
-    // any synchrony: ~QQmlEngine runs each host's Component.onDestruction, and
-    // the disconnect is the only reason that emission reaches nobody. Do not
-    // remove it on the assumption that draining first is enough.
-    //
-    // The callback is deliberately NOT cleared here, for the same reason:
-    // nothing below can reach onHostDismissed, so there is no self-dismissal
-    // to suppress.
-    //
-    // `m_engine` is likewise retained rather than nulled: the reload path
-    // drains and then hands over a replacement through setEngine, so clearing
-    // it here would buy nothing. On the shutdown path the controller's tables
-    // are already empty before drain runs, so no further openSurface arrives. Clearing it
-    // would be permanent: PopoutController installs its callback once, in its
-    // constructor, and never reinstalls, so a transport disarmed by the first
-    // hot reload would swallow every click-outside and Escape for the rest of
-    // the process while still tearing the surface down. The controller would
-    // keep the stale row and report the popout as open forever.
+    // Close also schedules Surface deletion; Surface's destructor schedules
+    // its QQuickWindow deletion. Finish the first level here so the engine's
+    // deferred-delete flush can destroy every QML host before its singletons.
+    // Include already-closing surfaces, which have left m_entries but still
+    // belong to this transport. The callback stays installed for the new engine.
     const auto entries = std::exchange(m_entries, {});
     for (auto it = entries.cbegin(); it != entries.cend(); ++it) {
         destroyEntry(it.key(), it.value());
+    }
+    const auto surfaces = findChildren<PhosphorLayer::Surface*>(Qt::FindDirectChildrenOnly);
+    for (auto* surface : surfaces) {
+        QCoreApplication::sendPostedEvents(surface, QEvent::DeferredDelete);
     }
 }
 

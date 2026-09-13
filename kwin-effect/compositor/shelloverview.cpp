@@ -1,16 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "shelloverview.h"
+#include "../plasmazoneseffect/plasmazoneseffect.h"
 #include <core/output.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <cmath>
 namespace PlasmaZones {
 namespace {
 const QString ObjectPath = QStringLiteral("/PlasmaZones/ShellOverview");
+bool navigable(KWin::EffectWindow* window)
+{
+    return window && !window->isDeleted() && !window->isSkipSwitcher()
+        && (window->isNormalWindow() || window->isDialog())
+        && !window->windowClass().contains(QLatin1String("phosphor-shell"))
+        && !window->windowClass().contains(QLatin1String("plasmazonesd"));
+}
 }
 ShellOverview::ShellOverview(KWin::Effect* effect)
     : QObject(effect)
@@ -18,7 +29,25 @@ ShellOverview::ShellOverview(KWin::Effect* effect)
     , m_ownerWatcher(this)
 {
     auto bus = QDBusConnection::sessionBus();
-    bus.registerObject(ObjectPath, this, QDBusConnection::ExportAllSlots);
+    bus.registerObject(ObjectPath, this, QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
+    m_windowChanges.setSingleShot(true);
+    m_windowChanges.setInterval(16);
+    connect(&m_windowChanges, &QTimer::timeout, this, &ShellOverview::windowsChanged);
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &ShellOverview::watchWindow);
+    connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, [this](KWin::EffectWindow* window) {
+        if (window->isNormalWindow() || window->isDialog())
+            m_windowChanges.start();
+    });
+    connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, [this](KWin::EffectWindow* window) {
+        if (navigable(window)) {
+            m_lastFocusedWindow = static_cast<PlasmaZonesEffect*>(m_effect)->getWindowId(window);
+            m_windowChanges.start();
+        }
+    });
+    for (auto* window : KWin::effects->stackingOrder())
+        watchWindow(window);
+    if (auto* window = KWin::effects->activeWindow(); navigable(window))
+        m_lastFocusedWindow = static_cast<PlasmaZonesEffect*>(m_effect)->getWindowId(window);
     m_ownerWatcher.setConnection(bus);
     m_ownerWatcher.setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
     connect(&m_ownerWatcher, &QDBusServiceWatcher::serviceUnregistered, this, &ShellOverview::restore);
@@ -35,6 +64,46 @@ ShellOverview::ShellOverview(KWin::Effect* effect)
         if (m_closing)
             restore();
     });
+}
+void ShellOverview::watchWindow(KWin::EffectWindow* window)
+{
+    if (!navigable(window))
+        return;
+    const auto changed = [this] {
+        m_windowChanges.start();
+    };
+    connect(window, &KWin::EffectWindow::windowFrameGeometryChanged, this, changed);
+    connect(window, &KWin::EffectWindow::windowDesktopsChanged, this, changed);
+    connect(window, &KWin::EffectWindow::minimizedChanged, this, changed);
+    connect(window, &KWin::EffectWindow::windowHiddenChanged, this, changed);
+    m_windowChanges.start();
+}
+QString ShellOverview::windows(const QString& screen, int desktop) const
+{
+    auto* output = KWin::effects->findScreen(screen);
+    const auto desktops = KWin::effects->desktops();
+    if (!output || desktop < 1 || desktop > desktops.size())
+        return QStringLiteral("[]");
+    auto* effect = static_cast<PlasmaZonesEffect*>(m_effect);
+    const auto screenId = effect->outputScreenId(output);
+    QJsonArray result;
+    for (auto* window : KWin::effects->stackingOrder()) {
+        if (!navigable(window) || effect->getWindowScreenId(window) != screenId
+            || !window->isOnDesktop(desktops[desktop - 1]) || !window->isOnCurrentActivity())
+            continue;
+        const auto rect = window->frameGeometry();
+        const auto id = effect->getWindowId(window);
+        result.append(QJsonObject{{QStringLiteral("windowId"), id},
+                                  {QStringLiteral("appId"), effect->getWindowAppId(window)},
+                                  {QStringLiteral("title"), window->caption()},
+                                  {QStringLiteral("focused"), id == m_lastFocusedWindow},
+                                  {QStringLiteral("minimized"), window->isMinimized()},
+                                  {QStringLiteral("x"), rect.x()},
+                                  {QStringLiteral("y"), rect.y()},
+                                  {QStringLiteral("width"), rect.width()},
+                                  {QStringLiteral("height"), rect.height()}});
+    }
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 ShellOverview::~ShellOverview()
 {

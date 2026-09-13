@@ -9,10 +9,12 @@ import Phosphor.Widgets
 FocusScope {
     id: root
     property var map: null
+    property var workspaces: null
+    property var mapFor: null
     property bool menuFocused: false
     signal closeRequested
-    implicitWidth: 680
-    implicitHeight: 410
+    implicitWidth: 700
+    implicitHeight: layout.implicitHeight + (Appearance.padding + 1) * 2
     focus: true
     Component.onCompleted: {
         if (map)
@@ -50,78 +52,94 @@ FocusScope {
         }
     }
 
-    ColumnLayout {
+    Flickable {
         anchors.fill: parent
-        anchors.margins: Appearance.padding
-        spacing: 12
-        RowLayout {
-            Layout.fillWidth: true
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-                Text {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: qsTr("Workspace %1").arg(root.map ? root.map.currentDesktop + 1 : 1)
-                    color: Appearance.muted
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: 11
-                }
-                Text {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: qsTr("Your windows, within reach.")
-                    color: Appearance.text
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                }
-            }
-            ShellButton {
-                iconName: "view-list-details"
-                label: qsTr("Placement settings")
-                highlighted: root.menuFocused
-                onClicked: {
-                    root.menuFocused = !root.menuFocused;
-                    if (root.map)
-                        root.map.refreshMenu();
-                }
-            }
-            ShellButton {
-                iconName: "window-close"
-                label: qsTr("Close navigator")
-                onClicked: root.closeRequested()
-            }
-        }
-        WorkspaceNavigator {
-            id: navigator
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            map: root.map
-            visible: !root.menuFocused
-            onActivated: root.closeRequested()
+        anchors.margins: Appearance.padding + 1
+        anchors.bottomMargin: Appearance.padding - 2
+        contentWidth: width
+        contentHeight: layout.implicitHeight + 3
+        interactive: contentHeight > height
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
         ColumnLayout {
-            visible: root.menuFocused
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            id: layout
+            width: parent.width
+            spacing: 0
             RowLayout {
                 Layout.fillWidth: true
-                Repeater {
-                    model: [qsTr("Snapping"), qsTr("Tiling"), qsTr("Scrolling")]
-                    ShellButton {
-                        required property int index
-                        required property string modelData
+                Layout.preferredHeight: 53
+                spacing: 12
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    Text {
                         Layout.fillWidth: true
-                        text: modelData
-                        highlighted: root.map && root.map.mode === index
-                        onClicked: root.map.setPlacementMode(index)
+                        elide: Text.ElideRight
+                        text: qsTr("WORKSPACE %1 / %2").arg(String(root.map ? root.map.currentDesktop + 1 : 1).padStart(2, "0")).arg(root.workspaces ? root.workspaces.activeName.toUpperCase() : "")
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 9
+                        font.letterSpacing: 1.3
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: qsTr("Your windows, within reach.")
+                        color: Appearance.text
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 18
+                        font.weight: Font.Medium
                     }
                 }
+                Text {
+                    visible: root.width > 620
+                    text: qsTr("Placement")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 10
+                }
+                ShellComboBox {
+                    implicitWidth: 91
+                    implicitHeight: 33
+                    model: [qsTr("Snapping"), qsTr("Tiling"), qsTr("Scrolling")]
+                    currentIndex: root.map ? root.map.mode : -1
+                    displayText: currentIndex < 0 ? qsTr("Off") : currentText
+                    Accessible.name: qsTr("Placement")
+                    onActivated: root.map.setPlacementMode(currentIndex)
+                }
+                Item {
+                    Layout.preferredWidth: root.width > 620 ? 110 : 0
+                }
+                ShellButton {
+                    text: root.menuFocused ? "‹" : "×"
+                    label: root.menuFocused ? qsTr("Back to windows") : qsTr("Close navigator")
+                    implicitWidth: 30
+                    outlined: true
+                    flat: true
+                    labelSize: 17
+                    onClicked: if (root.menuFocused)
+                        root.menuFocused = false
+                    else
+                        root.closeRequested()
+                }
+            }
+            WorkspaceNavigator {
+                id: navigator
+                Layout.fillWidth: true
+                Layout.topMargin: 19
+                Layout.preferredHeight: implicitHeight
+                map: root.map
+                visible: !root.menuFocused
+                onActivated: root.closeRequested()
             }
             ListView {
+                visible: root.menuFocused
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.topMargin: 19
+                Layout.preferredHeight: 222
                 clip: true
                 spacing: 5
                 model: root.map ? root.map.menuModel : []
@@ -131,39 +149,120 @@ FocusScope {
                     width: ListView.view.width
                     text: modelData.kind === "verb" ? root.verbLabel(modelData.id) : modelData.name || modelData.id
                     highlighted: !!modelData.current
-                    onClicked: root.map.applyMenuChoice(modelData.kind, modelData.id)
+                    onClicked: {
+                        root.map.applyMenuChoice(modelData.kind, modelData.id);
+                        root.menuFocused = false;
+                    }
                 }
             }
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            ListView {
+            Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 32
+                Layout.topMargin: 20
+                height: 1
+                color: Appearance.outline
+            }
+            ListView {
+                id: desktopList
+                Layout.fillWidth: true
+                Layout.topMargin: 15
+                Layout.preferredHeight: 34
                 orientation: ListView.Horizontal
                 clip: true
-                spacing: 6
-                model: root.map ? root.map.desktopCount : 0
-                delegate: ShellButton {
+                spacing: 8
+                model: root.workspaces ? root.workspaces.model : null
+                delegate: AbstractButton {
+                    id: desktopChoice
                     required property int index
-                    width: 36
-                    height: 30
-                    text: String(index + 1).padStart(2, "0")
-                    label: qsTr("Workspace %1").arg(index + 1)
-                    highlighted: root.map && index === root.map.currentDesktop
-                    onClicked: root.map.switchDesktop(index)
+                    required property string name
+                    required property string workspaceId
+                    required property bool isActive
+                    readonly property var map: root.mapFor ? root.mapFor(index) : null
+                    width: Math.max(110, (desktopList.width - 8 * Math.max(0, desktopList.count - 1)) / Math.max(1, desktopList.count))
+                    height: 34
+                    padding: 11
+                    Accessible.name: name
+                    onClicked: root.workspaces.switchTo(workspaceId)
+                    background: Rectangle {
+                        radius: 8
+                        color: desktopChoice.isActive ? Appearance.card : "transparent"
+                        border.width: 1
+                        border.color: desktopChoice.isActive ? Appearance.accent : Appearance.outline
+                    }
+                    contentItem: RowLayout {
+                        spacing: 8
+                        Text {
+                            text: String(desktopChoice.index + 1).padStart(2, "0")
+                            font.family: Tokens.font_family_mono
+                            font.pixelSize: 10
+                            color: Appearance.muted
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: desktopChoice.name
+                            font.family: Tokens.font_family_ui
+                            font.pixelSize: 10
+                            color: desktopChoice.isActive ? Appearance.text : Appearance.muted
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            text: desktopChoice.map ? desktopChoice.map.windows.length : ""
+                            font.family: Tokens.font_family_ui
+                            font.pixelSize: 10
+                            color: Appearance.muted
+                        }
+                    }
                 }
             }
-            Text {
-                text: root.modeLabel(root.map ? root.map.mode : -1)
-                color: Appearance.muted
-                font.pixelSize: 11
-            }
-            Text {
-                visible: root.width >= 600
-                text: qsTr("↑ ↓ Select · Enter Open")
-                color: Appearance.muted
-                font.pixelSize: 10
+            Item {
+                Layout.fillWidth: true
+                Layout.topMargin: 16
+                Layout.preferredHeight: 14
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+                    Keycap {
+                        text: "←"
+                    }
+                    Keycap {
+                        text: "→"
+                    }
+                    Text {
+                        text: qsTr("Select")
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Keycap {
+                        text: "Enter"
+                    }
+                    Text {
+                        text: qsTr("Focus")
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Keycap {
+                        text: "Esc"
+                    }
+                    Text {
+                        text: qsTr("Close")
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.width >= 620
+                    text: qsTr("Click a window to focus it")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 10
+                }
             }
         }
     }

@@ -64,6 +64,7 @@ private Q_SLOTS:
     void controllerInitiatedCloseSuppressesTheCallback();
     void closeIsIdempotentForUnknownHandles();
     void drainEmptiesWithoutInvokingTheCallback();
+    void drainReleasesQmlHostsBeforeEngineTeardown();
     void aFailedSurfaceRoutesToTheCallback();
     void barAnchorsPlaceTheHostBelowTheReservedBand();
     void barAnchorWithoutAProviderHangsFromTheScreenEdge();
@@ -472,6 +473,25 @@ void TestLayerPopoutTransport::drainEmptiesWithoutInvokingTheCallback()
     // A drained transport still opens fresh surfaces.
     QVERIFY(!transport.openSurface(makeRequest()).isEmpty());
     transport.drain();
+}
+
+void TestLayerPopoutTransport::drainReleasesQmlHostsBeforeEngineTeardown()
+{
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    for (bool closing : {false, true}) {
+        const QString handle = transport.openSurface(makeRequest());
+        QVERIFY(!handle.isEmpty());
+        QTRY_VERIFY(lastHost());
+        QPointer<QQuickWindow> window = lastHost()->window();
+        QVERIFY(window);
+        if (closing)
+            transport.closeSurface(handle);
+        transport.drain();
+        // ShellEngine performs one flush, with no intervening event-loop turn.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY2(window.isNull(), "QML popout must die before its engine's singletons");
+    }
 }
 
 void TestLayerPopoutTransport::aFailedSurfaceRoutesToTheCallback()

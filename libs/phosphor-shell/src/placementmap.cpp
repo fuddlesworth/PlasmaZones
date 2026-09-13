@@ -54,6 +54,7 @@ PlacementMapScreen::PlacementMapScreen(const QString& screenName, int desktopInd
     m_pinnedRefetch.setSingleShot(true);
     m_pinnedRefetch.setInterval(0);
     connect(&m_pinnedRefetch, &QTimer::timeout, this, &PlacementMapScreen::fetchDesktopWindows);
+    initializeNavigation();
 
     if (Workspaces* ws = m_map->workspaces()) {
         connect(ws, &Workspaces::activeChanged, this, &PlacementMapScreen::desktopsChanged);
@@ -190,6 +191,7 @@ void PlacementMapScreen::resolveScreenId()
 
 void PlacementMapScreen::refreshGeometry()
 {
+    requestNavigation();
     if (m_screenId.isEmpty()) {
         return;
     }
@@ -206,6 +208,7 @@ void PlacementMapScreen::refreshGeometry()
             return;
         }
         m_workArea = rect;
+        requestNavigation();
         // A tiling batch is in screen pixels; re-normalise it against the new
         // work area. Snapping is relative already; scrolling is re-read, and
         // so is a pinned desktop (its cells are not from a batch).
@@ -501,6 +504,7 @@ void PlacementMapScreen::desktopsChanged()
         }
     }
     if (changed) {
+        requestNavigation();
         schedulePublish();
     }
 }
@@ -552,6 +556,9 @@ void PlacementMapScreen::rebuildFromSource()
         }
     } else if (m_mode == Tiling) {
         applyFocusByWindowId(m_resolvedWindows, focused);
+    }
+    if (m_nativeAvailable) {
+        m_resolvedWindows = mergeNavigationWindows(m_resolvedWindows, m_nativeWindows);
     }
     applyMetadata(m_resolvedWindows, m_map->windowMetadata());
     applyUrgency(m_resolvedWindows, m_map->urgentWindows());

@@ -32,6 +32,9 @@ QtObject {
     readonly property color outline: light ? "#28234064" : "#1cb4c8f1"
     readonly property list<color> stops: settings.palette === "ember" ? (light ? ["#856127", "#8b5a34", "#9d4e2f", "#984350"] : ["#e8c988", "#d4b08a", "#d3906c", "#d27b83"]) : settings.palette === "wallpaper" ? (light ? ["#49739d", "#6c63aa", "#a2577d", "#955a39"] : ["#93b6db", "#aeace6", "#db9ab4", "#eabb9c"]) : (light ? ["#137b91", "#3567b3", "#8154a8", "#a34e76"] : ["#41d4e8", "#6e9cfd", "#b68aee", "#f390b3"])
     readonly property color accent: stops[1]
+    function windowColor(index: int): color {
+        return stops[[0, 2, 3, 1][Math.max(0, index) % 4]];
+    }
     function at(position: real): color {
         const scaled = Math.max(0, Math.min(1, position)) * 3;
         const i = Math.min(2, Math.floor(scaled));

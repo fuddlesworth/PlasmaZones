@@ -39,6 +39,12 @@ Item {
             return '<path d="M9 18 V5 L20 3 V16 M9 8 L20 6"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="17" cy="16" rx="3" ry="3"/>';
         if (source === "system-search")
             return '<circle cx="10" cy="10" r="7"/><path d="M15 15 L21 21"/>';
+        if (source === "utilities-terminal")
+            return '<rect x="2" y="3" width="20" height="18" rx="4"/><path d="M6 8 L10 12 L6 16 M14 16 H18"/>';
+        if (source === "internet-web-browser")
+            return '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12 H21"/>';
+        if (source === "folder")
+            return '<path d="M3 6 H10 L12 9 H21 V20 H3 Z M3 6 V4 H10 L12 6 H20 V9"/>';
         return "";
     }
     Image {

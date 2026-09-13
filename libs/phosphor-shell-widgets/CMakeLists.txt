@@ -61,6 +61,8 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/ShellButton.qml
     qml/Phosphor/Widgets/ShellComboBox.qml
     qml/Phosphor/Widgets/ShellIcon.qml
+    qml/Phosphor/Widgets/Keycap.qml
+    qml/Phosphor/Widgets/WindowMapCard.qml
     qml/Phosphor/Widgets/MediaCard.qml
     qml/Phosphor/Widgets/SpectrumVisualizer.qml
     qml/Phosphor/Widgets/PhosphorRipple.qml

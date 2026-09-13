@@ -376,7 +376,7 @@ public:
     QString getWindowAppId(KWin::EffectWindow* w) const;
 
 private:
-    // Window management
+    friend class ShellOverview;
     void setupWindowConnections(KWin::EffectWindow* w);
     /// Wire the window's virtual-desktop-set handling (departure arm, arrival
     /// arm, and the m_trackedDesktopsPerWindow stamp both diff against) and

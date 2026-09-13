@@ -329,6 +329,38 @@ void PlacementMapScreen::moveToDesktop(const QString& id, int index)
         });
 }
 
+void PlacementMapScreen::moveNavigationWindowToDesktop(const QString& windowId, int index)
+{
+    if (windowId.isEmpty() || index < 0 || index >= m_desktopCount || !m_map->isAvailable()
+        || !m_map->m_caps.moveWindowToDesktop) {
+        return;
+    }
+    for (const Cell& cell : std::as_const(m_resolvedWindows)) {
+        if (cell.windowId == windowId) {
+            call<void>(
+                Iface::WindowTracking, QStringLiteral("moveWindowToDesktop"), {windowId, index + 1}, [] { },
+                [this](const QDBusError& error) {
+                    latchUnknownMethod(m_map->m_caps.moveWindowToDesktop, error);
+                });
+            return;
+        }
+    }
+}
+
+void PlacementMapScreen::placeNavigationWindowInZone(const QString& windowId, const QString& zoneId)
+{
+    const Cell* zone = cellById(zoneId);
+    if (m_mode != Snapping || !zone || windowId.isEmpty() || !m_map->isAvailable()) {
+        return;
+    }
+    for (const Cell& cell : std::as_const(m_resolvedWindows)) {
+        if (cell.windowId == windowId) {
+            m_map->m_bus->call(Iface::Snap, QStringLiteral("moveWindowToZone"), {windowId, zoneId});
+            return;
+        }
+    }
+}
+
 // ─── Drop proxy ───────────────────────────────────────────────────────
 
 void PlacementMapScreen::registerDropProxy(const QRect& miniatureScreenRect, const QVariantList& cellScreenRects)

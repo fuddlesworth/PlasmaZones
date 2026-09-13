@@ -113,6 +113,7 @@ set(phosphorshell_SRCS
     src/placementmap.cpp
     src/placementmap_actions.cpp
     src/placementmap_desktop.cpp
+    src/placementmap_navigation.cpp
     src/placementmapparser.cpp
     src/wallpaperservice.cpp
     src/systemclock.cpp

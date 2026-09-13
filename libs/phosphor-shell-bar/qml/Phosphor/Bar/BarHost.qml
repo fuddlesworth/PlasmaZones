@@ -7,6 +7,7 @@ import QtQuick
 import Phosphor.Theme
 import Phosphor.Widgets
 import Phosphor.Shell
+import Phosphor.Shell as Shell
 
 PanelWindow {
     id: panel
@@ -40,7 +41,8 @@ PanelWindow {
     property bool mapPaneOpen: false
     // Opened on its menu section (a right-click).
     property bool mapPaneMenuFocused: false
-    property int mapPaneWidth: 680
+    property int mapPaneWidth: 700
+    readonly property rect mapBlurRect: mapPaneOpen ? Qt.rect(pane.x, pane.y, pane.width, pane.height) : Qt.rect(0, 0, 0, 0)
 
     // What the pane machinery below actually shows: the host's pane, or
     // the map pane when that is the one open.
@@ -158,8 +160,8 @@ PanelWindow {
     // left below the bar, whichever is less, so a short display never gets
     // a surface the compositor clips.
     readonly property int _usablePaneDepth: {
-        const available = (panel.screen ? panel.screen.height : 0) - Tokens.bar_thickness - Tokens.spacing_xl;
-        return available > 0 ? Math.min(panel.paneDepth, available) : panel.paneDepth;
+        const available = (panel.screen ? panel.screen.geometry.height : 0) - Tokens.bar_thickness - 40;
+        return available > 0 ? Math.min(Math.max(panel.paneDepth, 720), available) : panel.paneDepth;
     }
     // Surface reserved below the band for the pane. Reserved ONCE at
     // materialization: ShellEngine snapshots `thickness + shadowSize` when
@@ -473,10 +475,10 @@ PanelWindow {
     readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width - 2 * Appearance.gap)
     // The map pane is as deep as its content; the host's pane takes the
     // reserved depth.
-    readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight) + Tokens.rail_thickness) : panel._usablePaneDepth
+    readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight)) : panel._usablePaneDepth
     // Right-aligned under the chip, clamped to the screen: a trailing chip
     // gets a pane that ends where the chip ends.
-    readonly property real _paneX: Math.max(Appearance.gap, Math.min(panel.width - panel._paneW - Appearance.gap, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
+    readonly property real _paneX: panel.mapPaneOpen ? Math.round((panel.width - panel._paneW) / 2) : Math.max(Appearance.gap, Math.min(panel.width - panel._paneW - Appearance.gap, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
     readonly property real _paneT: Spectrum.tForX(panel._paneX + panel._paneW / 2, panel.width)
 
     // The tether: rail hue at the chip's x, dropping from the rail to the
@@ -513,15 +515,25 @@ PanelWindow {
         sliceEnd: rail.sliceEnd
     }
 
+    Rectangle {
+        x: Math.round(panel.width / 2) - 1
+        y: Appearance.bottom ? band.y - 14 : band.y + band.height + 2
+        width: 2
+        height: 12
+        color: Appearance.accent
+        visible: panel.mapPaneOpen
+        opacity: panel._paneProgress
+    }
+
     // The pane.
     Item {
         id: pane
 
         x: panel._paneX
-        y: Appearance.bottom ? band.y - Appearance.gap - height : Tokens.bar_thickness
+        y: Appearance.bottom ? band.y - 14 - height : band.y + band.height + 14
         width: panel._paneW
         height: Math.max(0, panel._paneDepthEff * Math.max(0, Math.min(1, (panel._paneProgress - 0.2) / 0.8)))
-        clip: true
+        clip: false
         // Never for an external pane: the toplevel is the pane then.
         visible: height > 0 && !panel._paneExternalEff
         // Gate input the instant a close starts: an opacity-0 Item is still
@@ -531,6 +543,7 @@ PanelWindow {
         ShellSurface {
             anchors.fill: parent
             railT: panel._paneT
+            accented: panel.mapPaneOpen
         }
 
         // Latched by a plain flag rather than the Loader reading its own
@@ -597,13 +610,16 @@ PanelWindow {
             }
 
             anchors.fill: parent
-            anchors.topMargin: Tokens.rail_thickness
+            anchors.topMargin: 0
+            clip: true
             opacity: pane._p
             anchors.bottomMargin: -4 * (1 - pane._p)
             active: showing
             visible: showing
             sourceComponent: MapPane {
                 map: panel.placementMap
+                workspaces: Shell.Workspaces
+                mapFor: index => Shell.PlacementMap.forScreenDesktop(panel.screen ? panel.screen.name : "", index)
                 menuFocused: panel.mapPaneMenuFocused
                 onCloseRequested: panel.mapPaneOpen = false
             }

@@ -179,10 +179,11 @@ Item {
             readonly property var bandWindow: bar.bandItem ? bar.bandItem.Window.window : null
             function applyBlur(): void {
                 if (bar.bandWindow)
-                    ShellEffects.setBlurBehind(bar.bandItem, bar.bandRect);
+                    ShellEffects.setBlurBehind(bar.bandItem, Appearance.glass ? bar.bandRect : Qt.rect(0, 0, 0, 0), Appearance.glass ? bar.mapBlurRect : Qt.rect(0, 0, 0, 0));
             }
             onBandWindowChanged: applyBlur()
             onBandRectChanged: applyBlur()
+            onMapBlurRectChanged: applyBlur()
             Component.onCompleted: {
                 reportMode();
                 reportChip();
@@ -803,6 +804,8 @@ Item {
         // capsule to grow out of; a status chip's panel hangs under the
         // chip itself.
         function onWidgetActivated(id: string, source: Item): void {
+            if (id !== "placementmap")
+                Popouts.close(Popouts.handleFor("dashboard"));
             // A Cooperative open is refused outright while a Modal popout is
             // up, and the refusal is silent: the user would press the button
             // and see nothing happen, with nothing logged. The power menu is
@@ -1142,6 +1145,7 @@ Item {
             implicitHeight: Screen.height
             screenName: Screen.name
             workspaces: Workspaces
+            surfaceEffects: ShellEffects
             mapFor: index => Screen.name ? PlacementMap.forScreenDesktop(Screen.name, index) : null
             open: true
             onCloseRequested: open = false

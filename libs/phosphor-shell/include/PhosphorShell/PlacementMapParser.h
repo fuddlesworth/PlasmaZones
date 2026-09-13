@@ -239,6 +239,12 @@ PHOSPHORSHELL_EXPORT void applyFocusByWindowId(QList<Cell>& cells, const QString
 /// stripT, columnIndex, windowId, appId, title, urgent).
 PHOSPHORSHELL_EXPORT QVariantList toVariantList(const QList<Cell>& cells);
 
+/// Compositor window snapshots include floating and minimized windows.
+PHOSPHORSHELL_EXPORT QList<Cell> parseNativeWindows(const QString& json, const QRect& workArea);
+/// Keep engine ordering and scrolling coordinates, add unplaced windows,
+/// and remove windows no longer on this output and desktop.
+PHOSPHORSHELL_EXPORT QList<Cell> mergeNavigationWindows(const QList<Cell>& placed, const QList<Cell>& live);
+
 /// `{x, w}` for a lens band, or an empty map for a null rect.
 PHOSPHORSHELL_EXPORT QVariantMap lensToVariant(const QRectF& lens);
 

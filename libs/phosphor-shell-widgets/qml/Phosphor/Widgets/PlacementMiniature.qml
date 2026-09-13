@@ -62,6 +62,9 @@ Item {
     property real cellRadius: Tokens.radius_mini
     property bool showLens: true
     property bool interactive: false
+    // Separate cards share the window palette with the expanded navigator.
+    // Composers can retain the continuous, matched-edge map with false.
+    property bool separatedCells: true
     // Draw the app glyph (or the title's first letter) in each occupied
     // cell. Only at expanded height (A2 §1.3).
     property bool labels: false
@@ -373,6 +376,7 @@ Item {
     // Work-area outline.
     Rectangle {
         anchors.fill: parent
+        visible: !root.separatedCells
         radius: root.cellRadius
         color: "transparent"
         border.width: 1
@@ -409,7 +413,7 @@ Item {
             required property string title
             required property bool retiring
 
-            readonly property color _hue: Spectrum.at(t)
+            readonly property color _hue: root.separatedCells ? Appearance.windowColor(index) : Spectrum.at(t)
             readonly property bool _hovered: hover.hovered && root.interactive && !retiring
             readonly property bool _pressed: tap.pressed || drag.active
             readonly property bool _dropTarget: root.dropTargetId === cellId
@@ -417,15 +421,15 @@ Item {
             // Urgent pulse, 0.4 → 1.0 at 1.2 s; steady under reduced motion.
             property real _pulse: 1
 
-            x: cx * root.width
-            y: cy * root.height
-            width: cw * root.width
-            height: ch * root.height
-            radius: root.cellRadius
-            color: occupied ? Qt.rgba(_lit.r, _lit.g, _lit.b, _pressed || focused ? 0.55 : 0.40) : "transparent"
+            x: cx * root.width + (root.separatedCells ? 1.5 : 0)
+            y: cy * root.height + (root.separatedCells ? 1.5 : 0)
+            width: Math.max(1, cw * root.width - (root.separatedCells ? 3 : 0))
+            height: Math.max(1, ch * root.height - (root.separatedCells ? 3 : 0))
+            radius: root.separatedCells ? Math.min(2, Appearance.radius) : root.cellRadius
+            color: occupied ? Qt.alpha(_lit, root.separatedCells ? 0.2 : _pressed || focused ? 0.55 : 0.40) : "transparent"
             // The resting hue edge is the edge layer's; the fill carries
             // only the white signals and the hover lift.
-            border.width: _dropTarget || urgent || focused || _hovered ? 1 : 0
+            border.width: root.separatedCells || _dropTarget || urgent || focused || _hovered ? 1 : 0
             border.color: _dropTarget ? Spectrum.focus : urgent ? Qt.rgba(1, 1, 1, _pulse) : focused ? Qt.rgba(1, 1, 1, 0.9) : _lit
             transformOrigin: Item.Center
 
@@ -459,6 +463,7 @@ Item {
 
             // Focus: a 2 px white core line along the top edge.
             Rectangle {
+                visible: !root.separatedCells || root.height > 90
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
@@ -607,6 +612,7 @@ Item {
         model: edgeModel
         delegate: Rectangle {
             id: edge
+            visible: !root.separatedCells
 
             required property int index
             required property string key

@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QRectF>
+#include <QTimer>
 #include <QVariantAnimation>
 namespace KWin {
 class Effect;
@@ -31,9 +32,14 @@ public Q_SLOTS:
     bool begin(const QString& screen, double x, double y, double width, double height, bool animate,
                const QString& token);
     void end(const QString& token);
+    QString windows(const QString& screen, int desktop) const;
+
+Q_SIGNALS:
+    void windowsChanged();
 
 private:
     void restore();
+    void watchWindow(KWin::EffectWindow* window);
     KWin::Effect* m_effect;
     QPointer<KWin::LogicalOutput> m_output;
     QDBusServiceWatcher m_ownerWatcher;
@@ -42,5 +48,7 @@ private:
     QVariantAnimation m_animation;
     QRectF m_rect;
     bool m_closing = false;
+    QTimer m_windowChanges;
+    QString m_lastFocusedWindow;
 };
 }

@@ -119,6 +119,9 @@ public:
     [[nodiscard]] QVariantList windows() const;
     /// Activate a window from the complete navigation model.
     Q_INVOKABLE void activateNavigationWindow(const QString& windowId);
+    /// Move any window in the navigation model, including offscreen columns.
+    Q_INVOKABLE void moveNavigationWindowToDesktop(const QString& windowId, int index);
+    Q_INVOKABLE void placeNavigationWindowInZone(const QString& windowId, const QString& zoneId);
     [[nodiscard]] QVariantMap lens() const;
     [[nodiscard]] int overflowLeft() const;
     [[nodiscard]] int overflowRight() const;
@@ -224,6 +227,12 @@ Q_SIGNALS:
 
 private:
     void resolveScreenId();
+    void initializeNavigation();
+    void fetchNavigation();
+private Q_SLOTS:
+    void requestNavigation();
+
+private:
     void fetchModeData();
     void fetchSnappingLayout();
     void fetchStrip();
@@ -302,6 +311,10 @@ private:
     QList<PlacementMapParser::Cell> m_source;
     QList<PlacementMapParser::Cell> m_sourceWindows;
     QList<PlacementMapParser::Cell> m_resolvedWindows;
+    QList<PlacementMapParser::Cell> m_nativeWindows;
+    QTimer m_navigationRefresh;
+    bool m_nativeAvailable = false;
+    int m_navigationGeneration = 0;
     QList<PlacementMapParser::TileRect> m_lastBatch;
     QRectF m_sourceLens;
     int m_sourceOverflowLeft = 0;
