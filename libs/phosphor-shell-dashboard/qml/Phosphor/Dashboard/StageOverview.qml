@@ -38,7 +38,8 @@ FocusScope {
     readonly property rect nativeRect: Qt.rect(previewRect.x - canvas.x * previewRect.width / canvas.width, previewRect.y - canvas.y * previewRect.height / canvas.height, width * previewRect.width / canvas.width, height * previewRect.height / canvas.height)
     readonly property rect barRect: Qt.rect(Appearance.barInset, Appearance.bottom ? height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset, width - Appearance.barInset * 2, Appearance.barHeight)
     function windowRect(window) {
-        return Qt.rect(previewRect.x + (window.x * workArea.width - canvasLeft) * previewRect.width / canvas.width, previewRect.y + (window.y * workArea.height - canvasTop) * previewRect.height / canvas.height, window.w * workArea.width * previewRect.width / canvas.width, window.h * workArea.height * previewRect.height / canvas.height);
+        const frame = window.nativeRect && window.nativeRect.width > 0 ? window.nativeRect : Qt.rect(window.x, window.y, window.w, window.h);
+        return Qt.rect(previewRect.x + (frame.x * workArea.width - canvasLeft) * previewRect.width / canvas.width, previewRect.y + (frame.y * workArea.height - canvasTop) * previewRect.height / canvas.height, frame.width * workArea.width * previewRect.width / canvas.width, frame.height * workArea.height * previewRect.height / canvas.height);
     }
     readonly property var windowRects: windows.filter(w => !w.offscreen && !w.minimized).map(w => windowRect(w))
     onWindowRectsChanged: Qt.callLater(refreshSurface)
@@ -100,7 +101,7 @@ FocusScope {
         if (open && map && typeof map.refreshGeometry === "function")
             map.refreshGeometry();
         if (open && width > 0 && height > 0)
-            desktop.show(screenName, Qt.rect(nativeRect.x / width, nativeRect.y / height, nativeRect.width / width, nativeRect.height / height), !Motion.reducedMotion);
+            desktop.show(screenName, Qt.rect(nativeRect.x / width, nativeRect.y / height, nativeRect.width / width, nativeRect.height / height), !Motion.reducedMotion, Qt.rect(previewRect.x / width, previewRect.y / height, previewRect.width / width, previewRect.height / height));
     }
     function refreshSurface() {
         if (surfaceEffects)
@@ -219,7 +220,10 @@ FocusScope {
             required property string name
             required property string workspaceId
             required property bool isActive
-            readonly property var map: root.mapFor ? root.mapFor(index) : null
+            // The factory returns the shared live map for the current desktop.
+            // Re-resolve every card when that desktop changes.
+            readonly property var map: root.currentDesktop >= 0 && root.mapFor ? root.mapFor(index) : null
+            objectName: "stage-workspace-" + index
             width: workspaceList.width
             height: root.compact ? 98 : 116
             padding: 12
@@ -299,10 +303,11 @@ FocusScope {
                 id: liveWindow
                 required property var modelData
                 required property int index
-                x: (modelData.x * root.workArea.width - root.canvasLeft) * root.previewRect.width / root.canvas.width
-                y: (modelData.y * root.workArea.height - root.canvasTop) * root.previewRect.height / root.canvas.height
-                width: modelData.w * root.workArea.width * root.previewRect.width / root.canvas.width
-                height: modelData.h * root.workArea.height * root.previewRect.height / root.canvas.height
+                readonly property rect frame: root.windowRect(modelData)
+                x: frame.x - root.previewRect.x
+                y: frame.y - root.previewRect.y
+                width: frame.width
+                height: frame.height
                 visible: !modelData.offscreen && !modelData.minimized
                 Accessible.name: modelData.title || modelData.appId
                 onClicked: root.select(index)

@@ -52,6 +52,66 @@ TestCase {
             height: testCase.height
         }
     }
+    Component {
+        id: workspacesComponent
+        QtObject {
+            property int count: 2
+            property int activeIndex: 1
+            property string activeName: "Develop"
+            property var model: [
+                {
+                    name: "Develop",
+                    workspaceId: "develop",
+                    isActive: activeIndex === 1
+                },
+                {
+                    name: "Build",
+                    workspaceId: "build",
+                    isActive: activeIndex === 2
+                }
+            ]
+        }
+    }
+    function test_workspaceCardsResolveAgainAfterDesktopSwitch() {
+        const live = createTemporaryObject(mapComponent, testCase);
+        const first = createTemporaryObject(mapComponent, testCase);
+        const second = createTemporaryObject(mapComponent, testCase);
+        const workspaces = createTemporaryObject(workspacesComponent, testCase);
+        // Plain JS state mirrors the C++ factory: it cannot establish a QML
+        // dependency on the active desktop inside the mapFor callback.
+        const context = {
+            current: 0
+        };
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            workspaces: workspaces,
+            mapFor: index => index === context.current ? live : (index === 0 ? first : second),
+            open: true
+        });
+        waitForRendering(stage);
+        compare(findChild(stage, "stage-workspace-0").map, live);
+        compare(findChild(stage, "stage-workspace-1").map, second);
+        context.current = 1;
+        workspaces.activeIndex = 2;
+        compare(findChild(stage, "stage-workspace-0").map, first);
+        compare(findChild(stage, "stage-workspace-1").map, live);
+    }
+    function test_nativePreviewGeometryDoesNotUseStripCoordinates() {
+        const map = createTemporaryObject(mapComponent, testCase);
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            mapFor: () => map
+        });
+        const native = Qt.rect(0.03, 0.025, 0.46, 0.9);
+        const strip = {
+            x: 0,
+            y: 0,
+            w: 0.5,
+            h: 1,
+            nativeRect: native
+        };
+        const frame = stage.windowRect(strip);
+        fuzzyCompare(frame.x, stage.previewRect.x + (native.x * stage.workArea.width - stage.canvasLeft) * stage.previewRect.width / stage.canvas.width, 0.001);
+        fuzzyCompare(frame.height, native.height * stage.workArea.height * stage.previewRect.height / stage.canvas.height, 0.001);
+    }
     function test_selectionIsSeparateFromActivation() {
         const map = createTemporaryObject(mapComponent, testCase);
         const stage = createTemporaryObject(stageComponent, testCase, {

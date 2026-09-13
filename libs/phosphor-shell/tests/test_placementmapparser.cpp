@@ -469,6 +469,8 @@ private Q_SLOTS:
         QCOMPARE(merged.size(), 3);
         QCOMPARE(merged[0].windowId, column.windowId);
         QCOMPARE(merged[0].rect, column.rect);
+        QCOMPARE(merged[0].nativeRect, live[1].rect);
+        QCOMPARE(toVariantList(merged)[0].toMap().value(QStringLiteral("nativeRect")).toRectF(), live[1].rect);
         QCOMPARE(merged[0].columnIndex, 8);
         QCOMPARE(merged[0].colorIndex, 2);
         QCOMPARE(toVariantList(merged)[0].toMap().value(QStringLiteral("colorIndex")).toInt(), 2);
@@ -477,6 +479,34 @@ private Q_SLOTS:
         QVERIFY(merged[1].focused);
         QVERIFY(merged[2].minimized);
         QVERIFY(mergeNavigationWindows(merged, {}).isEmpty());
+    }
+
+    void inactiveDesktopMiniaturesIncludeWindowsWithoutPlacementState()
+    {
+        const auto live = parseNativeWindows(QStringLiteral(R"([
+            {"windowId":"left","colorIndex":3,"x":20,"y":100,"width":580,"height":500,"focused":true},
+            {"windowId":"right","colorIndex":0,"x":620,"y":100,"width":360,"height":500}
+        ])"),
+                                             QRect(0, 100, 1000, 500));
+        const auto tiling = inactiveDesktopCells(live, false);
+        QCOMPARE(tiling.size(), 2);
+        QCOMPARE(tiling[0].rect, QRectF(0.02, 0, 0.58, 1));
+        QCOMPARE(tiling[1].rect, QRectF(0.62, 0, 0.36, 1));
+        QVERIFY(!tiling[0].focused);
+        QCOMPARE(tiling[0].colorIndex, 3);
+
+        auto parked = live;
+        parked[0].rect = parked[1].rect = QRectF(0, 1.5, 0.5, 1);
+        parked[0].offscreen = parked[1].offscreen = true;
+        const auto scrolling = inactiveDesktopCells(parked, true);
+        QCOMPARE(scrolling.size(), 2);
+        QCOMPARE(scrolling[0].rect, QRectF(0, 0, 0.5, 1));
+        QCOMPARE(scrolling[1].rect, QRectF(0.5, 0, 0.5, 1));
+        QCOMPARE(scrolling[0].windowId, QStringLiteral("left"));
+        QCOMPARE(scrolling[1].colorIndex, 0);
+        QVERIFY(!scrolling[0].offscreen);
+        QVERIFY(!scrolling[0].focused);
+        QVERIFY(inactiveDesktopCells({}, true).isEmpty());
     }
 
     // The screen-pixel helpers a surface uses to sit on a cell (A3 §3–§4):

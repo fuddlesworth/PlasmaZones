@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "shelloverview.h"
+#include "stripviewanimator.h"
 #include "../plasmazoneseffect/plasmazoneseffect.h"
 #include <core/output.h>
+#include <core/renderviewport.h>
 #include <window.h>
 #include <KDecoration3/Decoration>
 #include <effect/effect.h>
@@ -112,7 +114,9 @@ QString ShellOverview::windows(const QString& screen, int desktop) const
         if (!navigable(window) || effect->getWindowScreenId(window) != screenId
             || !window->isOnDesktop(desktops[desktop - 1]) || !window->isOnCurrentActivity())
             continue;
-        const auto rect = window->frameGeometry();
+        // Publish the settled position. The strip spring need not emit frame
+        // geometry changes while it converges, so sampling it here can go stale.
+        const auto rect = window->frameGeometry().translated(visualOffset(window, false));
         const auto id = effect->getWindowId(window);
         result.append(QJsonObject{{QStringLiteral("windowId"), id},
                                   {QStringLiteral("appId"), effect->getWindowAppId(window)},
@@ -146,10 +150,26 @@ bool ShellOverview::appliesTo(KWin::EffectWindow* window) const
         && !window->windowClass().contains(QLatin1String("phosphor-shell"))
         && !window->windowClass().contains(QLatin1String("plasmazones"));
 }
+QPointF ShellOverview::visualOffset(KWin::EffectWindow* window, bool animated) const
+{
+    auto* effect = static_cast<PlasmaZonesEffect*>(m_effect);
+    auto* output = effect->scrollManagedOutputFor(window);
+    if (!output)
+        return {};
+    QPointF offset = animated ? effect->m_stripViewAnimator->offsetFor(output) : QPointF();
+    const auto it = effect->m_scrollVisualDelta.constFind(effect->getWindowId(window));
+    if (it != effect->m_scrollVisualDelta.cend())
+        offset += effect->scrollVisualTranslationFor(*it, window->frameGeometry());
+    return offset;
+}
 bool ShellOverview::begin(const QString& screen, double x, double y, double width, double height, bool animate,
-                          const QString& token)
+                          const QString& token, double clipX, double clipY, double clipWidth, double clipHeight)
 {
     if (token.isEmpty() || token.size() > 128)
+        return false;
+    if (!std::isfinite(clipX) || !std::isfinite(clipY) || !std::isfinite(clipWidth) || !std::isfinite(clipHeight)
+        || clipX < 0 || clipY < 0 || clipWidth <= 0 || clipHeight <= 0 || clipX + clipWidth > 1
+        || clipY + clipHeight > 1)
         return false;
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) || x < 0 || y < 0
         || width < 0.2 || height < 0.2 || x + width > 1 || y + height > 1)
@@ -170,6 +190,8 @@ bool ShellOverview::begin(const QString& screen, double x, double y, double widt
     }
     m_output = output;
     m_targetRect = target;
+    m_clipRect = QRectF(geometry.x() + clipX * geometry.width(), geometry.y() + clipY * geometry.height(),
+                        clipWidth * geometry.width(), clipHeight * geometry.height());
     m_owner = owner;
     m_token = token;
     m_ownerWatcher.setWatchedServices(owner.isEmpty() ? QStringList() : QStringList{owner});
@@ -211,9 +233,10 @@ void ShellOverview::transform(KWin::EffectWindow* window, KWin::WindowPaintData&
         return;
     const auto screen = m_output->geometry();
     const auto frame = window->frameGeometry();
+    const auto offset = visualOffset(window, true);
     const qreal sx = m_rect.width() / screen.width();
     const qreal sy = m_rect.height() / screen.height();
-    data.setXTranslation(m_rect.x() + (frame.x() - screen.x() + data.xTranslation()) * sx - frame.x());
+    data.setXTranslation(m_rect.x() + (frame.x() - screen.x() + offset.x() + data.xTranslation()) * sx - frame.x());
     // Stage paints an unscaled 43 px titlebar. Fit the complete client below
     // it instead of hiding the first rows of app content behind that header.
     // The adjustment fades with the compositor transform on entry and exit.
@@ -221,9 +244,25 @@ void ShellOverview::transform(KWin::EffectWindow* window, KWin::WindowPaintData&
     const qreal top = std::max(0.0, window->clientGeometry().y() - frame.y());
     const qreal header = top * sy + progress * (43 - top * sy);
     const qreal bodyScale = std::max(0.01, (frame.height() * sy - header) / std::max(1.0, frame.height() - top));
-    data.setYTranslation(m_rect.y() + (frame.y() - screen.y()) * sy + header - top * bodyScale
+    data.setYTranslation(m_rect.y() + (frame.y() - screen.y() + offset.y()) * sy + header - top * bodyScale
                          + data.yTranslation() * bodyScale - frame.y());
     data.setXScale(data.xScale() * sx);
     data.setYScale(data.yScale() * bodyScale);
+}
+void ShellOverview::paint(const KWin::RenderTarget& target, const KWin::RenderViewport& viewport,
+                          KWin::EffectWindow* window, int mask, const KWin::Region& region,
+                          KWin::WindowPaintData& data) const
+{
+    auto* effect = static_cast<PlasmaZonesEffect*>(m_effect);
+    if (effect->scrollParkedOffscreen(window, effect->getWindowId(window)))
+        return;
+    transform(window, data);
+    const QRectF screen = QRectF(QRect(m_output->geometry()));
+    const qreal progress = std::clamp(
+        (screen.width() - m_rect.width()) / std::max(0.001, screen.width() - m_targetRect.width()), 0.0, 1.0);
+    const QRectF clip(screen.topLeft() + (m_clipRect.topLeft() - screen.topLeft()) * progress,
+                      screen.size() + (m_clipRect.size() - screen.size()) * progress);
+    const auto clipped = region.intersected(viewport.mapToDeviceCoordinatesAligned(KWin::RectF(clip)));
+    KWin::effects->paintWindow(target, viewport, window, mask | KWin::Effect::PAINT_WINDOW_TRANSFORMED, clipped, data);
 }
 }

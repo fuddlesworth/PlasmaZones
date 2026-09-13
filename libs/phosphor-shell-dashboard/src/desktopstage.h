@@ -17,7 +17,8 @@ public:
     {
         return m_active;
     }
-    Q_INVOKABLE void show(const QString& screen, const QRectF& normalizedRect, bool animate);
+    Q_INVOKABLE void show(const QString& screen, const QRectF& normalizedRect, bool animate,
+                          const QRectF& viewport = QRectF());
     Q_INVOKABLE void hide();
 Q_SIGNALS:
     void activeChanged();

@@ -18,7 +18,8 @@ and checks the rendered shell in an isolated KWin session.
 | E. Launcher | `a5c63d5f6` | Navigator result list and Stage pinned-app shelf, native window search, activation and saved pins. |
 | F. Appearance and feedback | `88252edf9` | Appearance controls, preserved popup position and scroll state through reload, compact OSD and toast styling. |
 | G. Native desktop windows | `1071fc53c` | KDecoration3 titlebars, shared stable window colors, palette and radius updates, real placement gaps and reversible desktop styling. |
-| H. Final visual and interaction checks | This commit | Readable Stage titlebars over live content, rounded preview silhouettes, immediate popup keyboard input and focus restoration on dismissal. |
+| H. Final visual and interaction checks | `a1e91f9b8` | Readable Stage titlebars over live content, rounded preview silhouettes, immediate popup keyboard input and focus restoration on dismissal. |
+| I. Workspace transitions | This commit | Native snapshots populate inactive cards, cards rebind after desktop switches, and Stage aligns scrolling previews with native frames. The compositor clips content to the preview and waits for an existing desktop transition before opening it. |
 
 ### Validation
 

@@ -512,6 +512,10 @@ void PlacementMapScreen::desktopsChanged()
 void PlacementMapScreen::rebuildFromSource()
 {
     m_resolved = m_source;
+    // The placement engines publish only the active desktop. Native snapshots
+    // also cover inactive desktops, including windows without saved zone state.
+    if (isPinned() && m_nativeAvailable && (m_mode == Tiling || m_mode == Scrolling))
+        m_resolved = inactiveDesktopCells(m_nativeWindows, m_mode == Scrolling);
     // The engine's focus is the current desktop's; a pinned screen shows
     // no focus, and its snapping occupancy is its own desktop's read.
     const QString focused = isPinned() ? QString() : effectiveFocusedWindowId();

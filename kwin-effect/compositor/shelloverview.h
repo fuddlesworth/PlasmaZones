@@ -14,6 +14,9 @@ class Effect;
 class EffectWindow;
 class LogicalOutput;
 class WindowPaintData;
+class RenderTarget;
+class RenderViewport;
+class Region;
 }
 namespace PlasmaZones {
 // Owns the compositor half of Stage. A lost shell connection, removed
@@ -29,9 +32,11 @@ public:
     bool onOutput(KWin::LogicalOutput* output) const;
     bool appliesTo(KWin::EffectWindow* window) const;
     void transform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
+    void paint(const KWin::RenderTarget& target, const KWin::RenderViewport& viewport, KWin::EffectWindow* window,
+               int mask, const KWin::Region& region, KWin::WindowPaintData& data) const;
 public Q_SLOTS:
     bool begin(const QString& screen, double x, double y, double width, double height, bool animate,
-               const QString& token);
+               const QString& token, double clipX, double clipY, double clipWidth, double clipHeight);
     void end(const QString& token);
     QString windows(const QString& screen, int desktop) const;
 
@@ -42,6 +47,7 @@ private:
     void restore();
     void updateDecorations();
     void watchWindow(KWin::EffectWindow* window);
+    QPointF visualOffset(KWin::EffectWindow* window, bool animated) const;
     KWin::Effect* m_effect;
     QPointer<KWin::LogicalOutput> m_output;
     QDBusServiceWatcher m_ownerWatcher;
@@ -50,6 +56,7 @@ private:
     QVariantAnimation m_animation;
     QRectF m_rect;
     QRectF m_targetRect;
+    QRectF m_clipRect;
     bool m_closing = false;
     QTimer m_windowChanges;
     QString m_lastFocusedWindow;

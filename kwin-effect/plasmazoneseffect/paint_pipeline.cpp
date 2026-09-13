@@ -1391,8 +1391,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::WindowPaintData& data)
 {
     if (m_shellOverview->appliesTo(w)) {
-        m_shellOverview->transform(w, data);
-        KWin::effects->paintWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED, deviceRegion, data);
+        m_shellOverview->paint(renderTarget, viewport, w, mask, deviceRegion, data);
         return;
     }
     // Scrolling-strip boundary clip. A strip column legitimately straddles

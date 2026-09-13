@@ -6,6 +6,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
+#include <QTimer>
 #include <QUuid>
 namespace PhosphorShellDashboard {
 namespace {
@@ -38,21 +39,33 @@ void DesktopStage::setActive(bool active)
     m_active = active;
     Q_EMIT activeChanged();
 }
-void DesktopStage::show(const QString& screen, const QRectF& rect, bool animate)
+void DesktopStage::show(const QString& screen, const QRectF& rect, bool animate, const QRectF& viewport)
 {
     if (screen.isEmpty())
         return;
     m_requested = true;
     const int generation = ++m_generation;
     auto call = request(QStringLiteral("begin"));
-    call.setArguments({screen, rect.x(), rect.y(), rect.width(), rect.height(), animate, m_token});
+    const QRectF clip = viewport.isEmpty() ? rect : viewport;
+    call.setArguments({screen, rect.x(), rect.y(), rect.width(), rect.height(), animate, m_token, clip.x(), clip.y(),
+                       clip.width(), clip.height()});
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* result) {
-        const QDBusPendingReply<bool> reply = *result;
-        result->deleteLater();
-        if (generation == m_generation)
-            setActive(!reply.isError() && reply.value());
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, generation, screen, rect, animate, clip](QDBusPendingCallWatcher* result) {
+                const QDBusPendingReply<bool> reply = *result;
+                result->deleteLater();
+                if (generation == m_generation) {
+                    setActive(!reply.isError() && reply.value());
+                    // A desktop transition can temporarily own the compositor. Keep
+                    // this request pending until it releases, and cancel on hide or
+                    // replacement. An unavailable protocol remains the static fallback.
+                    if (!reply.isError() && !reply.value())
+                        QTimer::singleShot(120, this, [this, generation, screen, rect, animate, clip] {
+                            if (m_requested && generation == m_generation)
+                                show(screen, rect, animate, clip);
+                        });
+                }
+            });
 }
 void DesktopStage::hide()
 {
