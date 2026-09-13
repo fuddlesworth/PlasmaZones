@@ -187,8 +187,13 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // restart that is the entire population — the membership map is rebuilt
     // from scratch, so every multi-desktop window is adopted here rather than
     // arriving already a member.
+    // Only on a screen this engine is active on: a screen a tiling engine
+    // owns keeps its snap memberships as frozen memory for a return to
+    // snapping, and re-committing them here would fight the tiling engine's
+    // own placement on every desktop switch (seen live: the window bounced
+    // between its tile and its old zone).
     QSet<QString> reapply;
-    if (const SnapState* currentState = m_states.stateForKey(currentKey)) {
+    if (const SnapState* currentState = isActiveOnScreen(screenId) ? m_states.stateForKey(currentKey) : nullptr) {
         for (const QString& windowId : m_states.trackedWindowIds()) {
             if (m_states.hasMembership(windowId, currentKey) && m_states.membershipsForWindow(windowId).size() > 1
                 && !currentState->zonesForWindow(windowId).isEmpty()) {

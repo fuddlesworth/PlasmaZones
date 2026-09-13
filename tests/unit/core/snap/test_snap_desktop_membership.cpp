@@ -15,6 +15,7 @@
 
 #include <QGuiApplication>
 #include <QSet>
+#include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -30,6 +31,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
@@ -439,6 +441,37 @@ private Q_SLOTS:
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
         QVERIFY2(!persistedZonesByDesktop(kWindow).contains(2), "the float must forget desktop 2's zone");
         QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
+    }
+
+    // A screen a tiling engine owns keeps its snap memberships as frozen
+    // memory, and the membership pass must not re-commit them on a desktop
+    // switch there: live, that re-commit fought the tiling engine's own
+    // placement on every switch.
+    void switchOnATilingScreenDoesNotReapplySnapZones()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+
+        m_engine->setLiveModeResolver([](const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Autotile;
+        });
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QVERIFY(m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky())).isEmpty());
+        QCOMPARE(resnapSpy.count(), 0);
+        // The memberships are kept for the return to snapping.
+        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
+
+        m_engine->setLiveModeResolver([](const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        QVERIFY2(resnapSpy.count() > 0, "back in snapping mode the switch re-applies the desktop's zone");
+        m_engine->setLiveModeResolver({});
     }
 
     // Removing a desktop renumbers every bare desktop number the service
