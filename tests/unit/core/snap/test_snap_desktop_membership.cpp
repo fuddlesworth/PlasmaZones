@@ -474,6 +474,57 @@ private Q_SLOTS:
         m_engine->setLiveModeResolver({});
     }
 
+    // A handoff to a tiling engine releases the CONTEXT it took the window
+    // in, not the window: a membership on another desktop still in snapping
+    // mode keeps its zone, so switching there finds the window snapped and
+    // switching back finds it tiled. With no such context left, the window
+    // is forgotten outright, as before.
+    void handoffReleaseKeepsTheOtherSnappingDesktop()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+
+        // Desktop 1 flips to tiling and the tiling engine takes the window there.
+        m_layoutManager->assignLayoutById(kScreen, 1, QString(), QStringLiteral("autotile:bsp"));
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_engine->handoffRelease(kWindow);
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
+        QVERIFY(m_engine->isWindowTracked(kWindow));
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QCOMPARE(m_engine->heldKeyForWindow(kWindow)->desktop, 2);
+
+        // Desktop 2 flips too: nothing snapping is left and the window goes.
+        m_layoutManager->assignLayoutById(kScreen, 2, QString(), QStringLiteral("autotile:bsp"));
+        m_engine->handoffRelease(kWindow);
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QVERIFY(!m_engine->isWindowTracked(kWindow));
+        QVERIFY(!m_engine->heldKeyForWindow(kWindow).has_value());
+    }
+
+    // Adoption puts back the zone the durable record remembers for the
+    // desktop entered: a screen that went to tiling and came back released
+    // every context, and the record's per-desktop map is what survives.
+    void adoptionRestoresTheRememberedZoneForThatDesktop()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        m_engine->forgetWindow(kWindow); // the handoff dropped every context
+
+        // Re-snapped on desktop 1 (the return resnap); desktop 2 is entered.
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        const auto result = m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        QCOMPARE(result.adopted.size(), 1);
+        QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
+        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+    }
+
     // Removing a desktop renumbers every bare desktop number the service
     // keeps, not only the persisted map: a pending restore queued across the
     // removal must land on the desktop it was queued for.

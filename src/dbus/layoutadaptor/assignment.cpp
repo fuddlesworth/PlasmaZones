@@ -123,7 +123,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, 0, QString(), layoutId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
 
     // Update global active layout when assigning to the primary screen (manual layouts only)
     if (layout) {
@@ -147,7 +147,7 @@ void LayoutAdaptor::clearAssignment(const QString& screenId)
     }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
 }
 
 QStringList LayoutAdaptor::getAvailableScreenIds()
@@ -313,7 +313,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, QString(), layoutId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
@@ -331,7 +331,7 @@ void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int
     }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, QString());
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "on desktop" << virtualDesktop;
 }
 
@@ -692,7 +692,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, 0, activityId, layoutId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
@@ -713,7 +713,7 @@ void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, co
     }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, 0, activityId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "activity" << activityId;
 }
 
@@ -798,7 +798,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
 
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, activityId, layoutId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
@@ -823,7 +823,7 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
     }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "desktop" << virtualDesktop << "activity"
                          << activityId;
 }
@@ -882,7 +882,7 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
         }
     }
     m_layoutManager->assignScrollingTemplate(resolvedId, virtualDesktop, activityId, layoutId);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
     qCInfo(lcDbusLayout) << (layoutId.isEmpty() ? "Cleared scrolling template" : "Set scrolling template") << layoutId
                          << "for screen" << screenId << "desktop" << virtualDesktop << "activity" << activityId;
 }
@@ -1094,7 +1094,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
     entry.tilingAlgorithm = tilingAlgorithm;
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);
-    m_changedScreenIds.insert(resolvedId);
+    stageOrApply(resolvedId);
 
     qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout

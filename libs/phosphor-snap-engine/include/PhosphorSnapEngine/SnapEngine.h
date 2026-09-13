@@ -394,6 +394,8 @@ public:
         return QStringLiteral("snap");
     }
     void handoffReceive(const HandoffContext& ctx) override;
+    /// Per context: keeps a membership on another desktop still in snapping
+    /// mode (the window stays snapped there); forgets the window otherwise.
     void handoffRelease(const QString& windowId) override;
     QString screenForTrackedWindow(const QString& windowId) const override;
     /// Whether this engine considers the window owned (snapped, snap-floated,

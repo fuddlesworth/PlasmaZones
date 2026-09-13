@@ -10,7 +10,7 @@
 // which of those owns what. Same rationale as
 // PhosphorTileEngine/AutotileEngine.h. Grew with the per-desktop membership
 // change: the forget / renumber wrappers over the persisted per-desktop
-// zones and the membership-aware zone walk.
+// zones, the membership-aware zone walk and the per-desktop zone read.
 
 #pragma once
 
@@ -916,8 +916,14 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Live snap zones if present, else the durable placement-record snap slot.
-    /// See IWindowTrackingService::recordedSnapZones.
+    /// See IWindowTrackingService::recordedSnapZones. A multi-desktop window
+    /// answers for the desktop its screen shows (its live store there, else
+    /// the record's per-desktop map), never another desktop's zone.
     QStringList recordedSnapZones(const QString& windowId) const override;
+    /// @p slot's zones for the desktop @p screenId shows: the per-desktop map's
+    /// entry when the slot carries one (empty when it names no zone there),
+    /// else the flat zoneIds.
+    QStringList snapZonesOnDesktopInView(const PhosphorEngine::EngineSlot& slot, const QString& screenId) const;
 
     using PendingRestore = PhosphorEngine::PendingRestore;
     using ResnapEntry = PhosphorEngine::ResnapEntry;

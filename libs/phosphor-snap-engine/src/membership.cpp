@@ -166,11 +166,26 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                                  << stale.desktop << "of" << stale.screenId << "— its span no longer covers it";
         }
         if (entry.adopt) {
-            // Membership only. No zone is chosen for the window here: an
-            // unsnapped window on this desktop stays unsnapped, and the store
-            // exists so that snapping it later lands in ITS OWN assignment.
-            ensureStateForKey(currentKey);
+            // Membership, plus the zone the durable record remembers for this
+            // desktop, if any. An unsnapped window on this desktop stays
+            // unsnapped, and the store exists so that snapping it later lands
+            // in ITS OWN assignment; but a window whose per-desktop map names
+            // a zone here was snapped here and lost the live store to a mode
+            // handoff (a screen that went to tiling and came back releases
+            // every context it took), so its zone is put back and re-applied
+            // below rather than waiting for the user to snap it again.
+            SnapState* state = ensureStateForKey(currentKey);
             m_states.addMembership(entry.windowId, currentKey);
+            if (state && m_windowTracker && state->zonesForWindow(entry.windowId).isEmpty()) {
+                if (const auto rec = m_windowTracker->placementStore().peekExact(entry.windowId)) {
+                    const QStringList remembered = rec->slotFor(engineId()).zonesByDesktop.value(currentKey.desktop);
+                    if (!remembered.isEmpty()) {
+                        state->assignWindowToZones(entry.windowId, remembered, currentKey.screenId, currentKey.desktop);
+                        qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: restored" << entry.windowId
+                                             << "to its remembered zone(s) on desktop" << currentKey.desktop;
+                    }
+                }
+            }
             result.adopted.append({entry.windowId, currentKey});
             qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: adopted" << entry.windowId << "into desktop"
                                  << currentKey.desktop << "of" << currentKey.screenId;

@@ -17,6 +17,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "placementlogging.h"
 
 namespace PhosphorPlacement {
@@ -143,6 +144,89 @@ void WindowTrackingService::renumberDesktopZones(int removedDesktop)
     for (PhosphorEngine::ResnapEntry& entry : m_resnapBuffer) {
         shift(entry.virtualDesktop);
     }
+}
+
+QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
+{
+    // Prefer the live, runtime assignment — it reflects this session's snaps.
+    // Go through the canonicalizing point accessor (not the raw whole-map getter)
+    // so a class-mutated window still resolves its live zones (issue #628).
+    if (const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId)) {
+        // The store for the desktop the window's screen SHOWS, when it holds
+        // the window: a multi-desktop window's primary falls back to another
+        // desktop's store while the viewed desktop holds no membership, and
+        // that store's zone is the wrong answer here (a return to snapping
+        // would put the window in the other desktop's zone).
+        const PhosphorSnapEngine::SnapState* inView = snapForScreen(snapState->screenForWindow(windowId));
+        if (inView && inView != snapState && snapHoldsWindow(windowId, inView)) {
+            snapState = inView;
+        }
+        int held = 0;
+        for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+            held += snapHoldsWindow(windowId, state) ? 1 : 0;
+        }
+        const QStringList live = snapState->zonesForWindow(windowId);
+        if (!live.isEmpty() && (snapState == inView || held <= 1)) {
+            return live;
+        }
+    }
+    // Cold cache (post-restart, or after handoffRelease cleared the live map):
+    // fall back to the DURABLE snap slot in the placement record. windowId is the
+    // exact `appId|uuid`; KWin uuids are stable across a daemon restart, so peek's
+    // exact-id branch resolves the right window. The appId fallback is DELIBERATE
+    // relogin support (pinned by testRecordedSnapZones_appIdFallbackAfterRelogin):
+    // a new-uuid window resolves its app's durable zone for the resnap /
+    // never-snapped consumers. Accepted tradeoff: a record-less LIVE window with
+    // no live zones reads the same app-level answer — indistinguishable from the
+    // relogin case at this layer, and a live-ASSIGNED sibling always resolves via
+    // its own live store first (see the sameAppInstancesEachKeepOwnZone test).
+    // The window's OWN record stays authoritative: an exact-instance record
+    // whose snap slot is NOT snapped answers "no zones" outright — falling
+    // through to the app-level fallback there would hand a window that
+    // explicitly floats a sibling's zone list.
+    if (const auto own = m_placementStore.peekExact(windowId)) {
+        const PhosphorEngine::EngineSlot ownSlot = own->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        return ownSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
+            ? snapZonesOnDesktopInView(ownSlot, own->screenId)
+            : QStringList{};
+    }
+    // Record-less window: the appId fallback, with an accept selecting
+    // genuinely SNAPPED records. peek's appId branch returns the newest
+    // record by sequence, and close captures restamp a pure-float sibling to
+    // the highest sequence — without the accept, that float record shadowed
+    // an older sibling's real snapped slot and a durably-snapped window read
+    // as "never snapped" (mis-seeding it into autotile and losing its resnap
+    // target). validatedUnmanagedGeometry documents the same shadowing trap
+    // for the geometry axis.
+    const auto rec =
+        m_placementStore.peek(QString(), currentAppIdFor(windowId), [](const PhosphorEngine::WindowPlacement& p) {
+            return p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
+                == PhosphorEngine::WindowPlacement::stateSnapped();
+        });
+    if (rec) {
+        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        if (snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
+            return snapZonesOnDesktopInView(snapSlot, rec->screenId);
+        }
+    }
+    return {};
+}
+
+QStringList WindowTrackingService::snapZonesOnDesktopInView(const PhosphorEngine::EngineSlot& slot,
+                                                            const QString& screenId) const
+{
+    // A multi-desktop record names a zone per desktop; its flat zoneIds are
+    // whichever desktop was in view at the last capture. The consumers that
+    // put a window back on a zone (the buffer resnap, the order resnap on a
+    // return to snapping) act on the desktop the screen shows, so that is
+    // the desktop whose zone answers; a desktop the map does not name is one
+    // the window was unsnapped on.
+    if (slot.zonesByDesktop.isEmpty()) {
+        return slot.zoneIds;
+    }
+    const int desktop =
+        m_virtualDesktopManager && !screenId.isEmpty() ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+    return desktop > 0 ? slot.zonesByDesktop.value(desktop) : slot.zoneIds;
 }
 
 void WindowTrackingService::forEachZoneAssignedWindow(
