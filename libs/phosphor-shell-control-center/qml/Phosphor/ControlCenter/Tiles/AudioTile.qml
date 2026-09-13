@@ -47,6 +47,9 @@ SliderTile {
         return root.value < 67 ? "audio-volume-medium" : "audio-volume-high";
     }
     label: qsTr("Volume")
+    // Drills into the bar's audio panel, the same surface the audio
+    // chip opens, instead of a second view of the same service.
+    detailPanelId: "audio"
     from: 0
     to: 100
     value: Math.round(root._amplitude * 100)

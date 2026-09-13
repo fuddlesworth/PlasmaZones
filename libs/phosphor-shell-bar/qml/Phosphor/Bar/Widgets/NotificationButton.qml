@@ -2,15 +2,21 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Bar.NotificationButton, opens the notification center.
 //
-// An icon button whose `activated` signal is the seam the notification
-// center popout binds to (Phase 4.3). The unread `badgeCount` is left at
-// 0 here on purpose: the count must come from the shell's single shared
-// NotificationServer (the daemon that owns org.freedesktop.Notifications,
-// also feeding the toast host), not a second server instantiated
-// per-widget, which would fail to acquire the bus name. The badge binds
-// to that shared service when the notification center lands.
+// An icon button whose `activated` signal opens NotificationPanel, and
+// whose badge counts what has arrived since that panel was last opened.
+//
+// The count comes from the shell's SINGLE shared notification service,
+// reached as the NotificationRegistry context property, never from a
+// server instantiated per widget: org.freedesktop.Notifications admits one
+// owner per session, so a second one would fail to acquire the name and
+// count nothing forever.
+//
+// The badge is `unreadCount`, not the list length. It answers "is there
+// anything new", which is what a bar glyph is for; the panel is where the
+// full list lives.
 
 BarIconButton {
     iconName: "notifications"
     label: qsTr("Notifications")
+    badgeCount: NotificationRegistry.unreadCount
 }

@@ -28,10 +28,19 @@ QML_ELEMENT
 // geometry the shell has chosen. The transport resolves them to
 // actual coordinates. ScreenCenter and AtPointer ignore the bar.
 // Custom forwards customAnchor verbatim.
+//
+// BarItem is the one anchor that depends on a value only the caller has:
+// it hangs below the bar like the other bar anchors, but centres on a
+// specific widget rather than on a fixed edge, reading customAnchor.x() as
+// that widget's horizontal centre in screen-local pixels. It is what a
+// popout summoned by one bar widget uses, so the panel opens under the
+// thing that was clicked. customAnchor.y() is ignored; the reserved band
+// decides the vertical, exactly as it does for BarLeft/Center/Right.
 enum class Anchor {
     BarLeft,
     BarCenter,
     BarRight,
+    BarItem,
     ScreenCenter,
     AtPointer,
     Custom,
@@ -141,7 +150,9 @@ public:
     // caller that wants the middle of the screen must ask for ScreenCenter.
     Anchor anchor = Anchor::BarCenter;
 
-    // Used only when anchor == Custom. Interpreted by the transport
+    // Used when anchor == Custom (both coordinates, screen-local) and when
+    // anchor == BarItem (x only, the anchoring widget's horizontal centre).
+    // Interpreted by the transport
     // in screen-local coordinates. A default-constructed QPointF
     // (0, 0) is a valid screen-origin anchor and the transport will
     // place the popout there; callers using Anchor::Custom must

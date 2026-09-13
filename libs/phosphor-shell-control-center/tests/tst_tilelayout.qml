@@ -2,10 +2,16 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Layout contract between ControlCenter and its tiles.
 //
-// Every control is a rail that spans the pane (05 §8): a toggle and a
-// range both declare `spansRow` true, and the host stretches each one
-// to the pane's width. The two-column grid and its column spans are
-// gone with the tile look.
+// A toggle is a CARD in a two-column grid; a range (volume, brightness)
+// spans both columns, because its 2 px underline is its control and a
+// longer line is a finer one to drag. Both fill the width they are given,
+// and neither fills the HEIGHT: stretching cards vertically is what turned
+// a five-control panel into five slabs when the surface was zone-sized.
+//
+// This previously asserted the opposite — that every control is a rail
+// spanning the pane. That was the shape when the control center was an
+// engine-placed pane and took the whole zone; it is a card grid in a
+// content-sized transient now.
 
 import QtQuick
 import QtQuick.Layouts
@@ -48,11 +54,11 @@ TestCase {
         }
     }
 
-    function test_rails_span_the_pane() {
+    function test_only_ranges_span_both_columns() {
         const toggle = createTemporaryObject(toggleComp, testCase);
         const slider = createTemporaryObject(sliderComp, testCase);
-        compare(toggle.spansRow, true, "a toggle rail spans the pane");
-        compare(slider.spansRow, true, "a range rail spans the pane");
+        compare(toggle.spansRow, false, "a toggle is a card in one column");
+        compare(slider.spansRow, true, "a range spans both columns");
     }
 
     function test_host_stretches_every_rail() {
@@ -74,8 +80,17 @@ TestCase {
                     tiles.push(child);
             }
         }
-        compare(tiles.length, 2, "both rails were materialised into the list");
-        for (let k = 0; k < tiles.length; ++k)
-            compare(tiles[k].Layout.fillWidth, true, "rail " + k + " fills the pane");
+        compare(tiles.length, 2, "both tiles were materialised into the grid");
+        for (let k = 0; k < tiles.length; ++k) {
+            compare(tiles[k].Layout.fillWidth, true, "tile " + k + " fills its column");
+            // The one that matters: a card keeps its own height. With
+            // fillHeight the grid divides the surface between the cards, and
+            // on a tall surface each becomes a slab with a glyph at the top
+            // and a label at the bottom.
+            compare(tiles[k].Layout.fillHeight, false, "tile " + k + " keeps its own height");
+        }
+        // A range takes both columns; a toggle takes one.
+        for (let m = 0; m < tiles.length; ++m)
+            compare(tiles[m].Layout.columnSpan, tiles[m].spansRow ? 2 : 1, "tile " + m + " spans by its kind");
     }
 }

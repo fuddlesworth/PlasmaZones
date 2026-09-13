@@ -68,6 +68,11 @@ void LayerPopoutTransport::setReservedMarginsProvider(ReservedMarginsProvider pr
     m_reservedMargins = std::move(provider);
 }
 
+void LayerPopoutTransport::setDecorationProvider(DecorationProvider provider)
+{
+    m_decorationProvider = std::move(provider);
+}
+
 void LayerPopoutTransport::drain()
 {
     // Note this DEFERS destruction: destroyEntry deleteLater()s each Surface,
@@ -177,6 +182,12 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         break;
     case PhosphorPopout::Anchor::BarRight:
         placement = QStringLiteral("barRight");
+        break;
+    case PhosphorPopout::Anchor::BarItem:
+        // Starts with "bar", so the reserved-band lookup below picks it up
+        // and the panel hangs off the bar's bottom edge like the other bar
+        // anchors. Only the horizontal differs.
+        placement = QStringLiteral("barItem");
         break;
     case PhosphorPopout::Anchor::Custom:
         placement = QStringLiteral("custom");
@@ -318,6 +329,13 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // Placement, resolved above. Checked like the other host writes: a
     // rejected write means the host renamed a property and every
     // bar-anchored popout would silently land mid-screen.
+    // Asked for at each open rather than cached: a hot reload builds a
+    // fresh Component and the stale one belongs to a dead engine.
+    if (m_decorationProvider) {
+        if (QObject* decoration = m_decorationProvider()) {
+            hostItem->setProperty("decoration", QVariant::fromValue(decoration));
+        }
+    }
     if (!hostItem->setProperty("placement", placement)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the placement write";
     }
@@ -340,6 +358,15 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
                 qCWarning(lcPopoutTransport) << "popout" << popoutId << "— PopoutHost rejected a reservedTop update";
             }
         });
+    }
+    if (request.anchor == PhosphorPopout::Anchor::BarItem) {
+        // x only: BarItem takes its vertical from the reserved band, so
+        // writing customY here would be writing a value the host's y
+        // binding does not read on this branch.
+        if (!hostItem->setProperty("customX", request.customAnchor.x())) {
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "— PopoutHost rejected the BarItem customX write";
+        }
     }
     if (request.anchor == PhosphorPopout::Anchor::Custom) {
         // Both writes always run. Short-circuiting on the first would leave a

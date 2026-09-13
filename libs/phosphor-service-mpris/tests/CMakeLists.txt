@@ -13,6 +13,10 @@ function(_phosphorservicempris_test target source)
     target_link_libraries(${target}
         PRIVATE
             Qt6::Test
+            # The wire test exports a fake player onto the private session
+            # bus, so it needs QtDBus directly rather than only through the
+            # library's own link.
+            Qt6::DBus
             PhosphorServiceMpris::PhosphorServiceMpris
     )
     add_test(NAME ${target} COMMAND ${target})
@@ -27,3 +31,7 @@ function(_phosphorservicempris_test target source)
 endfunction()
 
 _phosphorservicempris_test(test_phosphorservicempris_smoke test_smoke.cpp)
+# A real MPRIS service on the private bus, read by a real MprisHost: the
+# suite had only a smoke test, so nothing checked that a player's metadata
+# actually reaches MprisPlayer.
+_phosphorservicempris_test(test_phosphorservicempris_wire test_wire.cpp)

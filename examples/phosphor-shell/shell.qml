@@ -400,6 +400,16 @@ Item {
         ControlCenter {
             provider: ControlCenterRegistry
             tileIds: ControlCenterRegistry.tileIds
+            // A card drilling in opens the bar panel that card names, which
+            // is the same surface its chip on the bar opens. The control
+            // center closes first: two Cooperative popouts in one scope
+            // would otherwise have the arbiter close this one anyway, and
+            // doing it here makes the hand-off deliberate rather than a
+            // side effect of arbitration.
+            onPanelRequested: panelId => {
+                Popouts.close(Popouts.handleFor("control-center"));
+                root.toggleWidgetPanel(panelId, root._lastPanelSource);
+            }
         }
     }
 
@@ -532,14 +542,37 @@ Item {
         // marks it CppOwnership before returning, so the JS GC cannot
         // delete the live screen when this wrapper is collected. Do not
         // reach for a QScreen any other way from QML.
+        root._lastPanelSource = source;
         const target = ControlCenterRegistry.screenOf(source);
+        // Anchored under its own chip, like every other panel. It used to
+        // take the bar-centre default, which was invisible while it was an
+        // engine-placed pane (the engine decided where it went) and became
+        // wrong the moment it started being positioned by the shell.
+        const centre = BarRegistry.anchorCenterFor(source);
+        const anchored = centre >= 0;
+        const railT = anchored && target && target.width > 0 ? Math.max(0, Math.min(1, centre / target.width)) : 0.5;
         const request = {
             "popoutId": "control-center",
             "content": paneComponent,
             "targetScreen": target,
+            "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
-            "keyboardFocus": true,
-            "dismissOnFocusLoss": false
+            // Closes on an outside click, like every other panel. This was
+            // false, which was right while it was an engine-placed pane —
+            // A2 §4.7: a pane is a tile and tiles do not vanish when you
+            // look elsewhere — and became a trap the moment it stopped
+            // being one: a transient that ignores click-outside has no way
+            // out at all, since it has no close button either.
+            "dismissOnFocusLoss": true,
+            // No keyboard for the same reason the other panels take none:
+            // it is a pointer surface, and holding focus takes it off
+            // whatever the user was typing in. It also kept the surface
+            // alive by holding the grab.
+            "keyboardFocus": false,
+            "props": {
+                "railT": railT
+            }
         };
         // The arbiter keys on the popout id alone, which is right for the
         // launcher and the power menu but not for a pane that belongs to
@@ -601,13 +634,181 @@ Item {
         });
     }
 
+    // The status chips' panels, keyed by the bar-widget id BarController
+    // registers (barcontroller.cpp), NOT by the IPC target names below.
+    //
+    // One map rather than a chain of else-ifs, because every entry opens
+    // the same shape in the same way: a Cooperative popout hanging under
+    // the chip that was pressed. A widget missing from this map simply has
+    // no panel, which is how systemmetrics and focusedapp stay inert
+    // without needing a case of their own.
+    //
+    // `keyboard` is per panel and not a shared default, because the two
+    // answers are both wrong for the other case. A panel that takes the
+    // keyboard pulls focus off whatever the user was typing in, which is
+    // unacceptable for a volume slider or a device list. But the network
+    // panel has a passphrase field, and a layer surface that was never
+    // granted keyboard focus cannot receive a keystroke at all — the field
+    // would look editable and silently swallow everything typed into it.
+    readonly property var widgetPanels: ({
+            "network": {
+                "component": networkPanelComponent,
+                "keyboard": true
+            },
+            "bluetooth": {
+                "component": bluetoothPanelComponent,
+                "keyboard": false
+            },
+            "audio": {
+                "component": audioPanelComponent,
+                "keyboard": false
+            },
+            "battery": {
+                "component": batteryPanelComponent,
+                "keyboard": false
+            },
+            "media": {
+                "component": mediaPanelComponent,
+                "keyboard": false
+            },
+            "notification": {
+                "component": notificationPanelComponent,
+                "keyboard": false
+            },
+            "clock": {
+                "component": calendarPanelComponent,
+                "keyboard": false
+            }
+        })
+
+    Component {
+        id: networkPanelComponent
+
+        NetworkPanel {}
+    }
+
+    Component {
+        id: bluetoothPanelComponent
+
+        BluetoothPanel {}
+    }
+
+    Component {
+        id: audioPanelComponent
+
+        AudioPanel {}
+    }
+
+    Component {
+        id: batteryPanelComponent
+
+        BatteryPanel {}
+    }
+
+    Component {
+        id: mediaPanelComponent
+
+        MediaPanel {}
+    }
+
+    Component {
+        id: notificationPanelComponent
+
+        NotificationPanel {}
+    }
+
+    Component {
+        id: calendarPanelComponent
+
+        CalendarPanel {}
+    }
+
+    // Open (or close) the panel belonging to bar widget `id`, hanging under
+    // the chip that fired.
+    //
+    // The popout id is prefixed so each chip's panel is its own logical
+    // popout: with one shared id, pressing network while bluetooth was open
+    // would TOGGLE the open one shut and never open the one that was asked
+    // for. Distinct ids plus the shared Cooperative scope give the wanted
+    // behaviour instead — the previous panel closes, this one opens.
+    function toggleWidgetPanel(id: string, source: Item): void {
+        const panel = root.widgetPanels[id];
+        if (!panel)
+            return;
+        root._lastPanelSource = source;
+        // BarItem needs the chip's centre in its screen's pixels.
+        // anchorCenterFor returns -1 when it cannot resolve one (a widget
+        // with no window yet), which is NOT a coordinate: fall back to the
+        // bar-centre anchor rather than pinning the panel to the left edge.
+        const centre = BarRegistry.anchorCenterFor(source);
+        const anchored = centre >= 0;
+        // Where the panel sits along the screen, 0..1. This is what binds
+        // the panel's stroke and top band to the one screen-wide gradient
+        // rather than giving each panel a private colour: a chip on the
+        // left opens a cyan-leaning surface, one on the right a
+        // rose-leaning one. Falls back to centre when the chip's position
+        // could not be resolved.
+        const screen = BarRegistry.screenOf(source);
+        const railT = anchored && screen && screen.width > 0 ? Math.max(0, Math.min(1, centre / screen.width)) : 0.5;
+        Popouts.toggle({
+            "popoutId": "bar.panel." + id,
+            "content": panel.component,
+            // screenOf hands back a QScreen the C++ side owns; the
+            // controller marks it CppOwnership before returning, so the JS
+            // GC cannot delete the live screen when this wrapper is
+            // collected. Do not reach for a QScreen any other way from QML.
+            "targetScreen": screen,
+            "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "customAnchor": Qt.point(anchored ? centre : 0, 0),
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            // Per panel; see widgetPanels above for why this is not one
+            // shared value.
+            "keyboardFocus": panel.keyboard,
+            // Transients close on outside click or focus loss (A2 §4.7).
+            // That is the line between this class and a pane: a pane is a
+            // tile and does not vanish when you look elsewhere, and these
+            // are glances.
+            "dismissOnFocusLoss": true,
+            "props": {
+                "railT": railT
+            }
+        });
+    }
+
+    // The bar cannot see a transient — it is a layer surface the shell
+    // composes — so it is told which chip owns the open one. That drives
+    // the chip's lit state and the tether down to the surface (A2 §4.3).
+    // Both edges are needed: `popoutClosed` fires however the popout went,
+    // including an outside click the shell never hears about otherwise.
+    Connections {
+        target: Popouts
+
+        function onPopoutOpened(popoutId: string, handle: string): void {
+            if (popoutId === "control-center")
+                BarRegistry.setOpenPanel("controlcenter", root._lastPanelSource);
+            else if (popoutId.startsWith("bar.panel."))
+                BarRegistry.setOpenPanel(popoutId.substring("bar.panel.".length), root._lastPanelSource);
+        }
+
+        function onPopoutClosed(popoutId: string, handle: string): void {
+            if (popoutId === "control-center" || popoutId.startsWith("bar.panel."))
+                BarRegistry.setOpenPanel("", null);
+        }
+    }
+
+    // The chip the in-flight open was summoned from. Set immediately before
+    // the request goes out, read by the handler above: PopoutController's
+    // signal carries the id and the handle but not the source item.
+    property Item _lastPanelSource: null
+
     Connections {
         target: BarRegistry
 
         // `source` is the bar widget that fired. The session menu is
         // screen-centred and ignores it; the control center is anchored to
         // a bar, so it uses the widget's window to pick which output's
-        // capsule to grow out of.
+        // capsule to grow out of; a status chip's panel hangs under the
+        // chip itself.
         function onWidgetActivated(id: string, source: Item): void {
             // A Cooperative open is refused outright while a Modal popout is
             // up, and the refusal is silent: the user would press the button
@@ -621,6 +822,14 @@ Item {
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
                 root.toggleControlCenter(source);
+            else
+                // Everything else, the clock included, opens its transient
+                // under the chip. The clock used to open the DASHBOARD,
+                // which is the every-desktop overview with a calendar cell
+                // in its last row: a full-screen takeover to read a date.
+                // The dashboard keeps its cell and its own gesture; the
+                // clock gets CalendarPanel (A2 §5, A3 §7).
+                root.toggleWidgetPanel(id, source);
         }
     }
 

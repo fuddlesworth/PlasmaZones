@@ -7,6 +7,9 @@
 // present device, or a non-finite percentage during bus init). The
 // freedesktop icon name comes from UPower itself, so the glyph tracks
 // charge level and charging state without a local lookup table.
+//
+// Time-to-empty, health and the per-device breakdown live in BatteryPanel,
+// which the chip's `activated` opens.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
@@ -15,6 +18,11 @@ import Phosphor.Service.UPower
 
 BarWidget {
     id: root
+
+    /// Relayed by BarController as BarRegistry.widgetActivated("battery").
+    /// See Network.qml for why this is declared per widget rather than on
+    /// BarWidget.
+    signal activated
 
     // A battery is shown only when UPower reports a present device with a
     // finite percentage. isPresent gates out the synthetic display device
@@ -62,6 +70,36 @@ BarWidget {
             font.pixelSize: Tokens.font_size_label_l
             font.family: Tokens.font_family
             anchors.verticalCenter: parent.verticalCenter
+        }
+    }
+
+    ChipTrigger {
+        id: trigger
+
+        actionName: qsTr("Show battery panel")
+        // `available` already covers the no-battery desktop; this repeats
+        // the display-device test because the panel's content is that
+        // device, and a press with none resolved would open an empty card.
+        active: !!battery.displayDevice
+        onTriggered: root.activated()
+    }
+
+    // The press reads on the whole chip here, not on one glyph: this widget
+    // is an icon plus a readout, and scaling only the icon would leave the
+    // percentage sitting still beside it.
+    scale: trigger.pressed ? 0.96 : 1
+    opacity: trigger.lit ? 1 : 0.9
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: Motion.duration_tick
+            easing: Motion.reveal
+        }
+    }
+    Behavior on opacity {
+        NumberAnimation {
+            duration: trigger.lit ? Motion.duration_enter : Motion.duration_release
+            easing: trigger.lit ? Motion.enter : Motion.release
         }
     }
 }

@@ -206,6 +206,22 @@ PanelWindow {
     // and the tether retracts.
     property real _paneProgress: panel._paneOpenEff ? 1 : 0
 
+    // A transient's tether. The pane state above only ever describes the
+    // engine-placed pane; a transient is a layer surface the shell composes
+    // and the bar never sees it, so the shell names the chip that owns it
+    // (BarRegistry.openPanelId) and this drops a wire from that chip to the
+    // band's edge. PaneTether already handles an unlocated surface that way
+    // — it is the same wire, just without a rect to run along.
+    readonly property bool _panelOpenHere: BarRegistry.openPanelId !== "" && BarRegistry.openPanelAnchorX >= 0 && (BarRegistry.openPanelScreen === "" || !panel.screen || BarRegistry.openPanelScreen === panel.screen.name)
+    property real _panelProgress: panel._panelOpenHere ? 1 : 0
+
+    Behavior on _panelProgress {
+        NumberAnimation {
+            duration: panel._panelOpenHere ? Motion.duration_reveal : Motion.duration_dismiss
+            easing: panel._panelOpenHere ? Motion.reveal : Motion.release
+        }
+    }
+
     Behavior on _paneProgress {
         NumberAnimation {
             duration: panel._paneOpenEff ? Motion.duration_reveal + Motion.duration_enter_content : Motion.duration_dismiss + 250
@@ -503,6 +519,20 @@ PanelWindow {
         paneRect: panel.paneScreenRect
         screenWidth: panel.width
         progress: panel._paneProgress
+        sliceStart: rail.sliceStart
+        sliceEnd: rail.sliceEnd
+    }
+
+    // The transient's tether. Its own instance rather than a shared one
+    // because the two can be up at once — a status panel over the pane —
+    // and they hang from different chips.
+    PaneTether {
+        id: panelTether
+
+        anchors.fill: parent
+        anchorX: BarRegistry.openPanelAnchorX
+        screenWidth: panel.width
+        progress: panel._panelProgress
         sliceStart: rail.sliceStart
         sliceEnd: rail.sliceEnd
     }

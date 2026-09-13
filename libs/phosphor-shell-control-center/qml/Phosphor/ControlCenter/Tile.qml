@@ -44,15 +44,38 @@ Item {
     property string detailTitle: ""
     property Component detailContent: null
     property bool detailEnabled: true
-    readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
+    /// The bar panel this card drills into, by the bar-widget id that
+    /// opens it ("network", "bluetooth", "audio"). Set instead of
+    /// `detailContent` when the full view already exists as a panel: the
+    /// chip on the bar and the card in here then open the SAME surface
+    /// rather than two views of the same service drifting apart.
+    property string detailPanelId: ""
+
+    readonly property bool hasDetail: root.detailEnabled && (root.detailContent !== null || root.detailPanelId !== "")
     // Layout hint read by ControlCenter. Every rail spans the pane.
-    readonly property bool spansRow: true
+    // Whether this tile wants the grid's full width. A toggle is a card in
+    // a column; a level (volume, brightness) reads better across the row,
+    // because its underline IS its control and a longer line is a finer one.
+    property bool spansRow: false
+    /// Where this card sits on the shared field, 0..1. The host sets it from
+    /// the card's position in the grid, so a row of cards steps along the
+    /// spectrum instead of each one picking a colour.
+    property real railT: 0.5
 
     signal toggled
     signal detailRequested
 
     implicitWidth: 320
-    implicitHeight: Math.max(52, content.implicitHeight + Tokens.spacing_m)
+    // A card, not a rail. The floor is what keeps a card legible in a
+    // narrow zone; the grid stretches it from there to fill the pane, which
+    // is the whole point of the change — the control center is placed as a
+    // TILE and gets whatever the zone is, so content that hugs the top left
+    // two thirds of it empty.
+    implicitHeight: Math.max(92, content.implicitHeight + Tokens.spacing_l * 2)
+    // A card clips: the grid can hand it less height than its content wants
+    // on a short zone, and text escaping the outline reads as a rendering
+    // fault rather than as a tight fit.
+    clip: true
     opacity: root.available ? 1 : StateLayer.disabled_content
 
     activeFocusOnTab: true
@@ -92,45 +115,73 @@ Item {
         onTapped: root.toggled()
     }
 
-    RowLayout {
+    // The card's edge. A stroke, never a fill (R1) and never a shadow (R2):
+    // what separates one card from the next is its outline sampling the
+    // shared field, and it brightens rather than filling when the tile is
+    // on.
+    SpectrumStroke {
+        anchors.fill: parent
+        radius: Tokens.radius_tile
+        t: root.railT
+        active: root.active || hover.hovered
+    }
+
+    ColumnLayout {
         id: content
 
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Tokens.spacing_xs
-        anchors.rightMargin: root.hasDetail ? chevron.width + Tokens.spacing_s : Tokens.spacing_xs
-        spacing: Tokens.spacing_m
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.margins: Tokens.spacing_s
+        anchors.bottomMargin: Tokens.spacing_s + 2
+        spacing: Tokens.spacing_xs
 
         Kirigami.Icon {
             source: root.iconName
             isMask: true
             color: Theme.on_surface
-            opacity: root.active ? 1 : 0.7
-            implicitWidth: 16
-            implicitHeight: 16
-            Layout.alignment: Qt.AlignVCenter
+            opacity: root.active ? 1 : 0.55
+            Layout.preferredWidth: 20
+            Layout.preferredHeight: 20
         }
 
-        Text {
-            Accessible.ignored: true
-            text: root.label
-            color: Theme.on_surface
-            font.family: Tokens.font_family_ui
-            font.pixelSize: Tokens.font_size_body_l
-            font.weight: Tokens.font_weight_medium
-            elide: Text.ElideRight
+        // Pushes the foot to the bottom, so a row of cards shares one
+        // baseline however tall the grid stretches them. Collapses first
+        // when the zone is short, which is what keeps the foot inside the
+        // card instead of overflowing it.
+        Item {
+            Layout.fillHeight: true
+            Layout.minimumHeight: 0
+        }
+
+        // Label and value on ONE line rather than stacked: two stacked text
+        // rows plus the glyph need more height than a card gets in a short
+        // zone, and the value was rendering outside the card's bottom edge.
+        RowLayout {
             Layout.fillWidth: true
-        }
+            spacing: Tokens.spacing_xs
 
-        TabularText {
-            Accessible.ignored: true
-            text: root.sublabel
-            color: Theme.on_surface_variant
-            font.pixelSize: Tokens.font_size_body_m
-            elide: Text.ElideRight
-            visible: root.sublabel !== ""
-            Layout.maximumWidth: root.width * 0.45
+            Text {
+                Accessible.ignored: true
+                text: root.label
+                color: Theme.on_surface
+                font.family: Tokens.font_family_ui
+                font.pixelSize: Tokens.font_size_body_m
+                font.weight: Tokens.font_weight_medium
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            TabularText {
+                Accessible.ignored: true
+                text: root.sublabel
+                color: Theme.on_surface_variant
+                font.pixelSize: Tokens.font_size_label_s
+                elide: Text.ElideRight
+                visible: root.sublabel !== ""
+                Layout.maximumWidth: root.width * 0.5
+            }
         }
     }
 
@@ -139,6 +190,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        anchors.leftMargin: Tokens.radius_tile
+        anchors.rightMargin: Tokens.radius_tile
+        anchors.bottomMargin: 1
         height: 2
         color: root.pending ? Spectrum.pending : (root.active ? Spectrum.active : Theme.on_surface)
         opacity: root.active || root.pending ? (hover.hovered ? 1 : 0.9) : (hover.hovered ? 0.45 : 0.25)

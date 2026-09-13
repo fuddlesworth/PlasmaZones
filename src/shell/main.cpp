@@ -16,6 +16,7 @@
 #include "ShellGestures.h"
 #include "ShellMotion.h"
 #include "SocketPopoutTransport.h"
+#include "NotificationController.h"
 #include "ToastController.h"
 
 #include "daemon/rendering/surfaceshaderitem.h"
@@ -283,6 +284,14 @@ int main(int argc, char* argv[])
     PhosphorShellApp::OsdController osdController;
     PhosphorShellApp::ToastController toastController;
 
+    // The notification centre. Constructing it is what makes this process
+    // the session's org.freedesktop.Notifications daemon, so it is declared
+    // once here rather than per engine: the bus name admits one owner, and
+    // a hot reload rebuilding it would drop the name and every retained
+    // notification with it. Same reverse-destruction placement as the
+    // controllers above.
+    PhosphorShellApp::NotificationController notificationController;
+
     // The dashboard's media cell reads one MprisHost for the process.
     // Owned here rather than declared in QML because the dashboard popout
     // is built by the transport against the root context, where a
@@ -350,8 +359,24 @@ int main(int argc, char* argv[])
     // no placement engine, so the router's "socket" slot is the pane
     // transport and the socket transport sits behind it.
     PhosphorShellApp::PanePopoutTransport paneTransport(&controlCenterController, &socketTransport);
-    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport,
-                                                             {QStringLiteral("control-center")});
+    // NOTHING is engine-placed at the moment, and the empty route set is the
+    // decision rather than an oversight.
+    //
+    // The control center was the one id here, so it opened as a real
+    // toplevel the engine placed in a zone. Two faults came from that and
+    // only that. It was ENORMOUS, because a pane is a tile and a tile gets
+    // the whole zone: five controls stretched across an 830 px surface. And
+    // it was the only surface that appeared centred and jumped, because a
+    // toplevel is mapped where the compositor chooses and the rule moves it
+    // afterwards, which a layer surface the shell positions itself never
+    // does. Every other panel — the calendar included — was already on the
+    // layer route and had neither problem.
+    //
+    // The pane transport and its rules are left wired up: the notification
+    // centre and the expanded map are still meant to be panes (A2 §4.1),
+    // and putting an id back in this set is all it takes. What is settled is
+    // that a surface you open to change one setting is not worth a window.
+    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport, {});
     PhosphorPopout::PopoutController popouts(&routedTransport);
 
     // Compositor-side effects the QML asks for (blur behind the bar band).
@@ -413,6 +438,13 @@ int main(int argc, char* argv[])
             // The pane's surface pack, the same Component every other surface's
             // DecorationSlot instantiates.
             paneTransport.setDecorationProvider([&shellChrome]() -> QObject* {
+                return shellChrome.decorationComponent();
+            });
+            // The same provider on the layer route, so a surface pack reaches
+            // the launcher, the toasts, the bar's panels and the control
+            // center too. That route had none, so a pack stopped at the edge
+            // of every surface on it.
+            popoutTransport.setDecorationProvider([&shellChrome]() -> QObject* {
                 return shellChrome.decorationComponent();
             });
             // The zone nearest the chip, from this engine's placement map and
@@ -548,6 +580,21 @@ int main(int argc, char* argv[])
     engine.addEngineHook([&toastController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ToastRegistry"), &toastController);
     });
+    // The notification centre's retained list, bound the same way. The
+    // controller IS the model, so the panel binds it directly as
+    // `model: NotificationRegistry` and reads serverActive / unreadCount
+    // off the same object.
+    engine.addEngineHook([&notificationController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"), &notificationController);
+    });
+    // One source, two surfaces. Every notification the server accepts both
+    // enters the centre and raises a toast; before this the two were fed by
+    // different paths and disagreed — a real notification appeared in the
+    // centre with no toast, and a scripted one toasted with no record.
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationArrived,
+                     &toastController, [&toastController](const QString& summary, const QString& body) {
+                         toastController.send(summary, body);
+                     });
     engine.addEngineHook([&dashboardMedia](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("DashboardMedia"), &dashboardMedia);
     });

@@ -2642,6 +2642,34 @@ target_link_libraries(test_bar_controller
 target_include_directories(test_bar_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_bar_controller COMMAND test_bar_controller)
 
+# The notification centre, same shape and same reasoning as
+# test_bar_controller: the class ships in the GPL shell binary, so it is
+# tested here rather than from the LGPL service library's own suite (which
+# covers the server and its live model). The server under it runs on a
+# private peer-to-peer bus, so this needs no session daemon.
+#
+# GUARDED, unlike the two above: phosphor-service-notifications is one of
+# the shell-tier libraries the root CMakeLists only adds under
+# BUILD_PHOSPHOR_SHELL, and this target links it rather than compiling its
+# sources. An ungated link to a gated library fails the DEFAULT configure at
+# generate time, which takes the whole suite down instead of one test.
+if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
+    add_executable(test_notification_controller
+        shell/test_notification_controller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/NotificationController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/notificationcontroller.cpp
+    )
+    target_link_libraries(test_notification_controller
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+    )
+    target_include_directories(test_notification_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_notification_controller COMMAND test_notification_controller)
+endif()
+
 # The OSD registry owner, same shape and same reasoning as test_bar_controller.
 add_executable(test_osd_controller
     shell/test_osd_controller.cpp
@@ -2733,6 +2761,39 @@ if(TARGET PhosphorTheme::PhosphorTheme)
     add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
 endif()
 
+# What it costs to OPEN a bar panel: a fence against a blocking service
+# construction moving back onto the click path. Needs the Phosphor.Bar QML
+# module and every service the panels import, so it is guarded on the
+# shell-tier targets the way test_shell_chrome is.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
+    add_executable(test_panel_open_cost shell/test_panel_open_cost.cpp)
+    target_link_libraries(test_panel_open_cost
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            # The popout host is built per open by the transport, so it is
+            # on the click path too and is measured alongside the panels.
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+    )
+    target_compile_definitions(test_panel_open_cost PRIVATE PZ_QML_IMPORT_DIR="${CMAKE_BINARY_DIR}/qml")
+    add_test(NAME test_panel_open_cost COMMAND test_panel_open_cost)
+endif()
+
 # The toast broker behind the `notify` IpcTarget.
 add_executable(test_toast_controller
     shell/test_toast_controller.cpp
@@ -2776,6 +2837,73 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml)
     add_test(NAME test_bar_widget_types COMMAND test_bar_widget_types)
 endif()
 
+# Every shipped shell QML file must compile. A property assignment to a name
+# that does not exist takes the whole file out with no warning, and it has
+# done so three times. The sweep walks the linked modules' resource trees, so
+# every module whose files should be covered has to be on the link line here
+# AND its plugin registrar with it: without the registrar a statically linked
+# module registers no types and each file would fail on its own imports.
+#
+# The service libraries are linked for their registerQmlTypes(), which is what
+# makes a Phosphor.Service.* import resolve — the difference between this and
+# a static qmllint run. No D-Bus daemon is contacted: the files are loaded,
+# never instantiated.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
+    add_executable(test_shell_qml_compiles shell/test_shell_qml_compiles.cpp)
+    target_link_libraries(test_shell_qml_compiles
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellControlCenterQml
+            PhosphorShellControlCenterQmlplugin
+            PhosphorShellOsdQml
+            PhosphorShellOsdQmlplugin
+            PhosphorShellNotificationsQml
+            PhosphorShellNotificationsQmlplugin
+            PhosphorShellDashboardQml
+            PhosphorShellDashboardQmlplugin
+            PhosphorShellLauncherQml
+            PhosphorShellLauncherQmlplugin
+            PhosphorShellPowerQml
+            PhosphorShellPowerQmlplugin
+            PhosphorShellPickerQml
+            PhosphorShellPickerQmlplugin
+            PhosphorShellPolkitQml
+            PhosphorShellPolkitQmlplugin
+            PhosphorShellLockQml
+            PhosphorShellLockQmlplugin
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorShellQml
+            PhosphorShellQmlplugin
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorServiceSni::PhosphorServiceSni
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceBrightness::PhosphorServiceBrightness
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServicePolkit::PhosphorServicePolkit
+            PhosphorServiceIdle::PhosphorServiceIdle
+            PhosphorServiceSession::PhosphorServiceSession
+            # Not for a QML module: PanelWindow, SystemClock and SystemUsage
+            # are C++ types this library registers into Phosphor.Shell.
+            PhosphorShell::PhosphorShell
+    )
+    add_test(NAME test_shell_qml_compiles COMMAND test_shell_qml_compiles)
+endif()
+
 # LayerPopoutTransport, the shell's real popout transport (Phase 4.6),
 # driven headless through phosphor-layer's mock transport + screen provider.
 # Gated on the popout QML module because building PopoutHost in-test needs
@@ -2808,6 +2936,11 @@ if(TARGET PhosphorPopout::PhosphorPopoutQml AND TARGET PhosphorLayer::PhosphorLa
             PhosphorPopoutQmlplugin
             PhosphorThemeQml
             PhosphorThemeQmlplugin
+            # PopoutHost imports Phosphor.Widgets for the DecorationSlot it
+            # wraps its content frame in. Without the module the host does
+            # not load and every open in this file is refused.
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
     )
     add_test(NAME test_layer_popout_transport COMMAND test_layer_popout_transport)
 endif()

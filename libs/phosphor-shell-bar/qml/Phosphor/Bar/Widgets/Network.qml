@@ -6,8 +6,10 @@
 // NetworkManager's connectivity state plus the type of the connection
 // actually carrying traffic. Per-device signal strength and SSID
 // (NetworkDevice / AccessPoint) are a follow-up; this first cut is a robust
-// state glyph, not a full applet. The detailed network panel binds the same
-// host when the control center tile lands.
+// state glyph, not a full applet. NetworkPanel is the detailed view, and
+// binds its own host for the reason NetworkTile documents: NetworkHost is a
+// thin view over NetworkManager's D-Bus state, so a second one costs one
+// more set of property mirrors, not a second connection's worth of traffic.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
@@ -16,6 +18,13 @@ import Phosphor.Service.Network
 
 BarWidget {
     id: root
+
+    /// Relayed by BarController as BarRegistry.widgetActivated("network"),
+    /// which shell.qml turns into the NetworkPanel popout. Declared here
+    /// rather than on BarWidget because the duck-typed lookup keys on this
+    /// signal existing: putting it on the base would register every status
+    /// chip as a trigger, including the ones with nothing to open.
+    signal activated
 
     NetworkHost {
         id: host
@@ -96,5 +105,33 @@ BarWidget {
         source: root.iconName
         isMask: true
         color: root.online ? Theme.on_surface : root.limited ? Theme.warning : Theme.on_surface_variant
+        // The press reads on the glyph, since the chip has no state layer.
+        scale: trigger.pressed ? 0.94 : 1
+        opacity: trigger.lit ? 1 : 0.85
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: Motion.duration_tick
+                easing: Motion.reveal
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: trigger.lit ? Motion.duration_enter : Motion.duration_release
+                easing: trigger.lit ? Motion.enter : Motion.release
+            }
+        }
+    }
+
+    ChipTrigger {
+        id: trigger
+
+        actionName: qsTr("Show network panel")
+        // The panel needs a device to talk about. With none, the chip is
+        // already collapsed by `available`, but the gate is stated anyway:
+        // the two predicates answer different questions and tying the press
+        // to the readout's visibility by accident is how they drift.
+        active: host.deviceCount > 0
+        onTriggered: root.activated()
     }
 }

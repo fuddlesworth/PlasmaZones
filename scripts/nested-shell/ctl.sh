@@ -12,7 +12,7 @@ set -eu
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
-NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 
 if [ ! -f "$NEST/env.sh" ]; then
     echo "no nested session in $NEST (run scripts/nested-shell/run-shell.sh first)" >&2

@@ -49,15 +49,60 @@ Item {
     // is. `created` false means the provider returned null.
     signal tileResolved(string tileId, bool created)
     // Emitted as a detail view opens and after it closes.
+    /// A card asked for a full view that lives outside this surface (a bar
+    /// panel). Carries the bar-widget id, for the host to open.
+    signal panelRequested(string panelId)
+
     signal detailOpened(string tileId)
     signal detailClosed(string tileId)
 
-    implicitWidth: grid.implicitWidth + 2 * Tokens.spacing_m
+    /// The surface's width. Fixed rather than derived from the cards,
+    /// because the cards divide whatever width they are given and would
+    /// otherwise collapse to their text. Matches the bar's other panels, so
+    /// moving between them is not re-reading a differently shaped surface.
+    property real panelWidth: 360
+
+    implicitWidth: root.panelWidth
     // The taller of the two views, not just the grid. A host that sizes
     // itself to this would otherwise clip a detail view taller than the
     // grid behind it, and neither view scrolls or clips, so the overflow
     // would simply be cut off.
     implicitHeight: Math.max(grid.implicitHeight, detail.implicitHeight) + 2 * Tokens.spacing_m
+
+    /// Where this surface sits along the screen, 0..1, for the stroke and
+    /// the top band. Set by the host from the chip that opened it.
+    property real railT: 0.5
+
+    // The surface's own material. It had none: as an engine-placed pane it
+    // borrowed PaneHost's ground, and the moment it became an ordinary
+    // popout the cards were left floating on the bare desktop with no
+    // surface under them. The layers are 05 §5's, the same ones the bar's
+    // other panels draw.
+    Rectangle {
+        anchors.fill: parent
+        radius: Tokens.radius_l
+        color: Theme.isDark ? Qt.rgba(0.027, 0.059, 0.133, 0.94) : Qt.rgba(0.96, 0.976, 1, 0.94)
+    }
+
+    SpectrumStroke {
+        anchors.fill: parent
+        radius: Tokens.radius_l
+        t: root.railT
+    }
+
+    // The top edge IS the rail over this surface's x-range, so the panel and
+    // the bar above it match hue for hue, and it carries the gleam.
+    SpectrumRail {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.leftMargin: Tokens.radius_l
+        anchors.rightMargin: Tokens.radius_l
+        thickness: 2
+        gleam: true
+        sliceStart: Math.max(0, root.railT - 0.09)
+        sliceEnd: Math.min(1, root.railT + 0.09)
+    }
 
     QtObject {
         id: priv
@@ -158,13 +203,39 @@ Item {
                 // Tiles come from a provider, so a third-party one may
                 // legitimately not span; a tile that declares nothing gets
                 // the rail default, which is to span.
-                item.Layout.fillWidth = item.spansRow === undefined || item.spansRow;
+                // Cards fill their cell in both directions, so the grid
+                // distributes the zone across them instead of leaving the
+                // remainder empty. A tile that wants the full width (a
+                // level, whose underline is its control and reads better
+                // long) spans both columns.
+                const wide = item.spansRow === undefined ? false : item.spansRow;
+                item.Layout.fillWidth = true;
+                // NOT fillHeight: a card keeps its own height. Stretching
+                // them to fill was what turned a five-control panel into
+                // five 230 px slabs.
+                item.Layout.fillHeight = false;
+                item.Layout.columnSpan = wide ? 2 : 1;
+                // Step each card along the shared field by its position, so
+                // the grid reads as one gradient rather than a set of
+                // independently coloured cards (05 R1).
+                if (item.railT !== undefined)
+                    item.railT = root.tileIds.length > 1 ? i / (root.tileIds.length - 1) : 0.5;
                 // The tile chrome carries no id of its own; bind the
                 // detail request here so Tile.qml stays a pure view.
-                if (item.detailRequested !== undefined)
+                if (item.detailRequested !== undefined) {
+                    // A card that names a bar panel hands the request out
+                    // rather than opening the in-surface detail view: the
+                    // panel already exists and is what the matching chip
+                    // opens, so drilling in here and pressing the chip land
+                    // in the same place.
+                    const panelId = item.detailPanelId === undefined ? "" : item.detailPanelId;
                     item.detailRequested.connect(function () {
-                        root.openDetail(id);
+                        if (panelId !== "")
+                            root.panelRequested(panelId);
+                        else
+                            root.openDetail(id);
                     });
+                }
             }
             // Truthiness, not a null comparison: a factory that falls off
             // the end returns undefined, which `!== null` would report as
@@ -187,17 +258,25 @@ Item {
         root.rebuild();
     }
 
-    ColumnLayout {
+    GridLayout {
         id: grid
 
-        // Anchored to the top three edges rather than filling: a host that
-        // gives the surface more height than the rails need would
-        // otherwise spread the rows down the whole surface.
+        // Top-anchored, and the surface is sized to IT rather than the other
+        // way round. This surface is a transient now, not an engine-placed
+        // tile, so it gets the size it asks for.
+        //
+        // It has been both other things and both were wrong. Filling a
+        // zone-sized pane stretched five controls across 830 px, so each
+        // card became enormous. Hugging the top of a zone-sized pane left
+        // two thirds of it empty. Neither is fixable by layout, because the
+        // fault was the surface taking a whole zone at all.
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: Tokens.spacing_m
-        spacing: 0
+        columns: 2
+        columnSpacing: Tokens.spacing_m
+        rowSpacing: Tokens.spacing_m
         // Hidden, not merely covered, while a detail view is open. The
         // detail panel is a sibling rather than a child, so leaving the grid
         // visible underneath would keep every tile in the accessibility tree

@@ -8,8 +8,12 @@
 #include <PhosphorRegistry/RegistryNotifier.h>
 
 #include <QDebug>
+#include <QGuiApplication>
+#include <QPointF>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickWindow>
+#include <QScreen>
 #include <QStringList>
 
 #include <memory>
@@ -216,6 +220,89 @@ void BarController::relayWidgetActivation()
         return;
     }
     Q_EMIT widgetActivated(id, widget);
+}
+
+QScreen* BarController::screenOf(QQuickItem* item) const
+{
+    QScreen* screen = nullptr;
+    if (item) {
+        if (const QQuickWindow* window = item->window()) {
+            screen = window->screen();
+        }
+    }
+    // An unresolved source should open the panel somewhere sensible rather
+    // than nowhere: a null targetScreen leaves the transport with no bar to
+    // hang from.
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    // LOAD-BEARING, and the same trap ControlCenterController::screenOf
+    // documents at length: a QScreen has no QObject parent, so QML gives a
+    // Q_INVOKABLE's parentless QObject* return JavaScriptOwnership and the
+    // garbage collector DELETES the live screen when the wrapper is
+    // collected. The screen belongs to QGuiApplication; say so.
+    if (screen) {
+        QQmlEngine::setObjectOwnership(screen, QQmlEngine::CppOwnership);
+    }
+    return screen;
+}
+
+qreal BarController::anchorCenterFor(QQuickItem* item) const
+{
+    if (!item) {
+        return -1.0;
+    }
+    QQuickWindow* window = item->window();
+    if (!window) {
+        // A widget built but not yet shown. The caller falls back to a
+        // fixed bar anchor rather than placing the panel at the origin.
+        return -1.0;
+    }
+    // Item -> scene, scene -> global, global -> screen-local. The last hop
+    // is what makes this correct on a multi-head desktop: mapToGlobal
+    // returns a virtual-desktop coordinate, and PopoutHost places against a
+    // surface that is full-bleed on ONE output, whose origin is the screen's
+    // geometry topLeft.
+    const QPointF sceneCenter = item->mapToScene(QPointF(item->width() / 2.0, item->height() / 2.0));
+    const QPointF globalCenter = window->mapToGlobal(sceneCenter);
+    const QScreen* screen = window->screen();
+    if (!screen) {
+        return -1.0;
+    }
+    return globalCenter.x() - screen->geometry().x();
+}
+
+void BarController::setOpenPanel(const QString& id, QQuickItem* source)
+{
+    if (m_openPanelId == id && m_openPanelSource == source) {
+        return;
+    }
+    m_openPanelId = id;
+    m_openPanelSource = source;
+    Q_EMIT openPanelChanged();
+}
+
+QString BarController::openPanelId() const
+{
+    return m_openPanelId;
+}
+
+qreal BarController::openPanelAnchorX() const
+{
+    // Recomputed on read rather than cached at setOpenPanel: the chip's
+    // position moves as the bar lays out (a widget appearing or collapsing
+    // shifts every chip after it), and a tether pinned to where the chip
+    // was when the panel opened would drift off it.
+    return m_openPanelId.isEmpty() ? -1.0 : anchorCenterFor(m_openPanelSource.data());
+}
+
+QString BarController::openPanelScreen() const
+{
+    if (m_openPanelId.isEmpty() || !m_openPanelSource) {
+        return {};
+    }
+    const QScreen* screen = screenOf(m_openPanelSource.data());
+    return screen ? screen->name() : QString();
 }
 
 QStringList BarController::factoryIds() const

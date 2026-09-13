@@ -29,6 +29,23 @@ Item {
 
     opacity: 0.75
 
+    // LOAD-BEARING. The gleam below is deliberately sized and travelled to
+    // start fully off one end of the rail and finish fully off the other,
+    // so for part of every pass it sits OUTSIDE this item's bounds. On the
+    // bar that is invisible, because the rail spans the whole output and
+    // the overshoot lands off-screen. Anywhere the rail is inset — a
+    // panel's top band, a pane's, a tether's — the overshoot escapes and
+    // paints an 8 px bright dash detached from the surface, hanging on the
+    // desktop beside it.
+    //
+    // Clipping here rather than in each consumer: PaneHost already wraps
+    // its rail in an `Item { clip: true }` for exactly this, and the bar
+    // panels then hit it a second time. A shared atom whose correct use
+    // requires a wrapper is a trap; it clips itself now, and the wrapper
+    // in PaneHost is left in place because it is also what gives that band
+    // its x-range offset.
+    clip: true
+
     implicitWidth: vertical ? thickness : 200
     implicitHeight: vertical ? 200 : thickness
 

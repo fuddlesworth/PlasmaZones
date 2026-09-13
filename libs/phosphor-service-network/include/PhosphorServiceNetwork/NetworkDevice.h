@@ -26,6 +26,18 @@ class PHOSPHORSERVICENETWORK_EXPORT NetworkDevice : public QObject
     Q_PROPERTY(DeviceType deviceType READ deviceType NOTIFY deviceTypeChanged)
     Q_PROPERTY(DeviceState state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool managed READ managed NOTIFY managedChanged)
+    /// D-Bus path of the access point this device is currently associated
+    /// with, or empty when it is associated with none — which is also what
+    /// a non-Wi-Fi device always reports, since only
+    /// org.freedesktop.NetworkManager.Device.Wireless carries the property.
+    ///
+    /// A PATH rather than an AccessPoint*: the access-point objects are
+    /// owned by AccessPointModel, which builds them per device, and handing
+    /// out a pointer from here would make this class a second owner of
+    /// something it does not manage the lifetime of. A consumer that has a
+    /// model already compares this against each row's `dbusPath`, which is
+    /// exactly what the comparison is for.
+    Q_PROPERTY(QString activeAccessPointPath READ activeAccessPointPath NOTIFY activeAccessPointPathChanged)
 
 public:
     // Mirrors org.freedesktop.NetworkManager.Device `DeviceType` (NM 1.0+,
@@ -89,12 +101,14 @@ public:
     [[nodiscard]] DeviceType deviceType() const;
     [[nodiscard]] DeviceState state() const;
     [[nodiscard]] bool managed() const;
+    [[nodiscard]] QString activeAccessPointPath() const;
 
 Q_SIGNALS:
     void interfaceNameChanged();
     void deviceTypeChanged();
     void stateChanged();
     void managedChanged();
+    void activeAccessPointPathChanged();
 
 private Q_SLOTS:
     void _q_onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);
