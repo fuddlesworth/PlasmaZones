@@ -8,6 +8,34 @@ The current reference is [`mockups-v3/`](mockups-v3/), including Navigator,
 Stage, the quick-settings shelf, calendar, visualizers and scrolling with
 four and ten windows.
 
+The [wallpaper and Appearance study](mockups-v3/index.html#navigator/appearance)
+brings wallpaper browsing, style controls, bar composition and presets into one
+window. The gallery includes eight wallpapers, searchable collections, image
+import, two simulated displays, placement controls and wallpaper-derived colors.
+A desktop preview hides windows so the background can be judged at full size.
+Changes stay provisional until Apply. Revert restores the applied look, and
+closing with changes offers Apply, Discard or Keep editing.
+
+Style includes palette and focus color, glass/solid/light materials, geometry,
+fonts, motion, media and privacy options, with browser approximations of optional
+surface effects. The Bar page supports drag, keyboard-accessible region/order
+controls, hide/restore, edge and inset. Presets can include wallpapers and bar
+layout explicitly. Saving, importing with validation, export, deletion and
+retaining the applied configuration through a reload work in the browser.
+Imported images stay in the current tab and are excluded from portable presets.
+The external **Preview controls** drawer remains available for reviewing other
+surfaces. The bar's Appearance button opens the new window.
+
+This is a prototype for review before native migration. The two displays, effect
+samples and pane previews are fixtures. Artwork is drawn in CSS except for the
+existing bundled picture; no downloaded assets or fonts are required.
+Captures: [Wallpaper](mockups-v3/appearance.png),
+[Style](mockups-v3/appearance-style.png), [Bar](mockups-v3/appearance-bar.png),
+[Presets](mockups-v3/appearance-presets.png),
+[Paper](mockups-v3/appearance-paper.png), [Ember](mockups-v3/appearance-ember.png),
+[desktop preview](mockups-v3/appearance-preview.png), and
+[saving a preset](mockups-v3/appearance-save-preset.png).
+
 The [notification-center study](mockups-v3/index.html#navigator/notifications)
 adds a bounded inbox shared by Navigator and Stage. It includes app groups,
 an unread filter, urgent items, inline demo replies, Do Not Disturb, and Undo
@@ -20,7 +48,8 @@ Dismissed popups remain in history. Do Not Disturb suppresses the popup;
 the preview stays open until dismissed when it is shown.
 Organization and message previews are customizable alongside the
 shared palettes and density. These notification interactions are browser
-fixtures for design review; the native notification center is unchanged.
+fixtures for design review; the approved native migration is recorded in
+`04-implementation-plan.md`.
 Captures: [Phosphor](mockups-v3/notifications.png),
 [Paper](mockups-v3/notifications-paper.png),
 [Ember](mockups-v3/notifications-ember.png), and the

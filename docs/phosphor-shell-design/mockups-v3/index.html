@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="studies.css">
 <link rel="stylesheet" href="lockscreen.css">
 <link rel="stylesheet" href="notifications.css">
+<link rel="stylesheet" href="appearance.css">
 </head>
 <body>
 <header class="review-header">
@@ -21,10 +22,10 @@
 <div class="review-toolbar">
   <nav aria-label="Preview state" class="view-switch">
     <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button>
-    <button data-view="controls">Quick settings</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button>
+    <button data-view="controls">Quick settings</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
   </nav>
   <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
-  <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Customize this shell</button>
+  <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Preview controls</button>
 </div>
 <div id="lock-preview-controls" class="lock-preview-controls hidden" aria-label="Lock screen prototype controls">
   <span>PREVIEW STATE</span>
@@ -85,6 +86,7 @@
   <section id="datetime" class="hidden" aria-label="Date and time"></section>
   <section id="notifications" class="hidden" aria-label="Notification center" role="dialog"></section>
   <section id="notification-arrival" class="hidden" aria-label="New notification"></section>
+  <section id="appearance" class="hidden" aria-label="Appearance"></section>
   <section id="session" class="hidden" aria-label="Session actions" role="dialog" aria-modal="true"></section>
   <div id="osd" class="osd hidden" role="status"></div>
   <div id="toast" class="toast material hidden" role="status"></div>
@@ -128,6 +130,7 @@
 <script src="visualizer.js"></script>
 <script src="lockscreen.js"></script>
 <script src="notifications.js"></script>
+<script src="appearance.js"></script>
 <script src="studies.js"></script>
 </body>
 </html>

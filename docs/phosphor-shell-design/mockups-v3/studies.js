@@ -54,6 +54,9 @@ const notificationCenter = PhosphorNotifications.create({root:$('#notifications'
 const lockscreen = PhosphorLock.create({root:$('#lockscreen'),icon,getSettings:()=>settings,isPlaying:()=>state.playing,
   togglePlayback:()=>{state.playing=!state.playing;},syncVisualizer,onUnlocked:()=>setView('desktop'),
   onPhaseChanged:phase=>desktop.classList.toggle('lock-releasing',phase==='success')});
+const appearance = PhosphorAppearance.create({root:$('#appearance'),desktop,icon,getSettings:()=>settings,
+  setSettings:(value,persist=false,redraw=true)=>{settings={...value};applySettings(persist,redraw);},presets,
+  onClose:()=>setView('desktop'),notify});
 const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
 const selectedWindow = () => windows.find(w => w.id === state.focused);
 const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
@@ -119,7 +122,7 @@ function renderBar() {
     <div class="bar-right"><button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime">Sat 12 &nbsp; <span style="color:var(--text)">10:24</span></button>
     <button class="bar-notifications" data-view="notifications" data-unread="${notificationCenter.unread()>0}" aria-label="Notifications, ${notificationCenter.unread()} unread" aria-expanded="${state.view==='notifications'&&notificationCenter.inboxOpen()}" aria-controls="notifications">${icon('bell')}</button>
     <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}<span>82%</span></button>
-    <button class="settings-trigger" data-customize aria-label="Customize shell">◈</button>
+    <button class="settings-trigger" data-view="appearance" aria-label="Open Appearance">◈</button>
     <button class="bar-power" data-view="power" aria-label="Open session menu" aria-expanded="${state.view==='power'}">${icon('power')}</button></div>`;
   syncVisualizer();
 }
@@ -271,6 +274,13 @@ function renderLauncher() {
 }
 
 function renderNotes() {
+  if(state.view==='appearance') {
+    $('#study-kicker').textContent='E / WALLPAPER & APPEARANCE';
+    $('#study-title').textContent='A space that feels like yours.';
+    $('#study-description').textContent='Wallpapers, color, material and bar composition in one place. Large previews and a real desktop view make each choice easy to judge. The pane motif carries through the gallery and live samples.';
+    $('#ux-description').textContent='Preview without committing. Apply or revert changes, choose wallpapers per display, and save a preset with only the parts you want to share. Imported images and presets stay in this browser prototype.';
+    return;
+  }
   if(state.view==='notifications') {
     $('#study-kicker').textContent='D / NOTIFICATION CENTER';
     $('#study-title').textContent='A place for what arrives.';
@@ -375,18 +385,20 @@ function render() {
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
   desktop.classList.toggle('locked',state.view==='lockscreen');
-  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power'].includes(state.view);
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance'].includes(state.view);
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
   renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
   notificationCenter.render(state.view==='notifications');
   updateNotificationBell();
   lockscreen.render(state.view==='lockscreen');
+  appearance.render(state.view==='appearance');
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
   $$('.view-switch [data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===state.view));
   history.replaceState(null,'',`#${state.study}/${state.view}`);
 }
 
-function applySettings() {
+function applySettings(persist=true,redraw=true) {
+  if(persist)appearance.syncSettings(settings);
   for (const [key,value] of Object.entries(settings)) {
     if (key==='radius'||key==='gap') desktop.style.setProperty(`--${key}`,`${value}px`);
     else desktop.dataset[key] = String(value);
@@ -399,11 +411,12 @@ function applySettings() {
   }
   $('#radius-value').textContent=`${settings.radius} px`;
   $('#gap-value').textContent=`${settings.gap} px`;
-  try { localStorage.setItem('phosphor-design-settings',JSON.stringify(settings)); } catch { /* Optional persistence. */ }
-  render();
+  try { if(persist) localStorage.setItem('phosphor-design-settings',JSON.stringify(settings)); } catch { /* Optional persistence. */ }
+  if(redraw)render();
 }
 
 function setView(view) {
+  if(state.view==='appearance' && view!=='appearance' && appearance.guardExit(()=>setView(view)))return;
   const previousView=state.view;
   clearTimeout(powerTimer);state.powerArmed='';state.powerIndex=0;
   if (view!=='desktop') returnFocus=document.activeElement;
@@ -415,10 +428,12 @@ function setView(view) {
   if (view==='datetime') $('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
   if (view==='power') $('#session .selected')?.focus({preventScroll:true});
   if (view==='notifications') notificationCenter.focus();
+  if (view==='appearance') appearance.focus();
   if (view==='desktop') {
     if (previousView==='notifications') $('.bar-notifications').focus();
     else if (previousView==='datetime') $('.clock').focus();
     else if (previousView==='power') $('.bar-power').focus();
+    else if (previousView==='appearance') $('.settings-trigger')?.focus();
     else if (returnFocus?.isConnected) returnFocus.focus();
     else $('.map-trigger')?.focus();
   }
@@ -474,7 +489,7 @@ function runResult(index) {
   const r=lastResults[index];if(!r)return;
   if(r.kind==='windows')focusWindow(r.id);
   else if(r.kind==='apps')launchApp(r.id);
-  else if(r.id==='customize'){setView('desktop');customize();}
+  else if(r.id==='customize')setView('appearance');
   else {state.dnd=!state.dnd;setView('desktop');notify(`Do not disturb ${state.dnd?'on':'off'}`);}
 }
 
@@ -565,6 +580,7 @@ document.addEventListener('input',e=>{
 });
 
 document.addEventListener('keydown',e=>{
+  if(appearance.handleKey(e))return;
   if(lockscreen.handleKey(e))return;
   if(e.key==='Escape'){setView('desktop');return;}
   if(state.view==='power'&&!e.target.closest('.review-toolbar,.review-header,#customizer')&&!e.ctrlKey&&!e.metaKey&&!e.altKey) {
@@ -614,7 +630,9 @@ new ResizeObserver(([entry])=>{
 }).observe($('.frame'));
 const [study,view]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power'].includes(view))state.view=view;
+if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
 if(state.view==='power')$('#session .selected')?.focus({preventScroll:true});
+
+if(state.view==='appearance')appearance.focus();
