@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 #include <QDBusContext>
+#include <QHash>
 #include <QDBusServiceWatcher>
 #include <QObject>
 #include <QPointer>
@@ -39,6 +40,7 @@ Q_SIGNALS:
 
 private:
     void restore();
+    void updateDecorations();
     void watchWindow(KWin::EffectWindow* window);
     KWin::Effect* m_effect;
     QPointer<KWin::LogicalOutput> m_output;
@@ -50,5 +52,7 @@ private:
     bool m_closing = false;
     QTimer m_windowChanges;
     QString m_lastFocusedWindow;
+    QHash<KWin::EffectWindow*, int> m_windowColors;
+    int m_nextColor = 0;
 };
 }

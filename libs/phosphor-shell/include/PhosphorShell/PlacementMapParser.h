@@ -62,6 +62,7 @@ struct PHOSPHORSHELL_EXPORT Cell
     bool urgent = false;
     bool offscreen = false;
     bool minimized = false;
+    int colorIndex = -1;
 };
 
 /// One non-floating window on a screen, for `applyOccupancy`: the zones

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #include <PhosphorTheme/AppearanceStore.h>
+#include <PhosphorTheme/ShellPalette.h>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -10,6 +11,26 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void sharedPalettePreservesApprovedColors()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        const QList<QColor> backgrounds{QColor(QStringLiteral("#101d32")), QColor(QStringLiteral("#eef2fa")),
+                                        QColor(QStringLiteral("#272620"))};
+        const QList<QString> presets{QStringLiteral("phosphor"), QStringLiteral("paper"), QStringLiteral("ember")};
+        for (int i = 0; i < presets.size(); ++i) {
+            QVERIFY(store.applyPreset(presets[i]));
+            const auto palette = PhosphorTheme::ShellPalette::fromSettings(store.values());
+            QCOMPARE(palette.surface, backgrounds[i]);
+            QCOMPARE(store.palette(), palette.toVariant());
+            QCOMPARE(palette.windowColor(0), palette.stops[0]);
+            QCOMPARE(palette.windowColor(1), palette.stops[2]);
+            QCOMPARE(palette.windowColor(2), palette.stops[3]);
+            QCOMPARE(palette.windowColor(3), palette.stops[1]);
+            QCOMPARE(palette.windowColor(7), palette.windowColor(3));
+            QVERIFY(palette.text != palette.surface);
+        }
+    }
     void presetNamesReflectStyleEdits()
     {
         QTemporaryDir dir;

@@ -20,6 +20,7 @@ set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
 find_package(KWin 6.7 REQUIRED)
+find_package(KDecoration3 6.7 REQUIRED)
 
 # KColorScheme: the compositor-drawn scrolling tab pills resolve their
 # theme colours (the negative/urgent red in particular) from the active KDE
@@ -219,6 +220,7 @@ set_source_files_properties(transitions/transitionpasshelpers.cpp PROPERTIES SKI
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
     KWin::kwin
+    KDecoration3::KDecoration
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
@@ -278,3 +280,8 @@ target_include_directories(kwin_effect_plasmazones PRIVATE
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in
 # the KWIN_EFFECT_FACTORY_SUPPORTED macro. The source file MUST include
 # "plasmazoneseffect.moc" at the end for MOC to process the generated Q_OBJECT class.
+
+# Native titlebars share the shell palette and geometry.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(shell-decoration)
+endif()

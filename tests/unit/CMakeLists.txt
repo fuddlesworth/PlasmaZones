@@ -2414,6 +2414,14 @@ add_test(NAME test_bar_controller COMMAND test_bar_controller)
 # sources. An ungated link to a gated library fails the DEFAULT configure at
 # generate time, which takes the whole suite down instead of one test.
 if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
+    add_executable(test_desktop_style_controller
+        shell/test_desktop_style_controller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/DesktopStyleController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/desktopstylecontroller.cpp
+    )
+    target_link_libraries(test_desktop_style_controller PRIVATE Qt6::Test Qt6::DBus KF6::CoreAddons plasmazones_core)
+    target_include_directories(test_desktop_style_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_desktop_style_controller COMMAND test_desktop_style_controller)
     add_executable(test_quick_settings_controller
         shell/test_quick_settings_controller.cpp
         ${CMAKE_SOURCE_DIR}/src/shell/QuickSettingsController.h

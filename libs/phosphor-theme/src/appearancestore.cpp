@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #include <PhosphorTheme/AppearanceStore.h>
+#include <PhosphorTheme/ShellPalette.h>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -36,6 +37,7 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("glow"), true},
             {QStringLiteral("motion"), true},
             {QStringLiteral("surfacePacks"), false},
+            {QStringLiteral("desktopStyle"), true},
             {QStringLiteral("media"), true},
             {QStringLiteral("visualizer"), QStringLiteral("ribbon")}};
 }
@@ -241,9 +243,14 @@ bool AppearanceStore::applyPreset(const QString& preset)
     }
     for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
                             QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
-                            QStringLiteral("surfacePacks")})
+                            QStringLiteral("surfacePacks"), QStringLiteral("desktopStyle")})
         next[key] = m_values.value(key);
     return commit(next);
+}
+
+QVariantMap AppearanceStore::palette() const
+{
+    return ShellPalette::fromSettings(m_values).toVariant();
 }
 
 QString AppearanceStore::currentPreset() const

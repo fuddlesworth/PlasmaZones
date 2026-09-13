@@ -3,6 +3,8 @@
 #include "shelloverview.h"
 #include "../plasmazoneseffect/plasmazoneseffect.h"
 #include <core/output.h>
+#include <window.h>
+#include <KDecoration3/Decoration>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -32,9 +34,13 @@ ShellOverview::ShellOverview(KWin::Effect* effect)
     bus.registerObject(ObjectPath, this, QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
     m_windowChanges.setSingleShot(true);
     m_windowChanges.setInterval(16);
-    connect(&m_windowChanges, &QTimer::timeout, this, &ShellOverview::windowsChanged);
+    connect(&m_windowChanges, &QTimer::timeout, this, [this] {
+        updateDecorations();
+        Q_EMIT windowsChanged();
+    });
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &ShellOverview::watchWindow);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, [this](KWin::EffectWindow* window) {
+        m_windowColors.remove(window);
         if (window->isNormalWindow() || window->isDialog())
             m_windowChanges.start();
     });
@@ -69,14 +75,29 @@ void ShellOverview::watchWindow(KWin::EffectWindow* window)
 {
     if (!navigable(window))
         return;
+    if (!m_windowColors.contains(window))
+        m_windowColors.insert(window, m_nextColor++ % 4);
     const auto changed = [this] {
         m_windowChanges.start();
     };
+    connect(window->window(), &KWin::Window::decorationChanged, this, changed);
     connect(window, &KWin::EffectWindow::windowFrameGeometryChanged, this, changed);
     connect(window, &KWin::EffectWindow::windowDesktopsChanged, this, changed);
     connect(window, &KWin::EffectWindow::minimizedChanged, this, changed);
     connect(window, &KWin::EffectWindow::windowHiddenChanged, this, changed);
     m_windowChanges.start();
+}
+void ShellOverview::updateDecorations()
+{
+    auto* effect = static_cast<PlasmaZonesEffect*>(m_effect);
+    for (auto* window : KWin::effects->stackingOrder()) {
+        if (!navigable(window))
+            continue;
+        if (auto* decoration = window->window()->decoration()) {
+            decoration->setProperty("phosphorColorIndex", m_windowColors.value(window, 0));
+            decoration->setProperty("phosphorFocused", effect->getWindowId(window) == m_lastFocusedWindow);
+        }
+    }
 }
 QString ShellOverview::windows(const QString& screen, int desktop) const
 {
@@ -97,6 +118,7 @@ QString ShellOverview::windows(const QString& screen, int desktop) const
                                   {QStringLiteral("appId"), effect->getWindowAppId(window)},
                                   {QStringLiteral("title"), window->caption()},
                                   {QStringLiteral("focused"), id == m_lastFocusedWindow},
+                                  {QStringLiteral("colorIndex"), m_windowColors.value(window, 0)},
                                   {QStringLiteral("minimized"), window->isMinimized()},
                                   {QStringLiteral("x"), rect.x()},
                                   {QStringLiteral("y"), rect.y()},

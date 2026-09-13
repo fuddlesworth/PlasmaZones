@@ -716,6 +716,8 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/layerpopouttransport.cpp
         shell/QmlComponentBarWidgetFactory.h
         shell/qmlcomponentbarwidgetfactory.cpp
+        shell/DesktopStyleController.h
+        shell/desktopstylecontroller.cpp
         shell/QuickSettingsController.h
         shell/quicksettingscontroller.cpp
         shell/ControlCenterController.h
@@ -781,6 +783,8 @@ if(BUILD_PHOSPHOR_SHELL)
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
+            plasmazones_core
+            KF6::CoreAddons
             # Registry core (Registry<IBarWidgetFactory> + RegistryNotifier)
             # for BarController, and the Phosphor.Bar QML module + its plugin
             # registrar so the bar delegates resolve at runtime.

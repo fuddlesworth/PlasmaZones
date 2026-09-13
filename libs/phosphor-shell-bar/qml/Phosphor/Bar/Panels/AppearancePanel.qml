@@ -305,7 +305,7 @@ FocusScope {
                     settingKey: "motion"
                 }
                 ShellButton {
-                    text: root.advanced ? qsTr("Fewer options") : qsTr("Fonts and surface packs")
+                    text: root.advanced ? qsTr("Fewer options") : qsTr("More options")
                     Layout.fillWidth: true
                     onClicked: root.advanced = !root.advanced
                 }
@@ -313,6 +313,10 @@ FocusScope {
                     visible: root.advanced
                     Layout.fillWidth: true
                     spacing: 16
+                    SettingCheck {
+                        label: qsTr("Match desktop windows")
+                        settingKey: "desktopStyle"
+                    }
                     SettingCheck {
                         label: qsTr("Custom surface packs")
                         settingKey: "surfacePacks"

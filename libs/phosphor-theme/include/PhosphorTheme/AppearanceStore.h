@@ -17,6 +17,7 @@ class PHOSPHORTHEME_EXPORT AppearanceStore : public QObject
     Q_PROPERTY(QVariantMap values READ values NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString currentPreset READ currentPreset NOTIFY changed)
+    Q_PROPERTY(QVariantMap palette READ palette NOTIFY changed)
 public:
     explicit AppearanceStore(QObject* parent = nullptr);
     explicit AppearanceStore(const QString& path, QObject* parent = nullptr);
@@ -30,6 +31,7 @@ public:
     }
     static QVariantMap defaults();
     QString currentPreset() const;
+    QVariantMap palette() const;
     Q_INVOKABLE bool setValue(const QString& key, const QVariant& value);
     Q_INVOKABLE bool moveWidget(const QString& id, const QString& region, int index = -1);
     Q_INVOKABLE bool resetBarLayout();

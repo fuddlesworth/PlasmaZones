@@ -98,7 +98,7 @@ FocusScope {
                     id: card
                     required property var modelData
                     required property int index
-                    colorIndex: index
+                    colorIndex: modelData.colorIndex >= 0 ? modelData.colorIndex : index
                     windowInfo: modelData
                     x: 5 + modelData.x * (mapCanvas.width - 10)
                     y: 5 + modelData.y * (mapCanvas.height - 10)
@@ -144,7 +144,7 @@ FocusScope {
                     required property int index
                     width: 104
                     height: 196
-                    colorIndex: index
+                    colorIndex: modelData.colorIndex >= 0 ? modelData.colorIndex : index
                     windowInfo: modelData
                     selected: root.selectedId === modelData.windowId
                     onClicked: root.choose(index)
@@ -186,7 +186,7 @@ FocusScope {
                 width: titles.width
                 height: 56
                 row: true
-                colorIndex: index
+                colorIndex: modelData.colorIndex >= 0 ? modelData.colorIndex : index
                 windowInfo: modelData
                 selected: root.selectedId === modelData.windowId
                 onClicked: root.choose(index)

@@ -450,7 +450,7 @@ private Q_SLOTS:
     {
         const auto live = parseNativeWindows(QStringLiteral(R"([
             {"windowId":"float","appId":"editor","title":"Floating","x":125,"y":150,"width":300,"height":200,"focused":true},
-            {"windowId":"column","x":1400,"y":100,"width":400,"height":500},
+            {"windowId":"column","colorIndex":2,"x":1400,"y":100,"width":400,"height":500},
             {"windowId":"minimized","x":0,"y":100,"width":500,"height":500,"minimized":true}
         ])"),
                                              QRect(0, 100, 1000, 500));
@@ -470,6 +470,8 @@ private Q_SLOTS:
         QCOMPARE(merged[0].windowId, column.windowId);
         QCOMPARE(merged[0].rect, column.rect);
         QCOMPARE(merged[0].columnIndex, 8);
+        QCOMPARE(merged[0].colorIndex, 2);
+        QCOMPARE(toVariantList(merged)[0].toMap().value(QStringLiteral("colorIndex")).toInt(), 2);
         QVERIFY(merged[0].offscreen);
         QCOMPARE(merged[1].windowId, QStringLiteral("float"));
         QVERIFY(merged[1].focused);

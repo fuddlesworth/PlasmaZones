@@ -150,6 +150,7 @@ Item {
             "cw": Number(c.w) || 0,
             "ch": Number(c.h) || 0,
             "t": Number(c.t) || 0,
+            "colorIndex": c.colorIndex >= 0 ? c.colorIndex : -1,
             "occupied": !!c.occupied,
             "focused": !!c.focused,
             "urgent": !!c.urgent,
@@ -404,6 +405,7 @@ Item {
             required property real cy
             required property real cw
             required property real ch
+            required property int colorIndex
             required property real t
             required property bool occupied
             required property bool focused
@@ -413,7 +415,7 @@ Item {
             required property string title
             required property bool retiring
 
-            readonly property color _hue: root.separatedCells ? Appearance.windowColor(index) : Spectrum.at(t)
+            readonly property color _hue: root.separatedCells ? Appearance.windowColor(colorIndex >= 0 ? colorIndex : index) : Spectrum.at(t)
             readonly property bool _hovered: hover.hovered && root.interactive && !retiring
             readonly property bool _pressed: tap.pressed || drag.active
             readonly property bool _dropTarget: root.dropTargetId === cellId

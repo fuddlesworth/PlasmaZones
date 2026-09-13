@@ -21,16 +21,16 @@ QtObject {
     readonly property int barHeight: compact ? 42 : 52
     readonly property int rowHeight: compact ? 43 : 52
     readonly property int panelWidth: 364
-    readonly property color text: light ? "#172740" : (settings.palette === "ember" ? "#eee9dc" : "#e8eef9")
-    readonly property color muted: light ? "#4d607a" : (settings.palette === "ember" ? "#b6b1a4" : "#97a8c0")
+    readonly property color text: AppearanceStore.palette.text
+    readonly property color muted: AppearanceStore.palette.muted
     readonly property int barInset: stage ? 24 : 16
     readonly property int barOffset: 12
-    readonly property real surfaceOpacity: light ? 0.93 : glass ? (settings.palette === "spectrum" ? 0.95 : 0.93) : 1
-    readonly property color surface: light ? "#eef2fa" : (settings.palette === "ember" ? "#272620" : settings.palette === "wallpaper" ? "#222338" : "#101d32")
-    readonly property color card: light ? "#dce3ef" : (settings.palette === "ember" ? "#403c32" : settings.palette === "wallpaper" ? "#39394f" : "#23314a")
-    readonly property color recess: light ? "#e1e8f4" : (settings.palette === "ember" ? "#1c1e1b" : settings.palette === "wallpaper" ? "#181b2b" : "#0b1528")
-    readonly property color outline: light ? "#28234064" : "#1cb4c8f1"
-    readonly property list<color> stops: settings.palette === "ember" ? (light ? ["#856127", "#8b5a34", "#9d4e2f", "#984350"] : ["#e8c988", "#d4b08a", "#d3906c", "#d27b83"]) : settings.palette === "wallpaper" ? (light ? ["#49739d", "#6c63aa", "#a2577d", "#955a39"] : ["#93b6db", "#aeace6", "#db9ab4", "#eabb9c"]) : (light ? ["#137b91", "#3567b3", "#8154a8", "#a34e76"] : ["#41d4e8", "#6e9cfd", "#b68aee", "#f390b3"])
+    readonly property real surfaceOpacity: AppearanceStore.palette.opacity
+    readonly property color surface: AppearanceStore.palette.surface
+    readonly property color card: AppearanceStore.palette.card
+    readonly property color recess: AppearanceStore.palette.recess
+    readonly property color outline: AppearanceStore.palette.outline
+    readonly property list<color> stops: AppearanceStore.palette.stops
     readonly property color accent: stops[1]
     function windowColor(index: int): color {
         return stops[[0, 2, 3, 1][Math.max(0, index) % 4]];

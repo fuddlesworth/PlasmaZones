@@ -48,6 +48,7 @@ set(phosphortheme_public_HDRS
     include/PhosphorTheme/PhosphorTheme.h
     include/PhosphorTheme/IThemeService.h
     include/PhosphorTheme/AppearanceStore.h
+    include/PhosphorTheme/ShellPalette.h
     include/PhosphorTheme/FontFaces.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/PaletteStore.h
@@ -57,6 +58,7 @@ set(phosphortheme_public_HDRS
 set(phosphortheme_SRCS
     src/defaultpalette.cpp
     src/appearancestore.cpp
+    src/shellpalette.cpp
     src/fontfaces.cpp
     src/matugenrunner.cpp
     src/palettestore.cpp
@@ -164,6 +166,7 @@ set(_phosphor_theme_qml_sources
     # the QML module only needs the type metadata.
     include/PhosphorTheme/PaletteStore.h
     include/PhosphorTheme/AppearanceStore.h
+    include/PhosphorTheme/ShellPalette.h
     include/PhosphorTheme/FontFaces.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/TemplateEngine.h

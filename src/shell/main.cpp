@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "BarController.h"
+#include "DesktopStyleController.h"
 #include "ControlCenterController.h"
 #include "QuickSettingsController.h"
 #include "LauncherController.h"
@@ -308,6 +309,7 @@ int main(int argc, char* argv[])
     // controllers above.
     PhosphorShellApp::NotificationController notificationController;
     PhosphorShellApp::QuickSettingsController quickSettings;
+    PhosphorShellApp::DesktopStyleController desktopStyle;
 
     // The dashboard's media cell reads one MprisHost for the process.
     // Owned here rather than declared in QML because the dashboard popout
@@ -670,21 +672,26 @@ int main(int argc, char* argv[])
         qCCritical(lcShell) << "shell engine failed:" << reason << "— the shell is now headless until the next reload";
     });
 
-    engine.addEngineHook(
-        [&engine, &popouts, &barController, appearanceSession, &appearanceScreenToRestore](QQmlEngine* qmlEngine) {
-            qmlEngine->rootContext()->setContextProperty(QStringLiteral("AppearanceSession"), appearanceSession);
-            auto* appearance = qmlEngine->singletonInstance<PhosphorTheme::AppearanceStore*>(
-                QStringLiteral("Phosphor.Theme"), QStringLiteral("AppearanceStore"));
-            if (appearance) {
-                QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, &engine,
-                                 [&engine, &popouts, &barController, &appearanceScreenToRestore] {
-                                     appearanceScreenToRestore = popouts.isOpen(QStringLiteral("bar.panel.appearance"))
-                                         ? barController.openPanelScreen()
-                                         : QString();
-                                     engine.requestReload();
-                                 });
-            }
-        });
+    engine.addEngineHook([&engine, &popouts, &barController, &desktopStyle, appearanceSession,
+                          &appearanceScreenToRestore](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("AppearanceSession"), appearanceSession);
+        auto* appearance = qmlEngine->singletonInstance<PhosphorTheme::AppearanceStore*>(
+            QStringLiteral("Phosphor.Theme"), QStringLiteral("AppearanceStore"));
+        if (appearance) {
+            desktopStyle.apply(appearance->values());
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::changed, &desktopStyle,
+                             [appearance, &desktopStyle] {
+                                 desktopStyle.apply(appearance->values());
+                             });
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, &engine,
+                             [&engine, &popouts, &barController, &appearanceScreenToRestore] {
+                                 appearanceScreenToRestore = popouts.isOpen(QStringLiteral("bar.panel.appearance"))
+                                     ? barController.openPanelScreen()
+                                     : QString();
+                                 engine.requestReload();
+                             });
+        }
+    });
 
     QObject::connect(&engine, &PhosphorShell::ShellEngine::reloaded, &barController,
                      [&engine, &barController, &appearanceScreenToRestore] {

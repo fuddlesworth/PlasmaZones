@@ -559,6 +559,11 @@ void PlacementMapScreen::rebuildFromSource()
     }
     if (m_nativeAvailable) {
         m_resolvedWindows = mergeNavigationWindows(m_resolvedWindows, m_nativeWindows);
+        QHash<QString, int> colors;
+        for (const auto& window : std::as_const(m_nativeWindows))
+            colors.insert(window.windowId, window.colorIndex);
+        for (auto& cell : m_resolved)
+            cell.colorIndex = colors.value(cell.windowId, -1);
     }
     applyMetadata(m_resolvedWindows, m_map->windowMetadata());
     applyUrgency(m_resolvedWindows, m_map->urgentWindows());

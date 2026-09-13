@@ -491,6 +491,7 @@ QVariantList toVariantList(const QList<Cell>& cells)
         map.insert(QStringLiteral("urgent"), cell.urgent);
         map.insert(QStringLiteral("offscreen"), cell.offscreen);
         map.insert(QStringLiteral("minimized"), cell.minimized);
+        map.insert(QStringLiteral("colorIndex"), cell.colorIndex);
         list.append(map);
     }
     return list;
@@ -586,6 +587,7 @@ QList<Cell> parseNativeWindows(const QString& json, const QRect& workArea)
         cell.focused = obj.value(QStringLiteral("focused")).toBool();
         cell.minimized = obj.value(QStringLiteral("minimized")).toBool();
         cell.offscreen = !frame.intersects(workArea);
+        cell.colorIndex = obj.value(QStringLiteral("colorIndex")).toInt(-1);
         result.append(cell);
     }
     return result;
@@ -605,6 +607,7 @@ QList<Cell> mergeNavigationWindows(const QList<Cell>& placed, const QList<Cell>&
         if (cell.columnIndex < 0)
             cell.rect = it->rect;
         cell.focused = it->focused;
+        cell.colorIndex = it->colorIndex;
         cell.minimized = it->minimized;
         cell.appId = it->appId;
         cell.title = it->title;

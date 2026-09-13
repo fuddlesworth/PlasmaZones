@@ -66,7 +66,7 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(map.activated, "b");
     }
-    function test_workAreaMapsToPreviewAcrossOutputShapes() {
+    function test_desktopCanvasMapsToPreviewAcrossOutputShapes() {
         const map = createTemporaryObject(mapComponent, testCase);
         const stage = createTemporaryObject(stageComponent, testCase, {
             mapFor: () => map
@@ -80,10 +80,10 @@ TestCase {
             verify(stage.previewRect.x + stage.previewRect.width < stage.width);
             verify(stage.previewRect.y + stage.previewRect.height < stage.height - 80);
             const sx = stage.nativeRect.width / stage.width, sy = stage.nativeRect.height / stage.height;
-            fuzzyCompare(stage.nativeRect.x + map.workArea.x * sx, stage.previewRect.x, 0.001);
-            fuzzyCompare(stage.nativeRect.y + map.workArea.y * sy, stage.previewRect.y, 0.001);
-            fuzzyCompare(map.workArea.width * sx, stage.previewRect.width, 0.001);
-            fuzzyCompare(map.workArea.height * sy, stage.previewRect.height, 0.001);
+            fuzzyCompare(stage.nativeRect.x + stage.canvas.x * sx, stage.previewRect.x, 0.001);
+            fuzzyCompare(stage.nativeRect.y + stage.canvas.y * sy, stage.previewRect.y, 0.001);
+            fuzzyCompare(stage.canvas.width * sx, stage.previewRect.width, 0.001);
+            fuzzyCompare(stage.canvas.height * sy, stage.previewRect.height, 0.001);
         }
     }
 }

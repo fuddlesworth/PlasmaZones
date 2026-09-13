@@ -30,9 +30,12 @@ FocusScope {
     readonly property real previewTop: Math.min(174, height * 0.22)
     readonly property rect previewRect: Qt.rect(previewLeft, previewTop, Math.max(100, width - previewLeft - inspectorWidth - (compact ? 40 : 54)), Math.max(120, height - previewTop - Math.min(178, height * 0.2)))
     readonly property rect workArea: map && map.workArea && map.workArea.width > 0 && map.workArea.height > 0 ? map.workArea : Qt.rect(0, 0, width, height)
-    // The reference fits the work area into the preview. The native effect
-    // transforms output coordinates, including the bar's reserved inset.
-    readonly property rect nativeRect: Qt.rect(previewRect.x - workArea.x * previewRect.width / workArea.width, previewRect.y - workArea.y * previewRect.height / workArea.height, width * previewRect.width / workArea.width, height * previewRect.height / workArea.height)
+    // Fit the desktop canvas inside Stage without doubling its outer margin.
+    readonly property real canvasLeft: Appearance.settings.desktopStyle ? 36 : 0
+    readonly property real canvasTop: Appearance.settings.desktopStyle ? (Appearance.bottom ? 36 : 14) : 0
+    readonly property real canvasBottom: Appearance.settings.desktopStyle ? (Appearance.bottom ? 14 : 54) : 0
+    readonly property rect canvas: Qt.rect(workArea.x + canvasLeft, workArea.y + canvasTop, Math.max(1, workArea.width - 2 * canvasLeft), Math.max(1, workArea.height - canvasTop - canvasBottom))
+    readonly property rect nativeRect: Qt.rect(previewRect.x - canvas.x * previewRect.width / canvas.width, previewRect.y - canvas.y * previewRect.height / canvas.height, width * previewRect.width / canvas.width, height * previewRect.height / canvas.height)
     readonly property rect barRect: Qt.rect(Appearance.barInset, Appearance.bottom ? height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset, width - Appearance.barInset * 2, Appearance.barHeight)
     readonly property bool scrolling: map && map.mode === 2
     readonly property string selectedApp: selectedWindow ? appName(selectedWindow.appId) : qsTr("No window selected")
@@ -301,10 +304,10 @@ FocusScope {
                 id: liveWindow
                 required property var modelData
                 required property int index
-                x: modelData.x * root.previewRect.width
-                y: modelData.y * root.previewRect.height
-                width: modelData.w * root.previewRect.width
-                height: modelData.h * root.previewRect.height
+                x: (modelData.x * root.workArea.width - root.canvasLeft) * root.previewRect.width / root.canvas.width
+                y: (modelData.y * root.workArea.height - root.canvasTop) * root.previewRect.height / root.canvas.height
+                width: modelData.w * root.workArea.width * root.previewRect.width / root.canvas.width
+                height: modelData.h * root.workArea.height * root.previewRect.height / root.canvas.height
                 visible: !modelData.offscreen && !modelData.minimized
                 Accessible.name: modelData.title || modelData.appId
                 onClicked: root.select(index)
@@ -313,7 +316,7 @@ FocusScope {
                     radius: Appearance.radius
                     color: "transparent"
                     border.width: root.selectedId === liveWindow.modelData.windowId ? 1 : 0
-                    border.color: Appearance.windowColor(liveWindow.index)
+                    border.color: Appearance.windowColor(liveWindow.modelData.colorIndex >= 0 ? liveWindow.modelData.colorIndex : liveWindow.index)
                 }
                 contentItem: Item {
                     Rectangle {
