@@ -25,6 +25,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QSignalSpy>
+#include <QSaveFile>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -63,6 +64,7 @@ private Q_SLOTS:
     void nestedStateIsRegisteredAsASingleton();
     void nestedStateSurvivesAReload();
     void aRootPanelWithNoScreenFailsTheLoad();
+    void watcherIgnoresSettingsAndRearmsIdenticalAtomicSaves();
 
 private:
     [[nodiscard]] static QObject* singletonFor(ShellEngine& engine, const QString& reloadId);
@@ -198,6 +200,45 @@ void TestPersistentPropertiesScan::aRootPanelWithNoScreenFailsTheLoad()
     // The failed-build postcondition: everything torn down and engine() null,
     // which is how a caller tells this apart from a rejected call.
     QVERIFY(!engine.engine());
+}
+
+void TestPersistentPropertiesScan::watcherIgnoresSettingsAndRearmsIdenticalAtomicSaves()
+{
+    QTemporaryDir dir;
+    const auto path = dir.filePath(QStringLiteral("shell.qml"));
+    QFile source(path);
+    QVERIFY(source.open(QIODevice::WriteOnly));
+    source.write(kShellQml);
+    source.close();
+    PhosphorLayer::Testing::MockTransport transport;
+    PhosphorLayer::Testing::MockScreenProvider screens;
+    PhosphorLayer::SurfaceFactory factory(PhosphorLayer::Testing::makeDeps(&transport, &screens));
+    ShellEngine engine({&factory, &screens});
+    QVERIFY(engine.load(QUrl::fromLocalFile(path)));
+    QSignalSpy reloaded(&engine, &ShellEngine::reloaded);
+    QSaveFile settings(dir.filePath(QStringLiteral("appearance.json")));
+    QVERIFY(settings.open(QIODevice::WriteOnly));
+    settings.write("{}");
+    QVERIFY(settings.commit());
+    QTest::qWait(250);
+    QCOMPARE(reloaded.count(), 0);
+    QSaveFile identical(path);
+    QVERIFY(identical.open(QIODevice::WriteOnly));
+    identical.write(kShellQml);
+    QVERIFY(identical.commit());
+    QTest::qWait(250);
+    QCOMPARE(reloaded.count(), 0);
+    // A direct edit after the inode replacement still has a live file watch.
+    QVERIFY(source.open(QIODevice::Append));
+    source.write("// direct edit\n");
+    source.close();
+    QTRY_COMPARE(reloaded.count(), 1);
+    QSaveFile changed(path);
+    QVERIFY(changed.open(QIODevice::WriteOnly));
+    changed.write(kShellQml);
+    changed.write("// atomic edit\n");
+    QVERIFY(changed.commit());
+    QTRY_COMPARE(reloaded.count(), 2);
 }
 
 QTEST_MAIN(TestPersistentPropertiesScan)

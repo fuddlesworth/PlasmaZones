@@ -29,6 +29,8 @@ public:
     }
     static QVariantMap defaults();
     Q_INVOKABLE bool setValue(const QString& key, const QVariant& value);
+    Q_INVOKABLE bool moveWidget(const QString& id, const QString& region, int index = -1);
+    Q_INVOKABLE bool resetBarLayout();
     Q_INVOKABLE bool applyPreset(const QString& preset);
     Q_INVOKABLE bool importPreset(const QUrl& file);
     Q_INVOKABLE bool exportPreset(const QUrl& file);

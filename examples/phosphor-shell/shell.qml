@@ -28,30 +28,10 @@ import Phosphor.Theme
 import QtQuick
 import org.plasmazones.common as PZCommon
 
-// Top-level composer for the dogfood shell. Phase 4.1 replaces the old
-// single TopPanel + pushed-in data sources with the production bar:
-// BarHost mounts one spectrum-rail bar per output, and each bar widget
-// owns its own data source (Clock its SystemClock, Battery its UPowerHost,
-// Tray its StatusNotifierHost, ...), so this file no longer wires
-// clock/CPU/memory/battery into a panel.
-//
-// BarHost reads the BarRegistry context property (the IBarWidgetFactory
-// owner, set by src/shell/main.cpp) to mount its widgets.
-//
-// PerScreenPanels rather than a Repeater: ShellEngine discovers panels by
-// walking QObject children and then takes ownership of each one, so the
-// instantiator has to parent what it builds and must never destroy it
-// afterwards. See PerScreenPanels' class docs.
-//
-// This file is also the composition root for anything that spans several
-// services. The bar's trailing buttons are only triggers; what they open
-// lives elsewhere, and BarRegistry.widgetActivated is the seam that keeps
-// Phosphor.Bar from depending on every surface it can summon.
-//
-// The legacy panel/popup/settings demo components (TopPanel, PanelPopupHost,
-// SettingsWindow, ...) still ship in this module but are no longer composed
-// here; their replacements are the Phase 4 surfaces (control center,
-// notification center, power menu) reached through that seam.
+// Composition root for the floating bar, Navigator, Stage and service panels.
+// BarRegistry mounts the built-in and extension widgets. PerScreenPanels
+// gives ShellEngine ownership of one bar per output; cross-service actions
+// remain here so the reusable surfaces need only their injected models.
 Item {
     id: root
 
@@ -733,7 +713,9 @@ Item {
 
     Component {
         id: appearancePanelComponent
-        AppearancePanel {}
+        AppearancePanel {
+            availableWidgets: BarRegistry.factoryIds
+        }
     }
 
     Component {
@@ -881,6 +863,20 @@ Item {
 
         function preset(name: string): bool {
             return AppearanceStore.applyPreset(name);
+        }
+        function font(kind: string, family: string): bool {
+            if (kind !== "uiFont" && kind !== "monoFont")
+                return false;
+            return AppearanceStore.setValue(kind, family);
+        }
+        function widget(id: string, region: string, index: int): bool {
+            return AppearanceStore.moveWidget(id, region, index);
+        }
+        function visualizer(name: string): bool {
+            return AppearanceStore.setValue("visualizer", name);
+        }
+        function motion(enabled: bool): bool {
+            return AppearanceStore.setValue("motion", enabled);
         }
     }
 

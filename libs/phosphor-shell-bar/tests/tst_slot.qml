@@ -247,4 +247,25 @@ TestCase {
         compare(fakeRegistry.created, 1, "the bare string mounts exactly one widget");
         compare(fakeRegistry.mountedIds, ["clock"], "and it is the id itself, not a character");
     }
+    Component {
+        id: regionComp
+        BarRegion {
+            registry: fakeRegistry
+            maximumWidth: 100
+        }
+    }
+    function test_overflowStaysBoundedAndRetainsEveryWidget() {
+        const region = createTemporaryObject(regionComp, testCase, {
+            groups: [["a", "b", "c", "d", "e", "f"]]
+        });
+        verify(region !== null);
+        tryCompare(region, "mountedCount", 6);
+        tryCompare(region, "overflowing", true);
+        compare(region.width, 100);
+        verify(region.cellFor("f") !== null);
+        region.maximumWidth = 600;
+        tryCompare(region, "overflowing", false);
+        compare(region.mountedCount, 6);
+        verify(region.width < 600);
+    }
 }

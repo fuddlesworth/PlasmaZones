@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <cmath>
 
@@ -14,6 +16,19 @@ namespace PhosphorTheme {
 QVariantMap AppearanceStore::defaults()
 {
     return {{QStringLiteral("presentation"), QStringLiteral("navigator")},
+            {QStringLiteral("uiFont"), QString()},
+            {QStringLiteral("monoFont"), QString()},
+            {QStringLiteral("barLayout"),
+             QVariantMap{{QStringLiteral("left"),
+                          QVariantList{QVariantList{QStringLiteral("placementmap")},
+                                       QVariantList{QStringLiteral("focusedapp")}}},
+                         {QStringLiteral("center"), QVariantList{QVariantList{QStringLiteral("clock")}}},
+                         {QStringLiteral("right"),
+                          QVariantList{QVariantList{QStringLiteral("media")}, QVariantList{QStringLiteral("tray")},
+                                       QVariantList{QStringLiteral("audio"), QStringLiteral("network"),
+                                                    QStringLiteral("bluetooth"), QStringLiteral("battery")},
+                                       QVariantList{QStringLiteral("notification"), QStringLiteral("controlcenter"),
+                                                    QStringLiteral("power")}}}}},
             {QStringLiteral("palette"), QStringLiteral("spectrum")},
             {QStringLiteral("material"), QStringLiteral("glass")},
             {QStringLiteral("edge"), QStringLiteral("top")},
@@ -71,6 +86,35 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
             if (it.value().metaType().id() != QMetaType::QString
                 || !enums.value(it.key()).contains(it.value().toString()))
                 return false;
+        } else if (it.key() == QLatin1String("barLayout")) {
+            if (it.value().metaType().id() != QMetaType::QVariantMap)
+                return false;
+            const auto layout = it.value().toMap();
+            if (layout.keys() != QStringList{QStringLiteral("center"), QStringLiteral("left"), QStringLiteral("right")})
+                return false;
+            QSet<QString> seen;
+            static const QRegularExpression idPattern(QStringLiteral("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$"));
+            for (const auto& region : layout) {
+                if (region.metaType().id() != QMetaType::QVariantList || region.toList().size() > 24)
+                    return false;
+                for (const auto& group : region.toList()) {
+                    if (group.metaType().id() != QMetaType::QVariantList || group.toList().isEmpty())
+                        return false;
+                    for (const auto& id : group.toList()) {
+                        if (id.metaType().id() != QMetaType::QString || !idPattern.match(id.toString()).hasMatch()
+                            || seen.contains(id.toString()) || seen.size() >= 24)
+                            return false;
+                        seen.insert(id.toString());
+                    }
+                }
+            }
+        } else if (it.key() == QLatin1String("uiFont") || it.key() == QLatin1String("monoFont")) {
+            if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 80)
+                return false;
+            for (const auto c : it.value().toString()) {
+                if (!c.isPrint())
+                    return false;
+            }
         } else if (result.value(it.key()).metaType().id() == QMetaType::Bool) {
             if (it.value().metaType().id() != QMetaType::Bool)
                 return false;
@@ -126,9 +170,54 @@ bool AppearanceStore::setValue(const QString& key, const QVariant& value)
     next[key] = value;
     return commit(next);
 }
+bool AppearanceStore::moveWidget(const QString& id, const QString& region, int index)
+{
+    if (!region.isEmpty() && region != QLatin1String("left") && region != QLatin1String("center")
+        && region != QLatin1String("right"))
+        return fail(tr("Unknown bar region."));
+    auto layout = m_values.value(QStringLiteral("barLayout")).toMap();
+    for (auto it = layout.begin(); it != layout.end(); ++it) {
+        QVariantList groups;
+        for (const auto& entry : it.value().toList()) {
+            auto group = entry.toList();
+            group.removeAll(id);
+            if (!group.isEmpty())
+                groups.append(QVariant(group));
+        }
+        it.value() = groups;
+    }
+    if (!region.isEmpty()) {
+        auto groups = layout.value(region).toList();
+        // The index counts widgets, independent of the optional visual groups.
+        int offset = 0;
+        bool inserted = false;
+        for (auto& entry : groups) {
+            auto group = entry.toList();
+            if (index >= 0 && index <= offset + group.size()) {
+                group.insert(qBound(0, index - offset, int(group.size())), id);
+                entry = group;
+                inserted = true;
+                break;
+            }
+            offset += group.size();
+        }
+        if (!inserted)
+            groups.append(QVariant(QVariantList{id}));
+        layout[region] = groups;
+    }
+    return setValue(QStringLiteral("barLayout"), layout);
+}
+bool AppearanceStore::resetBarLayout()
+{
+    return setValue(QStringLiteral("barLayout"), defaults().value(QStringLiteral("barLayout")));
+}
 bool AppearanceStore::applyPreset(const QString& preset)
 {
     auto next = defaults();
+    for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
+                            QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("media"),
+                            QStringLiteral("visualizer"), QStringLiteral("surfacePacks")})
+        next[key] = m_values.value(key);
     if (preset == QLatin1String("paper")) {
         next[QStringLiteral("palette")] = QStringLiteral("wallpaper");
         next[QStringLiteral("material")] = QStringLiteral("light");

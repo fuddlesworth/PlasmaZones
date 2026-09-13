@@ -20,6 +20,7 @@
 #include "shell/BarController.h"
 #include "shell/QmlComponentBarWidgetFactory.h"
 
+#include <PhosphorTheme/AppearanceStore.h>
 #include <QFile>
 #include <QJSEngine>
 #include <QQmlComponent>
@@ -113,6 +114,10 @@ void TestBarWidgetTypes::theDefaultBarLayoutOnlyUsesRegisteredIds()
         const QString expression = source.mid(start, end - start);
         for (const int width : {400, 800, 1440}) {
             QJSEngine evaluator;
+            auto appearance = evaluator.newObject();
+            appearance.setProperty(QStringLiteral("settings"),
+                                   evaluator.toScriptValue(PhosphorTheme::AppearanceStore::defaults()));
+            evaluator.globalObject().setProperty(QStringLiteral("Appearance"), appearance);
             auto panel = evaluator.newObject();
             panel.setProperty(QStringLiteral("width"), width);
             evaluator.globalObject().setProperty(QStringLiteral("panel"), panel);

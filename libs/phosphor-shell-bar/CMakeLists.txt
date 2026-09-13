@@ -119,6 +119,8 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Panels/NotificationPanel.qml
     qml/Phosphor/Bar/Panels/CalendarPanel.qml
     qml/Phosphor/Bar/Panels/AppearancePanel.qml
+    qml/Phosphor/Bar/Panels/BarLayoutEditor.qml
+    qml/Phosphor/Bar/BarRegion.qml
     # The wire from a chip to its engine-placed pane (A2 §4.3): pure
     # routing math plus the two segments it draws.
     qml/Phosphor/Bar/PaneTether.qml

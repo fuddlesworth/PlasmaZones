@@ -95,8 +95,8 @@ QtObject {
     // families so a missing face degrades to a named fallback rather than
     // whatever fontconfig substitutes; `font_family` above stays the
     // settings-page face.
-    readonly property string font_family_ui: FontFaces.ui
-    readonly property string font_family_mono: FontFaces.mono
+    readonly property string font_family_ui: AppearanceStore.values.uiFont || FontFaces.ui
+    readonly property string font_family_mono: AppearanceStore.values.monoFont || FontFaces.mono
     readonly property int font_size_display_l: 32
     readonly property int font_size_display_m: 24
     readonly property int font_size_display_s: 20

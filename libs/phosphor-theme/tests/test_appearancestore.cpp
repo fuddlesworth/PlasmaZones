@@ -59,6 +59,54 @@ private Q_SLOTS:
         QVERIFY(store.setValue(QStringLiteral("density"), QStringLiteral("compact")));
         QCOMPARE(layout.count(), 1);
     }
+    void layoutAndFontsSurvivePresetsAndRoundTrip()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        QVERIFY(store.moveWidget(QStringLiteral("clock"), QStringLiteral("left"), 0));
+        QVERIFY(store.moveWidget(QStringLiteral("power"), QString()));
+        QVERIFY(store.setValue(QStringLiteral("uiFont"), QStringLiteral("Noto Sans")));
+        QVERIFY(store.setValue(QStringLiteral("monoFont"), QStringLiteral("monospace")));
+        QVERIFY(store.setValue(QStringLiteral("presentation"), QStringLiteral("stage")));
+        const auto layout = store.values().value(QStringLiteral("barLayout"));
+        QVERIFY(store.applyPreset(QStringLiteral("ember")));
+        QCOMPARE(store.values().value(QStringLiteral("barLayout")), layout);
+        QCOMPARE(store.values().value(QStringLiteral("uiFont")).toString(), QStringLiteral("Noto Sans"));
+        QCOMPARE(store.values().value(QStringLiteral("presentation")).toString(), QStringLiteral("stage"));
+        const auto url = QUrl::fromLocalFile(dir.filePath(QStringLiteral("preset.json")));
+        QVERIFY(store.exportPreset(url));
+        AppearanceStore restored(dir.filePath(QStringLiteral("second.json")));
+        QVERIFY(restored.importPreset(url));
+        QCOMPARE(restored.values(), store.values());
+        QVERIFY(store.resetBarLayout());
+        QCOMPARE(store.values().value(QStringLiteral("barLayout")),
+                 AppearanceStore::defaults().value(QStringLiteral("barLayout")));
+    }
+    void layoutBoundaryRejectsDuplicatesAndMalformedIds()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        const auto before = store.values();
+        auto layout = before.value(QStringLiteral("barLayout")).toMap();
+        layout[QStringLiteral("center")] = QVariantList{QVariantList{QStringLiteral("clock"), QStringLiteral("clock")}};
+        QVERIFY(!store.setValue(QStringLiteral("barLayout"), layout));
+        QVERIFY(!store.moveWidget(QStringLiteral("bad id"), QStringLiteral("left")));
+        QVERIFY(!store.moveWidget(QStringLiteral("clock"), QStringLiteral("above")));
+        QVERIFY(!store.setValue(QStringLiteral("uiFont"), QStringLiteral("bad\nfont")));
+        QVERIFY(!store.setValue(QStringLiteral("monoFont"), 42));
+        QCOMPARE(store.values(), before);
+    }
+    void reorderCountsWidgetsAcrossGroups()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        QVERIFY(store.moveWidget(QStringLiteral("placementmap"), QStringLiteral("left"), 1));
+        QVariantList flattened;
+        for (const auto& group :
+             store.values().value(QStringLiteral("barLayout")).toMap().value(QStringLiteral("left")).toList())
+            flattened += group.toList();
+        QCOMPARE(flattened, (QVariantList{QStringLiteral("focusedapp"), QStringLiteral("placementmap")}));
+    }
     void failedWriteKeepsCurrentAppearance()
     {
         QTemporaryDir dir;

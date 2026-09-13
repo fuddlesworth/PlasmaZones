@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Bar.Slot, one left/center/right bar region.
 //
-// A horizontal run of bare chips on the band: no chip backgrounds, no
-// pills (05 §8). Groups are separated by a 1 × 12 px hairline at 25 %
-// white. The slot is registry-agnostic: it is handed a list of groups and
+// Groups share the floating band and are separated by a subtle hairline. The slot is registry-agnostic: it is handed a list of groups and
 // a `registry` exposing createWidgetFor(id, parent) -> Item (the shell's
 // BarController). Each widget is parented under its cell, so the cell's
 // destruction cascades through the QObject parent chain; the slot never

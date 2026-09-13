@@ -208,9 +208,9 @@ PanelWindow {
 
     // Bar layout: each slot is a list of groups; each group is an array of
     // widget ids separated from its neighbours by a hairline.
-    property var leftGroups: panel.width >= 1100 ? [["placementmap"], ["focusedapp"]] : [["placementmap"]]
-    property var centerGroups: [["clock"]]
-    property var rightGroups: (panel.width >= 1100 ? [["media"]] : []).concat([["tray"], ["audio", "network", "bluetooth", "battery"], ["notification", "controlcenter", "power"]])
+    property var leftGroups: Appearance.settings.barLayout.left.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length)
+    property var centerGroups: Appearance.settings.barLayout.center.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length)
+    property var rightGroups: Appearance.settings.barLayout.right.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length)
 
     // This screen's placement map, shared by the rail (which binds its
     // slice to the strip on a scrolling screen) and the map widget.
@@ -370,35 +370,38 @@ PanelWindow {
     }
 
     // ─── Slots ──────────────────────────────────────────────────────────
-    Slot {
+    BarRegion {
         id: leftSlot
 
         anchors.left: parent.left
         anchors.leftMargin: Appearance.gap + Tokens.spacing_m
         anchors.verticalCenter: band.verticalCenter
+        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.gap - Tokens.spacing_m * 2)
         groups: panel.leftGroups
         registry: BarRegistry
         screenWidth: panel.width
         screenName: panel.screen ? panel.screen.name : ""
     }
 
-    Slot {
+    BarRegion {
         id: centerSlot
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: band.verticalCenter
+        maximumWidth: Math.max(0, panel.width * 0.32 - Appearance.gap)
         groups: panel.centerGroups
         registry: BarRegistry
         screenWidth: panel.width
         screenName: panel.screen ? panel.screen.name : ""
     }
 
-    Slot {
+    BarRegion {
         id: rightSlot
 
         anchors.right: parent.right
         anchors.rightMargin: Appearance.gap + Tokens.spacing_m
         anchors.verticalCenter: band.verticalCenter
+        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.gap - Tokens.spacing_m * 2)
         groups: panel.rightGroups
         registry: BarRegistry
         screenWidth: panel.width
@@ -420,6 +423,9 @@ PanelWindow {
     // its slot, and the centre slot moves with its width).
     function _trackCell(c: Item): void {
         void panel.width;
+        void leftSlot.scrollOffset;
+        void centerSlot.scrollOffset;
+        void rightSlot.scrollOffset;
         void leftSlot.x;
         void leftSlot.width;
         void centerSlot.x;

@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls.Basic as Basic
 import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Widgets
@@ -40,6 +41,23 @@ Item {
 
     implicitWidth: root.panelWidth
     implicitHeight: shell.implicitHeight
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged(): void {
+            const item = root.Window.window.activeFocusItem;
+            if (!item)
+                return;
+            let ancestor = item;
+            while (ancestor && ancestor !== body)
+                ancestor = ancestor.parent;
+            if (ancestor !== body)
+                return;
+            const position = item.mapToItem(scroller, 0, 0);
+            const offset = position.y < 0 ? position.y : Math.max(0, position.y + item.height - scroller.height);
+            scroller.contentY = Math.max(0, Math.min(scroller.contentHeight - scroller.height, scroller.contentY + offset));
+        }
+    }
 
     Item {
         id: shell
@@ -124,11 +142,18 @@ Item {
                 // short panel does not rubber-band under the pointer.
                 interactive: contentHeight > height
                 boundsBehavior: Flickable.StopAtBounds
+                Basic.ScrollBar.vertical: Basic.ScrollBar {
+                    contentItem: Rectangle {
+                        implicitWidth: 4
+                        radius: 2
+                        color: Appearance.muted
+                    }
+                }
 
                 Column {
                     id: body
 
-                    width: scroller.width
+                    width: Math.max(0, scroller.width - 8)
                     spacing: Tokens.spacing_xs
                 }
             }
