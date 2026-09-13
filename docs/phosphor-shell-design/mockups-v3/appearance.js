@@ -20,6 +20,52 @@ window.PhosphorAppearance = (() => {
   const styleKeys = ['palette','material','density','radius','gap','glow'];
   const options = {palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],density:['comfortable','compact'],edge:['top','bottom'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
 
+  const paletteRoles = ['c1','c2','c3','c4','bg','card','recess','text','muted','outline','shadow','glow','stage-shade','modal-shade'];
+  const rgb = color => [1,3,5].map(at=>parseInt(color.slice(at,at+2),16)/255);
+  const hex = channels => '#'+channels.map(v=>Math.round(Math.max(0,Math.min(1,v))*255).toString(16).padStart(2,'0')).join('');
+  function hsl(color) {
+    const [r,g,b]=rgb(color),max=Math.max(r,g,b),min=Math.min(r,g,b),delta=max-min,l=(max+min)/2;
+    if(!delta)return [0,0,l];
+    const h=max===r?((g-b)/delta+6)%6:max===g?(b-r)/delta+2:(r-g)/delta+4;
+    return [h/6,delta/(1-Math.abs(2*l-1)),l];
+  }
+  function tone([h,s],l,saturation=s) {
+    const a=saturation*Math.min(l,1-l);
+    return hex([0,8,4].map(n=>{const k=(n+h*12)%12;return l-a*Math.max(-1,Math.min(k-3,9-k,1));}));
+  }
+  function luminance(color) {
+    const [r,g,b]=rgb(color).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    return .2126*r+.7152*g+.0722*b;
+  }
+  function readableColor(color,light,backgrounds) {
+    const seed=hsl(color),saturation=Math.min(.72,seed[1]),step=light?-.02:.02;
+    let level=light?Math.min(.38,seed[2]):Math.max(.72,seed[2]);
+    for(let i=0;i<40;i++,level=Math.max(0,Math.min(1,level+step))) {
+      const result=tone(seed,level,saturation),a=luminance(result);
+      if(backgrounds.every(bg=>{const b=luminance(bg);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5;}))return result;
+    }
+    return light?'#000000':'#ffffff';
+  }
+  function wallpaperPalette(colors,settings) {
+    // The dominant wallpaper hue colors every semantic role. Keep luminance
+    // predictable so changing an image cannot turn glass or Paper unreadable.
+    // Achromatic images stay neutral rather than acquiring an arbitrary hue.
+    const seed=hsl(colors[0]),saturation=Math.min(.38,seed[1]*1.15),light=settings.material==='light';
+    const surface=tone(seed,light?.952:.135,saturation);
+    const card=tone(seed,light?.885:.205,saturation*.86);
+    const recess=tone(seed,light?.916:.085,saturation*.8);
+    const text=readableColor(tone(seed,light?.145:.945,saturation*.6),light,[surface,card,recess]);
+    const muted=readableColor(tone(seed,light?.355:.715,saturation*.65),light,[surface,card,recess]);
+    const shade=tone(seed,.055,saturation);
+    const result={bg:surface+(settings.material==='solid'?'':light?'f5':'f2'),card,recess,text,muted,
+      outline:tone(seed,light?.28:.76,saturation*.7)+(light?'30':'2b'),
+      shadow:`0 22px 55px ${shade}${light?'40':'80'}`,
+      'stage-shade':shade+'a3','modal-shade':shade+'80'};
+    colors.forEach((color,i)=>{result[`c${i+1}`]=readableColor(color,light,[surface,card,recess]);});
+    result.glow=settings.glow?`0 0 24px ${result.c2}22`:'0 0 0 transparent';
+    return result;
+  }
+
   function create({root,desktop,icon,getSettings,setSettings,presets,onClose,notify}) {
     let data=copy(initial),applied,baseline,active=false,peek=false,page='wallpaper',filter='All',query='',dialog=null,pendingExit=null,skipGuard=false,chosenWidget='workspaces',dragged='',message='',saved=[],uploads=[];
     const key='phosphor-appearance-study-v1';
@@ -98,12 +144,8 @@ window.PhosphorAppearance = (() => {
       bg.classList.add('ap-wallpaper');bg.innerHTML=artwork(wall);bg.dataset.fit=data.displays[data.display].fit;
       desktop.dataset.apColorSource=data.colorSource;
       desktop.dataset.apDesktopStyle=data.desktopStyle;desktop.dataset.apEffect=data.surfaceEffect;
-      for(let i=0;i<4;i++)desktop.style.removeProperty(`--c${i+1}`);
-      if(data.colorSource==='wallpaper')wall.colors.forEach((c,i)=>{
-        const rgb=[1,3,5].map(at=>parseInt(c.slice(at,at+2),16));
-        if(s.material==='light')for(let j=0;j<3;j++)rgb[j]=Math.round(rgb[j]*.56);
-        desktop.style.setProperty(`--c${i+1}`,'#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join(''));
-      });
+      for(const role of paletteRoles)desktop.style.removeProperty(`--${role}`);
+      if(data.colorSource==='wallpaper')for(const [role,color] of Object.entries(wallpaperPalette(wall.colors,s)))desktop.style.setProperty(`--${role}`,color);
       desktop.style.setProperty('--ap-accent',`var(--c${data.accent+1})`);
       desktop.style.setProperty('--ap-inset',`${data.inset}px`);
       desktop.style.setProperty('--ap-font',data.font);

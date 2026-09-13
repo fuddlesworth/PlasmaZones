@@ -392,6 +392,8 @@ function render() {
   updateNotificationBell();
   lockscreen.render(state.view==='lockscreen');
   appearance.render(state.view==='appearance');
+  // Canvas gradients cache their colors; resample after the wallpaper palette.
+  syncVisualizer();
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
   $$('.view-switch [data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===state.view));
   history.replaceState(null,'',`#${state.study}/${state.view}`);

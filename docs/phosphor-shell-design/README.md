@@ -14,7 +14,10 @@ window. The gallery includes eight wallpapers, searchable collections, image
 import, two simulated displays, placement controls and wallpaper-derived colors.
 A desktop preview hides windows so the background can be judged at full size.
 Changes stay provisional until Apply. Revert restores the applied look, and
-closing with changes offers Apply, Discard or Keep editing.
+closing with changes offers Apply, Discard or Keep editing. Following a wallpaper
+retints the shell backgrounds, cards, text, borders, shadows and accents together.
+Light and dark tones retain readable contrast, and media visualization takes the
+same palette immediately. See the [Understory color study](mockups-v3/appearance-wallpaper-colors.png).
 
 Style includes palette and focus color, glass/solid/light materials, geometry,
 fonts, motion, media and privacy options, with browser approximations of optional
