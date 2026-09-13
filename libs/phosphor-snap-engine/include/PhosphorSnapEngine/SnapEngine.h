@@ -577,11 +577,15 @@ public:
     /// screen is showing (a RouteToDesktop rule, a cross-desktop move, a
     /// restore onto a background desktop) has to land in THAT desktop's store,
     /// or the membership pass reads the store's key as the assignment's
-    /// desktop and releases it on the next switch. Unpinned (0), an
-    /// already-tracked window keeps its primary store and a first placement
-    /// derives the key from the screen's current context. A screenless call
-    /// resolves to the global holder. Public so the WTS facade routes its
-    /// screen-carrying writes here.
+    /// desktop and releases it on the next switch. In the daemon every zone
+    /// commit is pinned, since commitSnap resolves the screen's current
+    /// desktop when the caller names none, and that pin equals the key in
+    /// view (both are fed from the same per-output desktop push). Unpinned
+    /// (0: the float / residence writes, and every commit in a fixture
+    /// without a desktop manager), an already-tracked window keeps its
+    /// primary store and a first placement derives the key from the screen's
+    /// current context. A screenless call resolves to the global holder.
+    /// Public so the WTS facade routes its screen-carrying writes here.
     SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId, int desktop = 0);
 
     /// Drop every membership @p windowId holds AND its data in each member

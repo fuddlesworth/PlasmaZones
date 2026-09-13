@@ -1168,7 +1168,7 @@ private:
     // historical "no SnapState" no-op guards at the call sites.
     PhosphorSnapEngine::SnapState* snapForWindow(const QString& windowId) const;
     /// Whether @p state holds a membership for the window (see
-    /// SnapStateResolver::holdsWindow). Unwired: only the primary store does.
+    /// SnapStateResolver::holdsWindow, daemon-wired). Unwired: primary only.
     bool snapHoldsWindow(const QString& windowId, const PhosphorSnapEngine::SnapState* state) const;
     PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId,
                                                          int desktop = 0);

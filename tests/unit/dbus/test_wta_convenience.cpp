@@ -598,7 +598,7 @@ private Q_SLOTS:
     // A context release (TilingAdaptor::reconcileWindowMembership dropping a
     // window from a desktop or activity it has left) does NOT run through
     // uncommitSnap, so the engine emits nothing — see the note on
-    // SnapEngine::releaseFromContext for why that signal would be wrong there.
+    // SnapEngine::applyMembershipWork for why that signal would be wrong there.
     // The effect's per-window zone mirror still has to be told, or the
     // IsSnapped / Zone rule fields keep matching against a zone the window has
     // left. This relay is the narrow announcement that does it, and an EMPTY

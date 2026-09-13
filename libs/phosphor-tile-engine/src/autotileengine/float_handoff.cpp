@@ -607,9 +607,27 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // desktop in view adopts the window as a tile.
     if (!shouldFloat && !callerScreenId.isEmpty()) {
         const TilingStateKey viewKey = currentKeyForScreen(callerScreenId);
-        if (m_states.hasWindow(windowId) && !m_states.hasMembership(windowId, viewKey)
-            && isAutotileScreen(callerScreenId)) {
+        // Membership-verified, not hasWindow: a key whose state no longer
+        // holds the window is a phantom, and a window held ONLY by phantoms
+        // takes the ordinary not-tracked refusal below, which sweeps them.
+        bool heldSomewhere = false;
+        for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
+            const PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);
+            if (heldState && heldState->containsWindow(windowId)) {
+                heldSomewhere = true;
+            } else {
+                m_states.removeMembership(windowId, held);
+            }
+        }
+        if (heldSomewhere && !m_states.hasMembership(windowId, viewKey) && isAutotileScreen(callerScreenId)) {
             for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
+                // A membership on ANOTHER output is stale tracking (a window
+                // has one screen); it is released so the adoption below does
+                // not leave the window tiled on two monitors at once.
+                if (held.screenId != callerScreenId) {
+                    releaseMembership(windowId, held);
+                    continue;
+                }
                 PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);
                 if (heldState && heldState->isFloating(windowId)) {
                     heldState->setFloating(windowId, false);
@@ -619,10 +637,28 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
                 }
             }
             m_overflow.clearOverflow(windowId);
+            // The cap may have changed while the window was floating or
+            // minimized; the ordinary unfloat arm drops it for the same reason.
+            m_windowMinSizes.remove(windowId);
+            // The same policy gate the membership pass adopts through: a
+            // sticky window under RestoreOnly / IgnoreAll gets no tile here
+            // either. The suspension float is lifted regardless, so the
+            // window is where it was on the desktops that hold it.
+            if (!shouldTileWindow(windowId)) {
+                Q_EMIT windowFloatingStateSynced(windowId, false, callerScreenId);
+                return;
+            }
+            bool floatingNow = false;
             if (adoptIntoContext(windowId, viewKey)) {
                 retileAfterOperation(callerScreenId, true);
+                // Re-read AFTER the retile, as performToggleFloat does: the
+                // overflow pass can float the just-adopted window back out,
+                // and announcing the pre-retile value would leave the mirror
+                // contradicting the state one line after the batch set it.
+                const PhosphorTiles::TilingState* viewState = m_states.stateForKey(viewKey);
+                floatingNow = viewState && viewState->isFloating(windowId);
             }
-            Q_EMIT windowFloatingStateSynced(windowId, false, callerScreenId);
+            Q_EMIT windowFloatingStateSynced(windowId, floatingNow, callerScreenId);
             return;
         }
     }

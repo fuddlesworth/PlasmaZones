@@ -576,6 +576,12 @@ QSet<int> AutotileEngine::desktopsWithActiveState() const
 
 void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 {
+    // The dirty-background memo for the desktop goes with its states: the
+    // count-shrink path prunes without renumbering, so nothing else would
+    // drop an entry a re-created desktop number could inherit.
+    m_dirtyBackgroundContexts.removeIf([removedDesktop](const TilingStateKey& key) {
+        return key.desktop == removedDesktop;
+    });
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
@@ -640,13 +646,13 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
 {
     // The dirty-background memo for a departed output goes with its states:
     // a replugged connector reusing the id must not inherit a stale retile.
-    m_dirtyBackgroundContexts.removeIf([&physicalScreenId](const TilingStateKey& key) {
-        return PhosphorIdentity::VirtualScreenId::extractPhysicalId(key.screenId) == physicalScreenId
-            || key.screenId == physicalScreenId;
-    });
     if (physicalScreenId.isEmpty()) {
         return;
     }
+    m_dirtyBackgroundContexts.removeIf([&physicalScreenId](const TilingStateKey& key) {
+        return !key.screenId.isEmpty()
+            && PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, physicalScreenId);
+    });
     // Match the physical id and every virtual sub-screen of it (samePhysical
     // strips the "/vs:N" suffix). All desktops/activities: this is the
     // whole-output reap that updateEngineScreens' current-context sweep
@@ -748,6 +754,9 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
 void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
     const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    m_dirtyBackgroundContexts.removeIf([&valid](const TilingStateKey& key) {
+        return !key.activity.isEmpty() && !valid.contains(key.activity);
+    });
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;

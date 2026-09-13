@@ -475,7 +475,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             // meaning exact — so slot.state, which only says what the desktop
             // in view at the last capture looked like, cannot decide.
             const int restoreDesktop = restoreDesktopFor(windowId, *rec, restoreScreen);
-            const QString restoreActivity = rec->activity.isEmpty() ? currentActivity() : rec->activity;
+            // The LIVE activity, on purpose: the window is being restored into
+            // the activity the session is in, and the caller's commit is
+            // pinned there (stateForWindowOnScreen keys on currentActivity()).
+            // Keying the grant and the seeds under the record's activity
+            // split one window across two activity keys, and the next
+            // membership pass released and forgot the record-keyed half.
+            const QString restoreActivity = currentActivity();
             const QStringList restoreZones = slot.zonesByDesktop.isEmpty()
                 ? (slot.state == WindowPlacement::stateSnapped() ? slot.zoneIds : QStringList{})
                 : slot.zonesByDesktop.value(restoreDesktop);

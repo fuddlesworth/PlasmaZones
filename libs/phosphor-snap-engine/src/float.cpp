@@ -25,7 +25,11 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
 {
     SnapState* state = stateForWindow(windowId);
     const bool currentlyFloating = isFloating(windowId);
-    const bool currentlySnapped = state && state->isWindowSnapped(windowId);
+    // Managed here means snapped in the primary store OR held anywhere: a
+    // window adopted into the desktop in view without being snapped there
+    // (its zone is on another desktop) is this engine's, and Meta+F floats
+    // it the way it floated the single-store window before adoption existed.
+    const bool currentlySnapped = (state && state->isWindowSnapped(windowId)) || heldKeyForWindow(windowId).has_value();
 
     if (!currentlyFloating && !currentlySnapped) {
         // Report instead of absorbing the press silently: every other
@@ -683,7 +687,11 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         // the screen-assignment write the deliberate free adoption read as a
         // REFUSAL and the window bounced straight back to the source engine.
         // handoffRelease clears this symmetrically (clearScreenAndDesktop).
-        stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
+        // Pinned to the destination desktop when the handoff names one, so
+        // the residence lands in the store whose key says that desktop (an
+        // unpinned resolve minted the membership under the VIEWED desktop
+        // and the next membership pass released it).
+        stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop)
             ->recordResidence(ctx.windowId, ctx.toScreenId, currentDesktop);
         // Own store first (a re-adoption of a window snap once floated could
         // still carry the bit); the routed WTS clear follows for the shared
@@ -693,7 +701,7 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         Q_EMIT windowFloatingChanged(ctx.windowId, false, ctx.toScreenId);
         return;
     }
-    stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
+    stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop)
         ->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
     m_windowTracker->setWindowFloating(ctx.windowId, true);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);

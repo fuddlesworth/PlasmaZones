@@ -276,9 +276,9 @@ private Q_SLOTS:
         QVERIFY(holdsPlaceOn(engine, kS1, 2, kSticky));
     }
 
-    // Switching between two desktops a window is on parks and restores its
-    // applied-geometry memo per context: each strip keeps its own columns
-    // and the window is placed on both after any number of round trips.
+    // Switching between two desktops a window is on: each strip keeps its
+    // own columns and the window is placed on both after any number of round
+    // trips (strip structure; the memo the switch parks is pinned below).
     void switchingBetweenHeldDesktopsKeepsEachStripsColumns()
     {
         QObject owner;
@@ -308,6 +308,44 @@ private Q_SLOTS:
         }
         QVERIFY(holdsPlaceOn(engine, kS1, 1, kSticky));
         QVERIFY(holdsPlaceOn(engine, kS1, 2, kSticky));
+    }
+
+    // The applied-rect memo doubles as the float-back poison guard the
+    // adaptor reads through lastManagedRect on close. A switch onto a desktop
+    // the window is NOT on (2 for a window on {1,3}) must leave that guard
+    // standing: parking copies the memo, it does not take it.
+    void crossingADesktopTheWindowIsNotOnKeepsItsManagedRect()
+    {
+        QObject owner;
+        const GeometryFn geometry = [](const QString&) {
+            return defaultScreenRect();
+        };
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, geometry, geometry);
+        const PhosphorEngine::DesktopSpanQuery oneAndThree = [](const QString& windowId) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.desktops = windowId == kSticky ? QSet<int>{1, 3} : QSet<int>{1};
+            return span;
+        };
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->windowOpened(kD1, kS1, 0, 0);
+        engine->windowOpened(kSticky, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        engine->setCurrentDesktopForScreen(kS1, 3);
+        QCOMPARE(engine->reconcileDesktopMemberships(kS1, oneAndThree).adopted.size(), 1);
+        QCoreApplication::processEvents();
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        QCoreApplication::processEvents();
+        QVERIFY(engine->lastManagedRect(kSticky).isValid());
+
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        QVERIFY(engine->reconcileDesktopMemberships(kS1, oneAndThree).isEmpty());
+        QCoreApplication::processEvents();
+        QVERIFY2(engine->lastManagedRect(kSticky).isValid(), "the poison guard must survive a pass-through desktop");
+        engine->setCurrentDesktopForScreen(kS1, 3);
+        QCoreApplication::processEvents();
+        QVERIFY(engine->lastManagedRect(kSticky).isValid());
+        QCOMPARE(engine->managedWindowOrder(kS1), QStringList{kSticky});
     }
 
     // A drag dropped on ANOTHER output moves the window there for good: the

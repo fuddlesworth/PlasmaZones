@@ -322,16 +322,22 @@ private Q_SLOTS:
         m_engine->setWindowRegistry(nullptr);
     }
 
-    // A restore onto a desktop the record floats the window on (the map has
-    // no entry for it) restores it floating THERE and still seeds the other
-    // desktops' zones; a restart from the adopted-unsnapped capture must not
-    // snap the window back on every desktop from the flat zoneIds.
-    void restartFromAnUnsnappedCaptureFloatsOnThatDesktopAndSeedsTheRest()
+    // The per-desktop restore decision. A record captured with the SNAPPED
+    // desktop in view (state snapped, flat zoneIds z0, map {1: z0}) restored
+    // onto desktop 2, where the window was unsnapped, must float there and
+    // seed desktop 1, not re-snap z0 from the flat zoneIds; and a record
+    // captured FLOATING on one desktop whose map names a zone for the
+    // restore desktop must snap there.
+    void restoreDecidesSnappedOrFloatedPerDesktop()
     {
         snapOn(1, kWindow, m_zoneIds[0]);
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        auto captured = m_engine->capturePlacement(kWindow);
+        QVERIFY(captured.has_value());
+        QCOMPARE(captured->slotFor(WindowPlacement::snapEngineId()).state, WindowPlacement::stateSnapped());
+        m_service->placementStore().record(*captured);
         m_engine->forgetWindow(kWindow);
 
         PhosphorEngine::WindowRegistry registry;
@@ -340,16 +346,25 @@ private Q_SLOTS:
         meta.appId = QStringLiteral("app");
         meta.title = QStringLiteral("t");
         meta.virtualDesktop = 2;
-        meta.isSticky = true;
         registry.upsert(QStringLiteral("11111111-2222-3333-4444-555555555555"), meta);
         m_engine->setWindowRegistry(&registry);
 
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
-        const PhosphorEngine::SnapResult result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
+        PhosphorEngine::SnapResult result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
         QVERIFY2(!result.shouldSnap, "desktop 2 was unsnapped at capture time");
         QVERIFY(m_engine->isFloating(kWindow));
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
         QVERIFY(zonesOn(2, kWindow).isEmpty());
+
+        // The other leg: floating on desktop 1 at capture, zone z1 on desktop 2.
+        m_engine->forgetWindow(kWindow);
+        WindowPlacement floated = multiDesktopRecord();
+        floated.engines[WindowPlacement::snapEngineId()].state = WindowPlacement::stateFloating();
+        m_service->placementStore().record(floated);
+        result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
+        QVERIFY2(result.shouldSnap, "the map names a zone on the restore desktop");
+        QCOMPARE(result.zoneIds, QStringList{m_zoneIds[1]});
+        QCOMPARE(result.virtualDesktop, 2);
         m_engine->setWindowRegistry(nullptr);
     }
 

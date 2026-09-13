@@ -469,8 +469,11 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (targetZoneId.isEmpty()) {
         // No resolvable equivalent zone on the target desktop (no layout / no
         // matching slot / invalid geometry): fall back to a bare desktop
-        // re-stamp + move. The window relocates but keeps its slot memory for
-        // when its own layout is restored — graceful degradation.
+        // re-stamp + move. The re-stamp lives in the SOURCE desktop's store;
+        // once the compositor reports the move, the membership pass releases
+        // that store and forgets the source desktop's persisted zone, so the
+        // window arrives on the target desktop as an unmanaged window (there
+        // is no zone there to hold it). Graceful degradation, not a memory.
         // stateForWindow never returns null (untracked windows resolve to
         // the global holder); reassignDesktop fails there, which is the
         // intended no-op for an untracked window.

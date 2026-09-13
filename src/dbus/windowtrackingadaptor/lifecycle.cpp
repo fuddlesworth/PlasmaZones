@@ -1,5 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// FILE-SIZE EXCEPTION (sanctioned): the adaptor's window lifecycle is one
+// ordered pipeline (capture, screen and desktop change, open, close,
+// metadata, frame tracking, prune) whose steps read each other's state;
+// splitting it by step would scatter the ordering the comments here pin.
+// Grew with the per-desktop membership change: the capture's still-on-snap-
+// rect guard now walks the record's per-desktop zones.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — window lifecycle

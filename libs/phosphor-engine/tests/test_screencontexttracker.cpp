@@ -23,6 +23,7 @@ private Q_SLOTS:
     void releaseScreenOwnership_keepsPerOutputDesktop();
     void removeScreensIf_byPredicate();
     void pruneDesktop_byValue();
+    void virtualScreen_followsItsParentOutput();
 };
 
 void TestScreenContextTracker::currentKeyForScreen_precedence()
@@ -45,6 +46,22 @@ void TestScreenContextTracker::currentKeyForScreen_precedence()
     t.setStickyPin(QStringLiteral("S1"), 9);
     QCOMPARE(t.currentKeyForScreen(QStringLiteral("S1")).desktop, 9);
     QVERIFY(t.hasStickyPin(QStringLiteral("S1")));
+}
+
+void TestScreenContextTracker::virtualScreen_followsItsParentOutput()
+{
+    ScreenContextTracker t;
+    t.setCurrentDesktop(1);
+    // The effect pushes the PHYSICAL output's desktop; the subdivided
+    // children are asked about by their own id.
+    t.setCurrentDesktopForScreen(QStringLiteral("DP-1"), 4);
+    QCOMPARE(t.screenDesktop(QStringLiteral("DP-1/vs:0")), 4);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("DP-1/vs:1")).desktop, 4);
+    // A child with its own push keeps it; an unrelated output falls back to
+    // the global desktop.
+    t.setCurrentDesktopForScreen(QStringLiteral("DP-1/vs:0"), 2);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("DP-1/vs:0")).desktop, 2);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("HDMI-1/vs:0")).desktop, 1);
 }
 
 void TestScreenContextTracker::setCurrentDesktop_arming()

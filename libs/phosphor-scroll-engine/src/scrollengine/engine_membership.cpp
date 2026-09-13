@@ -380,10 +380,11 @@ void ScrollEngine::dropFromOtherContexts(const QString& windowId, const Placemen
     // ever reaped — pruneStaleWindows walks tracked ids, which no longer
     // named the window, and adoptIntoContext refused to re-adopt a window
     // its strip already held.
-    // The kept key's parked memo goes too: every caller takes the window
-    // out of keepKey right after (a close, a handoff, a replace onto the
-    // destination), and a parked entry left under it would be restored onto
-    // a later re-adoption there as "on screen at the old rect".
+    // The kept key's parked memo goes too. Every caller either takes the
+    // window out of keepKey right after (a close, a handoff, a replace onto
+    // the destination) or has just added it there from another output, where
+    // no parked entry can exist; a parked entry left under it would be
+    // restored onto a later re-adoption there as "on screen at the old rect".
     forgetContextMemo(keepKey, windowId);
     for (const PlacementStateKey& key : m_states.membershipsForWindow(windowId)) {
         if (key == keepKey) {
@@ -426,42 +427,60 @@ void ScrollEngine::swapContextRectMemory(const QString& screenId, const Placemen
     // The two arms are independent: a switch that passes THROUGH a desktop
     // the window is not on (1 → 2 → 3 for a window on {1,3}) parks on the way
     // out of 1 and restores on the way into 3, with nothing to do at 2.
+    //
+    // Parking COPIES; it never clears the window-level entry. That entry is
+    // also the float-back poison guard: windowClosed and handoffRelease keep
+    // it on purpose so the adaptor can tell a close frame still on the tile
+    // rect from a genuine free position (lastManagedRect), and a window on
+    // {1,3} closed from desktop 2 has no other copy in reach. The entering
+    // arm replaces it when it has something to put back, so a window on
+    // both keys still reads its own context's rect.
     for (const QString& windowId : m_states.trackedWindowIds()) {
         const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
-        if (held.size() < 2 || held.first().screenId != screenId) {
+        if (held.isEmpty() || held.first().screenId != screenId) {
             continue;
         }
-        if (held.contains(oldKey)) {
-            // Park the leaving context's memo under its key. The window-level
-            // entry is cleared with it: what stays would describe a strip
-            // that is no longer on screen.
+        if (held.size() >= 2 && held.contains(oldKey)) {
             if (const auto rect = m_lastAppliedRect.constFind(windowId); rect != m_lastAppliedRect.constEnd()) {
                 m_contextRectMemory[oldKey].insert(windowId, *rect);
-                m_lastAppliedRect.erase(rect);
             }
             if (const auto edge = m_parkedScrollEdge.constFind(windowId); edge != m_parkedScrollEdge.constEnd()) {
                 m_contextParkedEdge[oldKey].insert(windowId, *edge);
-                m_parkedScrollEdge.erase(edge);
             }
         }
-        if (held.contains(newKey)) {
-            // Restore the entering context's memo, or leave none: with no
-            // memo the window reads as arriving, which on its first batch
-            // there it is.
+        if (!held.contains(newKey)) {
+            continue;
+        }
+        // Restore the entering context's memo when one is parked. Gated on
+        // the membership, not the count: a window that shrank to one
+        // membership after its memo was parked still owns that memo, and
+        // leaving it parked would restore a stale rect onto whatever later
+        // re-adoption made the window multi-membership again.
+        if (auto entering = m_contextRectMemory.find(newKey); entering != m_contextRectMemory.end()) {
+            if (const auto rect = entering->constFind(windowId); rect != entering->constEnd()) {
+                m_lastAppliedRect.insert(windowId, *rect);
+                entering->erase(rect);
+            } else if (held.size() >= 2) {
+                m_lastAppliedRect.remove(windowId); // the other context's rect: arriving here
+            }
+            if (entering->isEmpty()) {
+                m_contextRectMemory.erase(entering);
+            }
+        } else if (held.size() >= 2) {
             m_lastAppliedRect.remove(windowId);
+        }
+        if (auto entering = m_contextParkedEdge.find(newKey); entering != m_contextParkedEdge.end()) {
+            if (const auto edge = entering->constFind(windowId); edge != entering->constEnd()) {
+                m_parkedScrollEdge.insert(windowId, *edge);
+                entering->erase(edge);
+            } else if (held.size() >= 2) {
+                m_parkedScrollEdge.remove(windowId);
+            }
+            if (entering->isEmpty()) {
+                m_contextParkedEdge.erase(entering);
+            }
+        } else if (held.size() >= 2) {
             m_parkedScrollEdge.remove(windowId);
-            if (auto entering = m_contextRectMemory.find(newKey); entering != m_contextRectMemory.end()) {
-                if (const auto rect = entering->constFind(windowId); rect != entering->constEnd()) {
-                    m_lastAppliedRect.insert(windowId, *rect);
-                    entering->erase(rect);
-                }
-            }
-            if (auto entering = m_contextParkedEdge.find(newKey); entering != m_contextParkedEdge.end()) {
-                if (const auto edge = entering->constFind(windowId); edge != entering->constEnd()) {
-                    m_parkedScrollEdge.insert(windowId, *edge);
-                    entering->erase(edge);
-                }
-            }
         }
     }
 }

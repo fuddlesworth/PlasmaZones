@@ -875,59 +875,6 @@ QStringList WindowTrackingService::floatingWindows() const
     return m_floatingWindows.values();
 }
 
-void WindowTrackingService::unsnapForFloat(const QString& windowId)
-{
-    PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
-    if (!snapState || !snapState->isWindowSnapped(windowId)) {
-        return;
-    }
-
-    // Read zone/screen for logging BEFORE unsnapForFloat clears them.
-    QStringList zoneIds = snapState->zonesForWindow(windowId);
-    QString screenId = snapState->screenForWindow(windowId);
-    // The desktop this store's assignment belongs to, for the persisted map:
-    // a window present on several desktops keeps its pre-float zones in
-    // slot.zoneIds (the float-back), but its per-desktop entry has to go, or
-    // a restart onto another desktop seeds the zone back as a live snap on
-    // the desktop the user had floated it on.
-    const int floatedDesktop = snapState->desktopForWindow(windowId);
-
-    // SnapState::unsnapForFloat saves pre-float state (windowId-keyed) and unassigns.
-    auto unassignResult = snapState->unsnapForFloat(windowId);
-    if (floatedDesktop >= 1) {
-        forgetDesktopZones(windowId, PhosphorEngine::WindowPlacement::snapEngineId(), floatedDesktop);
-    }
-
-    // Also write an appId-keyed entry into the SAME store for session-restore
-    // fallback. SnapState::unsnapForFloat only writes the windowId key; the appId
-    // alias lets preFloatZone()/preFloatScreen() find the entry after a window
-    // close+reopen cycle where the windowId changes but the appId persists. It
-    // shares the window's owning store so the per-window preFloat lookup finds both.
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId && !appId.isEmpty()) {
-        snapState->addPreFloatZone(appId, zoneIds);
-        if (!screenId.isEmpty()) {
-            snapState->addPreFloatScreen(appId, screenId);
-        }
-    }
-    qCInfo(lcPlacement) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
-
-    // Last-used-zone coupling: unsnapForFloat already cleared this store's own
-    // per-key last-used if it named the floated zone. The global holder still carries
-    // the representative restored from disk, so clear it too if it named the zone.
-    bool lastUsedCleared = unassignResult.lastUsedZoneCleared;
-    lastUsedCleared |= clearGlobalLastUsedIfRemoved(zoneIds, snapState);
-
-    Q_EMIT windowZoneChanged(windowId, QString());
-    // One mark for every store this path touched: markDirty also kicks the
-    // adaptor's debounced save through stateChanged, so splitting it just
-    // restarts the same timer twice.
-    markDirty(DirtyPreFloatZones | DirtyPreFloatScreens | DirtyZoneAssignments
-              | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
-
-    consumePendingAssignment(windowId);
-}
-
 template<typename Func>
 auto WindowTrackingService::preFloatLookup(const QString& windowId, Func&& getter) const
     -> decltype(getter(std::declval<PhosphorSnapEngine::SnapState*>(), windowId))
