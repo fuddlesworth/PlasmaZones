@@ -94,7 +94,7 @@ void ToastController::update(const QVariantMap& notification)
 {
     for (const auto& host : m_hosts)
         if (host.object)
-            QMetaObject::invokeMethod(host.object, "update", Q_ARG(QVariant, QVariant(notification)));
+            QMetaObject::invokeMethod(host.object, "updateNotification", Q_ARG(QVariant, QVariant(notification)));
 }
 void ToastController::remove(uint id)
 {

@@ -56,6 +56,7 @@ qt_add_qml_module(phosphor_shell_example
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Phosphor/Shell/Example
     QML_FILES
         shell.qml
+        NotificationSurfaces.qml
         DefaultWallpaper.qml
         TopPanel.qml
         Taskbar.qml

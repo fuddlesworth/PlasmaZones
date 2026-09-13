@@ -271,43 +271,9 @@ Item {
         }
     }
 
-    // The toast overlay, one per output, on its own surface rather than
-    // the OSD's because the two want different input: OSD bands never
-    // take a click, while a toast card needs hover (which pauses its
-    // timer) and a close button. Same full-screen Overlay panel, but the
-    // input region follows the cards: ToastHost publishes their rects and
-    // PanelWindow opens input over exactly those, so everything around
-    // them stays click-through and an empty stack passes every click to
-    // the window beneath.
-    PerScreenPanels {
-        id: toastOverlays
-
-        model: PhosphorShell.screens
-
-        delegate: PanelWindow {
-            id: toastSurface
-
-            edge: PanelWindow.Top
-            alignment: PanelWindow.Fill
-            thickness: modelData.height
-            panelLayer: PanelWindow.LayerOverlay
-            exclusiveZoneEnabled: false
-            keyboardFocus: PanelWindow.None
-            inputRegion: toastHost.inputRects
-
-            ToastHost {
-                id: toastHost
-
-                anchors.fill: parent
-                screenName: toastSurface.screen ? toastSurface.screen.name : ""
-                decoration: ShellChrome.decorationComponent
-                // The `notify` IpcTarget below lands on the primary
-                // output's host, which is why the flag travels with the
-                // attachment.
-                Component.onCompleted: ToastRegistry.attachHost(toastHost, toastHost.screenName, modelData.isPrimary)
-                Component.onDestruction: ToastRegistry.detachHost(toastHost)
-            }
-        }
+    NotificationSurfaces {
+        locked: sessionCoordinator.lock.state !== 0
+        onOpenCenterRequested: root.toggleWidgetPanel("notification", null)
     }
 
     // The wallpaper and theme picker, one strip per output (A3 §8): a
@@ -618,7 +584,7 @@ Item {
             },
             "notification": {
                 "component": notificationPanelComponent,
-                "keyboard": false
+                "keyboard": true
             },
             "clock": {
                 "component": calendarPanelComponent,
@@ -659,7 +625,9 @@ Item {
     Component {
         id: notificationPanelComponent
 
-        NotificationPanel {}
+        NotificationPanel {
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.notification"))
+        }
     }
 
     Component {
@@ -714,7 +682,7 @@ Item {
             // GC cannot delete the live screen when this wrapper is
             // collected. Do not reach for a QScreen any other way from QML.
             "targetScreen": screen,
-            "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "anchor": id === "notification" ? PhosphorPopout.Anchor.BarRight : anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             // Per panel; see widgetPanels above for why this is not one
@@ -917,18 +885,12 @@ Item {
         }
     }
 
-    // A toast over the wire:
-    // `phosphorctl call notify.send --arg summary=Hi --arg body=There`. It
-    // lands on the primary output's stack and returns the toast id the host
-    // assigned (-1 when suppressed or when no host is up). This is the
-    // shell's own path, for scripts and for seeing the stack at all; the
-    // org.freedesktop.Notifications server is not run by this process yet,
-    // so notify-send does not arrive here.
+    // Scripted notifications follow the same arrival/history lifecycle as D-Bus.
     IpcTarget {
         target: "notify"
 
         function send(summary: string, body: string): int {
-            return ToastRegistry.send(summary, body);
+            return NotificationRegistry.send(summary, body);
         }
     }
 

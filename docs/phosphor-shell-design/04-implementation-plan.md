@@ -3,6 +3,28 @@
 
 # 04: Implementation Record
 
+## Notification migration (mockups-v3)
+
+The approved notification study now drives the native surfaces. The retained
+controller preserves app identity, pictures, actions, per-entry unread state,
+and bounded history. Clearing individual entries, app groups or the inbox can
+be undone without reviving actions belonging to a closed notification. D-Bus
+replacements update the existing card; expiry keeps its saved content. Scripted
+`notify.send` calls use the same ingestion path.
+
+The shared rich card appears in the grouped 444 px inbox and the 396 px arrival
+stack below the status area. Long messages expand, pictures preserve aspect
+ratio, and supported applications receive private inline replies. Reading or
+typing pauses expiry. The inbox includes urgent entries, All/Unread filters,
+mark-as-read, DND, clear/undo and empty states. Appearance controls app/time
+grouping and preview privacy across both surfaces. Opening the center, DND and
+session locking suppress arrival popups. The default bar includes the inbox.
+
+Data/service phase: `fc2c9bda0`. Native surface phase: this commit. Native KWin
+checks cover grouped history and real D-Bus pictures, expansion and reply input;
+unit coverage includes retention, replacement, unread bounds, undo with newer
+arrivals, action validation, expiry pause, rich rendering and preview privacy.
+
 ## Mockup fidelity correction (mockups-v3)
 
 The first six-phase implementation did not reproduce the approved mockups.

@@ -163,6 +163,7 @@ qt_add_qml_module(PhosphorShellBarQml
     DEPENDENCIES
         Phosphor.Theme
         Phosphor.Widgets
+        Phosphor.Notifications
         QtQuick.Layouts
         org.kde.kirigami
     SOURCES
@@ -211,6 +212,11 @@ endif()
 # the shell process, not by the phosphor-shell QML module. The only type
 # that module's registrar provides is PerScreen.qml, which the bar does not
 # use, so it is deliberately NOT linked here.
+
+# The notification panel uses the same rich card module as arrival popups.
+if(TARGET PhosphorShellNotificationsQml)
+    target_link_libraries(PhosphorShellBarQml PUBLIC PhosphorShellNotificationsQml PhosphorShellNotificationsQmlplugin)
+endif()
 
 # No install rules: PhosphorShellBarQml is a STATIC, in-tree-only QML
 # module (like PhosphorShellWidgetsQml / PhosphorShellOsdQml). It is linked

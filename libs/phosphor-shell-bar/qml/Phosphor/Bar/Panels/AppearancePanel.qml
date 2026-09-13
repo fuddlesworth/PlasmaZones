@@ -300,6 +300,24 @@ FocusScope {
                         onActivated: AppearanceStore.setValue("visualizer", ["ribbon", "bars", "halo", "off"][currentIndex])
                     }
                 }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    FieldLabel {
+                        text: qsTr("Notifications")
+                    }
+                    Choice {
+                        Layout.fillWidth: true
+                        model: [qsTr("Group by application"), qsTr("Chronological")]
+                        currentIndex: Appearance.notificationGrouping === "app" ? 0 : 1
+                        Accessible.name: qsTr("Notification grouping")
+                        onActivated: AppearanceStore.setValue("notificationGrouping", currentIndex === 0 ? "app" : "time")
+                    }
+                    SettingCheck {
+                        label: qsTr("Show notification previews")
+                        settingKey: "notificationPreviews"
+                    }
+                }
                 SettingCheck {
                     label: qsTr("Motion")
                     settingKey: "motion"

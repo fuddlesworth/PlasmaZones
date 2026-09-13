@@ -26,7 +26,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickControls2)
 
 # Toast imports Phosphor.Theme (tokens) and Phosphor.Widgets
 # (the atoms). The import scanner needs them visible at build time,
@@ -57,6 +57,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(_phosphor_notifications_qml_files
+    qml/Phosphor/Notifications/NotificationLabel.qml
+    qml/Phosphor/Notifications/NotificationCard.qml
+    qml/Phosphor/Notifications/NotificationCenter.qml
     qml/Phosphor/Notifications/Toast.qml
     qml/Phosphor/Notifications/ToastHost.qml
 )
@@ -82,6 +85,7 @@ qt_add_qml_module(PhosphorShellNotificationsQml
         Phosphor.Widgets
         QtQuick.Shapes
         QtQuick.Layouts
+        QtQuick.Controls
     # DEPENDENCIES rather than IMPORTS: Phosphor.Shell's runtime types are
     # registered imperatively and the qmldir only lists PerScreen, so the
     # scanner just needs the module named, not its names injected.
@@ -104,6 +108,7 @@ target_link_libraries(PhosphorShellNotificationsQml
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickShapes
+        Qt6::QuickControls2
 )
 
 if(TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)

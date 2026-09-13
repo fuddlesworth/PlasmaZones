@@ -26,9 +26,9 @@ QVariantMap AppearanceStore::defaults()
                          {QStringLiteral("center"),
                           QVariantList{QVariantList{QStringLiteral("placementmap"), QStringLiteral("workspaces")}}},
                          {QStringLiteral("right"),
-                          QVariantList{QVariantList{QStringLiteral("clock"), QStringLiteral("tray"),
-                                                    QStringLiteral("controlcenter"), QStringLiteral("appearance"),
-                                                    QStringLiteral("power")}}}}},
+                          QVariantList{QVariantList{QStringLiteral("clock"), QStringLiteral("notification"),
+                                                    QStringLiteral("tray"), QStringLiteral("controlcenter"),
+                                                    QStringLiteral("appearance"), QStringLiteral("power")}}}}},
             {QStringLiteral("palette"), QStringLiteral("spectrum")},
             {QStringLiteral("material"), QStringLiteral("glass")},
             {QStringLiteral("edge"), QStringLiteral("top")},
@@ -40,6 +40,8 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("surfacePacks"), false},
             {QStringLiteral("desktopStyle"), true},
             {QStringLiteral("media"), true},
+            {QStringLiteral("notificationGrouping"), QStringLiteral("app")},
+            {QStringLiteral("notificationPreviews"), true},
             {QStringLiteral("lockLayout"), QStringLiteral("split")},
             {QStringLiteral("lockMedia"), false},
             {QStringLiteral("lockNotifications"), true},
@@ -81,6 +83,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         {QStringLiteral("material"), {QStringLiteral("glass"), QStringLiteral("solid"), QStringLiteral("light")}},
         {QStringLiteral("edge"), {QStringLiteral("top"), QStringLiteral("bottom")}},
         {QStringLiteral("density"), {QStringLiteral("comfortable"), QStringLiteral("compact")}},
+        {QStringLiteral("notificationGrouping"), {QStringLiteral("app"), QStringLiteral("time")}},
         {QStringLiteral("lockLayout"), {QStringLiteral("split"), QStringLiteral("centered")}},
         {QStringLiteral("visualizer"),
          {QStringLiteral("ribbon"), QStringLiteral("bars"), QStringLiteral("halo"), QStringLiteral("off")}}};
@@ -250,7 +253,8 @@ bool AppearanceStore::applyPreset(const QString& preset)
          {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
           QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
           QStringLiteral("surfacePacks"), QStringLiteral("desktopStyle"), QStringLiteral("lockLayout"),
-          QStringLiteral("lockMedia"), QStringLiteral("lockNotifications")})
+          QStringLiteral("lockMedia"), QStringLiteral("lockNotifications"), QStringLiteral("notificationGrouping"),
+          QStringLiteral("notificationPreviews")})
         next[key] = m_values.value(key);
     return commit(next);
 }
