@@ -906,24 +906,13 @@ Item {
         }
     }
 
-    // The launcher, per docs/phosphor-shell-design/mockups-v2/launcher.svg:
-    // a screen-centred Cooperative popout that takes keyboard focus (it is
-    // a search field) and goes away on focus loss. Cooperative, not Modal:
-    // it should close when you click away, not dim the screen and
-    // suppress every other popout; and being Cooperative is what lets the
-    // Modal power menu close it.
-    //
-    // Launcher paints its own card, so unlike the control center it needs
-    // no panel wrapped around it. Everything it reads comes from the
-    // LauncherResults context property src/shell/main.cpp installs on
-    // every engine, and Popouts is a context property too, so this
-    // Component is safe to build against the root context the transport
-    // uses (the constraint that bit the power menu).
+    // The launcher owns its Navigator panel or Stage shelf geometry.
     Component {
         id: launcherComponent
 
         Launcher {
             results: LauncherResults
+            catalog: LauncherCatalog
             decoration: ShellChrome.decorationComponent
             // The viewfinder: this output's placement map, keyed by the
             // output the transport's layer window landed on.

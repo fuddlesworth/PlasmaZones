@@ -598,6 +598,10 @@ FocusScope {
             }
         }
         y: {
+            if (_visibleDelegate && _visibleDelegate.popoutBottomInset !== undefined)
+                return Math.max(Tokens.spacing_l, root.height - Math.max(root.reservedBottom + 6, _visibleDelegate.popoutBottomInset) - height);
+            if (_visibleDelegate && _visibleDelegate.popoutTopInset !== undefined)
+                return Math.max(Tokens.spacing_l, Math.min(_visibleDelegate.popoutTopInset, root.height - height - Tokens.spacing_l));
             switch (root.placement) {
             case "bottomCenter":
                 return Math.max(Tokens.spacing_l, root.height - (root.reservedBottom > 0 ? root.reservedBottom + 6 : 36) - height);

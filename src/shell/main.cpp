@@ -571,6 +571,7 @@ int main(int argc, char* argv[])
     // engine the shell builds.
     engine.addEngineHook([&launcherController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherResults"), launcherController.model());
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherCatalog"), &launcherController);
     });
 
     // The OSD provider and the toast broker, bound the same way. Context

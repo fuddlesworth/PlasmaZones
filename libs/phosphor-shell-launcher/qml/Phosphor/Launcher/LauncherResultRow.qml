@@ -1,24 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Launcher.LauncherResultRow, one result in the launcher list.
-//
-// Glyph, title, subtitle, and, on the selected row, the action hint so
-// the user knows what Enter will do. The selection is a 2 px blue line
-// on the row's left edge that slides between rows (the launcher's only
-// translating element, A3 §1); rows carry no filled background.
-//
-// Kirigami.Icon draws its own fallback glyph for a name the icon theme
-// cannot resolve, so a row never loses its icon slot.
-
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Widgets
 
 Item {
     id: root
-
     required property int index
     required property string title
     required property string subtitle
@@ -26,86 +16,98 @@ Item {
     required property string primaryActionLabel
     required property string alternateActionLabel
     required property bool hasAlternateAction
-
+    property string resultId: ""
+    property string providerId: ""
+    property var catalog: null
     property bool current: false
-
+    property bool compact: false
     signal clicked
-
-    implicitHeight: 54
-
+    implicitHeight: compact ? 53 : 59
     Accessible.role: Accessible.ListItem
-    Accessible.name: root.subtitle.length > 0 ? qsTr("%1, %2").arg(root.title).arg(root.subtitle) : root.title
-    Accessible.selected: root.current
+    Accessible.name: root.subtitle.length ? qsTr("%1, %2").arg(root.title).arg(root.subtitle) : root.title
+    Accessible.selected: current
     Accessible.onPressAction: root.clicked()
 
+    function appIcon(name: string): string {
+        const id = name.toLowerCase();
+        if (/firefox|chrom|browser/.test(id))
+            return "internet-web-browser";
+        if (/dolphin|folder|files/.test(id))
+            return "folder";
+        if (/kate|konsole|terminal|code/.test(id))
+            return "utilities-terminal";
+        return name;
+    }
+    Rectangle {
+        anchors.fill: parent
+        radius: Math.min(9, Appearance.radius)
+        color: root.current ? Qt.tint(Appearance.recess, Qt.alpha(Appearance.accent, 0.18)) : hover.hovered ? Appearance.card : "transparent"
+    }
+    Rectangle {
+        visible: root.current
+        width: 2
+        height: parent.height - 8
+        y: 4
+        radius: 1
+        color: Appearance.text
+    }
     HoverHandler {
         id: hover
-
         cursorShape: Qt.PointingHandCursor
     }
     TapHandler {
         onTapped: root.clicked()
     }
-
-    Rectangle {
-        anchors.fill: parent
-        radius: Math.min(12, Appearance.radius)
-        color: root.current ? Qt.alpha(Appearance.accent, 0.20) : hover.hovered ? Appearance.card : "transparent"
-        border.width: root.current ? 1 : 0
-        border.color: Qt.alpha(Appearance.accent, 0.4)
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        enabled: root.catalog !== null && root.providerId === "apps"
+        onTapped: pinMenu.popup()
+    }
+    Menu {
+        id: pinMenu
+        MenuItem {
+            text: root.catalog && root.catalog.isPinned(root.resultId) ? qsTr("Unpin from launcher") : qsTr("Pin to launcher")
+            onTriggered: root.catalog.togglePinned(root.resultId)
+        }
     }
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Tokens.spacing_m
-        anchors.rightMargin: Tokens.spacing_s
-        spacing: Tokens.spacing_m
-
-        Kirigami.Icon {
-            source: root.iconName
-            implicitWidth: 20
-            implicitHeight: 20
-            Layout.alignment: Qt.AlignVCenter
+        anchors.leftMargin: root.compact ? 10 : 14
+        anchors.rightMargin: root.compact ? 10 : 14
+        spacing: 14
+        ShellIcon {
+            source: root.appIcon(root.iconName)
+            implicitWidth: 18
+            implicitHeight: 18
+            color: Appearance.accent
         }
-
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 0
-
+            spacing: 1
             Text {
-                Accessible.ignored: true
+                Layout.fillWidth: true
                 text: root.title
                 textFormat: Text.PlainText
                 color: Appearance.text
-                opacity: root.current || hover.hovered ? 1 : 0.85
                 font.family: Tokens.font_family_ui
-                font.pixelSize: Tokens.font_size_body_l
-                font.weight: Tokens.font_weight_medium
+                font.pixelSize: 12
+                font.weight: Font.Medium
                 elide: Text.ElideRight
-                Layout.fillWidth: true
             }
-
             Text {
-                Accessible.ignored: true
+                Layout.fillWidth: true
+                visible: root.subtitle.length > 0
                 text: root.subtitle
                 textFormat: Text.PlainText
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: Tokens.font_size_body_s
+                font.pixelSize: 10
                 elide: Text.ElideRight
-                visible: root.subtitle.length > 0
-                Layout.fillWidth: true
             }
         }
-
-        TabularText {
-            Accessible.ignored: true
+        Keycap {
             visible: root.current
-            text: root.hasAlternateAction ? qsTr("↵ %1 · Alt+↵ %2").arg(root.primaryActionLabel).arg(root.alternateActionLabel) : qsTr("↵ %1").arg(root.primaryActionLabel)
-            textFormat: Text.PlainText
-            color: Appearance.muted
-            font.pixelSize: Tokens.font_size_label_s
-            elide: Text.ElideRight
-            Layout.maximumWidth: root.width * 0.4
+            text: "↵"
         }
     }
 }

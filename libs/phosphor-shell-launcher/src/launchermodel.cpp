@@ -214,14 +214,18 @@ void LauncherModel::rebuild()
     // empty list with no way to tell why, and nothing would clear it. Drop
     // it here, before assembling rows, so the surface falls back to "all".
     bool filterCleared = false;
-    if (!m_providerFilter.isEmpty() && counts.value(m_providerFilter) == 0) {
+    if (!m_providerFilter.isEmpty() && m_providerFilter != QStringLiteral("actions")
+        && counts.value(m_providerFilter) == 0) {
         m_providerFilter.clear();
         filterCleared = true;
     }
 
     QList<Row> rows;
     for (Group& group : groups) {
-        if (!m_providerFilter.isEmpty() && group.provider->id() != m_providerFilter) {
+        const bool actions = m_providerFilter == QStringLiteral("actions");
+        const QString id = group.provider->id();
+        if (actions ? (id == QStringLiteral("apps") || id == QStringLiteral("windows"))
+                    : (!m_providerFilter.isEmpty() && id != m_providerFilter)) {
             continue;
         }
         for (LauncherResult& result : group.results) {

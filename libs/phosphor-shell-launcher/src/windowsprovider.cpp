@@ -111,6 +111,16 @@ QObject* WindowsProvider::toplevelFor(const QString& resultId) const
     return nullptr;
 }
 
+void WindowsProvider::setNativeWindows(const QVariantList& windows)
+{
+    if (m_native && windows == m_nativeWindows) {
+        return;
+    }
+    m_native = true;
+    m_nativeWindows = windows;
+    recompute();
+}
+
 void WindowsProvider::setQuery(const QString& query)
 {
     m_query = query;
@@ -154,19 +164,27 @@ void WindowsProvider::recompute()
     // for the whole session, including while the launcher is closed.
     const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
-    if (m_toplevels) {
-        const int rows = m_toplevels->rowCount();
-        for (int row = 0; row < rows; ++row) {
+    QVariantList candidates = m_nativeWindows;
+    if (!m_native && m_toplevels) {
+        for (int row = 0; row < m_toplevels->rowCount(); ++row) {
             QObject* obj = toplevelAt(row);
-            if (!obj) {
+            if (obj) {
+                candidates.append(
+                    QVariantMap{{QStringLiteral("windowId"), QString::number(reinterpret_cast<quintptr>(obj))},
+                                {QStringLiteral("title"), obj->property("title")},
+                                {QStringLiteral("appId"), obj->property("appId")}});
+            }
+        }
+    }
+    {
+        for (const QVariant& candidate : std::as_const(candidates)) {
+            const QVariantMap window = candidate.toMap();
+            const QString id = window.value(QStringLiteral("windowId")).toString();
+            if (id.isEmpty()) {
                 continue;
             }
-            // Window titles are client-supplied and unbounded. The matcher
-            // allocates matrices proportional to the candidate length on
-            // every keystroke, so cap what reaches it; no launcher needs
-            // more than this to identify a window.
-            const QString title = obj->property("title").toString().left(kMaxCandidateChars);
-            const QString appId = obj->property("appId").toString().left(kMaxCandidateChars);
+            const QString title = window.value(QStringLiteral("title")).toString().left(kMaxCandidateChars);
+            const QString appId = window.value(QStringLiteral("appId")).toString().left(kMaxCandidateChars);
             int score = 0;
             // Smart case: a lower-case query matches anything, and a
             // typed capital means the user wants it.
@@ -185,9 +203,9 @@ void WindowsProvider::recompute()
                 score = best;
             }
             LauncherResult r;
-            r.id = QString::number(reinterpret_cast<quintptr>(obj));
+            r.id = id;
             r.title = title.isEmpty() ? appId : title;
-            r.subtitle = appId;
+            r.subtitle = window.value(QStringLiteral("subtitle"), appId).toString();
             // The app id doubles as the icon name for most desktop apps
             // (org.mozilla.firefox → its icon); the theme resolves what it
             // can and the surface falls back to the provider glyph. It is
@@ -228,6 +246,15 @@ QList<LauncherResult> WindowsProvider::results() const
 bool WindowsProvider::activate(const QString& resultId, Activation activation)
 {
     if (activation != Activation::Primary) {
+        return false;
+    }
+    if (m_native) {
+        for (const auto& window : std::as_const(m_nativeWindows)) {
+            if (window.toMap().value(QStringLiteral("windowId")).toString() == resultId) {
+                Q_EMIT nativeWindowActivated(resultId);
+                return true;
+            }
+        }
         return false;
     }
     QObject* toplevel = toplevelFor(resultId);
