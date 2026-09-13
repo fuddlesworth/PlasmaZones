@@ -410,9 +410,9 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
-                // [SEQ E¼] The desktop just entered gets its share of every
-                // window spanning it (after the pins and after [SEQ E]; see the helper).
-                reconcileMembershipsForScreens(m_tilingAdaptor, {screenId});
+                // [SEQ E¼] The desktop just entered gets its share of every window
+                // spanning it (after the pins and [SEQ E]; see the helper), per EFFECTIVE id.
+                reconcileMembershipsForScreens(m_tilingAdaptor, m_screenManager->virtualScreenIdsFor(screenId));
                 // [SEQ E½] Re-announce the managed set UNCONDITIONALLY for this
                 // report. The effect's staleness gate rejects any announce whose
                 // per-screen desktop stamps disagree with what it last reported,

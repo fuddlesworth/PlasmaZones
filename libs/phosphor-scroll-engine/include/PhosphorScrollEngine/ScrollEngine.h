@@ -1694,9 +1694,9 @@ private:
     /// alone, and applyLayout reads the park / arrive discriminator from
     /// them, so a multi-desktop window would otherwise compare one desktop's
     /// relayout against the rect the other desktop applied. On a context
-    /// switch the leaving context's entries are moved here under its key and
-    /// the entering context's are put back (swapContextRectMemory). Entries
-    /// die with the membership they describe.
+    /// switch the leaving context's entries are copied here under its key
+    /// (the window-level one stays as the close-time poison guard) and the
+    /// entering context's are put back. Entries die with their membership.
     QHash<PhosphorEngine::PlacementStateKey, QHash<QString, QRect>> m_contextRectMemory;
     QHash<PhosphorEngine::PlacementStateKey, QHash<QString, QString>> m_contextParkedEdge;
     /// What a floated/minimized window's column held, so unfloat restores

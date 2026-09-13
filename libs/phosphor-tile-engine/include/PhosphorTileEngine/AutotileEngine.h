@@ -1034,13 +1034,13 @@ public:
      *
      * @param windowId Window identifier from KWin
      * @param shouldFloat True to float, false to unfloat
-     * @param screenId Not used for screen RESOLUTION — autotile resolves the
-     *        screen from its own per-window tracking, which the focus-driven
-     *        migration keeps current (see the rationale block in
-     *        float_handoff.cpp's setWindowFloat). Its one consumer is the
-     *        refusal relay: a refused dispatch for a window with no tracked
-     *        screen names this caller-provided screen in its
-     *        windowFloatingStateSynced(false) announcement.
+     * @param screenId The caller's live screen. An ordinary float/unfloat
+     *        resolves the screen from the window's own tracking, which the
+     *        focus-driven migration keeps current (see float_handoff.cpp's
+     *        setWindowFloat). An unfloat for a window that holds no place in
+     *        the desktop this screen shows adopts it into that context; a
+     *        refused dispatch for a window with no tracked screen names this
+     *        screen in its windowFloatingStateSynced(false) announcement.
      */
     Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat,
                                     const QString& screenId = QString()) override;

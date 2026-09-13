@@ -62,6 +62,9 @@ void TestScreenContextTracker::virtualScreen_followsItsParentOutput()
     t.setCurrentDesktopForScreen(QStringLiteral("DP-1/vs:0"), 2);
     QCOMPARE(t.currentKeyForScreen(QStringLiteral("DP-1/vs:0")).desktop, 2);
     QCOMPARE(t.currentKeyForScreen(QStringLiteral("HDMI-1/vs:0")).desktop, 1);
+    // A sticky pin on the child still outranks the parent-resolved desktop.
+    t.setStickyPin(QStringLiteral("DP-1/vs:1"), 9);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("DP-1/vs:1")).desktop, 9);
 }
 
 void TestScreenContextTracker::setCurrentDesktop_arming()

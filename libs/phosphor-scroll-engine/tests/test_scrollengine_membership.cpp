@@ -336,15 +336,24 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         engine->setCurrentDesktopForScreen(kS1, 1);
         QCoreApplication::processEvents();
-        QVERIFY(engine->lastManagedRect(kSticky).isValid());
+        const QRect onOne = engine->lastManagedRect(kSticky);
+        QVERIFY(onOne.isValid());
+        engine->setCurrentDesktopForScreen(kS1, 3);
+        QCoreApplication::processEvents();
+        const QRect onThree = engine->lastManagedRect(kSticky);
+        QVERIFY(onThree.isValid());
+        QVERIFY2(onThree != onOne, "alone on desktop 3 the column sits elsewhere than beside kD1");
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        QCoreApplication::processEvents();
+        QCOMPARE(engine->lastManagedRect(kSticky), onOne);
 
         engine->setCurrentDesktopForScreen(kS1, 2);
         QVERIFY(engine->reconcileDesktopMemberships(kS1, oneAndThree).isEmpty());
         QCoreApplication::processEvents();
-        QVERIFY2(engine->lastManagedRect(kSticky).isValid(), "the poison guard must survive a pass-through desktop");
+        QVERIFY2(engine->lastManagedRect(kSticky) == onOne, "the poison guard must survive a pass-through desktop");
         engine->setCurrentDesktopForScreen(kS1, 3);
         QCoreApplication::processEvents();
-        QVERIFY(engine->lastManagedRect(kSticky).isValid());
+        QCOMPARE(engine->lastManagedRect(kSticky), onThree);
         QCOMPARE(engine->managedWindowOrder(kS1), QStringList{kSticky});
     }
 

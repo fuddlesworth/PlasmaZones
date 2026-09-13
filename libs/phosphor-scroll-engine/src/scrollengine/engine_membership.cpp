@@ -18,6 +18,7 @@
 // path in that file moves or drops them.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include "scrollenginelogging.h"
 
@@ -315,8 +316,9 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
     if (releasedInView) {
         // The window-level memos describe the strip the window just left.
         // All four, the set the header keeps together. A BACKGROUND release
-        // leaves them alone: after the context switch they describe the strip
-        // the window is still in, and the released key's own copy went above.
+        // leaves them alone: they are the window's actual frame and the
+        // float-back poison guard reads them (lastManagedRect), and the next
+        // entry into a held context replaces them from its parked copy.
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
@@ -435,9 +437,12 @@ void ScrollEngine::swapContextRectMemory(const QString& screenId, const Placemen
     // {1,3} closed from desktop 2 has no other copy in reach. The entering
     // arm replaces it when it has something to put back, so a window on
     // both keys still reads its own context's rect.
+    // The push names the PHYSICAL output; a subdivided output's strips are
+    // keyed by its children, so the filter is samePhysical (plain equality
+    // for an unsubdivided one).
     for (const QString& windowId : m_states.trackedWindowIds()) {
         const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
-        if (held.isEmpty() || held.first().screenId != screenId) {
+        if (held.isEmpty() || !PhosphorIdentity::VirtualScreenId::samePhysical(held.first().screenId, screenId)) {
             continue;
         }
         if (held.size() >= 2 && held.contains(oldKey)) {

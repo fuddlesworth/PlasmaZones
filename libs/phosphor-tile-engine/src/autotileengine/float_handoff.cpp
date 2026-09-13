@@ -559,9 +559,10 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // engine's stale-screen hazard guard: it re-homes the window's tiling-state
     // membership when the window is focused on a different autotile screen, so
     // by unfloat time the tracked screen is the window's real monitor. The
-    // effect-provided screen is therefore redundant for RESOLUTION here; its
-    // one use is the not-tracked refusal below, where a window with no key
-    // has no tracked screen to name in the sync.
+    // effect-provided screen has two uses: an unfloat for a window that holds
+    // no place in the desktop that screen is showing adopts it into THAT
+    // context (the arm below), and the not-tracked refusal names it in the
+    // sync, where a window with no key has no tracked screen of its own.
     if (!warnIfEmptyWindowId(rawWindowId, shouldFloat ? "floatWindow" : "unfloatWindow")) {
         return;
     }
@@ -608,24 +609,44 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     if (!shouldFloat && !callerScreenId.isEmpty()) {
         const TilingStateKey viewKey = currentKeyForScreen(callerScreenId);
         // Membership-verified, not hasWindow: a key whose state no longer
-        // holds the window is a phantom, and a window held ONLY by phantoms
-        // takes the ordinary not-tracked refusal below, which sweeps them.
+        // holds the window is a phantom and is dropped here. A window held
+        // ONLY by phantoms then has no key left, so the per-window caches the
+        // not-tracked refusal would have swept through its key are swept
+        // here instead, and the refusal names the phantom's screen.
         bool heldSomewhere = false;
+        bool droppedPhantom = false;
+        QString phantomScreen;
         for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
             const PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);
             if (heldState && heldState->containsWindow(windowId)) {
                 heldSomewhere = true;
             } else {
                 m_states.removeMembership(windowId, held);
+                droppedPhantom = true;
+                phantomScreen = held.screenId;
             }
+        }
+        if (droppedPhantom && !heldSomewhere) {
+            sweepPhantomTracking(windowId);
+            qCDebug(PhosphorTileEngine::lcTileEngine)
+                << "unfloatWindow - window held only by phantom keys, swept=" << windowId;
+            Q_EMIT windowFloatingStateSynced(windowId, false, phantomScreen.isEmpty() ? callerScreenId : phantomScreen);
+            return;
         }
         if (heldSomewhere && !m_states.hasMembership(windowId, viewKey) && isAutotileScreen(callerScreenId)) {
             for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
                 // A membership on ANOTHER output is stale tracking (a window
                 // has one screen); it is released so the adoption below does
-                // not leave the window tiled on two monitors at once.
+                // not leave the window tiled on two monitors at once. The
+                // release leaves the retile to its caller (the membership
+                // pass does the same), so that screen's layout is closed up
+                // here when the released key is the one it is showing; a
+                // background key is memoed by the release itself.
                 if (held.screenId != callerScreenId) {
                     releaseMembership(windowId, held);
+                    if (held == currentKeyForScreen(held.screenId) && isAutotileScreen(held.screenId)) {
+                        scheduleRetileForScreen(held.screenId);
+                    }
                     continue;
                 }
                 PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);

@@ -355,6 +355,10 @@ private Q_SLOTS:
         QVERIFY(m_engine->isFloating(kWindow));
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
         QVERIFY(zonesOn(2, kWindow).isEmpty());
+        // No pre-float zone on desktop 2: the flat zoneIds are desktop 1's,
+        // and Meta+F on desktop 2 must not unfloat into them.
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QVERIFY(static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->preFloatZones(kWindow).isEmpty());
 
         // The other leg: floating on desktop 1 at capture, zone z1 on desktop 2.
         m_engine->forgetWindow(kWindow);
@@ -435,6 +439,29 @@ private Q_SLOTS:
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
         QVERIFY2(!persistedZonesByDesktop(kWindow).contains(2), "the float must forget desktop 2's zone");
         QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
+    }
+
+    // Removing a desktop renumbers every bare desktop number the service
+    // keeps, not only the persisted map: a pending restore queued across the
+    // removal must land on the desktop it was queued for.
+    void removingADesktopRenumbersPendingRestores()
+    {
+        PhosphorEngine::PendingRestore onThree;
+        onThree.zoneIds = {m_zoneIds[0]};
+        onThree.screenId = kScreen;
+        onThree.virtualDesktop = 3;
+        PhosphorEngine::PendingRestore onTwo = onThree;
+        onTwo.virtualDesktop = 2;
+        m_service->setPendingRestoreQueues({{QStringLiteral("app"), {onThree, onTwo}}});
+        m_service->clearDirty();
+
+        m_engine->renumberDesktopsAfterRemoval(2);
+        const QList<PhosphorEngine::PendingRestore> queue =
+            m_service->pendingRestoreQueues().value(QStringLiteral("app"));
+        QCOMPARE(queue.size(), 2);
+        QCOMPARE(queue.at(0).virtualDesktop, 2);
+        QCOMPARE(queue.at(1).virtualDesktop, 0);
+        QVERIFY2(m_service->peekDirty() != 0, "the shift must mark the service dirty");
     }
 
     // The close the daemon relays goes through the service, and has to reach

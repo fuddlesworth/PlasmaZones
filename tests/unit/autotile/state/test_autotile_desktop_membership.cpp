@@ -13,6 +13,7 @@
 
 #include <QCoreApplication>
 #include <QObject>
+#include <QSignalSpy>
 #include <QTest>
 
 #include <PhosphorEngine/WindowRegistry.h>
@@ -262,12 +263,41 @@ private Q_SLOTS:
         f.engine.setCurrentDesktopForScreen(kScreen, 2);
         f.engine.setAutotileScreens({kScreen});
         QVERIFY(!f.engine.tilingStateForScreen(kScreen)->containsWindow(kWindow));
+        QSignalSpy syncSpy(&f.engine, &AutotileEngine::windowFloatingStateSynced);
         f.engine.setWindowFloat(kWindow, false, kScreen);
         QCoreApplication::processEvents();
         QVERIFY2(f.stateOn(2)->containsWindow(kWindow), "the desktop in view adopts the window");
         QVERIFY(!f.stateOn(2)->isFloating(kWindow));
         QVERIFY2(!f.stateOn(1)->isFloating(kWindow), "the suspension float is lifted where it was set");
         QVERIFY(f.stateOn(1)->containsWindow(kWindow));
+        // The announce carries the state read AFTER the retile: tiled.
+        QCOMPARE(syncSpy.count(), 1);
+        QCOMPARE(syncSpy.at(0).at(0).toString(), kWindow);
+        QCOMPARE(syncSpy.at(0).at(1).toBool(), false);
+        QCOMPARE(syncSpy.at(0).at(2).toString(), kScreen);
+    }
+
+    // The same arm for a window whose only membership is on ANOTHER output:
+    // stale tracking, released before the adoption, so the window is tiled on
+    // one monitor and the monitor it left closes up.
+    void unfloatOnAnotherScreenReleasesTheStaleMembership()
+    {
+        Fixture f;
+        const QString other = QStringLiteral("HDMI-1");
+        f.engine.setAutotileScreens({kScreen, other});
+        f.open(1, {kOther, kWindow});
+        f.engine.setWindowFloat(kWindow, true, kScreen);
+        QVERIFY(f.stateOn(1)->isFloating(kWindow));
+
+        f.engine.setCurrentDesktopForScreen(other, 1);
+        f.engine.setWindowFloat(kWindow, false, other);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* onOther = f.engine.tilingStateForScreen(other);
+        QVERIFY(onOther != nullptr);
+        QVERIFY2(onOther->containsWindow(kWindow), "the caller's screen adopts the window");
+        QVERIFY(!onOther->isFloating(kWindow));
+        QVERIFY2(!f.stateOn(1)->containsWindow(kWindow), "the stale membership on the other output is released");
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->screenId, other);
     }
 
     // A membership under the screen's sticky pin is not evidence the window

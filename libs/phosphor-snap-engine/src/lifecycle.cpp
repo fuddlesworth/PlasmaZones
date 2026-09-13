@@ -572,9 +572,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // store, not the one the screen happens to show.
                 SnapState* restoreState = stateForWindowOnScreen(windowId, restoreScreen, restoreDesktop);
                 restoreState->setFloatingOnScreen(windowId, restoreScreen, restoreDesktop);
-                if (!slot.zoneIds.isEmpty()) {
-                    // A window floated FROM a snapped state carries its pre-float zones
-                    // for the resnap path; a never-snapped floated window has none.
+                // A window floated FROM a snapped state carries its pre-float
+                // zones for the resnap path; a never-snapped floated window
+                // has none. A multi-desktop record's flat zoneIds are the
+                // desktop it was CAPTURED on, so they seed only when that is
+                // the desktop being restored onto; restored elsewhere the
+                // window had no pre-float zone there before the restart and
+                // gets none now (the live path reads the map, which has no
+                // entry for it).
+                if (!slot.zoneIds.isEmpty()
+                    && (slot.zonesByDesktop.isEmpty() || rec->virtualDesktop == restoreDesktop)) {
                     restoreState->addPreFloatZone(windowId, slot.zoneIds);
                     restoreState->addPreFloatScreen(windowId, restoreScreen);
                 }

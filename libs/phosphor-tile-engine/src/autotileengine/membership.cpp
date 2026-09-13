@@ -18,6 +18,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 
 #include <PhosphorTiles/TilingState.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 // releaseMembership calls through the algorithm's lifecycle hooks, so the
 // definition is needed here. AutotileEngine.h only forward-declares it, and a
 // unity build hid the omission by pulling it in from a sibling TU.
@@ -328,9 +329,18 @@ void AutotileEngine::dropFromOtherContexts(const QString& windowId, const Tiling
 void AutotileEngine::retileIfDirtyBackground(const QString& screenId)
 {
     // Consumed once per return: the entry is re-armed only by another
-    // release on that context.
-    if (m_dirtyBackgroundContexts.remove(currentKeyForScreen(screenId))) {
-        scheduleRetileForScreen(screenId);
+    // release on that context. The push names the PHYSICAL output while the
+    // dirty keys carry effective ids, so every child of a subdivided output
+    // is checked (samePhysical is plain equality for an unsubdivided one).
+    const QList<TilingStateKey> dirty(m_dirtyBackgroundContexts.cbegin(), m_dirtyBackgroundContexts.cend());
+    for (const TilingStateKey& key : dirty) {
+        if (!PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, screenId)) {
+            continue;
+        }
+        if (key == currentKeyForScreen(key.screenId)) {
+            m_dirtyBackgroundContexts.remove(key);
+            scheduleRetileForScreen(key.screenId);
+        }
     }
 }
 
