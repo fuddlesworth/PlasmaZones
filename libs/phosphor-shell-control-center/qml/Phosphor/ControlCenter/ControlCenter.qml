@@ -54,8 +54,8 @@ Item {
     /// because the cards divide whatever width they are given and would
     /// otherwise collapse to their text. Matches the bar's other panels, so
     /// moving between them is not re-reading a differently shaped surface.
-    property real panelWidth: Appearance.stage ? 1250 : Appearance.panelWidth
-    readonly property bool shelf: Appearance.stage && width >= 780
+    property real panelWidth: Appearance.panelWidth
+    readonly property bool shelf: width >= 780
     onShelfChanged: arrangeTiles()
     function arrangeTiles() {
         for (const id in priv.tiles) {

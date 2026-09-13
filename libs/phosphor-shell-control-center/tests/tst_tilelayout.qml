@@ -71,6 +71,22 @@ TestCase {
         AppearanceStore.setValue("presentation", "navigator");
     }
 
+    function test_overview_style_keeps_the_default_panel_compact() {
+        const previous = Appearance.settings.presentation;
+        try {
+            AppearanceStore.setValue("presentation", "navigator");
+            const cc = createTemporaryObject(controlCenterComp, testCase);
+            compare(cc.panelWidth, 364);
+            compare(cc.shelf, false);
+            AppearanceStore.setValue("presentation", "stage");
+            wait(0);
+            compare(cc.panelWidth, 364);
+            compare(cc.shelf, false);
+        } finally {
+            AppearanceStore.setValue("presentation", previous);
+        }
+    }
+
     function test_split_action_does_not_toggle_when_opening_details() {
         const tile = createTemporaryObject(toggleComp, testCase, {
             width: 320,

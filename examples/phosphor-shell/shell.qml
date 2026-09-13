@@ -543,7 +543,7 @@ Item {
             "popoutId": "control-center",
             "content": paneComponent,
             "targetScreen": target,
-            "anchor": Appearance.stage ? PhosphorPopout.Anchor.BottomCenter : PhosphorPopout.Anchor.BarRight,
+            "anchor": PhosphorPopout.Anchor.BarRight,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "dismissOnFocusLoss": true,
@@ -551,7 +551,7 @@ Item {
             "exclusiveKeyboard": true,
             "props": {
                 "railT": railT,
-                "panelWidth": Appearance.stage && target ? Math.max(364, target.geometry.width - 190) : Appearance.panelWidth
+                "panelWidth": Appearance.panelWidth
             }
         };
         // The arbiter keys on the popout id alone, which is right for the
@@ -908,7 +908,7 @@ Item {
         }
     }
 
-    // The launcher owns its Navigator panel or Stage shelf geometry.
+    // Launcher placement is independent of the workspace overview style.
     Component {
         id: launcherComponent
 

@@ -26,7 +26,13 @@ dark palette inside a popup: Paper must remain readable throughout the shell.
 | Presentation | Overview | Quick settings |
 |---|---|---|
 | Navigator | A bounded popup anchored to the workspace map. A preview and readable window list support direct activation. | A compact vertical panel with connection rows, levels and media. |
-| Stage | Workspace maps on the left, a live desktop preview in the center, a selected-window inspector on the right, and a bounded window strip below. | A wide shelf at the bottom, grouped into connections, sound/display and media. It collapses to the vertical panel on narrow outputs. |
+| Stage | Workspace maps on the left, a live desktop preview in the center, a selected-window inspector on the right, and a bounded window strip below. | The same compact panel anchored to the status area. |
+
+The workspace overview does not select popup geometry. Quick settings opens
+beside the bar's status area, and the launcher opens near the top center in
+both presentations. This follows the corrected interaction direction; the
+bottom shelves in the earlier Stage study are no longer the shell defaults.
+Wide content layouts remain available to custom composers.
 
 Stage uses the KWin effect's `org.plasmazones.ShellOverview` interface at
 `/PlasmaZones/ShellOverview` on `org.kde.KWin`. The effect transforms the real

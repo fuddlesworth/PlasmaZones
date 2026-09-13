@@ -13,10 +13,10 @@ FocusScope {
     property var map: null
     property var catalog: null
     property Component decoration: null
-    readonly property bool stageHome: Appearance.stage && catalog !== null && field.text.length === 0 && results.providerFilter === ""
-    readonly property real panelPadding: Appearance.stage ? 26 : 20
-    readonly property var popoutTopInset: Appearance.stage ? undefined : 145
-    readonly property var popoutBottomInset: Appearance.stage ? (Appearance.bottom ? Appearance.barHeight + 30 : 60) : undefined
+    property bool wide: false
+    readonly property bool stageHome: wide && catalog !== null && field.text.length === 0 && results.providerFilter === ""
+    readonly property real panelPadding: wide ? 26 : 20
+    readonly property int popoutTopInset: 145
     readonly property alias queryText: field.text
     property int selectedApp: -1
     readonly property var workspaceWindows: map ? map.windows : []
@@ -24,8 +24,8 @@ FocusScope {
     signal dismissed
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
-    implicitWidth: Math.min(Appearance.stage ? 1100 : 620, Screen.width - 44)
-    implicitHeight: Math.min(Screen.height - 80, Appearance.stage ? 420 : 183 + Math.min(7, Math.max(1, list.count)) * 59)
+    implicitWidth: Math.min(wide ? 1100 : 620, Screen.width - 44)
+    implicitHeight: Math.min(Screen.height - 80, wide ? 420 : 183 + Math.min(7, Math.max(1, list.count)) * 59)
     Binding {
         target: root.results
         property: "active"
@@ -98,12 +98,12 @@ FocusScope {
         spacing: 0
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Appearance.stage ? 66 : 55
+            Layout.preferredHeight: root.wide ? 66 : 55
             radius: Appearance.radius * 0.6
             color: Appearance.recess
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: Appearance.stage ? 17 : 15
+                anchors.margins: root.wide ? 17 : 15
                 spacing: 13
                 ShellIcon {
                     source: "system-search"
@@ -118,7 +118,7 @@ FocusScope {
                     verticalAlignment: TextInput.AlignVCenter
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: Appearance.stage ? 22 : 17
+                    font.pixelSize: root.wide ? 22 : 17
                     focus: true
                     selectByMouse: true
                     clip: true
@@ -127,7 +127,7 @@ FocusScope {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
                         visible: !field.text.length
-                        text: Appearance.stage ? qsTr("Search your desktop…") : qsTr("Apps, windows, actions…")
+                        text: root.wide ? qsTr("Search your desktop…") : qsTr("Apps, windows, actions…")
                         color: Appearance.muted
                         font: field.font
                         elide: Text.ElideRight
@@ -394,7 +394,7 @@ FocusScope {
                 required resultId
                 width: ListView.view.width
                 current: ListView.isCurrentItem
-                compact: Appearance.stage
+                compact: root.wide
                 catalog: root.catalog
                 onClicked: {
                     list.currentIndex = resultRow.index;

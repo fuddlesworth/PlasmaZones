@@ -318,13 +318,14 @@ TestCase {
             }
         }
     }
-    function test_stage_uses_workspace_ids_and_pins() {
+    function test_wide_layout_uses_workspace_ids_and_pins() {
         const previous = Appearance.settings.presentation;
         AppearanceStore.setValue("presentation", "stage");
         try {
             const catalog = createTemporaryObject(fakeCatalog, testCase);
             const map = createTemporaryObject(fakeWorkspace, testCase);
             const t = makeLauncher();
+            t.launcher.wide = true;
             t.launcher.catalog = catalog;
             t.launcher.map = map;
             tryCompare(t.launcher, "stageHome", true);
@@ -337,6 +338,26 @@ TestCase {
             keyClick(Qt.Key_Tab);
             compare(t.results.providerFilter, "windows");
             compare(t.launcher.stageHome, false);
+        } finally {
+            AppearanceStore.setValue("presentation", previous);
+        }
+    }
+
+    function test_overview_style_does_not_move_or_expand_launcher() {
+        const previous = Appearance.settings.presentation;
+        try {
+            AppearanceStore.setValue("presentation", "navigator");
+            const t = makeLauncher();
+            t.launcher.catalog = createTemporaryObject(fakeCatalog, testCase);
+            const initialWidth = t.launcher.implicitWidth;
+            const initialHeight = t.launcher.implicitHeight;
+            AppearanceStore.setValue("presentation", "stage");
+            wait(0);
+            compare(t.launcher.implicitWidth, initialWidth);
+            compare(t.launcher.implicitHeight, initialHeight);
+            compare(t.launcher.stageHome, false);
+            compare(t.launcher.popoutTopInset, 145);
+            compare(t.launcher.popoutBottomInset, undefined);
         } finally {
             AppearanceStore.setValue("presentation", previous);
         }
