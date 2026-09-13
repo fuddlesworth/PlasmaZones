@@ -36,7 +36,7 @@ const windows = [
 ];
 const workspaces = ['Develop','Build','Listen'];
 const state = {study:'navigator',view:'overview',workspace:0,focused:'editor',mode:'tiling',modes:['tiling','tiling','scrolling'],offset:0,snapSlots:{},detail:null,
-  wifi:true,bluetooth:true,dnd:false,night:false,playing:true,volume:64,brightness:78,network:'Home network',device:'Headphones',query:'',filter:'all',resultIndex:0};
+  wifi:true,bluetooth:true,dnd:false,night:false,playing:true,volume:64,brightness:78,network:'Home network',device:'Headphones',query:'',filter:'all',resultIndex:0,powerIndex:0,powerArmed:''};
 // Match the fixed date/time in the design scene. Agenda entries are sample data.
 const previewToday = new Date(2026,8,12,12);
 const calendar = {year:2026,month:8,selected:new Date(2026,8,12,12)};
@@ -47,7 +47,7 @@ const sampleEvents = {
   '2026-9-17':[['14:00','Prototype review','1 hour · Design','var(--c3)']],
   '2026-9-21':[['10:00','Plan the next iteration','30 min · Design','var(--c2)']]
 };
-let toastTimer, osdTimer, lastResults = [], returnFocus = null;
+let toastTimer, osdTimer, powerTimer, lastResults = [], returnFocus = null;
 const desktop = $('#desktop');
 const lockscreen = PhosphorLock.create({root:$('#lockscreen'),icon,getSettings:()=>settings,isPlaying:()=>state.playing,
   togglePlayback:()=>{state.playing=!state.playing;},syncVisualizer,onUnlocked:()=>setView('desktop'),
@@ -116,7 +116,8 @@ function renderBar() {
     </div>
     <div class="bar-right"><button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime">Sat 12 &nbsp; <span style="color:var(--text)">10:24</span></button>
     <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}<span>82%</span></button>
-    <button class="settings-trigger" data-customize aria-label="Customize shell">◈</button></div>`;
+    <button class="settings-trigger" data-customize aria-label="Customize shell">◈</button>
+    <button class="bar-power" data-view="power" aria-label="Open session menu" aria-expanded="${state.view==='power'}">${icon('power')}</button></div>`;
   syncVisualizer();
 }
 
@@ -267,6 +268,13 @@ function renderLauncher() {
 }
 
 function renderNotes() {
+  if(state.view==='power') {
+    $('#study-kicker').textContent='D / SESSION ACTIONS';
+    $('#study-title').textContent='A clear way to step away.';
+    $('#study-description').textContent='The power button stays visible at the end of the bar. Its session menu retains the existing actions and opens toward the button. Lock leads into the new lock-screen study.';
+    $('#ux-description').textContent='Lock is selected first. Arrow keys choose an action; Enter or its letter key activates it. Log out, restart and shut down need a second activation within three seconds. Escape returns to the desktop. All system actions here are simulated.';
+    return;
+  }
   if(state.view==='lockscreen') {
     $('#study-kicker').textContent='C / LOCK SCREEN';
     $('#study-title').textContent='Your space, held for you.';
@@ -323,15 +331,43 @@ function shiftMonth(delta, focus=false) {
   if(!focus)$(`#datetime [data-month="${delta}"]`)?.focus({preventScroll:true});
 }
 
+const sessionActions = [
+  {id:'lock',label:'Lock',key:'l',color:'var(--c1)'},
+  {id:'suspend',label:'Suspend',key:'s',color:'var(--c2)'},
+  {id:'hibernate',label:'Hibernate',key:'h',color:'var(--c2)'},
+  {id:'logout',label:'Log out',key:'o',color:'var(--c3)',confirm:true},
+  {id:'restart',label:'Restart',key:'r',color:'var(--c3)',confirm:true},
+  {id:'shutdown',label:'Shut down',key:'p',color:'var(--c4)',confirm:true}
+];
+
+function renderPower(focus=false) {
+  const panel=$('#session');panel.className=state.view==='power'?'session-overlay':'hidden';
+  if(state.view!=='power'){panel.replaceChildren();return;}
+  panel.innerHTML=`<div class="session-shade" data-dismiss></div><div class="session-menu material">${sessionActions.map((action,i)=>`<button data-session="${action.id}" style="--action-color:${action.color}" class="${state.powerIndex===i?'selected':''} ${state.powerArmed===action.id?'armed':''}" tabindex="${state.powerIndex===i?0:-1}"><span>${action.label}</span>${state.powerArmed===action.id?'<small>Enter again</small>':`<kbd>${action.key.toUpperCase()}</kbd>`}</button>`).join('')}</div>`;
+  if(focus)panel.querySelector('.selected')?.focus({preventScroll:true});
+}
+
+function runSession(id) {
+  const action=sessionActions.find(action=>action.id===id);if(!action)return;
+  state.powerIndex=sessionActions.indexOf(action);
+  if(action.confirm&&state.powerArmed!==id) {
+    clearTimeout(powerTimer);state.powerArmed=id;renderPower(true);
+    powerTimer=setTimeout(()=>{state.powerArmed='';if(state.view==='power')renderPower(true);},3000);
+    return;
+  }
+  if(id==='lock')setView('lockscreen');
+  else {setView('desktop');notify(`${action.label} selected in the prototype`);}
+}
+
 function render() {
   normalizeFocus();
   desktop.classList.toggle('navigator',state.study==='navigator');
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
   desktop.classList.toggle('locked',state.view==='lockscreen');
-  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#launcher,#datetime,#osd,#toast)')) element.inert=state.view==='lockscreen';
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#launcher,#datetime,#osd,#toast)')) element.inert=['lockscreen','power'].includes(state.view);
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
-  renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderNotes();
+  renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
   lockscreen.render(state.view==='lockscreen');
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
   $$('.view-switch [data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===state.view));
@@ -357,14 +393,17 @@ function applySettings() {
 
 function setView(view) {
   const previousView=state.view;
+  clearTimeout(powerTimer);state.powerArmed='';state.powerIndex=0;
   if (view!=='desktop') returnFocus=document.activeElement;
   state.view=view;state.detail=null;
   if(view==='lockscreen') {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
   render();
   if (view==='launcher') $('#launcher-search').focus();
   if (view==='datetime') $('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
+  if (view==='power') $('#session .selected')?.focus({preventScroll:true});
   if (view==='desktop') {
     if (previousView==='datetime') $('.clock').focus();
+    else if (previousView==='power') $('.bar-power').focus();
     else if (returnFocus?.isConnected) returnFocus.focus();
     else $('.map-trigger')?.focus();
   }
@@ -450,11 +489,13 @@ document.addEventListener('click',e=>{
     if(b.dataset.filter){state.filter=b.dataset.filter;state.resultIndex=0;renderLauncher();$('#launcher-search').focus();}
     if(b.dataset.result!==undefined)runResult(Number(b.dataset.result));
     if(b.dataset.app)launchApp(b.dataset.app);
+    if(b.dataset.session)runSession(b.dataset.session);
     return;
   }
   const win=e.target.closest('[data-select]');
   if(win){focusWindow(win.dataset.select,state.view!=='overview');return;}
-  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#launcher,#datetime,#bar'))setView('desktop');
+  if(e.target.matches('.session-shade')){setView('desktop');return;}
+  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#launcher,#datetime,#session,#bar'))setView('desktop');
 });
 
 document.addEventListener('dblclick',e=>{
@@ -503,6 +544,15 @@ document.addEventListener('input',e=>{
 document.addEventListener('keydown',e=>{
   if(lockscreen.handleKey(e))return;
   if(e.key==='Escape'){setView('desktop');return;}
+  if(state.view==='power'&&!e.target.closest('.review-toolbar,.review-header,#customizer')&&!e.ctrlKey&&!e.metaKey&&!e.altKey) {
+    if(['ArrowUp','ArrowDown','Tab'].includes(e.key)) {
+      e.preventDefault();clearTimeout(powerTimer);state.powerArmed='';
+      state.powerIndex=(state.powerIndex+(e.key==='ArrowUp'||(e.key==='Tab'&&e.shiftKey)?sessionActions.length-1:1))%sessionActions.length;
+      renderPower(true);
+    } else if(e.key==='Enter'||e.key===' ') {e.preventDefault();if(!e.repeat)runSession(sessionActions[state.powerIndex].id);}
+    else {const action=sessionActions.find(action=>action.key===e.key.toLowerCase());if(action){e.preventDefault();if(!e.repeat)runSession(action.id);}}
+    return;
+  }
   if(e.target.matches('[data-date]')) {
     const deltas={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7};
     if(e.key in deltas){e.preventDefault();const date=new Date(calendar.selected);date.setDate(date.getDate()+deltas[e.key]);selectDate(date);return;}
@@ -541,6 +591,7 @@ new ResizeObserver(([entry])=>{
 }).observe($('.frame'));
 const [study,view]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime','lockscreen'].includes(view))state.view=view;
+if(['desktop','overview','controls','launcher','datetime','lockscreen','power'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
+if(state.view==='power')$('#session .selected')?.focus({preventScroll:true});
