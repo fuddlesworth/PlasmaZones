@@ -5,7 +5,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
-const defaults = {palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon'};
+const defaults = {palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon',lockLayout:'split',lockMedia:false,lockNotifications:true};
 const presets = {
   phosphor:{...defaults},
   paper:{...defaults,palette:'wallpaper',material:'light',radius:24,gap:22,glow:false},
@@ -15,7 +15,7 @@ let settings = {...defaults};
 try {
   const saved = JSON.parse(localStorage.getItem('phosphor-design-settings') || 'null');
   if (saved) for (const key of Object.keys(defaults)) {
-    const choices = {palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off']};
+    const choices = {palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered']};
     if (choices[key]?.includes(saved[key])) settings[key] = saved[key];
     else if (typeof defaults[key] === 'boolean' && typeof saved[key] === 'boolean') settings[key] = saved[key];
     else if (key === 'radius' && Number.isFinite(saved[key])) settings[key] = Math.min(30,Math.max(4,saved[key]));
@@ -49,6 +49,9 @@ const sampleEvents = {
 };
 let toastTimer, osdTimer, lastResults = [], returnFocus = null;
 const desktop = $('#desktop');
+const lockscreen = PhosphorLock.create({root:$('#lockscreen'),icon,getSettings:()=>settings,isPlaying:()=>state.playing,
+  togglePlayback:()=>{state.playing=!state.playing;},syncVisualizer,onUnlocked:()=>setView('desktop'),
+  onPhaseChanged:phase=>desktop.classList.toggle('lock-releasing',phase==='success')});
 const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
 const selectedWindow = () => windows.find(w => w.id === state.focused);
 const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
@@ -264,6 +267,13 @@ function renderLauncher() {
 }
 
 function renderNotes() {
+  if(state.view==='lockscreen') {
+    $('#study-kicker').textContent='C / LOCK SCREEN';
+    $('#study-title').textContent='Your space, held for you.';
+    $('#study-description').textContent='A generous clock and a focused unlock card share the shell’s spectrum. Abstract pane shapes carry the identity without showing window titles or desktop content. The same lock screen serves Navigator and Stage.';
+    $('#ux-description').textContent='Type immediately, Enter to unlock, Escape to clear. Review Caps Lock, an incorrect password, and the waiting state above. Media is optional; notifications show a count with their content hidden.';
+    return;
+  }
   const stage = state.study==='stage';
   $('#study-kicker').textContent = stage?'B / SPATIAL OVERVIEW':'A / ANCHORED NAVIGATOR';
   $('#study-title').textContent = stage?'Work with the space.':'Stay in context.';
@@ -318,8 +328,11 @@ function render() {
   desktop.classList.toggle('navigator',state.study==='navigator');
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
+  desktop.classList.toggle('locked',state.view==='lockscreen');
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#launcher,#datetime,#osd,#toast)')) element.inert=state.view==='lockscreen';
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
   renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderNotes();
+  lockscreen.render(state.view==='lockscreen');
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
   $$('.view-switch [data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===state.view));
   history.replaceState(null,'',`#${state.study}/${state.view}`);
@@ -346,6 +359,7 @@ function setView(view) {
   const previousView=state.view;
   if (view!=='desktop') returnFocus=document.activeElement;
   state.view=view;state.detail=null;
+  if(view==='lockscreen') {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
   render();
   if (view==='launcher') $('#launcher-search').focus();
   if (view==='datetime') $('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
@@ -487,6 +501,7 @@ document.addEventListener('input',e=>{
 });
 
 document.addEventListener('keydown',e=>{
+  if(lockscreen.handleKey(e))return;
   if(e.key==='Escape'){setView('desktop');return;}
   if(e.target.matches('[data-date]')) {
     const deltas={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7};
@@ -518,9 +533,14 @@ $('#export').onclick=()=>{
   const url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download='phosphor-study-preset.json';link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Preset exported');
 };
-new ResizeObserver(()=>{const scale=$('.frame').clientWidth/1440;desktop.style.transform=`scale(${scale})`;$('.frame').style.height=`${900*scale+2}px`;}).observe($('.frame'));
+let previewWidth=0;
+new ResizeObserver(([entry])=>{
+  if(entry.contentRect.width===previewWidth)return;
+  previewWidth=entry.contentRect.width;
+  requestAnimationFrame(()=>{const scale=previewWidth/1440;desktop.style.transform=`scale(${scale})`;$('.frame').style.height=`${900*scale+2}px`;});
+}).observe($('.frame'));
 const [study,view]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime'].includes(view))state.view=view;
+if(['desktop','overview','controls','launcher','datetime','lockscreen'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();

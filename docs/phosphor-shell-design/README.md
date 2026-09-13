@@ -8,6 +8,13 @@ The current reference is [`mockups-v3/`](mockups-v3/), including Navigator,
 Stage, the quick-settings shelf, calendar, visualizers and scrolling with
 four and ten windows.
 
+The [lock-screen proposal](mockups-v3/index.html#navigator/lockscreen) is an
+interactive prototype awaiting design review. It includes password entry,
+retry and unlocking states, Caps Lock, optional media, and split or centered
+compositions in all three presets. Use the sample password `demo` to return
+to the desktop. Authentication and power actions are simulated; this study
+does not change the QML lock screen.
+
 The shell is Qt6/QML on the reusable `phosphor-*` libraries. This branch
 integrates with the PlasmaZones daemon and KWin effect; the nested harness
 runs those build-tree components without installing them. No other shell
