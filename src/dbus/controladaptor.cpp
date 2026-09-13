@@ -93,21 +93,57 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
                          << "to" << (newMode == 1 ? "autotile" : "snapping");
 
     if (m_layoutAdaptor) {
-        // setAssignmentEntry(screenId, desktop=0 (screen level), activity="" (all activities), mode, layout, algorithm)
+        // The toggle writes at the granularity that governs the screen RIGHT
+        // NOW. A screen whose current desktop (or desktop + activity) carries
+        // its own assignment is toggled in that context; a screen-level write
+        // there would be outranked by the narrower entry (a broader write
+        // never shadows a narrower one) and the toggle would do nothing
+        // visible. A screen with only a screen-level assignment, or none,
+        // keeps the screen-level toggle, which flips every desktop of it.
+        const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(resolvedScreenId) : 0;
+        const QString activity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+        int targetDesktop = 0;
+        QString targetActivity;
+        if (m_layoutManager && desktop > 0 && !activity.isEmpty()
+            && m_layoutManager->hasExplicitAssignment(resolvedScreenId, desktop, activity)) {
+            targetDesktop = desktop;
+            targetActivity = activity;
+        } else if (m_layoutManager && desktop > 0
+                   && m_layoutManager->hasExplicitAssignment(resolvedScreenId, desktop, QString())) {
+            targetDesktop = desktop;
+        } else if (m_layoutManager && !activity.isEmpty()
+                   && m_layoutManager->hasExplicitAssignment(resolvedScreenId, 0, activity)) {
+            targetActivity = activity;
+        }
+        // setAssignmentEntry(screenId, desktop, activity, mode, layout, algorithm)
         //
-        // The two empty strings WIPE the context's stored snapping layout and
-        // tiling algorithm — that is this verb's contract, not an oversight:
-        // it is a bare mode switch with no layout arguments of its own, so it
-        // cannot carry the slots forward, and the toggled mode resolves
-        // through the cascade instead. The scrolling template survives
-        // because setAssignmentEntry seeds the entry from the stored one.
+        // A bare mode switch has no layout arguments of its own, so the
+        // context's STORED slots ride along: the snapping layout and tiling
+        // algorithm the entry already carries (exactContextEntry reads the
+        // exact tuple's rule, never a cascade default) are written back with
+        // the new mode, and a round trip lands on the same layout it left.
+        // Written empty, a per-desktop entry lost its layout to the global
+        // default on the way back (the cascade has no wider level carrying it,
+        // unlike a screen-level entry). An unassigned context stays empty and
+        // resolves through the cascade. The scrolling template survives on
+        // its own: setAssignmentEntry seeds it from the stored entry.
         //
         // The apply (resnap, snap-zone restores, OSD) is the write's own:
         // outside a settings-app save batch every single-context assignment
         // write applies itself for its screen at once (LayoutAdaptor::
         // stageOrApply), so an explicit apply here would run the pass twice.
         // Inside a batch the batch's closing apply carries the screen.
-        m_layoutAdaptor->setAssignmentEntry(screenId, 0, QString(), newMode, QString(), QString());
+        PhosphorZones::AssignmentEntry stored;
+        if (m_layoutManager
+            && m_layoutManager->hasExplicitAssignment(resolvedScreenId, targetDesktop, targetActivity)) {
+            stored = m_layoutManager->exactContextEntry(resolvedScreenId, targetDesktop, targetActivity);
+        }
+        qCInfo(lcDbusWindow) << "toggleAutotileForScreen: writing context desktop=" << targetDesktop
+                             << "activity=" << targetActivity << "snapping=" << stored.snappingLayout
+                             << "tiling=" << stored.tilingAlgorithm;
+        m_layoutAdaptor->setAssignmentEntry(screenId, targetDesktop, targetActivity, newMode, stored.snappingLayout,
+                                            stored.tilingAlgorithm);
     } else {
         qCWarning(lcDbusWindow) << "toggleAutotileForScreen: LayoutAdaptor not available";
     }

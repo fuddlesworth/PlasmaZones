@@ -25,6 +25,23 @@ namespace PWR = PhosphorRules;
 using namespace RuleHelpers;
 
 namespace {
+/// Every rule in @p kept created by this batch (its priority is at or above
+/// the batch's first seed) lifts the narrower assignments it would shadow.
+void liftNarrowerAssignmentsForCreated(QList<PWR::Rule>& kept, int firstSeed)
+{
+    QList<PWR::Rule> created;
+    for (const PWR::Rule& rule : std::as_const(kept)) {
+        if (rule.priority >= firstSeed && RuleHelpers::isContextAssignmentRule(rule)) {
+            created.append(rule);
+        }
+    }
+    for (const PWR::Rule& rule : std::as_const(created)) {
+        RuleHelpers::liftNarrowerAssignmentsAbove(kept, rule);
+    }
+}
+} // namespace
+
+namespace {
 
 // One walk, both directions. @p shouldFlip selects the entries to convert and
 // @p target is the mode they are rewritten to; the layout fields (snapping,
@@ -309,6 +326,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // claims the next value so back-to-back creates don't collide. An UPDATE
     // preserves its snapshot priority instead.
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
+    const int firstSeed = seedPriority;
 
     // Step 2 — drop every rule belonging to this family; keep the rest.
     //
@@ -421,7 +439,10 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
-    // Step 4 — one commit, then signal per affected (screen, desktop).
+    // Step 4 — one commit, then signal per affected (screen, desktop). The
+    // created rules (seeded at the top) first lift the narrower assignments
+    // they would otherwise shadow; see liftNarrowerAssignmentsAbove.
+    liftNarrowerAssignmentsForCreated(kept, firstSeed);
     m_ruleStore->setAllRules(kept);
     QSet<ContextDims> emitContexts;
     for (const ContextDims& stored : std::as_const(storedContexts)) {
@@ -567,6 +588,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // Priority seed for newly CREATED combined assignments (see
     // applyBatchAssignments for the rationale).
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
+    const int firstSeed = seedPriority;
 
     // Family drop, with the same three carve-outs applyBatchAssignments makes:
     // an index so a surviving layout-only snapshot rule is replaced in place
@@ -643,6 +665,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
+    liftNarrowerAssignmentsForCreated(kept, firstSeed);
     m_ruleStore->setAllRules(kept);
     // The PAYLOAD resolves under the CURRENT activity: layoutAssigned carries only (screenId, desktop,
     // layoutPtr) and its consumers read that as the screen's live layout, so a
