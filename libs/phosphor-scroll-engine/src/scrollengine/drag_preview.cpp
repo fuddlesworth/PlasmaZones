@@ -233,8 +233,12 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
         }
         // Keep the window tracked against the TARGET context while detached
         // (screen routing, isWindowTracked, the daemon's re-latch all keep
-        // answering). Fresh adoption stays untracked until commit.
-        m_states.setKeyForWindow(windowId, targetKey);
+        // answering). Fresh adoption stays untracked until commit. Only the
+        // membership the drag started from moves; a multi-desktop window
+        // keeps its columns on the other desktops through the hold.
+        if (!preview.priorSameKey) {
+            m_states.migrate(windowId, preview.priorKey, targetKey);
+        }
     } else {
         preview.carried.width = params.defaultColumnWidth;
         preview.carried.display = effectiveDefaultColumnDisplay(screenId);
@@ -291,9 +295,9 @@ void ScrollEngine::commitDragInsertPreview()
     if (!targetState) {
         // The target screen left the scrolling set mid-hold and the cancels
         // that normally cover that raced past this commit. Do not return
-        // with the reverse-map entry intact — that is the detached-residue
-        // limbo every other path heals.
-        m_states.removeWindow(p.windowId);
+        // with the membership intact — that is the detached-residue limbo
+        // every other path heals.
+        m_states.removeMembership(p.windowId, p.targetKey);
         return;
     }
     // The STATE above came from the preview's captured key; params and the
@@ -401,7 +405,7 @@ void ScrollEngine::commitDragInsertPreview()
         // symmetry is the documented contract).
         m_lastAppliedWindowedFs.remove(p.windowId);
         m_lastAppliedMaximizedToEdges.remove(p.windowId);
-        m_states.setKeyForWindow(p.windowId, p.targetKey);
+        m_states.addMembership(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
         return;
@@ -439,7 +443,7 @@ void ScrollEngine::commitDragInsertPreview()
     // user asking for the middle in so many words, so there the drop centers
     // instead — see reanchorForDropCommit.
     strip.reanchorForDropCommit(preDropViewOffset, params);
-    m_states.setKeyForWindow(p.windowId, p.targetKey);
+    m_states.addMembership(p.windowId, p.targetKey);
 
     // Drop the last-applied memory so the re-tile emit survives the
     // emit-on-change gate even when the window resolves back to its
@@ -507,7 +511,7 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
                         targetState->strip().restoreViewAnchor(p.targetViewAnchorAtBegin, params);
                         targetState->strip().setViewDetached(p.targetViewDetachedAtBegin);
                     }
-                    m_states.setKeyForWindow(p.windowId, p.targetKey);
+                    m_states.addMembership(p.windowId, p.targetKey);
                     // Same emit-on-change escape as every other restore arm
                     // in this function: the restored slot is typically the
                     // pre-drag rect, so without dropping the memories the
@@ -618,7 +622,7 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
                     targetState->strip().setMaximizedToEdgesForWindow(p.windowId, true);
                 }
             }
-            m_states.setKeyForWindow(p.windowId, p.targetKey);
+            m_states.addMembership(p.windowId, p.targetKey);
             m_lastAppliedRect.remove(p.windowId);
             m_parkedScrollEdge.remove(p.windowId);
             applyLayout(p.targetScreenId, false);
@@ -631,9 +635,9 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
             Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
         } else {
             // Target context refused too — the window would stay tracked
-            // against a key holding it nowhere. Drop the reverse-map entry
+            // against a key holding it nowhere. Drop that membership
             // instead of latching the detached-residue limbo.
-            m_states.removeWindow(p.windowId);
+            m_states.removeMembership(p.windowId, p.targetKey);
         }
         return;
     }
@@ -664,7 +668,9 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
         m_lastAppliedRect.remove(p.windowId);
         m_parkedScrollEdge.remove(p.windowId);
     }
-    m_states.setKeyForWindow(p.windowId, p.priorKey);
+    // The reverse of begin's move: the membership goes home, and the
+    // window's other desktops' columns are untouched either way.
+    m_states.migrate(p.windowId, p.targetKey, p.priorKey);
     applyLayout(p.targetScreenId, false);
     if (p.priorKey == currentKeyForScreen(p.priorKey.screenId)) {
         applyLayout(p.priorKey.screenId, false);

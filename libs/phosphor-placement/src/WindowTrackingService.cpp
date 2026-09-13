@@ -190,9 +190,18 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     // its per-key last-used inside unassignWindow; the global holder still carries
     // the representative restored from disk, so clear it too if it named a removed zone.
     const QStringList removedZones = snapState->zonesForWindow(windowId);
+    // The desktop this store's assignment belongs to, read BEFORE the
+    // unassign clears it. A window present on several desktops has a zone
+    // per desktop persisted in its record, and the store MERGES that map on
+    // capture, so an unsnap here has to forget its desktop's entry explicitly
+    // or a restart snaps the window back into the zone it just left.
+    const int unsnappedDesktop = snapState->desktopForWindow(windowId);
     auto result = snapState->unassignWindow(windowId);
     if (!result.wasAssigned) {
         return;
+    }
+    if (unsnappedDesktop >= 1) {
+        forgetDesktopZones(windowId, PhosphorEngine::WindowPlacement::snapEngineId(), unsnappedDesktop);
     }
     bool lastUsedCleared = result.lastUsedZoneCleared;
     lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, snapState);
@@ -257,6 +266,9 @@ QStringList WindowTrackingService::snappedWindows() const
     for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         result += state->snappedWindows();
     }
+    // A window snapped on several desktops is in several stores; the D-Bus
+    // consumers of this list want each window once.
+    result.removeDuplicates();
     return result;
 }
 
@@ -598,6 +610,12 @@ void WindowTrackingService::downgradeMismatchedManagedSlots(PhosphorEngine::Wind
             || it->state == PhosphorEngine::WindowPlacement::stateTiled()) {
             it->state = PhosphorEngine::WindowPlacement::stateFloating();
             it->zoneIds.clear();
+            // The per-desktop map names that other screen's zones too, and
+            // the store MERGES it on record, so a map left standing would
+            // survive every later capture and be seeded back into THIS
+            // screen's per-desktop stores on restore. Same reasoning as
+            // WindowPlacementStore::releaseEngineSlot.
+            it->zonesByDesktop.clear();
             it->order = -1;
         }
     }
@@ -991,42 +1009,6 @@ bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Out-of-line accessors delegating to SnapState
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void WindowTrackingService::forEachZoneAssignedWindow(
-    const std::function<void(const QString&, const QStringList&, const QString&, int)>& fn) const
-{
-    Q_ASSERT(hasSnapState());
-    if (!hasSnapState()) {
-        return;
-    }
-    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        const QHash<QString, QStringList>& zones = state->zoneAssignments();
-        const QHash<QString, QString>& screens = state->screenAssignments();
-        const QHash<QString, int>& desktops = state->desktopAssignments();
-        for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
-            // Single-owner guard: a window's authoritative store is the one the
-            // reverse map points at (snapForWindow). Re-keying a window to a new
-            // per-(screen,desktop,activity) store only moves that pointer — it does
-            // NOT evict the window's zone/desktop data from the old store (see
-            // PerScreenStates::setKeyForWindow / removeWindow, which "do not touch
-            // state objects"). Iterating the raw stores therefore sees a re-keyed
-            // window twice, once per store, with each store's own (possibly stale)
-            // desktop value — the cross-desktop resnap leak (a VD1 window read as
-            // VD2 from a leftover store, then resnapped off its real desktop). The
-            // autotile engine never hits this because it resolves windows through
-            // the same reverse map instead of scanning raw stores. Match that here:
-            // report a window only from its owning store, skipping stale leftovers.
-            // A window untracked by the reverse map (owner == nullptr, e.g. the
-            // global holder's screenless entries) is left to the callback's own
-            // screen/desktop guards, preserving prior behaviour.
-            const PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
-            if (owner && owner != state) {
-                continue;
-            }
-            fn(it.key(), it.value(), screens.value(it.key()), desktops.value(it.key(), 0));
-        }
-    }
-}
 
 QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
 {

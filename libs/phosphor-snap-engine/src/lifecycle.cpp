@@ -118,6 +118,38 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 //     stale snap zones on a now-tiled screen must not bleed into placement.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+int SnapEngine::restoreDesktopFor(const QString& windowId, const PhosphorEngine::WindowPlacement& rec,
+                                  const QString& restoreScreen) const
+{
+    // The desktop the window is actually being placed onto, which is not the
+    // screen's current one when the compositor restores it onto a background
+    // desktop: session restore puts each window back on its saved desktop,
+    // and the registry has that stamped before this resolve runs. Reading the
+    // screen instead granted the membership, stamped the assignment and
+    // counted the zone occupancy on whatever desktop the user happened to be
+    // looking at.
+    const int screenDesktop = currentVirtualDesktopForScreen(restoreScreen);
+    if (m_windowRegistry) {
+        if (const auto ctx = m_windowRegistry->desktopContext(windowId)) {
+            if (ctx->sticky.value_or(false)) {
+                return screenDesktop; // on every desktop: the one in view is the one to apply
+            }
+            if (ctx->virtualDesktops.size() > 1) {
+                return ctx->virtualDesktops.contains(screenDesktop) ? screenDesktop : ctx->virtualDesktops.first();
+            }
+            if (ctx->virtualDesktop > 0) {
+                return ctx->virtualDesktop;
+            }
+        }
+    }
+    // No registry answer: a multi-desktop record's own desktop is the next
+    // best witness, provided the record still names a zone there.
+    if (rec.virtualDesktop >= 1 && rec.slotFor(engineId()).zonesByDesktop.contains(rec.virtualDesktop)) {
+        return rec.virtualDesktop;
+    }
+    return screenDesktop;
+}
+
 SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
                                             PhosphorEngine::WindowKind kind)
 {
@@ -448,7 +480,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     // holds whichever context was current when the record was
                     // last written, which is not necessarily this one — and
                     // put the other desktops' zones back in their own stores.
-                    const int restoreDesktop = currentVirtualDesktopForScreen(restoreScreen);
+                    const int restoreDesktop = restoreDesktopFor(windowId, *rec, restoreScreen);
+                    const QString restoreActivity = rec->activity.isEmpty() ? currentActivity() : rec->activity;
                     const QStringList zoneIds = slot.zonesByDesktop.value(restoreDesktop, slot.zoneIds);
                     const QRect geo =
                         zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
@@ -480,18 +513,23 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         // restore grants nothing.
                         if (!slot.zonesByDesktop.isEmpty()) {
                             const PhosphorEngine::PlacementStateKey restoreKey{restoreScreen, restoreDesktop,
-                                                                               currentActivity()};
+                                                                               restoreActivity};
                             ensureStateForKey(restoreKey);
                             m_states.addMembership(canonicalWindowId(windowId), restoreKey);
-                            seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop);
+                            seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop, restoreActivity);
                         }
                         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: placement(snapped) for"
                                                                  << windowId << "->" << geo << "freeGeo=" << freeGeo;
+                        // The desktop is pinned into the result so the commit
+                        // stamps the assignment into the store of the desktop
+                        // the window is actually on, which the caller's commit
+                        // would otherwise read as the screen's current one.
                         return SnapResult{.shouldSnap = true,
                                           .geometry = geo,
                                           .zoneId = zoneIds.first(),
                                           .zoneIds = zoneIds,
-                                          .screenId = restoreScreen};
+                                          .screenId = restoreScreen,
+                                          .virtualDesktop = restoreDesktop};
                     }
                 }
                 // Disabled context, managed-restore opt-out
@@ -508,15 +546,21 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // That gate refuses to auto-SNAP a window onto a context the user
                 // disabled snapping for; a floated window is not being snapped into a
                 // zone, so restoring its floating state is correct regardless.
+                const int restoreDesktop = restoreDesktopFor(windowId, *rec, restoreScreen);
                 SnapState* restoreState = stateForWindowOnScreen(windowId, restoreScreen);
-                restoreState->setFloatingOnScreen(windowId, restoreScreen,
-                                                  currentVirtualDesktopForScreen(restoreScreen));
+                restoreState->setFloatingOnScreen(windowId, restoreScreen, restoreDesktop);
                 if (!slot.zoneIds.isEmpty()) {
                     // A window floated FROM a snapped state carries its pre-float zones
                     // for the resnap path; a never-snapped floated window has none.
                     restoreState->addPreFloatZone(windowId, slot.zoneIds);
                     restoreState->addPreFloatScreen(windowId, restoreScreen);
                 }
+                // Floating on the desktop being restored onto, snapped on
+                // others: the other desktops' zones go back into their own
+                // stores exactly as a snapped restore's do, or the window
+                // comes back floating everywhere.
+                seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop,
+                                          rec->activity.isEmpty() ? currentActivity() : rec->activity);
                 // The window is floating regardless of whether a position was recorded
                 // — tell the compositor unconditionally (matching toggleWindowFloat /
                 // setWindowFloat / handoffReceive). The geometry MOVE, however, is
@@ -858,6 +902,33 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDes
     // stays true while it floats. The active runtime state is floating — record
     // that, with the pre-float zones carried in the slot for the resnap path.
     const SnapState* state = stateForWindow(windowId);
+    // A window present on several desktops is snapped separately on each,
+    // and zoneIds below can only carry one of those. Gather the rest so a
+    // restart puts it back in the zone it occupied on EVERY desktop instead
+    // of one zone everywhere. Written only for a genuinely multi-desktop
+    // window, so an ordinary record is unchanged. Keyed by the canonical id,
+    // which is what the membership map is keyed by; the raw id of a
+    // class-mutated window would find no memberships and write nothing.
+    // Gathered for a FLOATING window too: floating is per store, so a window
+    // floated on the desktop in view is still snapped on the others, and a
+    // record that dropped those zones would restore it floating everywhere.
+    const auto gatherZonesByDesktop = [this, &windowId, &slot]() {
+        const QList<PhosphorEngine::PlacementStateKey> memberships =
+            m_states.membershipsForWindow(canonicalWindowId(windowId));
+        if (memberships.size() <= 1) {
+            return;
+        }
+        for (const PhosphorEngine::PlacementStateKey& key : memberships) {
+            const SnapState* perDesktop = m_states.stateForKey(key);
+            if (!perDesktop || key.desktop < 1) {
+                continue;
+            }
+            const QStringList zones = perDesktop->zonesForWindow(windowId);
+            if (!zones.isEmpty()) {
+                slot.zonesByDesktop.insert(key.desktop, zones);
+            }
+        }
+    };
     if (isFloating(windowId)) {
         slot.state = WindowPlacement::stateFloating();
         slot.zoneIds = state ? state->preFloatZones(windowId) : QStringList{};
@@ -867,6 +938,7 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDes
         if (const int recorded = state ? state->desktopForWindow(windowId) : 0; recorded >= 1) {
             p.virtualDesktop = recorded;
         }
+        gatherZonesByDesktop();
     } else if (state && state->isWindowSnapped(windowId)) {
         slot.state = WindowPlacement::stateSnapped();
         slot.zoneIds = state->zonesForWindow(windowId);
@@ -875,24 +947,7 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDes
         if (const int recorded = state->desktopForWindow(windowId); recorded >= 1) {
             p.virtualDesktop = recorded;
         }
-        // A window present on several desktops is snapped separately on each,
-        // and zoneIds above can only carry one of those. Gather the rest so a
-        // restart puts it back in the zone it occupied on EVERY desktop
-        // instead of one zone everywhere. Written only for a genuinely
-        // multi-desktop window, so an ordinary record is unchanged.
-        const QList<PhosphorEngine::PlacementStateKey> memberships = m_states.membershipsForWindow(windowId);
-        if (memberships.size() > 1) {
-            for (const PhosphorEngine::PlacementStateKey& key : memberships) {
-                const SnapState* perDesktop = m_states.stateForKey(key);
-                if (!perDesktop || key.desktop < 1) {
-                    continue;
-                }
-                const QStringList zones = perDesktop->zonesForWindow(windowId);
-                if (!zones.isEmpty()) {
-                    slot.zonesByDesktop.insert(key.desktop, zones);
-                }
-            }
-        }
+        gatherZonesByDesktop();
     } else {
         // Snapping has only two states — snapped (above) or floated. An unmanaged
         // window on a snap-mode screen is FLOATED (the retired `free` state). The
@@ -915,6 +970,22 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDes
         }
         slot.state = WindowPlacement::stateFloating();
         p.screenId = screenForTrackedWindow(windowId);
+        // A window present on several desktops, unsnapped on the one in view
+        // (an adopted membership with no data), records as floating HERE with
+        // its other desktops' zones kept: snapping's two states make unsnapped
+        // and floated the same thing, and the restore's floated branch seeds
+        // the rest back. Its screen comes from any member store, since the
+        // store in view holds no residence for it.
+        if (p.screenId.isEmpty()) {
+            for (const PhosphorEngine::PlacementStateKey& key :
+                 m_states.membershipsForWindow(canonicalWindowId(windowId))) {
+                if (!key.screenId.isEmpty()) {
+                    p.screenId = key.screenId;
+                    break;
+                }
+            }
+        }
+        gatherZonesByDesktop();
     }
     p.engines.insert(engineId(), slot);
     return p;

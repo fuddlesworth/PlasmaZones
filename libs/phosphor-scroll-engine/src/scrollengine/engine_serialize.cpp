@@ -497,16 +497,23 @@ QJsonObject ScrollEngine::serializeStripState() const
 void ScrollEngine::restoreStripState(const QJsonObject& state)
 {
     int restored = 0;
-    // A window id may appear in exactly ONE staged tile, across every key.
-    // restoreFromStripStash completes an entry when the count of distinct
-    // consumed ids reaches its tile count, so a repeat inside one key makes
-    // that entry permanently unconsumable (it is then re-consulted on every
-    // later open of the context). A repeat ACROSS keys is not hypothetical —
+    // A window id may appear in exactly ONE staged tile per (screen,
+    // activity), across every key. restoreFromStripStash completes an entry
+    // when the count of distinct consumed ids reaches its tile count, so a
+    // repeat inside one key makes that entry permanently unconsumable (it is
+    // then re-consulted on every later open of the context). A repeat across
+    // keys that differ in SCREEN or activity is not hypothetical —
     // serializeStripState legitimately writes a live strip for one key beside
     // an un-consumed stash for another that still lists the same window — and
     // would let two contexts stage it, so whichever announces second splices
-    // it into a second strip.
+    // it into a second strip. A repeat across keys that differ only in
+    // DESKTOP is a window present on several desktops with a column in each,
+    // and every one of those stages: the membership pass re-adopts it on
+    // each desktop and the stash restore hands it its remembered slot there.
     QSet<QString> claimedWindowIds;
+    const auto claimKeyFor = [](const QString& windowId, const PhosphorEngine::PlacementStateKey& key) {
+        return windowId + QLatin1Char('\x1f') + key.screenId + QLatin1Char('\x1f') + key.activity;
+    };
     for (auto it = state.constBegin(); it != state.constEnd(); ++it) {
         // Count cap (see enginelimits.h): the numerics below are all
         // bounded at this boundary; the counts must be too, or a corrupt
@@ -624,8 +631,8 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                     continue;
                 }
                 tile.stagedFromPersistence = true;
-                if (!tile.windowId.isEmpty() && !claimedWindowIds.contains(tile.windowId)) {
-                    claimedWindowIds.insert(tile.windowId);
+                if (!tile.windowId.isEmpty() && !claimedWindowIds.contains(claimKeyFor(tile.windowId, key))) {
+                    claimedWindowIds.insert(claimKeyFor(tile.windowId, key));
                     col.tiles.append(tile);
                 }
             }

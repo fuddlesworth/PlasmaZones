@@ -127,19 +127,27 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 }
 
 void SnapEngine::forEachSnapAssignment(
-    const std::function<void(const QString&, const QStringList&, const QString&, int)>& fn) const
+    const std::function<void(const QString&, const QStringList&, const QString&, int, int)>& fn) const
 {
-    for (const SnapState* st : allSnapStates()) {
-        const QHash<QString, QStringList>& stZones = st->zoneAssignments();
-        const QHash<QString, QString>& stScreens = st->screenAssignments();
-        const QHash<QString, int>& stDesktops = st->desktopAssignments();
+    // Keyed walk, so the callback also learns the desktop the STORE sits
+    // under: a window present on several desktops holds one assignment per
+    // store, and only the store's own key says which context each belongs to.
+    for (auto st = m_states.states().constBegin(); st != m_states.states().constEnd(); ++st) {
+        const SnapState* state = st.value();
+        if (!state) {
+            continue;
+        }
+        const QHash<QString, QStringList>& stZones = state->zoneAssignments();
+        const QHash<QString, QString>& stScreens = state->screenAssignments();
+        const QHash<QString, int>& stDesktops = state->desktopAssignments();
         for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
-            fn(it.key(), it.value(), stScreens.value(it.key()), stDesktops.value(it.key(), 0));
+            fn(it.key(), it.value(), stScreens.value(it.key()), stDesktops.value(it.key(), 0), st.key().desktop);
         }
     }
 }
 
-QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
+QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(const QString& screenFilter,
+                                                                               const QSet<QString>& onlyWindows) const
 {
     QVector<ZoneAssignmentEntry> result;
 
@@ -163,10 +171,13 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
     // preserves every window's recorded desktop through the commit by
     // construction — see the matching stamp in calculateResnapFromPreviousLayout.
     int totalAssignments = 0;
-    forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                              int desktop) {
+    forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int desktop,
+                              int storeDesktop) {
         ++totalAssignments;
         if (zoneIds.isEmpty()) {
+            return;
+        }
+        if (!onlyWindows.isEmpty() && !onlyWindows.contains(windowId)) {
             return;
         }
         // Skip windows floating in SNAPPING mode, read from this engine's
@@ -201,7 +212,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
         // changes for the ordinary single-assignment case: a window
         // recorded on a desktop that is not current still resnaps, which
         // is what the layout-switch and startup-restore callers depend on.
-        if (m_states.membershipsForWindow(windowId).size() > 1 && desktop != currentKeyForScreen(screenId).desktop) {
+        // The STORE's desktop, not the per-window recorded one: the store
+        // is the context this assignment belongs to, and a pinned recorded
+        // desktop (a RouteToDesktop placement) can name another.
+        if (m_states.membershipsForWindow(windowId).size() > 1
+            && storeDesktop != currentKeyForScreen(screenId).desktop) {
             return;
         }
 
@@ -234,7 +249,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
                                    : QStringLiteral("(screen: %1)").arg(screenFilter));
     if (result.isEmpty() && totalAssignments > 0 && PhosphorSnapEngine::lcSnapEngine().isDebugEnabled()) {
         forEachSnapAssignment(
-            [&](const QString& windowId, const QStringList& zoneIds, const QString& screen, int /*desktop*/) {
+            [&](const QString& windowId, const QStringList& zoneIds, const QString& screen, int /*desktop*/, int) {
                 // Same engine-own read as the skip predicate above, so the
                 // diagnostic explains the decision that was actually taken.
                 bool floating = isFloating(windowId);
@@ -546,7 +561,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
     // cached "unknown").
     QHash<QString, int> screenDesktopMemo;
     forEachSnapAssignment(
-        [&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId, int desktop) {
+        [&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId, int desktop, int) {
             if (zoneIdList.isEmpty()) {
                 return;
             }

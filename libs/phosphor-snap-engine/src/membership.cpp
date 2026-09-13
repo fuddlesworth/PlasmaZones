@@ -13,9 +13,15 @@
 // window occupies on the desktop it came from, which is what made a sticky
 // window share one zone across every desktop.
 //
-// The eviction in stateForWindowOnScreen is the other half: it now spares
-// stores the window is a member of, so the two assignments coexist instead of
-// the newer one wiping the older.
+// An adopted membership holds NO data until the user snaps or floats the
+// window there. On that desktop the window therefore reads as neither snapped
+// nor floating for this engine; float is per store in snapping, the same way
+// it is per engine across modes, so a window floated on desktop 1 is not
+// floating on desktop 2 until the user floats it there.
+//
+// The eviction in stateForWindowOnScreen is the other half: it spares stores
+// the window is a member of, so the two assignments coexist instead of the
+// newer one wiping the older.
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -25,6 +31,10 @@
 #include <algorithm>
 
 namespace PhosphorSnapEngine {
+
+using PhosphorEngine::DesktopSpan;
+using PhosphorEngine::MembershipReconcileResult;
+using PhosphorEngine::PlacementStateKey;
 
 void SnapEngine::installContextResolver()
 {
@@ -39,13 +49,18 @@ void SnapEngine::installContextResolver()
 }
 
 void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const PhosphorEngine::EngineSlot& slot,
-                                           const QString& screenId, int restoreDesktop)
+                                           const QString& screenId, int restoreDesktop, const QString& activity)
 {
     // A restored record carries the zone the window occupied on EVERY desktop
     // it was present on. The open path applies only the one for the desktop
     // being restored onto; the rest have to be put back into their own stores
     // here, or switching to those desktops after a restart would find nothing
     // and leave the window wherever it happens to be.
+    //
+    // A desktop the record names but the session no longer has (the count
+    // shrank while the daemon was down) gets a store like any other; the
+    // first membership pass on the screen finds the window's span does not
+    // cover it and releases it, forgetting the persisted entry with it.
     if (slot.zonesByDesktop.isEmpty() || screenId.isEmpty()) {
         return;
     }
@@ -59,7 +74,7 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
         if (desktop < 1 || desktop == restoreDesktop || it.value().isEmpty()) {
             continue; // the restore desktop is applied by the caller
         }
-        const PhosphorEngine::PlacementStateKey key{screenId, desktop, currentActivity()};
+        const PlacementStateKey key{screenId, desktop, activity};
         SnapState* state = ensureStateForKey(key);
         if (!state) {
             continue;
@@ -71,50 +86,43 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
     }
 }
 
-void SnapEngine::reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery& spanOf)
+struct SnapEngine::PendingMembership
 {
-    if (!spanOf || screenId.isEmpty()) {
+    QString windowId;
+    QList<PlacementStateKey> stale;
+    bool adopt = false;
+};
+
+void SnapEngine::collectMembershipWork(const QString& windowId, const QString& screenId,
+                                       const PlacementStateKey& currentKey, const DesktopSpan& span,
+                                       QList<PendingMembership>& pending) const
+{
+    // An UNKNOWN span (the registry has not stamped a desktop for the window
+    // yet) adopts nothing and releases nothing: reading it as "every desktop"
+    // put windows into every desktop the user visited.
+    if (!span.known) {
         return;
     }
-    const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
-
-    // Snapshot: the arms below create stores and mutate the membership map.
-    struct Pending
-    {
-        QString windowId;
-        QList<PhosphorEngine::PlacementStateKey> stale;
-        bool adopt = false;
-    };
-    QList<Pending> pending;
-    for (const QString& windowId : m_states.trackedWindowIds()) {
-        const QList<PhosphorEngine::PlacementStateKey> held = m_states.membershipsForWindow(windowId);
-        const bool onThisScreen = std::any_of(held.cbegin(), held.cend(), [&screenId](const auto& key) {
-            return key.screenId == screenId;
-        });
-        if (!onThisScreen) {
-            continue;
-        }
-        const QSet<int> span = spanOf(windowId);
-        Pending entry;
-        entry.windowId = windowId;
-        // An EMPTY span is a sticky window (or one whose desktop is unknown):
-        // it covers every desktop, so it is never stale and always wants one.
-        if (!span.isEmpty()) {
-            for (const PhosphorEngine::PlacementStateKey& key : held) {
-                if (key.screenId == screenId && !span.contains(key.desktop)) {
-                    entry.stale.append(key);
-                }
-            }
-        }
-        entry.adopt =
-            (span.isEmpty() || span.contains(currentKey.desktop)) && !m_states.hasMembership(windowId, currentKey);
-        if (entry.adopt || !entry.stale.isEmpty()) {
-            pending.append(entry);
+    const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
+    PendingMembership entry;
+    entry.windowId = windowId;
+    for (const PlacementStateKey& key : held) {
+        if (key.screenId == screenId && !span.coversKey(key)) {
+            entry.stale.append(key);
         }
     }
+    entry.adopt = span.coversKey(currentKey) && !m_states.hasMembership(windowId, currentKey);
+    if (entry.adopt || !entry.stale.isEmpty()) {
+        pending.append(entry);
+    }
+}
 
-    for (const Pending& entry : std::as_const(pending)) {
-        for (const PhosphorEngine::PlacementStateKey& stale : entry.stale) {
+MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenId, const PlacementStateKey& currentKey,
+                                                          const QList<PendingMembership>& pending)
+{
+    MembershipReconcileResult result;
+    for (const PendingMembership& entry : pending) {
+        for (const PlacementStateKey& stale : entry.stale) {
             if (SnapState* state = m_states.stateForKey(stale)) {
                 // The zone assignment on a desktop the window has left is not
                 // a float-back: it is still snapped on the desktops its span
@@ -132,6 +140,7 @@ void SnapEngine::reconcileDesktopMemberships(const QString& screenId, const Phos
             if (m_windowTracker) {
                 m_windowTracker->forgetDesktopZones(entry.windowId, engineId(), stale.desktop);
             }
+            result.released.append({entry.windowId, stale});
             qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: released" << entry.windowId << "from desktop"
                                  << stale.desktop << "of" << stale.screenId << "— its span no longer covers it";
         }
@@ -141,34 +150,108 @@ void SnapEngine::reconcileDesktopMemberships(const QString& screenId, const Phos
             // exists so that snapping it later lands in ITS OWN assignment.
             ensureStateForKey(currentKey);
             m_states.addMembership(entry.windowId, currentKey);
+            result.adopted.append({entry.windowId, currentKey});
             qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: adopted" << entry.windowId << "into desktop"
                                  << currentKey.desktop << "of" << currentKey.screenId;
         }
     }
 
-    // Whether any window holds a zone in the context just entered. Computed
-    // AFTER the arms above, not before: a window adopted into this desktop by
-    // this very pass has to count. On a restart that is the entire population
-    // — the membership map is rebuilt from scratch, so every multi-desktop
-    // window is adopted here rather than arriving already a member.
-    bool reapplyCurrent = false;
+    // A window that holds a zone in the context just entered AND a place on
+    // another desktop is sitting at the other desktop's geometry right now (it
+    // is one window), so its own assignment here has to be re-applied. Only
+    // those: the single-desktop windows on the screen did not move, and
+    // re-committing every one of them on every switch was churn the effect had
+    // to absorb for nothing. Computed AFTER the arms above, not before: a
+    // window adopted into this desktop by this very pass has to count. On a
+    // restart that is the entire population — the membership map is rebuilt
+    // from scratch, so every multi-desktop window is adopted here rather than
+    // arriving already a member.
+    QSet<QString> reapply;
     if (const SnapState* currentState = m_states.stateForKey(currentKey)) {
         for (const QString& windowId : m_states.trackedWindowIds()) {
             if (m_states.hasMembership(windowId, currentKey) && m_states.membershipsForWindow(windowId).size() > 1
                 && !currentState->zonesForWindow(windowId).isEmpty()) {
-                reapplyCurrent = true;
-                break;
+                reapply.insert(windowId);
             }
         }
     }
-
-    if (reapplyCurrent) {
+    if (!reapply.isEmpty()) {
         // Scoped to this screen: the other outputs' assignments did not move,
         // and a whole-session resnap would fight whatever they are doing.
-        qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: re-applying" << screenId << "zones for desktop"
-                             << currentKey.desktop << "— a multi-desktop window is snapped here";
-        resnapCurrentAssignments(screenId);
+        qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: re-applying" << reapply.size() << "window(s) on"
+                             << screenId << "for desktop" << currentKey.desktop
+                             << "— multi-desktop windows are snapped here";
+        resnapCurrentAssignments(screenId, reapply);
     }
+    return result;
+}
+
+MembershipReconcileResult SnapEngine::reconcileDesktopMemberships(const QString& screenId,
+                                                                  const PhosphorEngine::DesktopSpanQuery& spanOf)
+{
+    if (!spanOf || screenId.isEmpty()) {
+        return {};
+    }
+    // A screen a tiling engine owns has no snap placements to grant: the
+    // zones belong to its layout, and a membership minted here would be a
+    // store nothing snaps into. The release arm still runs, so a window that
+    // left a desktop of a screen that has since switched mode stops being an
+    // occupant of its old zone there.
+    const bool snapping = isActiveOnScreen(screenId);
+    const PlacementStateKey currentKey = currentKeyForScreen(screenId);
+
+    // Snapshot: the arms mutate the membership map and create stores.
+    QList<PendingMembership> pending;
+    for (const QString& windowId : m_states.trackedWindowIds()) {
+        const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
+        const bool onThisScreen = std::any_of(held.cbegin(), held.cend(), [&screenId](const auto& key) {
+            return key.screenId == screenId;
+        });
+        if (!onThisScreen) {
+            continue;
+        }
+        collectMembershipWork(windowId, screenId, currentKey, spanOf(windowId), pending);
+        if (!snapping && !pending.isEmpty()) {
+            pending.last().adopt = false;
+            if (pending.last().stale.isEmpty()) {
+                pending.removeLast();
+            }
+        }
+    }
+    return applyMembershipWork(screenId, currentKey, pending);
+}
+
+MembershipReconcileResult SnapEngine::reconcileWindowMemberships(const QString& windowId,
+                                                                 const PhosphorEngine::DesktopSpanQuery& spanOf)
+{
+    if (!spanOf || windowId.isEmpty()) {
+        return {};
+    }
+    const QString canonical = canonicalWindowId(windowId);
+    // A window is on exactly one screen: every membership shares it, and the
+    // first one names it. An untracked window has no context to reconcile;
+    // it gains its first membership when it is snapped or floated, and the
+    // screen-wide pass on the next switch does the rest.
+    QString screenId;
+    for (const PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
+        if (!key.screenId.isEmpty()) {
+            screenId = key.screenId;
+            break;
+        }
+    }
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    const PlacementStateKey currentKey = currentKeyForScreen(screenId);
+    QList<PendingMembership> pending;
+    collectMembershipWork(canonical, screenId, currentKey, spanOf(canonical), pending);
+    if (!isActiveOnScreen(screenId) && !pending.isEmpty()) {
+        pending.last().adopt = false;
+        if (pending.last().stale.isEmpty()) {
+            pending.removeLast();
+        }
+    }
+    return applyMembershipWork(screenId, currentKey, pending);
 }
 
 } // namespace PhosphorSnapEngine

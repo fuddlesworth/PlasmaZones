@@ -93,7 +93,7 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
                                       int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams, bool migration,
-                                      QString* outDisplacedTab)
+                                      QString* outDisplacedTab, bool adoption)
 {
     // Public-API belt at the one boundary the update path already guards:
     // windowMinSizeUpdated clamps because "a negative floor flows into
@@ -127,7 +127,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool stickyExcluded =
         effectiveStickyWindowHandling(screenOverrides) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
         && m_windowTracker && m_windowTracker->isWindowSticky(windowId);
-    if (oversized || ruleFloated || stickyExcluded) {
+    // Never on an ADOPTION: the same three verdicts already ran for this
+    // window on the desktop it came from and answered "tile" (a floating
+    // source is adopted as floating by the caller and never reaches here).
+    if (!adoption && (oversized || ruleFloated || stickyExcluded)) {
         state->addFloating(windowId);
         seedFloatRestoreForOpen(windowId, minWidth, minHeight);
         // Engine-decided float, so it carries the mode marker like every
@@ -167,8 +170,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // strip order from per-window records needed close-burst ledgers and rank
     // anchors that every structural mutation had to invalidate, and the
     // strip stash already restores structure where it matters.
+    // Never on an ADOPTION either: the record is cross-session memory, and
+    // takeForReopen falls back to the app's FIFO, so a live window adopted
+    // onto another desktop could consume a closed sibling's floating record
+    // and be teleported to its float-back.
     const QString appId = currentAppIdFor(windowId);
-    if (m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+    if (!adoption && m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
         if (const auto record =
                 m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId)) {
@@ -760,6 +767,13 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (!state) {
         return;
     }
+    // A MIGRATION moves the window out of every context it held: a window
+    // that changed screen has left that screen's other desktops too (the
+    // strip it was resolved from is emptied above; the rest are emptied
+    // here), and only then does the replace below hold the whole truth.
+    if (oldState) {
+        dropFromOtherContexts(windowId, oldKey);
+    }
     // Track BEFORE inserting: insertOpenedWindow's oversized/rule-float
     // paths emit windowFloatingStateSynced, and a synchronous query-back from
     // a subscriber must already see the window as this engine's.
@@ -1065,6 +1079,9 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // position, and a close-time consume would send it to the ordinary
     // next-to-focus path instead (partiallyConsumedSeedGuardsReopens covers
     // exactly that sequence).
+    // The OTHER desktops' strips first: a window present on several holds a
+    // column in each, and removeWindow below drops every membership at once.
+    dropFromOtherContexts(windowId, key);
     m_states.removeWindow(windowId);
     // m_lastAppliedRect is deliberately RETAINED through the close: the
     // daemon's close capture consults lastManagedRect DURING windowClosed

@@ -393,19 +393,14 @@ void Daemon::connectDesktopActivity()
                     m_scrollEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
                 // [SEQ C½] Release the pins of screens that no longer hold an
-                // all-sticky window set, now that the context above has moved.
-                // A pinned screen's key does not follow the switch, so the
-                // pinned state is still reachable here. What HAS changed is
-                // where the migration lands, which is the whole point of
-                // running this after [SEQ C] rather than beside [SEQ B].
+                // all-sticky window set, now that the context above has moved:
+                // a pinned key does not follow the switch, so the pinned state
+                // is still reachable, but the migration now lands on the
+                // desktop entered (the point of running it after [SEQ C]).
                 // Ahead of updateEngineScreens() so displaced-window releases
                 // are done before the managed set is recomputed and announced.
                 applyStickyScreenPins(m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
                                       PhosphorEngine::StickyPinPhase::Release);
-                // [SEQ C¾] The desktop just entered gets its share of every
-                // window spanning it. After the pins: a pinned key does not follow the switch.
-                reconcileMembershipsForScreen(m_autotileEngine.get(), m_scrollEngine.get(), m_snapEngine.get(),
-                                              m_windowRegistry.get(), screenId);
                 // [SEQ D] Per-screen layout/overlay resolution context needs no
                 // push anymore: the layout registry (and the overlay service
                 // through it) resolves per-output desktops via the injected
@@ -415,6 +410,9 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
+                // [SEQ E¼] The desktop just entered gets its share of every
+                // window spanning it (after the pins and after [SEQ E]; see the helper).
+                reconcileMembershipsForScreens(m_tilingAdaptor, {screenId});
                 // [SEQ E½] Re-announce the managed set UNCONDITIONALLY for this
                 // report. The effect's staleness gate rejects any announce whose
                 // per-screen desktop stamps disagree with what it last reported,
@@ -753,6 +751,8 @@ void Daemon::connectDesktopActivity()
                                           PhosphorEngine::StickyPinPhase::Release);
                     // Per-activity assignments may differ — recompute autotile screens
                     updateEngineScreens();
+                    // Activity moves every screen's context at once; same ordering as [SEQ E¼].
+                    reconcileMembershipsForScreens(m_tilingAdaptor, m_screenManager->effectiveScreenIds());
                     // Same reason as the per-screen desktop switch above: this
                     // path has no consumer for the preserved snap-ZONE half, so
                     // windows released by an activity's snapping assignment need

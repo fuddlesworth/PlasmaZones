@@ -6,7 +6,9 @@
 // engine implements and the daemon dispatches against — and C++ cannot
 // split one class's members across headers. Extracting groups of virtuals
 // into secondary bases would change the contract's shape (and every
-// implementer and mock) purely to satisfy a line count.
+// implementer and mock) purely to satisfy a line count. Grew with the
+// per-desktop membership contract: reconcileDesktopMemberships and its
+// per-window form, their result type's contract, and the span query.
 
 #pragma once
 
@@ -190,22 +192,24 @@ public:
     /// the window arrived on), which is exactly the case the current-context
     /// predicates answer empty for.
     ///
-    /// At most ONE key can come back. The per-screen store's reverse map is
-    /// single-valued, so a window has exactly one recorded key; this answers
-    /// that key when the state it names genuinely holds the window, and
-    /// nullopt otherwise. A caller must not read nullopt as "no engine state
-    /// mentions this window" — a phantom reverse-map entry left by a refused
-    /// adoption answers nullopt too, which is the safe direction here.
+    /// At most ONE key comes back: the window's PRIMARY membership (the one in
+    /// the context its screen is showing, else the first) when the state it
+    /// names genuinely holds the window, otherwise the first membership whose
+    /// state does. A window present on several desktops holds a membership
+    /// in each; ask the engine's membership pass for the rest. A caller must
+    /// not read nullopt as "no engine state mentions this window" — a
+    /// phantom membership left by a refused adoption answers nullopt too,
+    /// which is the safe direction here.
     ///
     /// ScrollEngine answers nullopt for the duration of a drag-insert
-    /// preview: the preview keeps the reverse-map key pointed at the target
+    /// preview: the preview keeps the membership pointed at the target
     /// context while the window is detached from the strip, so the
     /// membership term fails until the drop or cancel.
     ///
-    /// SnapEngine has per-context states but deliberately keeps the default.
-    /// The daemon's desktop-membership reconcile walks the tiling-family
-    /// lifecycle engines only, so snapping is out of that arm's scope; a
-    /// zone assignment has no stack to close a gap in, unlike a tile.
+    /// All three engines override it. Snapping takes part in the daemon's
+    /// desktop-membership reconcile as a membership engine (it holds no
+    /// stack, so a release there is a zone assignment dropped, not a gap
+    /// closed).
     virtual std::optional<PlacementStateKey> heldKeyForWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -1137,15 +1141,39 @@ public:
     {
         Q_UNUSED(resolver)
     }
-    virtual void updateStickyScreenPins(const StickyPredicate& isSticky, StickyPinPhase) // see StickyPinPhase
+    /// Run one phase of the sticky-screen pin pass; see StickyPinPhase for
+    /// why the two phases bracket a context change rather than sharing a
+    /// call site. Only the tiling-family engines keep pins.
+    virtual void updateStickyScreenPins(const StickyPredicate& isSticky, StickyPinPhase phase)
     {
         Q_UNUSED(isSticky)
+        Q_UNUSED(phase)
     }
-    /// Give windows whose desktop span covers the screen's current desktop a
-    /// place in it, and take back places the span no longer covers. Run AFTER
-    /// the context moves.
-    virtual void reconcileDesktopMemberships(const QString&, const DesktopSpanQuery&)
+    /// Give every window whose span covers @p screenId's current context a
+    /// place in it, and take back the places on that screen the span no
+    /// longer covers. Run AFTER the context moves and after the engine's
+    /// active-screen set is recomputed, so the engine gates on the set the
+    /// switch produced. Memberships under a sticky pin are left to the
+    /// engine's own unpin migration. Returns what changed so the caller can
+    /// drive the bookkeeping the engine cannot reach.
+    virtual MembershipReconcileResult reconcileDesktopMemberships(const QString& screenId,
+                                                                  const DesktopSpanQuery& spanOf)
     {
+        Q_UNUSED(screenId)
+        Q_UNUSED(spanOf)
+        return {};
+    }
+    /// The same pass for ONE window, on the screen it is held on. The
+    /// daemon calls it when the compositor reports that window's desktop set
+    /// or activity changed, so a span shrink releases only the contexts the
+    /// window left and a sticky transition adopts the context in view without
+    /// waiting for a desktop switch.
+    virtual MembershipReconcileResult reconcileWindowMemberships(const QString& windowId,
+                                                                 const DesktopSpanQuery& spanOf)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(spanOf)
+        return {};
     }
     virtual QSet<int> desktopsWithActiveState() const
     {

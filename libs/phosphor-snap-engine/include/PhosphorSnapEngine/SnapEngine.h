@@ -6,7 +6,10 @@
 // declaration across headers. The implementation is partitioned by concern
 // under src/; shrinking this header means extracting collaborator classes,
 // a deliberate refactor rather than a mechanical file split. Same rationale
-// as AutotileEngine.h / daemon.h / windowtrackingadaptor.h.
+// as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
+// per-desktop membership change: the membership pass and its helpers, the
+// per-desktop seed / restore-desktop resolution, and the window-scoped
+// resnap.
 
 #pragma once
 
@@ -413,8 +416,11 @@ public:
     /**
      * @brief Resnap windows to their current zone assignments (re-apply geometries)
      * @param screenFilter Optional screen name filter (empty = all screens)
+     * @param onlyWindows When non-empty, only these windows are re-applied
+     *        (the membership pass re-applies the multi-desktop windows on the
+     *        desktop just entered without re-committing the whole screen)
      */
-    void resnapCurrentAssignments(const QString& screenFilter = QString());
+    void resnapCurrentAssignments(const QString& screenFilter = QString(), const QSet<QString>& onlyWindows = {});
 
     /**
      * @brief Resnap windows using autotile window order as assignment source
@@ -531,10 +537,11 @@ public:
     // (m_globals, keyed under the empty-screen sentinel). Each per-key store now
     // tracks its OWN last-used zone; m_globals keeps the user-snapped classes (a
     // per-app preference, not a placement) and the single representative last-used
-    // restored from disk. A window is placed
-    // under the key derived from its screen on first snap/float and stays there
-    // for its lifetime (the reverse map is authoritative); its screen is recorded
-    // as a per-window value, updated in place, exactly as the former single store.
+    // restored from disk. A window is placed under the key derived from its
+    // screen on first snap/float; a window present on several desktops holds
+    // a membership, and its own zone, in one store per desktop (the
+    // membership map is authoritative). Its screen is recorded as a
+    // per-window value, updated in place, exactly as the former single store.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// The SnapState that owns @p windowId (via the reverse map), or the global
@@ -575,9 +582,15 @@ public:
     /// screen-carrying writes here.
     SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId);
 
-    /// Drop the reverse-map entry for @p windowId (window closed / fully removed).
-    /// Does not touch state objects.
+    /// Drop every membership @p windowId holds AND its data in each member
+    /// store (window closed / fully removed). A window present on several
+    /// desktops holds a zone assignment in each; clearing only the store in
+    /// view left the others listing a dead window as a zone occupant.
     void forgetWindow(const QString& windowId);
+    /// Whether @p state holds a MEMBERSHIP for @p windowId, as opposed to a
+    /// leftover from before a re-key. The WTS facade's aggregate walks use it
+    /// through the resolver seam.
+    bool holdsWindowInState(const QString& windowId, const SnapState* state) const;
 
     /// Re-home a tracked window's snap state onto @p newScreenId's per-key store
     /// when it crosses monitors. Moves the window's per-window entries (zone, live
@@ -608,12 +621,16 @@ public:
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
     /// A window on several desktops holds its own zone on each. Membership
     /// only: snapping places nothing itself. See membership.cpp.
-    void reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery&) override;
+    PhosphorEngine::MembershipReconcileResult
+    reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
+    PhosphorEngine::MembershipReconcileResult
+    reconcileWindowMemberships(const QString& windowId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
     /// Point the container's primary resolution at currentKeyForScreen.
     void installContextResolver();
-    /// Re-seed a restored record's other desktops' zones into their stores.
+    /// Re-seed a restored record's other desktops' zones into their stores,
+    /// keyed under @p activity (the record's, when it has one).
     void seedPersistedDesktopZones(const QString& windowId, const PhosphorEngine::EngineSlot& slot,
-                                   const QString& screenId, int restoreDesktop);
+                                   const QString& screenId, int restoreDesktop, const QString& activity);
     void setCurrentActivity(const QString& activity) override;
 
     // Reclaim per-(screen,desktop,activity) stores whose context no longer exists.
@@ -856,7 +873,8 @@ public:
 
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
     QVector<PhosphorEngine::ZoneAssignmentEntry>
-    calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+    calculateResnapFromCurrentAssignments(const QString& screenFilter = QString(),
+                                          const QSet<QString>& onlyWindows = {}) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry>
     calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId,
                                      const QStringList& preClaimedZoneIds = {}) const;
@@ -1058,15 +1076,32 @@ private:
     /// first use, seeding it with the shared window registry.
     SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
 
-    /// Invoke @p fn once per zone-assigned window across every snap store, with
-    /// the window's zones, screen, and desktop read from the store that OWNS it —
-    /// the engine-side sibling of WindowTrackingService::forEachZoneAssignedWindow,
-    /// shared by the resnap / rotation producers so their per-store walks stay in
-    /// lockstep. A window lives in exactly one store (the reverse map is
-    /// authoritative), so each window is visited exactly once. @p fn must not
-    /// mutate the snap stores.
-    void forEachSnapAssignment(const std::function<void(const QString& windowId, const QStringList& zoneIds,
-                                                        const QString& screenId, int desktop)>& fn) const;
+    /// Invoke @p fn once per (window, store) zone assignment across every snap
+    /// store, with the window's zones, screen, and recorded desktop read from
+    /// that store, plus the desktop the STORE is keyed under — the engine-side
+    /// sibling of WindowTrackingService::forEachZoneAssignedWindow, shared by
+    /// the resnap / rotation producers so their per-store walks stay in
+    /// lockstep. A window present on one desktop is visited once; a window
+    /// present on several holds an assignment in each member store and is
+    /// visited once per store. @p fn must not mutate the snap stores.
+    void
+    forEachSnapAssignment(const std::function<void(const QString& windowId, const QStringList& zoneIds,
+                                                   const QString& screenId, int desktop, int storeDesktop)>& fn) const;
+
+    /// The desktop a restored window is being placed onto: the registry's
+    /// answer for the window, else the record's own desktop when the record
+    /// still names a zone there, else the screen's current desktop.
+    int restoreDesktopFor(const QString& windowId, const PhosphorEngine::WindowPlacement& rec,
+                          const QString& restoreScreen) const;
+
+    /// One window's share of a membership pass (see membership.cpp).
+    struct PendingMembership;
+    void collectMembershipWork(const QString& windowId, const QString& screenId,
+                               const PhosphorEngine::PlacementStateKey& currentKey,
+                               const PhosphorEngine::DesktopSpan& span, QList<PendingMembership>& pending) const;
+    PhosphorEngine::MembershipReconcileResult applyMembershipWork(const QString& screenId,
+                                                                  const PhosphorEngine::PlacementStateKey& currentKey,
+                                                                  const QList<PendingMembership>& pending);
 
     /// Clear the last-used zone on every store (per-screen + the global holder)
     /// that currently points at one of @p removedZones. Last-used is per-key now, so

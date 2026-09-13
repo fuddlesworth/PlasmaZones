@@ -58,9 +58,9 @@ void SnapEngine::resnapToNewLayout()
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
-void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
+void SnapEngine::resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows)
 {
-    QVector<ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenFilter);
+    QVector<ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenFilter, onlyWindows);
 
     if (entries.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "No windows to resnap from current assignments";

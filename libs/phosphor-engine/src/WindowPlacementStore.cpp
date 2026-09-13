@@ -210,7 +210,9 @@ namespace {
 /// True when @p p carries float-back geometry but NO managed (snapped/tiled)
 /// engine slot — i.e. a pure floating placement whose only value is its
 /// remembered free position. A record with a snapped/tiled slot is a managed
-/// placement and is never a collapse candidate.
+/// placement and is never a collapse candidate, and neither is one floating
+/// on its current desktop but snapped on another (zonesByDesktop non-empty):
+/// those zones are managed placement too.
 bool isPureFloatRecord(const WindowPlacement& p)
 {
     // A slot-LESS record with remembered free geometry (the shape
@@ -221,7 +223,8 @@ bool isPureFloatRecord(const WindowPlacement& p)
         return !p.freeGeometryByScreen.isEmpty();
     }
     for (auto it = p.engines.constBegin(); it != p.engines.constEnd(); ++it) {
-        if (it.value().state == WindowPlacement::stateSnapped() || it.value().state == WindowPlacement::stateTiled()) {
+        if (it.value().state == WindowPlacement::stateSnapped() || it.value().state == WindowPlacement::stateTiled()
+            || !it.value().zonesByDesktop.isEmpty()) {
             return false;
         }
     }
@@ -916,13 +919,53 @@ bool WindowPlacementStore::forgetDesktopZones(const QString& windowId, const QSt
             if (slotIt == p.engines.end() || slotIt->zonesByDesktop.remove(desktop) == 0) {
                 continue;
             }
+            // A forget is a real content change, so the record earns a fresh
+            // sequence the way every other mutation does.
+            p.sequence = ++m_sequence;
             changed = true;
         }
     }
-    if (changed) {
-        // A forget is a real content change, so the record earns a fresh
-        // sequence the way every other mutation does.
-        ++m_sequence;
+    return changed;
+}
+
+int WindowPlacementStore::renumberDesktopZones(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return 0;
+    }
+    int changed = 0;
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            bool touched = false;
+            for (auto slot = p.engines.begin(); slot != p.engines.end(); ++slot) {
+                QHash<int, QStringList>& byDesktop = slot->zonesByDesktop;
+                if (byDesktop.isEmpty()) {
+                    continue;
+                }
+                // The removed desktop's entry goes; every entry above it
+                // shifts down one, mirroring what the engines do to their
+                // live per-desktop stores. Rebuilt into a fresh map so a
+                // shifting entry cannot land on one not yet visited.
+                QHash<int, QStringList> shifted;
+                for (auto d = byDesktop.constBegin(); d != byDesktop.constEnd(); ++d) {
+                    if (d.key() == removedDesktop) {
+                        touched = true;
+                        continue;
+                    }
+                    if (d.key() > removedDesktop) {
+                        touched = true;
+                        shifted.insert(d.key() - 1, d.value());
+                    } else {
+                        shifted.insert(d.key(), d.value());
+                    }
+                }
+                byDesktop = std::move(shifted);
+            }
+            if (touched) {
+                p.sequence = ++m_sequence;
+                ++changed;
+            }
+        }
     }
     return changed;
 }

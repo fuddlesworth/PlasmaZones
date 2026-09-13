@@ -28,10 +28,11 @@ Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcPerScreenStates, PHOSPHORENGINE_EXPORT)
 /// The two cooperating maps a per-monitor placement engine keeps: a forward map
 /// from PlacementStateKey to the owning per-screen state object (Qt-parent-owned
 /// by the engine, constructed via a caller-supplied factory), and a reverse map
-/// from windowId to its owning key. Both the snap engine (SnapState) and the
-/// autotile engine (TilingState) manage exactly this pair; this template holds
-/// it once so the lockstep bookkeeping (lazy create, reverse-map maintenance,
-/// migration, prune) is written once.
+/// from windowId to the keys of every state holding it (its memberships, with
+/// a context resolver picking the primary). The snap, autotile and scroll
+/// engines manage exactly this pair; this template holds it once so the
+/// lockstep bookkeeping (lazy create, membership maintenance, migration,
+/// prune) is written once.
 ///
 /// StateT must implement PhosphorEngine::IPlacementState.
 ///
@@ -208,11 +209,6 @@ public:
         return m_windowMemberships.keys();
     }
 
-    int trackedWindowCount() const
-    {
-        return m_windowMemberships.size();
-    }
-
     /// Visit every (windowId, key) membership pair. For sweeps that have to
     /// see a multi-membership window once per state rather than once.
     void forEachMembership(const std::function<void(const QString&, const PlacementStateKey&)>& fn) const
@@ -227,8 +223,10 @@ public:
         }
     }
 
-    /// Resolve the state that owns `windowId` (no create). When `outKey` is
-    /// non-null it receives the window's owning key iff the window is tracked.
+    /// Resolve the state holding `windowId`'s PRIMARY membership (no create).
+    /// When `outKey` is non-null it receives that key iff the window is
+    /// tracked. A multi-membership window has other states too; see
+    /// membershipsForWindow.
     StateT* forWindow(const QString& windowId, PlacementStateKey* outKey = nullptr) const
     {
         auto it = m_windowMemberships.constFind(windowId);
@@ -249,6 +247,12 @@ public:
     /// stale-caller bug rather than driving the move.
     void migrate(const QString& windowId, const PlacementStateKey& oldKey, const PlacementStateKey& newKey)
     {
+        // A move onto itself is a no-op, not a merge: the merge arm below
+        // would find newKey already held and remove the entry at `at`, which
+        // for a single-membership window is its only one.
+        if (oldKey == newKey) {
+            return;
+        }
         // Debug assert AND a release-build warning for the same condition: a
         // stale-caller bug silently rewrote the reverse map in release, which
         // is exactly the case that leaves a window resolving to a state that

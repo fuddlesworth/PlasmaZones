@@ -696,9 +696,15 @@ void TestScrollEngineStripContext::aStickyWindowGetsAColumnOnEveryDesktopItSpans
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
     const QString kS1 = QStringLiteral("S1");
     const QString kSticky = QStringLiteral("app|sticky");
-    // Empty span == on every desktop, the reading the daemon's reconcile uses.
+    // The sticky window is on every desktop; everything else is on desktop 1.
     const PhosphorEngine::DesktopSpanQuery stickyEverywhere = [&](const QString& windowId) {
-        return windowId == kSticky ? QSet<int>{} : QSet<int>{1};
+        PhosphorEngine::DesktopSpan span;
+        span.known = true;
+        span.sticky = (windowId == kSticky);
+        if (!span.sticky) {
+            span.desktops = {1};
+        }
+        return span;
     };
 
     engine->setCurrentDesktopForScreen(kS1, 1);
@@ -737,7 +743,10 @@ void TestScrollEngineStripContext::aSpanWindowJoinsOnlyTheDesktopsItCovers()
     const QString kSpan = QStringLiteral("app|span");
     QSet<int> span{1, 2};
     const PhosphorEngine::DesktopSpanQuery spanOf = [&](const QString& windowId) {
-        return windowId == kSpan ? span : QSet<int>{1};
+        PhosphorEngine::DesktopSpan result;
+        result.known = true;
+        result.desktops = (windowId == kSpan) ? span : QSet<int>{1};
+        return result;
     };
 
     engine->setCurrentDesktopForScreen(kS1, 1);

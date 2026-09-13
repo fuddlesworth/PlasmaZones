@@ -331,13 +331,18 @@ void AutotileEngine::reapplyManagedWindowAppearance()
 
 std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(const QString& windowId) const
 {
-    using PhosphorEngine::WindowPlacement;
-    const QString wid = canonicalizeForLookup(windowId);
-    const auto primary = m_states.windowKey(wid);
+    const auto primary = m_states.windowKey(canonicalizeForLookup(windowId));
     if (!primary) {
         return std::nullopt;
     }
-    const PhosphorEngine::TilingStateKey key = *primary;
+    return capturePlacementForKey(windowId, *primary);
+}
+
+std::optional<PhosphorEngine::WindowPlacement>
+AutotileEngine::capturePlacementForKey(const QString& windowId, const PhosphorEngine::TilingStateKey& key) const
+{
+    using PhosphorEngine::WindowPlacement;
+    const QString wid = canonicalizeForLookup(windowId);
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
     if (!state || !state->containsWindow(wid)) {
         // Membership, not just a live key: windowOpened keys the window

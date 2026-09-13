@@ -7,7 +7,9 @@
 // concern under src/autotileengine/; shrinking this header means extracting
 // collaborator classes (drag preview, script-state stash, per-screen config),
 // which is a deliberate refactor, not a mechanical file split. Same rationale
-// as plasmazoneseffect.h / daemon.h / windowtrackingadaptor.h.
+// as plasmazoneseffect.h / daemon.h / windowtrackingadaptor.h. Grew with the
+// per-desktop membership change: the membership pass and its helpers, the
+// keyed capture, and the dirty-background retile memo.
 
 #pragma once
 
@@ -361,7 +363,8 @@ public:
      * TilingStateKey desktop to the current effective desktop so that
      * currentKeyForScreen() keeps resolving the existing state after a desktop
      * switch. Screens where not all windows are sticky are unpinned, with
-     * state migrated to m_context's global desktop if necessary. Acquire must
+     * state migrated to the screen's current desktop (its per-output desktop,
+     * else the global current one) if necessary. Acquire must
      * run BEFORE setCurrentDesktop()/setCurrentActivity() and Release AFTER,
      * so the migration targets the desktop being entered rather than the one
      * being left. See PhosphorEngine::StickyPinPhase. The predicate answers
@@ -375,7 +378,10 @@ public:
      * Driven off the desktop SPAN, so {1,2} is handled like sticky. The other
      * sticky modes grant nothing: shouldTileWindow refuses them.
      */
-    void reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery&) override;
+    PhosphorEngine::MembershipReconcileResult
+    reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
+    PhosphorEngine::MembershipReconcileResult
+    reconcileWindowMemberships(const QString& windowId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState and saved floating entries for a removed desktop
@@ -1003,6 +1009,13 @@ public:
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyManagedWindowAppearance() override;
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
+    /// capturePlacement against ONE of the window's contexts rather than its
+    /// primary. The teardown paths capture the state they are tearing down,
+    /// which for a window present on several desktops is not necessarily the
+    /// primary — and the primary's state can already be gone earlier in the
+    /// same sweep.
+    std::optional<PhosphorEngine::WindowPlacement>
+    capturePlacementForKey(const QString& windowId, const PhosphorEngine::TilingStateKey& key) const;
     void snapAllWindows(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
     void cycleFocus(bool forward, const PhosphorEngine::NavigationContext& ctx) override;
@@ -1429,8 +1442,27 @@ private:
     void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
     /// Per-desktop membership; see src/autotileengine/membership.cpp.
     void installContextResolver();
+    struct PendingMembership;
+    void collectMembershipWork(const QString& windowId, const QString& screenId,
+                               const PhosphorEngine::TilingStateKey& currentKey,
+                               const PhosphorEngine::DesktopSpan& span, bool adoptAllowed,
+                               QList<PendingMembership>& pending) const;
+    PhosphorEngine::MembershipReconcileResult applyMembershipWork(const QString& screenId,
+                                                                  const PhosphorEngine::TilingStateKey& currentKey,
+                                                                  const QList<PendingMembership>& pending);
+    /// Re-announce the float bit of every multi-desktop window on the context
+    /// @p screenId just entered, so the daemon's per-window mirror describes
+    /// the desktop in view.
+    void syncFloatMirrorForContext(const QString& screenId, const PhosphorEngine::TilingStateKey& currentKey);
     bool adoptIntoContext(const QString& windowId, const PhosphorEngine::TilingStateKey& key);
     void releaseMembership(const QString& windowId, const PhosphorEngine::TilingStateKey& key);
+    /// Drop @p windowId from every context but @p keepKey (a default key keeps
+    /// none), with the algorithm's remove hook per state. For the paths on
+    /// which the window leaves the engine or its screen.
+    void dropFromOtherContexts(const QString& windowId, const PhosphorEngine::TilingStateKey& keepKey);
+    /// Retile @p screenId if its current context was mutated while in the
+    /// background (see m_dirtyBackgroundContexts).
+    void retileIfDirtyBackground(const QString& screenId);
     void removeWindow(const QString& windowId);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,
@@ -1502,7 +1534,7 @@ private:
      *        inserted in arbitrary order.
      * @return Whether the state released any managed windows.
      */
-    bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+    bool releaseScreenStateForTeardown(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state,
                                        QStringList& releasedWindows, bool drainOverflow = true,
                                        bool clearScreenOrderMaps = true);
 
@@ -1833,9 +1865,11 @@ private:
     bool m_refreshingFromSettings = false;
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
 
-    // Per-screen tiling states + the windowId→owning-key reverse map. States are
-    // owned via Qt parent (this); PerScreenStates holds only the two maps and
-    // their lockstep bookkeeping — engine-specific lifecycle stays in this class.
+    // Per-screen tiling states + the windowId→memberships reverse map (one
+    // key per state holding the window, with a context resolver picking the
+    // one in view). States are owned via Qt parent (this); PerScreenStates
+    // holds the two maps and their lockstep bookkeeping — engine-specific
+    // lifecycle stays in this class.
     PhosphorEngine::PerScreenStates<PhosphorTiles::TilingState> m_states;
 
     // Screen+desktop states whose split ratio / master count the user has
@@ -1995,6 +2029,13 @@ private:
     // Uses QMetaObject::invokeMethod(Qt::QueuedConnection) which fires after
     // all currently-pending events are processed — no fixed delay needed.
     QSet<QString> m_pendingRetileScreens;
+    /// Contexts a window was released from while they were NOT on screen.
+    /// Nothing retiles a background context, and the identical-set desktop
+    /// switch deliberately retiles nothing, so the hole the release left
+    /// would stay until the next insert or close there. Each entry is
+    /// consumed by the context's next return (setCurrentDesktopForScreen /
+    /// setCurrentActivity), which schedules the retile it owes.
+    QSet<PhosphorEngine::TilingStateKey> m_dirtyBackgroundContexts;
     bool m_retilePending = false;
 
     // Bounded retry for transient screen geometry failures.

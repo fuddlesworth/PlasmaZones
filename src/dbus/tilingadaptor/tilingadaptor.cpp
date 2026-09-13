@@ -973,6 +973,7 @@ void TilingAdaptor::clearEngine()
     // borrow is dropped symmetrically and grep-discoverably.
     QObject::disconnect(m_registryDesktopConnection);
     m_registryDesktopConnection = {};
+    m_windowRegistry = nullptr;
     m_membershipEngines.clear();
     // The rest are interface-only borrows, no connections to drop. Also neutralise any
     // pending coalesced announce (its lambda re-checks the empty list) and

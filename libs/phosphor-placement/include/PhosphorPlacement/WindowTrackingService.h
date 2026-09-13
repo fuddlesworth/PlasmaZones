@@ -8,7 +8,9 @@
 // is already split by concern across src/*.cpp (snap, resnap, navigation,
 // virtualscreenmigration, lifecycle), and the member ordering here encodes
 // which of those owns what. Same rationale as
-// PhosphorTileEngine/AutotileEngine.h.
+// PhosphorTileEngine/AutotileEngine.h. Grew with the per-desktop membership
+// change: the forget / renumber wrappers over the persisted per-desktop
+// zones and the membership-aware zone walk.
 
 #pragma once
 
@@ -447,6 +449,8 @@ public:
     void releaseEngineSlot(const QString& windowId, const QString& engineId) override;
     /// Dirty-marking wrapper for WindowPlacementStore::forgetDesktopZones.
     void forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop) override;
+    /// Dirty-marking wrapper for WindowPlacementStore::renumberDesktopZones.
+    void renumberDesktopZones(int removedDesktop) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -1040,8 +1044,6 @@ Q_SIGNALS:
     // (it holds IWindowTrackingService*, not WindowTrackingService*, so PMF connect
     // is unavailable). Renaming this signal will silently break autotile zone tracking.
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
-    /// On-all-desktops state changed; fires only on a real transition.
-    void windowStickyChanged(const QString& windowId, bool sticky);
 
     /// Emitted when state needs to be saved
     void stateChanged();
@@ -1165,6 +1167,9 @@ private:
     // Each returns nullptr / empty when the resolver is unwired, preserving the
     // historical "no SnapState" no-op guards at the call sites.
     PhosphorSnapEngine::SnapState* snapForWindow(const QString& windowId) const;
+    /// Whether @p state holds a membership for the window (see
+    /// SnapStateResolver::holdsWindow). Unwired: only the primary store does.
+    bool snapHoldsWindow(const QString& windowId, const PhosphorSnapEngine::SnapState* state) const;
     PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId);
     PhosphorSnapEngine::SnapState* snapForScreen(const QString& screenId) const;
     /// The store holding the single representative last-used zone: the one with the
@@ -1200,12 +1205,15 @@ private:
     /// True once the resolver is wired — the drop-in replacement for the former
     /// `m_snapState != nullptr` guards.
     bool hasSnapState() const;
-    /// Invoke @p fn once per zone-assigned window, with its zones, screen, and
-    /// desktop read from the store that OWNS the window. The per-state replacement
-    /// for the removed flat zoneAssignments()/screenAssignments()/
-    /// desktopAssignments() unions: a window lives in exactly one store (the
-    /// engine's reverse map is authoritative), so each window is visited exactly
-    /// once and its context can never be paired with another store's values.
+    /// Invoke @p fn once per (window, store) zone assignment the window is a
+    /// MEMBER of, with its zones, screen, and desktop read from that store.
+    /// The per-state replacement for the removed flat zoneAssignments()/
+    /// screenAssignments()/desktopAssignments() unions. A window present on
+    /// one desktop is visited once; a window present on several desktops
+    /// holds an assignment in each and is visited once per member store, each
+    /// with that store's own desktop, so a caller that wants one context
+    /// filters by desktop. A store the window is NOT a member of can only hold
+    /// a leftover and is skipped.
     /// @p fn must not mutate the snap stores — collect first, mutate after.
     /// Body kept in lockstep with the engine-side sibling
     /// SnapEngine::forEachSnapAssignment (same contract; this one reaches the

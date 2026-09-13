@@ -245,6 +245,15 @@ public:
         Q_UNUSED(engineId)
         Q_UNUSED(desktop)
     }
+    /// Apply a desktop removal to every persisted per-desktop zone map (drop
+    /// @p removedDesktop, shift the entries above it down) and mark the
+    /// placements dirty. The engines renumber their live stores on the same
+    /// event; the record has to follow or a restart seeds a zone under a
+    /// number that now names a different desktop. Default no-op.
+    virtual void renumberDesktopZones(int removedDesktop)
+    {
+        Q_UNUSED(removedDesktop)
+    }
     /// Screen-scoped consume-once variant: clears only @p screenId's
     /// remembered float-back, preserving other monitors' entries. Default
     /// falls back to the all-screens form for implementations without

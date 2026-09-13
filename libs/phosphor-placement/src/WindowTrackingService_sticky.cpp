@@ -1,14 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Sticky (on-all-desktops) window state: the compositor's report of it, and
-// the change signal the engines' per-desktop membership pass hangs off.
+// Per-desktop placement bookkeeping: the compositor's report of a window's
+// sticky (on-all-desktops) state, the dirty-marking wrappers the engines'
+// per-desktop membership pass calls to keep the persisted per-desktop zones
+// honest, and the membership-aware walk over every snap store's zone
+// assignments that the occupancy and resnap consumers read.
 //
 // Its own translation unit because WindowTrackingService.cpp is over the
-// file-size ceiling, and this is the one concern in it with an outbound
-// signal rather than only storage.
+// file-size ceiling, and these are one concern: what the membership pass
+// reads, what it writes back, and how a window present on several desktops
+// is reported to the consumers that ask about every store at once.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
+
+#include <PhosphorSnapEngine/SnapState.h>
 
 namespace PhosphorPlacement {
 
@@ -18,23 +24,13 @@ void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sti
     // re-identification skew (issue #628). The daemon seeds the canonical mapping
     // in WindowTrackingAdaptor::setWindowMetadata, so canonicalizeForLookup
     // resolves to the first-seen composite without seeding here.
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    // Emit on a real transition only. The effect calls this from
-    // windowDesktopsChanged, which fires for every edit to the desktop set
-    // (and for every window at login), so an unconditional emit would put the
-    // membership pass on a hot path for a value that did not move.
-    const auto it = m_windowStickyStates.constFind(windowId);
-    const bool had = it != m_windowStickyStates.constEnd();
-    if (had && it.value() == sticky) {
-        return;
-    }
-    m_windowStickyStates[windowId] = sticky;
-    // A first observation of a NON-sticky window is not a transition: that is
-    // the default every window starts at, and announcing it would ask the
-    // consumers to undo memberships nothing ever granted.
-    if (had || sticky) {
-        Q_EMIT windowStickyChanged(windowId, sticky);
-    }
+    //
+    // Storage only. The per-desktop membership pass is driven by the daemon
+    // from the registry's metadata change, which the effect pushes for the
+    // same transition and which also carries the window's new desktop set;
+    // a signal from here would fire BEFORE that push arrives (the effect
+    // reports stickiness first) and reconcile against the old desktops.
+    m_windowStickyStates[canonicalizeForLookup(rawWindowId)] = sticky;
 }
 
 bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
@@ -48,15 +44,59 @@ void WindowTrackingService::forgetDesktopZones(const QString& windowId, const QS
         return;
     }
     // A wrapper, not a direct store call from the engines, for the reason
-    // releaseEngineSlot gives: the store has no dirty concept. Called from the
-    // engines' per-desktop membership pass when a window's span stops covering
-    // a desktop — which is why it lives beside the sticky state that pass
-    // hangs off. The first cut reached into the store directly and the forget
-    // never reached disk: the in-memory record dropped the desktop, nothing
-    // marked the placements dirty, and the next restart resurrected the
-    // window onto a desktop it had left.
+    // releaseEngineSlot gives: the store has no dirty concept. The first cut
+    // reached into the store directly and the forget never reached disk: the
+    // in-memory record dropped the desktop, nothing marked the placements
+    // dirty, and the next restart resurrected the window onto a desktop it
+    // had left.
     if (m_placementStore.forgetDesktopZones(windowId, engineId, desktop)) {
         markDirty(DirtyWindowPlacements);
+    }
+}
+
+void WindowTrackingService::renumberDesktopZones(int removedDesktop)
+{
+    if (m_placementStore.renumberDesktopZones(removedDesktop) > 0) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
+void WindowTrackingService::forEachZoneAssignedWindow(
+    const std::function<void(const QString&, const QStringList&, const QString&, int)>& fn) const
+{
+    Q_ASSERT(hasSnapState());
+    if (!hasSnapState()) {
+        return;
+    }
+    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        const QHash<QString, QStringList>& zones = state->zoneAssignments();
+        const QHash<QString, QString>& screens = state->screenAssignments();
+        const QHash<QString, int>& desktops = state->desktopAssignments();
+        for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
+            // Membership guard: a window's data is authoritative only in the
+            // stores it is a MEMBER of. Re-keying a window to a new
+            // per-(screen,desktop,activity) store only moves the membership —
+            // it does NOT evict the window's zone/desktop data from the old
+            // store (see PerScreenStates::setKeyForWindow / removeWindow, which
+            // "do not touch state objects"). Iterating the raw stores therefore
+            // sees a re-keyed window twice, once per store, with each store's
+            // own (possibly stale) desktop value — the cross-desktop resnap
+            // leak (a VD1 window read as VD2 from a leftover store, then
+            // resnapped off its real desktop). A window present on several
+            // desktops, on the other hand, is a member of one store per
+            // desktop and each of those holds real data the user chose, so it
+            // is reported from every member store with that store's desktop.
+            // Kept in lockstep with SnapEngine::stateForWindowOnScreen's
+            // eviction, which spares member stores for the same reason.
+            // A window untracked by the reverse map (owner == nullptr, e.g. the
+            // global holder's screenless entries) is left to the callback's own
+            // screen/desktop guards, preserving prior behaviour.
+            const PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
+            if (owner && owner != state && !snapHoldsWindow(it.key(), state)) {
+                continue;
+            }
+            fn(it.key(), it.value(), screens.value(it.key()), desktops.value(it.key(), 0));
+        }
     }
 }
 

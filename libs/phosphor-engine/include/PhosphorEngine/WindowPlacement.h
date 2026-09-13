@@ -48,10 +48,14 @@ struct EngineSlot
     /// on each, and one zone list cannot say that.
     ///
     /// Held INSIDE the engine slot rather than as sibling records, because
-    /// the store keeps at most one record per live instance and thirteen
-    /// restore paths depend on that uniqueness. Per-desktop zones are the
-    /// snap engine's business, and the slot is exactly where per-engine
-    /// business belongs.
+    /// the store keeps at most one record per live instance and the restore
+    /// paths depend on that uniqueness. Per-desktop zones are the snap
+    /// engine's business, and the slot is exactly where per-engine business
+    /// belongs. The tiling engines keep no per-desktop analogue: a tile
+    /// order restores into one desktop and the membership pass places the
+    /// window afresh on the others, which is a graceful degradation rather
+    /// than a wrong placement, since a tile order is only meaningful against
+    /// the layout it was captured in.
     ///
     /// `zoneIds` stays populated with the current context's zones, so every
     /// reader that predates this field keeps working unchanged.
@@ -224,7 +228,8 @@ struct WindowPlacement
     /// Whether this record carries anything worth restoring. True when the window
     /// has a captured free/float geometry, OR a MANAGED slot (`snapped`/`tiled`,
     /// which restore by zone/tile reference), OR a slot that still references a zone
-    /// (`zoneIds` — a floated-from-snap window's pre-float zones) or a tile order.
+    /// (`zoneIds` — a floated-from-snap window's pre-float zones, or a zone on
+    /// another desktop in `zonesByDesktop`) or a tile order.
     ///
     /// A bare slot with no geometry, no zone reference, and no tile order — whether
     /// `floating` (a never-snapped floated window captured frame-less) or the retired
@@ -245,7 +250,7 @@ struct WindowPlacement
             if (s.state == stateSnapped() || s.state == stateTiled()) {
                 return true;
             }
-            if (!s.zoneIds.isEmpty() || s.order >= 0) {
+            if (!s.zoneIds.isEmpty() || s.order >= 0 || !s.zonesByDesktop.isEmpty()) {
                 return true;
             }
         }
@@ -432,10 +437,13 @@ struct WindowPlacement
             for (auto d = byDesktop.constBegin(); d != byDesktop.constEnd(); ++d) {
                 bool ok = false;
                 const int desktop = d.key().toInt(&ok);
-                // Desktop numbers are 1-based; a key that is not one is a
+                // Desktop numbers are 1-based and bounded the same way the
+                // record-level desktop above is; a key outside that range is a
                 // corrupt or hand-edited file and is dropped rather than
-                // resurrected as desktop 0, which no context resolves to.
-                if (!ok || desktop < 1) {
+                // resurrected as desktop 0, which no context resolves to, or
+                // as a number that would mint a per-desktop store nothing
+                // else ever prunes.
+                if (!ok || desktop < 1 || desktop > MAX_PLAUSIBLE_VIRTUAL_DESKTOP) {
                     continue;
                 }
                 QStringList zones;

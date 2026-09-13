@@ -602,7 +602,7 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             // mis-reads them as user floats and they stick floating), and
             // clearing the screen-keyed seed maps would destroy an in-flight
             // strict order for the current desktop.
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false,
+            releaseScreenStateForTeardown(key, state, releasedWindows, /*drainOverflow=*/false,
                                           /*clearScreenOrderMaps=*/false);
             releasedScreens.insert(key.screenId);
             ++pruned;
@@ -665,7 +665,7 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
             // can share a screenId, so overflow drains once per screen
             // below, after all captures (same shape as the orphaned-VS
             // loop).
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false);
+            releaseScreenStateForTeardown(key, state, releasedWindows, /*drainOverflow=*/false);
             releasedScreens.insert(key.screenId);
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
@@ -757,7 +757,7 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
             // daemon and effect stop tracking windows this engine has dropped.
             // Both scope flags false for the same reason too — the screen
             // survives, only this activity's contexts are going away.
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false,
+            releaseScreenStateForTeardown(key, state, releasedWindows, /*drainOverflow=*/false,
                                           /*clearScreenOrderMaps=*/false);
             releasedScreens.insert(key.screenId);
             ++pruned;

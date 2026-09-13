@@ -70,6 +70,7 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
     preview.targetScreenId = screenId;
 
     const TilingStateKey targetKey = currentKeyForScreen(screenId);
+    preview.targetKey = targetKey;
 
     // Capture prior engine state (if any) for restoration on cancel.
     // Look up the prior PhosphorTiles::TilingState once and reuse below to avoid a redundant
@@ -119,7 +120,14 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
             targetState->removeWindow(windowId);
         }
         targetState->addWindow(windowId);
-        m_states.setKeyForWindow(windowId, targetKey);
+        // Only the membership the drag started from moves; a window present on
+        // the prior screen's other desktops keeps those places through the
+        // hold (the commit takes them, the cancel leaves them).
+        if (preview.hadPriorState) {
+            m_states.migrate(windowId, preview.priorKey, targetKey);
+        } else {
+            m_states.addMembership(windowId, targetKey);
+        }
     }
 
     // Evict last tiled neighbour if adoption pushed us over the cap for the
@@ -200,14 +208,14 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
                 if (preview.priorFloating) {
                     priorState->setFloating(windowId, true);
                 }
-                m_states.setKeyForWindow(windowId, preview.priorKey);
+                m_states.migrate(windowId, targetKey, preview.priorKey);
             } else {
-                m_states.removeWindow(windowId);
+                m_states.removeMembership(windowId, targetKey);
             }
         } else {
             // Fresh adoption: just undo the add.
             targetState->removeWindow(windowId);
-            m_states.removeWindow(windowId);
+            m_states.removeMembership(windowId, targetKey);
         }
         return false;
     }
@@ -279,7 +287,14 @@ void AutotileEngine::commitDragInsertPreview()
     // below so the daemon drops its stale "floating" bookkeeping.
     const bool sameScreenUnfloat = m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorSameScreen
         && m_dragInsertPreview->priorFloating;
+    const PhosphorEngine::PlacementStateKey targetKey = m_dragInsertPreview->targetKey;
     m_dragInsertPreview.reset();
+    if (crossScreenAdoption) {
+        // The window left its prior OUTPUT for good: the places it held on
+        // that screen's other desktops go with it (begin moved only the one
+        // the drag started from, so a cancel could leave them alone).
+        dropFromOtherContexts(windowId, targetKey);
+    }
     // Retile target without the filter so the dragged window's geometry is
     // applied on the next windowsTiled emission (KWin's interactive move has
     // ended and will accept the geometry set).
@@ -378,7 +393,6 @@ void AutotileEngine::cancelDragInsertPreview(bool dragStillActive)
             if (targetState) {
                 targetState->removeWindow(p.windowId);
             }
-            m_states.removeWindow(p.windowId);
             if (priorState) {
                 // Defensive: if the prior state was torn down and rebuilt
                 // between begin() and cancel(), it may already contain an
@@ -392,7 +406,11 @@ void AutotileEngine::cancelDragInsertPreview(bool dragStillActive)
                 if (p.priorFloating) {
                     priorState->setFloating(p.windowId, true);
                 }
-                m_states.setKeyForWindow(p.windowId, p.priorKey);
+                // The reverse of begin's move; the window's other desktops'
+                // places were never touched.
+                m_states.migrate(p.windowId, p.targetKey, p.priorKey);
+            } else {
+                m_states.removeMembership(p.windowId, p.targetKey);
             }
         }
     }

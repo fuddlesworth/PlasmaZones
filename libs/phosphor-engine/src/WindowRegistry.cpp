@@ -145,6 +145,16 @@ std::optional<bool> WindowRegistry::minimizedState(const QString& windowId) cons
     return it->isMinimized;
 }
 
+std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString& windowId) const
+{
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto it = m_records.constFind(instanceId);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity};
+}
+
 QStringList WindowRegistry::instancesWithAppId(const QString& appId) const
 {
     if (appId.isEmpty()) {

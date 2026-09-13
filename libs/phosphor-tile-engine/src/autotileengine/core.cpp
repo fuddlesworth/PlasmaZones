@@ -294,7 +294,7 @@ void AutotileEngine::connectSignals()
                             // would blind capturePlacement's overflow
                             // discriminator for the remaining contexts.
                             orphanedVsIds.insert(sid);
-                            if (releaseScreenStateForTeardown(sid, state, releasedWindows,
+                            if (releaseScreenStateForTeardown(key, state, releasedWindows,
                                                               /*drainOverflow=*/false)) {
                                 placementChangedScreens.insert(sid);
                             }
@@ -328,9 +328,12 @@ void AutotileEngine::connectSignals()
                             && PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) == physicalScreenId
                             && !newVsSet.contains(sid);
                     });
-                    for (const QString& windowId : std::as_const(releasedWindows)) {
-                        m_states.removeWindow(windowId);
-                    }
+                    // The memberships on the orphaned outputs, not every
+                    // membership: a released window may hold a place on
+                    // another screen this teardown did not touch.
+                    m_states.removeWindowsIf([&orphanedVsIds](const QString&, const TilingStateKey& key) {
+                        return orphanedVsIds.contains(key.screenId);
+                    });
                     if (!releasedWindows.isEmpty()) {
                         Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
                     }

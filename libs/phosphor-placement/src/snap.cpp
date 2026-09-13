@@ -203,6 +203,14 @@ PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindow(const QStrin
     return m_snapResolver.forWindow ? m_snapResolver.forWindow(windowId) : nullptr;
 }
 
+bool WindowTrackingService::snapHoldsWindow(const QString& windowId, const PhosphorSnapEngine::SnapState* state) const
+{
+    if (m_snapResolver.holdsWindow) {
+        return m_snapResolver.holdsWindow(windowId, state);
+    }
+    return state && state == snapForWindow(windowId);
+}
+
 PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindowOnScreen(const QString& windowId,
                                                                             const QString& screenId)
 {

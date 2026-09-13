@@ -56,8 +56,15 @@ struct SnapStateResolver
     /// caller dereferences the elements unguarded, so a resolver that
     /// breaks this crashes them all.
     std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;
-    /// Drop a window's reverse-map entry (window closed / fully removed).
+    /// Drop a window's memberships and its data in every member store (window
+    /// closed / fully removed).
     std::function<void(const QString& windowId)> forgetWindow;
+    /// Whether @p state holds a MEMBERSHIP for the window, as opposed to a
+    /// leftover. A window present on several desktops is a member of one
+    /// store per desktop; the aggregate walks use this to visit each of those
+    /// and skip the rest. Unset reads as "only the primary store is a member",
+    /// the single-membership answer.
+    std::function<bool(const QString& windowId, const PhosphorSnapEngine::SnapState* state)> holdsWindow;
 };
 
 } // namespace PhosphorPlacement

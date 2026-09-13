@@ -76,6 +76,11 @@ private Q_SLOTS:
     void rekeyWindows_rewritesMatching();
     void removeStatesIf_lockstepWithHook();
     void removeWindowsIf_byPredicate();
+    void memberships_addIsIdempotentAndRemoveOfLastUntracks();
+    void primary_followsTheContextResolver();
+    void migrate_movesOneMembershipAndKeepsTheRest();
+    void migrate_sameKeyIsANoOp();
+    void removeWindowsIf_isPerMembership();
 
 private:
     std::vector<std::unique_ptr<FakeState>> m_owned;
@@ -238,6 +243,124 @@ void TestPerScreenStates::removeWindowsIf_byPredicate()
     });
     QVERIFY(states.hasWindow(QStringLiteral("keep")));
     QVERIFY(!states.hasWindow(QStringLiteral("drop")));
+}
+
+void TestPerScreenStates::memberships_addIsIdempotentAndRemoveOfLastUntracks()
+{
+    PerScreenStates<FakeState> states;
+    const auto d1 = key(QStringLiteral("S1"), 1);
+    const auto d2 = key(QStringLiteral("S1"), 2);
+
+    states.addMembership(QStringLiteral("w"), d1);
+    states.addMembership(QStringLiteral("w"), d2);
+    states.addMembership(QStringLiteral("w"), d2); // no growth on a repeat
+    QCOMPARE(states.membershipsForWindow(QStringLiteral("w")).size(), 2);
+    QVERIFY(states.hasMembership(QStringLiteral("w"), d1));
+    QVERIFY(states.hasMembership(QStringLiteral("w"), d2));
+    QCOMPARE(states.trackedWindowIds(), QStringList{QStringLiteral("w")});
+
+    // Every (window, key) pair is visited, once each.
+    int visits = 0;
+    states.forEachMembership([&visits](const QString&, const PlacementStateKey&) {
+        ++visits;
+    });
+    QCOMPARE(visits, 2);
+
+    states.removeMembership(QStringLiteral("w"), d1);
+    QVERIFY(states.hasWindow(QStringLiteral("w")));
+    QCOMPARE(states.keyForWindow(QStringLiteral("w")), d2);
+    states.removeMembership(QStringLiteral("w"), d2);
+    QVERIFY2(!states.hasWindow(QStringLiteral("w")), "the last membership going untracks the window");
+    // Removing from an untracked window is a no-op, not a crash.
+    states.removeMembership(QStringLiteral("w"), d2);
+    QVERIFY(!states.hasWindow(QStringLiteral("w")));
+
+    // setKeyForWindow is a REPLACE: the one membership left is the given one.
+    states.addMembership(QStringLiteral("x"), d1);
+    states.addMembership(QStringLiteral("x"), d2);
+    states.setKeyForWindow(QStringLiteral("x"), d2);
+    QCOMPARE(states.membershipsForWindow(QStringLiteral("x")), QList<PlacementStateKey>{d2});
+}
+
+void TestPerScreenStates::primary_followsTheContextResolver()
+{
+    PerScreenStates<FakeState> states;
+    const auto d1 = key(QStringLiteral("S1"), 1);
+    const auto d2 = key(QStringLiteral("S1"), 2);
+    FakeState* s1 = states.forKey(d1, [&] {
+        return makeState(QStringLiteral("S1"));
+    });
+    FakeState* s2 = states.forKey(d2, [&] {
+        return makeState(QStringLiteral("S1"));
+    });
+    states.addMembership(QStringLiteral("w"), d1);
+    states.addMembership(QStringLiteral("w"), d2);
+
+    // No resolver: the first membership wins.
+    QCOMPARE(states.keyForWindow(QStringLiteral("w")), d1);
+    QCOMPARE(states.forWindow(QStringLiteral("w")), s1);
+
+    int shown = 2;
+    states.setContextKeyResolver([&shown](const QString& screen) {
+        return key(screen, shown);
+    });
+    QCOMPARE(states.keyForWindow(QStringLiteral("w")), d2);
+    PlacementStateKey out;
+    QCOMPARE(states.forWindow(QStringLiteral("w"), &out), s2);
+    QCOMPARE(out, d2);
+    shown = 1;
+    QCOMPARE(states.windowKey(QStringLiteral("w")).value(), d1);
+    // Every membership off-context: any of them beats none.
+    shown = 7;
+    QCOMPARE(states.keyForWindow(QStringLiteral("w")), d1);
+    QVERIFY(states.hasWindow(QStringLiteral("w")));
+    // A single-membership window never consults the resolver.
+    states.addMembership(QStringLiteral("solo"), d2);
+    QCOMPARE(states.keyForWindow(QStringLiteral("solo")), d2);
+}
+
+void TestPerScreenStates::migrate_movesOneMembershipAndKeepsTheRest()
+{
+    PerScreenStates<FakeState> states;
+    const auto d1 = key(QStringLiteral("S1"), 1);
+    const auto d2 = key(QStringLiteral("S1"), 2);
+    const auto other = key(QStringLiteral("S2"), 2);
+    states.addMembership(QStringLiteral("w"), d1);
+    states.addMembership(QStringLiteral("w"), d2);
+
+    states.migrate(QStringLiteral("w"), d2, other);
+    QVERIFY(states.hasMembership(QStringLiteral("w"), d1));
+    QVERIFY(!states.hasMembership(QStringLiteral("w"), d2));
+    QVERIFY(states.hasMembership(QStringLiteral("w"), other));
+    QCOMPARE(states.membershipsForWindow(QStringLiteral("w")).size(), 2);
+
+    // Moving onto a key already held is a merge, not a duplicate.
+    states.migrate(QStringLiteral("w"), other, d1);
+    QCOMPARE(states.membershipsForWindow(QStringLiteral("w")), QList<PlacementStateKey>{d1});
+}
+
+void TestPerScreenStates::migrate_sameKeyIsANoOp()
+{
+    // The merge arm would find the destination already held and remove the
+    // entry, which for a single-membership window is its only one.
+    PerScreenStates<FakeState> states;
+    const auto d1 = key(QStringLiteral("S1"), 1);
+    states.addMembership(QStringLiteral("w"), d1);
+    states.migrate(QStringLiteral("w"), d1, d1);
+    QVERIFY(states.hasWindow(QStringLiteral("w")));
+    QCOMPARE(states.membershipsForWindow(QStringLiteral("w")), QList<PlacementStateKey>{d1});
+}
+
+void TestPerScreenStates::removeWindowsIf_isPerMembership()
+{
+    PerScreenStates<FakeState> states;
+    states.addMembership(QStringLiteral("w"), key(QStringLiteral("S1"), 1));
+    states.addMembership(QStringLiteral("w"), key(QStringLiteral("S1"), 9));
+    states.removeWindowsIf([](const QString&, const PlacementStateKey& k) {
+        return k.desktop == 9;
+    });
+    QVERIFY2(states.hasWindow(QStringLiteral("w")), "only the matching membership goes");
+    QCOMPARE(states.membershipsForWindow(QStringLiteral("w")), QList<PlacementStateKey>{key(QStringLiteral("S1"), 1)});
 }
 
 QTEST_MAIN(TestPerScreenStates)

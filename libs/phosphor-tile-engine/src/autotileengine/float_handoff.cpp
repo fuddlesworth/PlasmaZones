@@ -489,6 +489,9 @@ void AutotileEngine::handoffRelease(const QString& windowId)
         }
         state->removeWindow(canonical);
     }
+    // Every other context the window held goes with it: the receiving engine
+    // owns the window on every desktop now.
+    dropFromOtherContexts(canonical, key);
     m_states.removeWindow(canonical);
     // The durable slot goes with the tracking (the scroll twin carries the
     // same clear): a released window is one this engine knowingly gave up,
@@ -530,7 +533,16 @@ void AutotileEngine::sweepPhantomTracking(const QString& windowId)
 {
     // See the header doc: shared refusal-sweep, deliberately narrower than
     // handoffRelease (no releaseEngineSlot, no algorithm removal hook).
-    m_states.removeWindow(windowId);
+    // The callers verified that the PRIMARY state does not hold the window,
+    // so that is the membership the sweep drops; a window present on other
+    // desktops keeps those, and its per-window caches, which describe a
+    // window still live there.
+    if (const auto primary = m_states.windowKey(windowId)) {
+        m_states.removeMembership(windowId, *primary);
+    }
+    if (m_states.hasWindow(windowId)) {
+        return;
+    }
     m_windowMinSizes.remove(windowId);
     m_autotileFloatedWindows.remove(windowId);
     m_overflow.clearOverflow(windowId);

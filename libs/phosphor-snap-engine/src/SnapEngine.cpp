@@ -179,6 +179,26 @@ bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& n
     }
     oldState->migrateWindowTo(newState, canonical, newScreenId);
     m_states.migrate(canonical, oldKey, newKey);
+    // A window is on exactly one screen. The primary moved above; every OTHER
+    // membership on the screen it left goes with it, or those stores keep
+    // listing the window as a zone occupant there and the next membership
+    // pass on that screen re-applies the leftover, dragging the window back
+    // across monitors. Released rather than migrated: the destination screen
+    // has its own desktops, and a zone of the old screen's layout means
+    // nothing there. The persisted per-desktop map follows, since the store
+    // merges it and would otherwise re-seed those zones on restore.
+    for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
+        if (key == newKey || key.screenId != oldKey.screenId) {
+            continue;
+        }
+        if (SnapState* state = m_states.stateForKey(key)) {
+            state->removeWindowData(canonical);
+        }
+        m_states.removeMembership(canonical, key);
+        if (m_windowTracker) {
+            m_windowTracker->forgetDesktopZones(canonical, engineId(), key.desktop);
+        }
+    }
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId;
     return true;
@@ -201,7 +221,34 @@ void SnapEngine::setCurrentActivity(const QString& activity)
 
 void SnapEngine::forgetWindow(const QString& windowId)
 {
-    m_states.removeWindow(canonicalWindowId(windowId));
+    const QString canonical = canonicalWindowId(windowId);
+    // Every member store, not the primary alone. The WTS close path clears
+    // the primary store's data before calling here; the OTHER desktops' stores
+    // still list the window, and with the memberships gone nothing would ever
+    // resolve those stores for it again: the eviction in stateForWindowOnScreen
+    // runs only when the window is next resolved, which a closed window never
+    // is. forEachSnapAssignment and the occupancy queries raw-scan every store,
+    // so the leftover would be a phantom occupant of its zone on that desktop.
+    for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
+        if (SnapState* state = m_states.stateForKey(key)) {
+            state->removeWindowData(canonical);
+        }
+    }
+    m_states.removeWindow(canonical);
+}
+
+bool SnapEngine::holdsWindowInState(const QString& windowId, const SnapState* state) const
+{
+    if (!state) {
+        return false;
+    }
+    const QString canonical = canonicalWindowId(windowId);
+    for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
+        if (m_states.stateForKey(key) == state) {
+            return true;
+        }
+    }
+    return false;
 }
 
 QList<SnapState*> SnapEngine::allSnapStates() const
@@ -363,6 +410,14 @@ void SnapEngine::renumberDesktopsAfterRemoval(int removedDesktop)
         }
     }
     m_context.renumberDesktopsAfterRemoval(removedDesktop);
+    // The persisted per-desktop zone maps follow the same renumbering, or a
+    // restart seeds a zone under a number that now belongs to another
+    // desktop. The removed desktop's own entry goes with it (the prune ahead
+    // of this dropped the live store). Through the tracker's wrapper so the
+    // change reaches disk.
+    if (m_windowTracker) {
+        m_windowTracker->renumberDesktopZones(removedDesktop);
+    }
 }
 
 void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
@@ -675,16 +730,30 @@ std::optional<PhosphorEngine::PlacementStateKey> SnapEngine::heldKeyForWindow(co
     // "left every desktop". The reverse map alone, then membership in the store
     // it names — the same two-step the tiling engines use.
     const QString canonical = canonicalWindowId(windowId);
-    PhosphorEngine::PlacementStateKey key;
-    const SnapState* state = m_states.forWindow(canonical, &key);
-    if (!state || key.screenId.isEmpty()) {
-        return std::nullopt;
+    const auto holds = [&canonical](const SnapState* state) {
+        // Membership, not a bare key: a refused placement can leave the
+        // reverse map pointing at a store that holds nothing for this window.
+        return state
+            && (state->isWindowSnapped(canonical) || state->isFloating(canonical)
+                || !state->screenForWindow(canonical).isEmpty());
+    };
+    // The primary first (the membership in view), then the rest. A window
+    // present on several desktops is adopted into the desktop in view with a
+    // membership and NO data (snapping places nothing itself), so its primary
+    // store can be empty while a background store genuinely holds it; the
+    // interface promises the holding key in ANY context.
+    PhosphorEngine::PlacementStateKey primary;
+    if (const SnapState* state = m_states.forWindow(canonical, &primary);
+        state && !primary.screenId.isEmpty() && holds(state)) {
+        return primary;
     }
-    // Membership, not a bare key: a refused placement can leave the reverse map
-    // pointing at a store that holds nothing for this window.
-    if (state->isWindowSnapped(canonical) || state->isFloating(canonical)
-        || !state->screenForWindow(canonical).isEmpty()) {
-        return key;
+    for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
+        if (key == primary || key.screenId.isEmpty()) {
+            continue;
+        }
+        if (holds(m_states.stateForKey(key))) {
+            return key;
+        }
     }
     return std::nullopt;
 }
@@ -718,11 +787,16 @@ void SnapEngine::releaseFromContext(const PhosphorEngine::PlacementStateKey& key
     // (relayWindowReleasedFromContext). Only the float-marker clear is left
     // out, deliberately.
     state->windowClosed(canonical);
-    // The reverse map named this store; with the window gone from it, leaving
-    // the entry would keep isWindowTracked answering true for a window no store
-    // holds — the phantom shape the membership check above exists to reject.
-    if (m_states.keyForWindow(canonical) == key) {
-        m_states.removeWindow(canonical);
+    // This ONE membership goes with the data. A window present on several
+    // desktops keeps its place on the rest; the container drops the window
+    // from tracking by itself once its last membership is gone, so a window
+    // no store holds cannot keep isWindowTracked answering true.
+    m_states.removeMembership(canonical, key);
+    if (m_windowTracker) {
+        // The persisted per-desktop map is merged on capture, so a desktop the
+        // window left has to be forgotten explicitly or a restart seeds the
+        // zone back.
+        m_windowTracker->forgetDesktopZones(canonical, engineId(), key.desktop);
     }
 }
 

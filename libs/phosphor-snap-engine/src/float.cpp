@@ -739,9 +739,15 @@ bool SnapEngine::isWindowTracked(const QString& windowId) const
     // state's own isFloating consults only the owning store, while the facade
     // sweeps every store, catching a float recorded outside the reverse map's
     // target.
+    // The trailing heldKeyForWindow is the multi-desktop arm: a window
+    // present on several desktops is adopted into the desktop in view with a
+    // membership and NO data, so its primary store answers false on every
+    // predicate above while a background store genuinely holds it. Tracked
+    // means "some store of this engine holds the window", in any context.
     const SnapState* state = stateForWindow(windowId);
     return state->isWindowSnapped(windowId) || state->isFloating(windowId)
-        || !state->screenForWindow(windowId).isEmpty() || isFloating(windowId);
+        || !state->screenForWindow(windowId).isEmpty() || isFloating(windowId)
+        || heldKeyForWindow(windowId).has_value();
 }
 
 } // namespace PhosphorSnapEngine

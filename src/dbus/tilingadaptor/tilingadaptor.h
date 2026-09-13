@@ -5,9 +5,11 @@
 
 #include "plasmazones_export.h"
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QDBusAbstractAdaptor>
+#include <QPointer>
 #include <QHash>
 #include <QObject>
 #include <QSet>
@@ -148,23 +150,31 @@ public:
     /// across every store, so the entry stays a live navigation target.
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
-    /// The reconcile setWindowRegistry subscribes: release @p windowId from
-    /// any state keyed by a context it no longer belongs to.
-    ///
-    /// Both movable axes of the key. @p desktops is the window's whole desktop
-    /// set and @p activity its activity; an EMPTY value on either means "all of
-    /// them, or unknown", and neither can be read as a mismatch — a sticky
-    /// window is on every desktop, and a state keyed with no activity covers
-    /// every activity. A window whose desktops AND activity are both unknown
-    /// releases nothing at all.
-    ///
-    /// The screen is the third component of the key and deliberately not
-    /// checked here: a window does not leave a screen the way it leaves a
+    /// The reconcile setWindowRegistry subscribes: run every engine's
+    /// per-window membership pass for @p windowId against @p span, so the
+    /// contexts the window left are released and the context its screen is
+    /// showing is adopted when the span covers it. Both movable axes of the
+    /// key, desktop and activity; an unknown span (no desktop stamped yet)
+    /// changes nothing. The screen is the third component and deliberately
+    /// not part of it: a window does not leave a screen the way it leaves a
     /// desktop, and the effect relays an output transfer with its own release.
+    ///
+    /// A window that holds no context in a lifecycle engine afterwards is
+    /// released from the pipeline with the bookkeeping the engine cannot do
+    /// itself; a snap release re-captures the record and tells the effect's
+    /// zone cache.
     ///
     /// Public so the contract is testable directly, without driving a registry
     /// round-trip to reach it.
-    void reconcileWindowMembership(const QString& windowId, const QSet<int>& desktops, const QString& activity);
+    void reconcileWindowMembership(const QString& windowId, const PhosphorEngine::DesktopSpan& span);
+
+    /// The screen-wide form: every engine gives every window whose span
+    /// covers @p screenId's current context a place in it and takes back the
+    /// places the span no longer covers. The daemon runs it after a desktop
+    /// switch on that screen and, for every screen, after an activity switch,
+    /// once the engines' active-screen sets have been recomputed for the new
+    /// context (the tiling engines gate on that set).
+    void reconcileDesktopMemberships(const QString& screenId);
 
     // ── Engine relay entry points ────────────────────────────────────────
     // The composition root connects every pipeline engine's signals here
@@ -677,6 +687,20 @@ private:
     /// The registry subscription setWindowRegistry made, so a re-wire
     /// replaces it rather than stacking a second reconcile per change.
     QMetaObject::Connection m_registryDesktopConnection;
+    /// The registry the membership pass reads desktop spans from. Borrowed.
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
+    /// A window's span as the engines' membership pass reads it, from its
+    /// registry metadata: sticky from the stamped bit (the service's own
+    /// report is the fallback), desktops from the span list or the single
+    /// desktop, unknown when neither is stamped.
+    PhosphorEngine::DesktopSpan spanFor(const PhosphorEngine::WindowMetadata& meta,
+                                        const QString& canonicalWindowId) const;
+    /// The query the engines' screen-wide pass takes, over the registry.
+    PhosphorEngine::DesktopSpanQuery desktopSpanQuery() const;
+    /// Drive the bookkeeping a membership pass leaves to the adaptor; see
+    /// reconcileWindowMembership.
+    void applyMembershipResult(PhosphorEngine::IPlacementEngine* engine, bool lifecycleEngine,
+                               const PhosphorEngine::MembershipReconcileResult& result);
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
     /// Last per-window tab-colour map relayed by relayScrollTabColorsForWindow

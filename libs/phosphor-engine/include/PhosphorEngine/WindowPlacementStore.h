@@ -403,6 +403,14 @@ public:
     /// occupies. Returns true when an entry was actually removed.
     bool forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop);
 
+    /// Drop @p removedDesktop from every slot's zonesByDesktop map and shift
+    /// the entries above it down by one, because Plasma renumbers x11
+    /// desktops when one in the middle is deleted. The persisted map has to
+    /// follow the same renumbering the engines apply to their live stores,
+    /// or a restart seeds a zone under a number that now belongs to another
+    /// desktop. Returns the number of records changed.
+    int renumberDesktopZones(int removedDesktop);
+
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId
     /// bucketing (e.g. virtual-screen id remap of freeGeometryByScreen keys). Does NOT
