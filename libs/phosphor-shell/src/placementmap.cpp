@@ -676,6 +676,12 @@ PlacementMap::PlacementMap(QObject* parent)
         setAvailable(false);
     });
 
+    connect(m_bus, &PlacementMapBus::geometryChanged, this, [this](const QString& screenId) {
+        for (PlacementMapScreen* screen : std::as_const(m_screens)) {
+            if (screen->screenId() == screenId)
+                screen->refreshGeometry();
+        }
+    });
     connect(m_bus, &PlacementMapBus::layoutChanged, this, [this](const QString& screenId) {
         for (PlacementMapScreen* s : std::as_const(m_screens)) {
             if (s->screenId() == screenId || screenId.isEmpty()) {

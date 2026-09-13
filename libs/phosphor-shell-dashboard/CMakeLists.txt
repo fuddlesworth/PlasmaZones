@@ -61,6 +61,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(_phosphor_dashboard_qml_files
+    qml/Phosphor/Dashboard/StageOverview.qml
     qml/Phosphor/Dashboard/Dashboard.qml
     qml/Phosphor/Dashboard/DesktopCell.qml
     qml/Phosphor/Dashboard/CalendarCell.qml
@@ -103,6 +104,8 @@ qt_add_qml_module(PhosphorShellDashboardQml
         src/phosphorshelldashboard_qml_plugin.cpp
         src/shortcutcatalog.h
         src/shortcutcatalog.cpp
+        src/desktopstage.h
+        src/desktopstage.cpp
     QML_FILES ${_phosphor_dashboard_qml_files} ${_phosphor_dashboard_js_files}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Dashboard
 )

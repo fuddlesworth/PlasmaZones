@@ -13,7 +13,8 @@
 namespace PhosphorTheme {
 QVariantMap AppearanceStore::defaults()
 {
-    return {{QStringLiteral("palette"), QStringLiteral("spectrum")},
+    return {{QStringLiteral("presentation"), QStringLiteral("navigator")},
+            {QStringLiteral("palette"), QStringLiteral("spectrum")},
             {QStringLiteral("material"), QStringLiteral("glass")},
             {QStringLiteral("edge"), QStringLiteral("top")},
             {QStringLiteral("density"), QStringLiteral("comfortable")},
@@ -56,6 +57,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
 {
     result = defaults();
     const QMap<QString, QStringList> enums{
+        {QStringLiteral("presentation"), {QStringLiteral("navigator"), QStringLiteral("stage")}},
         {QStringLiteral("palette"), {QStringLiteral("spectrum"), QStringLiteral("wallpaper"), QStringLiteral("ember")}},
         {QStringLiteral("material"), {QStringLiteral("glass"), QStringLiteral("solid"), QStringLiteral("light")}},
         {QStringLiteral("edge"), {QStringLiteral("top"), QStringLiteral("bottom")}},

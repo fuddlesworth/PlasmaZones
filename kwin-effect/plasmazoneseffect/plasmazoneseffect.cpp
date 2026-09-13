@@ -207,8 +207,8 @@ bool PlasmaZonesEffect::isActive() const
     // effect in the chain (the spring settling mid-fade dropped it, jumping
     // the corpse by the frozen offset). O(1); entries are bounded by corpse
     // lifetime (sole erase at windowDeleted).
-    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
+    return m_shellOverview->active() || m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations()
+        || !m_shaderManager.empty() || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
         || m_stripTransition.holdsCursorHide() || m_scrollTabPainter->hasAnyIndicators()
         || !m_scrollCorpseFreeze.isEmpty();

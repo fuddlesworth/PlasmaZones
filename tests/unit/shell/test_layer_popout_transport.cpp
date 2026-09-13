@@ -68,6 +68,7 @@ private Q_SLOTS:
     void barAnchorsPlaceTheHostBelowTheReservedBand();
     void barAnchorWithoutAProviderHangsFromTheScreenEdge();
     void bottomBarReservationReachesTheHost();
+    void fullScreenContentFillsTheOutput();
     void screenCenterAndCustomAnchorsMapToTheirPlacements();
     void reopeningWhileClosingRetiresTheDrainingSurface();
 
@@ -224,6 +225,25 @@ void TestLayerPopoutTransport::barAnchorsPlaceTheHostBelowTheReservedBand()
     QCOMPARE(host->property("placement").toString(), QStringLiteral("barCenter"));
     QCOMPARE(host->property("reservedTop").toInt(), 68);
 
+    transport.drain();
+}
+
+void TestLayerPopoutTransport::fullScreenContentFillsTheOutput()
+{
+    m_content->setData(
+        "import QtQuick\nItem { property bool fullScreen: true; implicitWidth: 800; implicitHeight: 600 }",
+        QUrl(QStringLiteral("qrc:/popout_test_content.qml")));
+    QVERIFY(m_content->isReady());
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    QVERIFY(!transport.openSurface(makeRequest()).isEmpty());
+    QQuickItem* host = lastHost();
+    QVERIFY(host);
+    host->setSize(QSizeF(800, 600));
+    auto* content = host->property("contentItem").value<QQuickItem*>();
+    QVERIFY(content);
+    QTRY_COMPARE(content->size(), QSizeF(800, 600));
+    QCOMPARE(content->parentItem()->position(), QPointF(0, 0));
     transport.drain();
 }
 

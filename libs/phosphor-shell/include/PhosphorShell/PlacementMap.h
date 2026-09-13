@@ -187,7 +187,7 @@ public:
     /// Re-read the mode for the current (screen, desktop, activity).
     void refreshMode();
     /// Re-read the work area.
-    void refreshGeometry();
+    Q_INVOKABLE void refreshGeometry();
     /// Occupancy (snapping) or focus (any mode) changed upstream.
     void occupancyChanged();
     /// A `windowsTileRequested` batch arrived; ignored unless it names us.

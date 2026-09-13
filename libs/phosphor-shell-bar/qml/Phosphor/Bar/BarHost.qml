@@ -36,6 +36,7 @@ PanelWindow {
     // Open when the map chip was long-pressed or right-clicked. Toggled
     // by the chip; closed by the pane's own close row or by the host's
     // pane opening.
+    signal overviewRequested
     property bool mapPaneOpen: false
     // Opened on its menu section (a right-click).
     property bool mapPaneMenuFocused: false
@@ -62,6 +63,10 @@ PanelWindow {
         target: panel._mapWidget
 
         function onExpandRequested(menu: bool): void {
+            if (Appearance.stage && !menu) {
+                panel.overviewRequested();
+                return;
+            }
             // One pane per screen: the host's pane wins while it is up.
             if (panel.paneOpen)
                 return;

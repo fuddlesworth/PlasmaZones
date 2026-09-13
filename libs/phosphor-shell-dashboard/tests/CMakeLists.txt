@@ -39,3 +39,8 @@ add_test(
 phosphor_apply_test_isolation(test_phosphor_shell_dashboard)
 set_property(TEST test_phosphor_shell_dashboard APPEND PROPERTY LABELS "phosphorshelldashboard")
 phosphor_append_test_environment(test_phosphor_shell_dashboard "QT_QPA_PLATFORM=offscreen")
+
+add_executable(test_desktopstage test_desktopstage.cpp ../src/desktopstage.cpp)
+target_link_libraries(test_desktopstage PRIVATE Qt6::Test Qt6::Qml Qt6::DBus)
+add_test(NAME test_desktopstage COMMAND test_desktopstage)
+phosphor_apply_test_isolation(test_desktopstage)

@@ -40,6 +40,7 @@
 // this block sits with the other project includes rather than after the Qt /
 // KDE ones (own header → project → KDE → Qt).
 #include "effect_state.h"
+#include "compositor/shelloverview.h"
 #include "shader_resolve.h"
 #include "types.h"
 
@@ -3028,6 +3029,7 @@ private:
     void warmUserTextureAsync(const QString& absolutePath);
 
     std::unique_ptr<DragTracker> m_dragTracker;
+    std::unique_ptr<ShellOverview> m_shellOverview;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
     /// The single owner of server-side decoration (title-bar) state. Every
     /// hide/restore goes through its owner model — handlers and the rule

@@ -75,6 +75,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_desktopTransition(this)
     , m_stripTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
+    , m_shellOverview(std::make_unique<ShellOverview>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {

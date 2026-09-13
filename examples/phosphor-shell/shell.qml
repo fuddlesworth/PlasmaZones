@@ -168,6 +168,7 @@ Item {
             // The bar is the only thing that can locate the pane (a
             // Wayland client is never told where its toplevel went), so it
             // reports the frame back for the pane's own top band.
+            onOverviewRequested: root.toggleDashboard(bar.screen)
             onPaneScreenRectChanged: ControlCenterRegistry.reportPaneRect(bar.paneScreenRect)
             // And where the chip itself is, so the pane lands in the zone
             // nearest it (A2 §4.2).
@@ -874,6 +875,10 @@ Item {
         function show(): void {
             root.toggleWidgetPanel("appearance", null);
         }
+        function presentation(name: string): bool {
+            return AppearanceStore.setValue("presentation", name);
+        }
+
         function preset(name: string): bool {
             return AppearanceStore.applyPreset(name);
         }
@@ -1177,28 +1182,30 @@ Item {
     Component {
         id: dashboardComponent
 
-        Dashboard {
+        StageOverview {
             implicitWidth: Screen.width
             implicitHeight: Screen.height
             screenName: Screen.name
             workspaces: Workspaces
             mapFor: index => Screen.name ? PlacementMap.forScreenDesktop(Screen.name, index) : null
-            media: DashboardMedia
             open: true
             onCloseRequested: open = false
             onReleased: Popouts.close(Popouts.handleFor("dashboard"))
         }
     }
 
-    function toggleDashboard(): void {
-        Popouts.toggle({
+    function toggleDashboard(target = null): void {
+        const request = {
             "popoutId": "dashboard",
             "content": dashboardComponent,
             "anchor": PhosphorPopout.Anchor.ScreenCenter,
             "exclusive": PhosphorPopout.ExclusiveMode.Modal,
             "keyboardFocus": true,
             "dismissOnFocusLoss": true
-        });
+        };
+        if (target)
+            request.targetScreen = target;
+        Popouts.toggle(request);
     }
 
     // The dashboard's wire surface: `phosphorctl call dashboard.toggle`

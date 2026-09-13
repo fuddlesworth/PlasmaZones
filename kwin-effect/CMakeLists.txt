@@ -153,6 +153,8 @@ set(plasmazones_effect_SRCS
     compositor/scrolltabindicatorpainter.cpp
     compositor/scrolltabindicatorpainter_raster.cpp
     compositor/scrolltabindicatorpainter.h
+    compositor/shelloverview.cpp
+    compositor/shelloverview.h
     compositor/compositorclock.cpp
     compositor/compositorclock.h
     compositor/deferredwindowcommits.h

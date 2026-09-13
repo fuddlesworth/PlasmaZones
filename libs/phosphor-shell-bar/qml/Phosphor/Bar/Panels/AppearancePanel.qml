@@ -41,6 +41,12 @@ PanelFrame {
     Repeater {
         model: [
             {
+                key: "presentation",
+                label: qsTr("Overview"),
+                names: [qsTr("Navigator"), qsTr("Stage")],
+                values: ["navigator", "stage"]
+            },
+            {
                 key: "palette",
                 label: qsTr("Palette"),
                 names: [qsTr("Spectrum"), qsTr("Wallpaper"), qsTr("Ember")],

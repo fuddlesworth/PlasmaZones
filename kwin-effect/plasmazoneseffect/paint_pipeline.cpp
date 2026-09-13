@@ -55,6 +55,8 @@ using ShaderInternal::shaderClockNowMs;
 
 bool PlasmaZonesEffect::blocksDirectScanout() const
 {
+    if (m_shellOverview->active())
+        return true;
     // Crop mode only: with scrollingCropStraddlers on, partial edge columns
     // keep their TRUE rects and the per-output cull in paintWindow is what
     // crops the overhang off the neighbouring monitor. That cull exists only
@@ -142,6 +144,8 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
+    if (m_shellOverview->onOutput(data.screen))
+        data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     // KWin 6.7 no longer passes a presentTime; sample the steady clock
     // ourselves. CompositorClock's epoch is steady_clock by contract, so a
     // current-time sample is the correct (and only available) source — KWin's
@@ -523,6 +527,10 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                     int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
+    if (m_shellOverview->onOutput(screen)) {
+        KWin::effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+        return;
+    }
     // GL-current point reached on every pass the effect takes part in,
     // including the transition-owned ones below: textures retired by a strip
     // that went away are deleted here. The clear sites drain too (under a
@@ -1162,6 +1170,11 @@ void PlasmaZonesEffect::postPaintScreen()
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
+    if (m_shellOverview->appliesTo(w)) {
+        data.setTransformed();
+        KWin::effects->prePaintWindow(view, w, data);
+        return;
+    }
     // Derived ONCE. This runs per window, per output, per frame, and the three
     // branches below (padded transform, SetOpacity, chain translucency) each used to
     // re-derive the id and re-look-up the same decoration entry.
@@ -1397,6 +1410,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
+    if (m_shellOverview->appliesTo(w)) {
+        m_shellOverview->transform(w, data);
+        KWin::effects->paintWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED, deviceRegion, data);
+        return;
+    }
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
     // across it). In default clamp mode the engine clamps BOTH edges

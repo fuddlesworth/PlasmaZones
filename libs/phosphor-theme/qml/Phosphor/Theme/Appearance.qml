@@ -5,6 +5,7 @@ import QtQuick
 
 QtObject {
     readonly property var settings: AppearanceStore.values
+    readonly property bool stage: settings.presentation === "stage"
     readonly property bool light: settings.material === "light"
     readonly property bool compact: settings.density === "compact"
     readonly property bool bottom: settings.edge === "bottom"
