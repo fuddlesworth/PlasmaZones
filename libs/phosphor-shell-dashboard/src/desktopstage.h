@@ -24,6 +24,7 @@ Q_SIGNALS:
 
 private:
     void setActive(bool active);
+    const QString m_token;
     bool m_active = false;
     bool m_requested = false;
     int m_generation = 0;

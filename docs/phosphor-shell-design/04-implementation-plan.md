@@ -3,6 +3,66 @@
 
 # 04: Implementation Record
 
+## Floating-shell redesign (mockups-v3)
+
+The approved direction is implemented in six phases. Each implementation
+phase was built and checked with its affected suites and the isolated nested
+harness. The final phase runs the entire suite against the completed tree.
+
+| Phase | Commit | Result |
+|---|---|---|
+| 1. Shared appearance and everyday panels | `11b8cfc04` | Floating materials, Phosphor/Paper/Ember, appearance persistence, connection rows, service-backed media visualization and calendar. |
+| 2. Bounded Navigator | `2629bf5d8` | Complete window navigation for snapping, tiling and scrolling; readable fixed cards; constant-size bar mini with offscreen counts. |
+| 3. Stage | `ce3e82053` | Full-screen workspace overview, inspector and real desktop transform with a map fallback. |
+| 4. Shelf and surface consistency | `92c125542` | Three-column quick settings with narrow-screen reflow; launcher, notifications, OSD, power, picker, lock and polkit adopt the selected palette/material. |
+| 5. Customization | `9693f02e8` | Saved widget regions/order/visibility, overflow controls, configurable fonts, preserved preferences across presets and live settings without source reloads. |
+| 6. Regression and handoff | This final phase | Full build/test pass, final nested checks and updated design records. |
+
+### Final result
+
+`cmake --build build --parallel 8` succeeds. The completed tree passes
+`dbus-run-session -- ctest --test-dir build --output-on-failure --parallel 4`:
+538 tests registered, 537 passed and the existing
+`test_surface_decoration_orientation` skipped. No tests failed.
+
+The final native pass includes reduced motion, rapid overview replacement
+and return to the normal desktop. Each Stage instance carries an ownership
+token, so a previous popup's late destructor cannot restore the replacement's
+preview. The narrow quick-settings scrollbar has a separate gutter.
+
+### Validation coverage
+
+- Scrolling was exercised with twenty real nested windows; Stage used four live tiling windows.
+  Parser and QML tests cover hidden columns, minimized windows, inactive
+  tabs, deletion, keyboard selection and all three placement modes.
+- Stage's compositor transform was captured from the visible nested window,
+  including a portrait output. A headless capture separately verified the
+  map fallback. Tests cover full-screen geometry, selection versus activation,
+  asynchronous begin/hide races and compositor-client lifetime.
+- The vertical settings panel was checked at 800×600 and the wide shelf at
+  1440×900. Connection rows, calendar and all three materials were captured.
+  The shelf test preserves control instances and values while reflowing.
+- Media was exercised with a controlled MPRIS player and a real CAVA process.
+  Provider tests cover visibility/playback gating and sanitized samples.
+- Appearance tests cover atomic persistence and import/export, invalid input,
+  layout/font preservation across presets and widget reordering. The editor
+  click test covers the saved result and immediate UI update. Live font and
+  widget commands keep the settings panel open.
+- Source-watcher tests distinguish appearance saves, identical atomic source
+  replacement, subsequent direct edits and changed atomic source replacement.
+
+The nested session does not verify physical Wi-Fi/Bluetooth connections,
+real audio output or backlight changes, host power actions, session locking,
+seat-owned authentication or physical gesture input. Their existing service
+contracts and UI behavior have automated coverage. No host power action was
+invoked. Calendar appointments and weather remain separate service features;
+the redesign does not supply fictional data for them.
+
+## Historical spectrum implementation (mockups-v2)
+
+The following record describes the preceding design. Its visual rules are
+superseded by `05-visual-identity.md` and `mockups-v3/`.
+
 How the spectrum identity (`05-visual-identity.md`, `identity/A1` to `A4`)
 was applied to the shell, phase by phase, with what each phase proved live
 and what it could not. The library and service groundwork that preceded it
@@ -86,7 +146,7 @@ rewritten for the shell that exists.
 | Packs on the bar band, the OSD band, the toast card, the launcher, the picker strip | |
 | The gestures capability from the rebuilt effect | |
 
-## What is next
+## Historical follow-ups
 
 See `02-gap-analysis.md`. The first three items there (compositor-drawn
 chrome packs, touchpad gesture progress, bundled faces) are the ones that
@@ -99,5 +159,5 @@ extend the identity; the surface gaps are ordinary feature work.
   binary, a stale effect binary).
 - When a scripted edit lands, check `git status` before building. One batch
   of effect edits was accepted by the tooling and never reached the tree.
-- The mockups in `mockups-v2/` are the reference. If the lived design
+- For that historical implementation, `mockups-v2/` was the reference. If the lived design
   deviates, update them or note the deviation in their README.

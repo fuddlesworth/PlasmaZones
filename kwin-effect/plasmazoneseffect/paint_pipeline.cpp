@@ -57,35 +57,15 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
 {
     if (m_shellOverview->active())
         return true;
-    // Crop mode only: with scrollingCropStraddlers on, partial edge columns
-    // keep their TRUE rects and the per-output cull in paintWindow is what
-    // crops the overhang off the neighbouring monitor. That cull exists only
-    // in the GL composite path — a surface presented directly on a hardware
-    // plane bypasses the effect chain, which is exactly how the overhang
-    // leaked when cropping was the default. Forcing composition while any
-    // scrolling screen exists is the price of crop mode; the default clamp
-    // mode costs nothing here because its clip is the committed geometry
-    // itself.
-    // Known enable-order gap, deliberately unfixed: the engine flips to true
-    // rects synchronously on the settings change while this cached flag
-    // arrives over an async D-Bus read. The exposure is NOT bounded by the
-    // retile debounce — applyLayout also runs synchronously from window
-    // lifecycle and float events, so any open/close/float landing inside the
-    // reply latency (one getSetting queued behind loadCachedSettings' whole
-    // burst) commits overhang with scanout still permitted. Closing it needs
-    // an effect-side ack the settings path does not have; crop is off by
-    // default and the flip is an explicit user action, so the window is
-    // accepted rather than engineered away.
-    // Either the daemon has resolved at least one screen to cropping (the
-    // per-context SetScrollCropStraddlers rule folded with the setting), or
-    // the map has not arrived yet and the global setting says crop. The
-    // fallback is SEEDED-GATED, not a plain OR: an empty resolved map is
-    // ambiguous on its own — "no screen crops" and "no reply yet" look
-    // identical — and while the fallback applied to both, a rule resolving
-    // every screen to false could never hand direct scanout back while the
-    // global setting stayed on. Gating on the seeded flag keeps the bring-up
-    // window no worse than the old global-flag test while making the resolved
-    // map authoritative the moment it exists.
+    // Crop mode needs the composite path: direct scanout would bypass the
+    // per-output cull and expose a column's overhang on the next monitor.
+    // Clamp mode commits the clipped geometry and needs no scanout block.
+    // The resolved per-context crop map is authoritative once seeded. Before
+    // its first reply, use the cached global setting; an empty seeded map
+    // means no output crops, even when the global setting is still enabled.
+    // Enable-order caveat: the engine can commit true rects synchronously
+    // before this async cache updates, including during a lifecycle retile.
+    // An effect-side acknowledgement would be needed to close that interval.
     if (m_tilingHandler->hasScrollingScreens()
         && (m_tilingHandler->anyScreenCropsStraddlers()
             || (!m_tilingHandler->scrollEffectBehaviourSeeded() && m_cachedScrollCropStraddlers))) {

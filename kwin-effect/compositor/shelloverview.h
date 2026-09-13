@@ -28,8 +28,9 @@ public:
     bool appliesTo(KWin::EffectWindow* window) const;
     void transform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 public Q_SLOTS:
-    bool begin(const QString& screen, double x, double y, double width, double height, bool animate);
-    void end();
+    bool begin(const QString& screen, double x, double y, double width, double height, bool animate,
+               const QString& token);
+    void end(const QString& token);
 
 private:
     void restore();
@@ -37,6 +38,7 @@ private:
     QPointer<KWin::LogicalOutput> m_output;
     QDBusServiceWatcher m_ownerWatcher;
     QString m_owner;
+    QString m_token;
     QVariantAnimation m_animation;
     QRectF m_rect;
     bool m_closing = false;

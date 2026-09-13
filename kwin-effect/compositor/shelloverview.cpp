@@ -56,8 +56,11 @@ bool ShellOverview::appliesTo(KWin::EffectWindow* window) const
         && !window->windowClass().contains(QLatin1String("phosphor-shell"))
         && !window->windowClass().contains(QLatin1String("plasmazones"));
 }
-bool ShellOverview::begin(const QString& screen, double x, double y, double width, double height, bool animate)
+bool ShellOverview::begin(const QString& screen, double x, double y, double width, double height, bool animate,
+                          const QString& token)
 {
+    if (token.isEmpty() || token.size() > 128)
+        return false;
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) || x < 0 || y < 0
         || width < 0.2 || height < 0.2 || x + width > 1 || y + height > 1)
         return false;
@@ -77,6 +80,7 @@ bool ShellOverview::begin(const QString& screen, double x, double y, double widt
     }
     m_output = output;
     m_owner = owner;
+    m_token = token;
     m_ownerWatcher.setWatchedServices(owner.isEmpty() ? QStringList() : QStringList{owner});
     m_closing = false;
     KWin::effects->setActiveFullScreenEffect(m_effect);
@@ -88,9 +92,9 @@ bool ShellOverview::begin(const QString& screen, double x, double y, double widt
     KWin::effects->addRepaintFull();
     return true;
 }
-void ShellOverview::end()
+void ShellOverview::end(const QString& token)
 {
-    if (!active() || (calledFromDBus() && message().service() != m_owner))
+    if (!active() || token != m_token || (calledFromDBus() && message().service() != m_owner))
         return;
     m_closing = true;
     m_animation.stop();
@@ -103,6 +107,7 @@ void ShellOverview::restore()
     m_animation.stop();
     m_output.clear();
     m_owner.clear();
+    m_token.clear();
     m_ownerWatcher.setWatchedServices({});
     m_closing = false;
     if (KWin::effects->activeFullScreenEffect() == m_effect)

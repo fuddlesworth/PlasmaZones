@@ -5,9 +5,9 @@
 # One-command phosphor-shell harness: a nested kwin_wayland session with
 # the BUILD-TREE shell running inside it, drivable over the shell's own
 # IPC socket and screenshot-able for eyes-free (AI) test loops. No
-# install, no logout, and nothing touches the live session — the power
-# menu's logind actions act on the NESTED session's scope, so clicking
-# Suspend in here does not suspend the machine you are sitting at.
+# install or logout. Configuration and shell IPC are isolated. Hardware
+# services and logind power actions still reach the host: use service
+# fixtures when testing actions such as suspend, reboot or shutdown.
 #
 # Usage:
 #   scripts/nested-shell/run-shell.sh [output-count] [width height] [scale]

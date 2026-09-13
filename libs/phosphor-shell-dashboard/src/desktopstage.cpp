@@ -6,6 +6,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
+#include <QUuid>
 namespace PhosphorShellDashboard {
 namespace {
 QDBusMessage request(const QString& method)
@@ -16,6 +17,7 @@ QDBusMessage request(const QString& method)
 }
 DesktopStage::DesktopStage(QObject* parent)
     : QObject(parent)
+    , m_token(QUuid::createUuid().toString())
 {
     auto* watcher = new QDBusServiceWatcher(QStringLiteral("org.kde.KWin"), QDBusConnection::sessionBus(),
                                             QDBusServiceWatcher::WatchForUnregistration, this);
@@ -43,7 +45,7 @@ void DesktopStage::show(const QString& screen, const QRectF& rect, bool animate)
     m_requested = true;
     const int generation = ++m_generation;
     auto call = request(QStringLiteral("begin"));
-    call.setArguments({screen, rect.x(), rect.y(), rect.width(), rect.height(), animate});
+    call.setArguments({screen, rect.x(), rect.y(), rect.width(), rect.height(), animate, m_token});
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* result) {
         const QDBusPendingReply<bool> reply = *result;
@@ -55,8 +57,14 @@ void DesktopStage::show(const QString& screen, const QRectF& rect, bool animate)
 void DesktopStage::hide()
 {
     ++m_generation;
-    if (m_requested)
-        QDBusConnection::sessionBus().asyncCall(request(QStringLiteral("end")));
+    if (m_requested) {
+        // Closing surfaces can outlive their replacement during an exit
+        // animation. A token keeps their late destructor from closing the
+        // new preview on the process's shared D-Bus connection.
+        auto call = request(QStringLiteral("end"));
+        call.setArguments({m_token});
+        QDBusConnection::sessionBus().asyncCall(call);
+    }
     m_requested = false;
     setActive(false);
 }

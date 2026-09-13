@@ -3,6 +3,7 @@
 #include "../src/desktopstage.h"
 #include <QDBusConnection>
 #include <QTest>
+#include <memory>
 using PhosphorShellDashboard::DesktopStage;
 class Compositor : public QObject
 {
@@ -11,18 +12,23 @@ class Compositor : public QObject
 public:
     QRectF lastRect;
     QString lastScreen;
+    QString lastToken;
+    QString endedToken;
     bool opened = false;
 public Q_SLOTS:
-    bool begin(const QString& screen, double x, double y, double width, double height, bool)
+    bool begin(const QString& screen, double x, double y, double width, double height, bool, const QString& token)
     {
         lastScreen = screen;
+        lastToken = token;
         lastRect = QRectF(x, y, width, height);
         opened = true;
         return true;
     }
-    void end()
+    void end(const QString& token)
     {
-        opened = false;
+        endedToken = token;
+        if (token == lastToken)
+            opened = false;
     }
 };
 class TestDesktopStage : public QObject
@@ -51,6 +57,22 @@ private Q_SLOTS:
             QVERIFY(!compositor.opened);
             stage.show(QStringLiteral("test-output"), QRectF(0.2, 0.15, 0.5, 0.5), false);
             QTRY_VERIFY(stage.active());
+        }
+        QTRY_VERIFY(!compositor.opened);
+        {
+            auto oldStage = std::make_unique<DesktopStage>();
+            oldStage->show(QStringLiteral("test-output"), QRectF(0.2, 0.15, 0.5, 0.5), false);
+            QTRY_VERIFY(oldStage->active());
+            const auto oldToken = compositor.lastToken;
+            QVERIFY(!oldToken.isEmpty());
+            DesktopStage replacement;
+            replacement.show(QStringLiteral("test-output"), QRectF(0.2, 0.15, 0.5, 0.5), false);
+            QTRY_VERIFY(replacement.active());
+            QVERIFY(compositor.lastToken != oldToken);
+            oldStage.reset();
+            QTRY_COMPARE(compositor.endedToken, oldToken);
+            QVERIFY(compositor.opened);
+            QVERIFY(replacement.active());
         }
         QTRY_VERIFY(!compositor.opened);
         bus.unregisterObject(QStringLiteral("/PlasmaZones/ShellOverview"));

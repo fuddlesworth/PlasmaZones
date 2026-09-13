@@ -826,32 +826,12 @@ Item {
                 // (barcontroller.cpp), not the IPC target name below.
                 root.toggleControlCenter(source);
             else
-                // Everything else, the clock included, opens its transient
-                // under the chip. The clock used to open the DASHBOARD,
-                // which is the every-desktop overview with a calendar cell
-                // in its last row: a full-screen takeover to read a date.
-                // The dashboard keeps its cell and its own gesture; the
-                // clock gets CalendarPanel (A2 §5, A3 §7).
+                // Date and service panels open from their own bar control.
                 root.toggleWidgetPanel(id, source);
         }
     }
 
-    // The wire surface, per the mockup's `phosphorctl call power.show`. The
-    // bar button is one way in; this is the one a compositor keybind uses,
-    // which is how Ctrl+Alt+Del reaches the menu without the shell claiming a
-    // global shortcut of its own.
-    //
-    // `show` and `toggle` are separate because a method named show that hides
-    // on the second call is a trap for anything scripting it. Bind a key to
-    // toggle; call show from a script that wants the menu up regardless.
-    // No hide() on this one, unlike the control center and the launcher.
-    // The power menu is Modal and its own toggle() is the way back out,
-    // so a caller that wants it gone calls that. A hide() would give two
-    // ways to close one surface whose open state is already single-valued.
-    // `phosphorctl call bar.activate --arg id=power`: press a bar button as
-    // a pointer would, with the button itself as the source, so whatever it
-    // opens lands where a click would put it. For a keybind, and for the
-    // nested harness, which cannot inject pointer input.
+    // Typed commands also drive the nested harness through its private socket.
     IpcTarget {
         target: "appearance"
         function show(): void {
@@ -1158,23 +1138,8 @@ Item {
         }
     }
 
-    // The dashboard (A3 §7): every desktop's placement map at once, a
-    // screen-filling Modal popout like the power menu (Exclusive keyboard
-    // focus, so Escape and the digit keys land; it closes the launcher and
-    // the control center through the controller's arbitration). A popout
-    // rather than an always-mounted overlay because a PanelWindow's
-    // keyboard interactivity is read once at materialization, and an
-    // always-mapped Exclusive surface would hold the keyboard forever.
-    // It lands on ONE output (the transport's target), not every output.
-    //
-    // Built fresh per open against the root context, so everything it
-    // reads is a singleton, an attached property or a context property:
-    // Workspaces and PlacementMap (Phosphor.Shell), Screen, and
-    // DashboardMedia (the MprisHost src/shell/main.cpp installs).
-    //
-    // Close runs in two steps so the release scale plays: closeRequested
-    // (Escape, a click, a desktop chosen) flips `open`, and `released`
-    // fires when the scale has run, which is when the popout goes.
+    // Stage owns one output while its modal popout is open. Release the
+    // native transform before the closing surface leaves the controller.
     Component {
         id: dashboardComponent
 

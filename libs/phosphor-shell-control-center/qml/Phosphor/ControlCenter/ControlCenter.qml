@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Controls.Basic as Basic
 import Phosphor.Theme
 import Phosphor.Widgets
 
@@ -235,12 +236,17 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
         visible: priv.detailTileId === ""
-        ScrollBar.vertical: ScrollBar {
+        Basic.ScrollBar.vertical: Basic.ScrollBar {
             active: scroller.interactive
+            contentItem: Rectangle {
+                implicitWidth: 4
+                radius: 2
+                color: Appearance.muted
+            }
         }
         ColumnLayout {
             id: main
-            width: scroller.width
+            width: Math.max(0, scroller.width - (scroller.interactive ? 8 : 0))
             spacing: 14
             visible: priv.detailTileId === ""
             RowLayout {

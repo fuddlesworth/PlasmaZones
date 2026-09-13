@@ -3031,12 +3031,9 @@ private:
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ShellOverview> m_shellOverview;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
-    /// The single owner of server-side decoration (title-bar) state. Every
-    /// hide/restore goes through its owner model — handlers and the rule
-    /// layer must never call KWin::Window::setNoBorder directly. Reached
-    /// through this member from inside the effect's own TUs (the handlers are
-    /// friends); there is deliberately no public accessor, so no code outside
-    /// that boundary can acquire the manager and drive it directly.
+    /// Owns title-bar hide/restore state. Effect handlers and rules use this
+    /// owner model, never KWin::Window::setNoBorder directly. No public
+    /// accessor exposes the manager outside the effect and its friends.
     std::unique_ptr<DecorationManager> m_decorationManager;
 
     // Keyboard modifiers from KWin's input system
