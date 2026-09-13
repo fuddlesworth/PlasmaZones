@@ -885,15 +885,6 @@ Item {
         }
     }
 
-    // Scripted notifications follow the same arrival/history lifecycle as D-Bus.
-    IpcTarget {
-        target: "notify"
-
-        function send(summary: string, body: string): int {
-            return NotificationRegistry.send(summary, body);
-        }
-    }
-
     // The launcher's wire surface, per the mockup's
     // `phosphorctl call launcher.toggle`. Argument-free, the form a
     // compositor keybind uses (Meta / Alt+Space bound to

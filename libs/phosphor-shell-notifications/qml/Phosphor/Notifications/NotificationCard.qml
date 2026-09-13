@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import QtQuick
+import QtQuick.Window
+import QtQuick.Effects
 import QtQuick.Controls
 import QtQuick.Layouts
 import Phosphor.Theme
@@ -223,6 +225,14 @@ FocusScope {
             color: Appearance.recess
             border.color: Appearance.outline
             clip: true
+            Rectangle {
+                id: imageMask
+                anchors.fill: parent
+                radius: parent.radius
+                color: "white"
+                visible: false
+                layer.enabled: true
+            }
             Image {
                 id: attachment
                 objectName: "notificationAttachment"
@@ -231,6 +241,11 @@ FocusScope {
                 source: root.previews ? root.notification.imageSource || "" : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: false
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: imageMask
+                }
                 Accessible.role: Accessible.Graphic
                 Accessible.name: root.previews ? qsTr("Notification image") : ""
                 Accessible.ignored: !root.previews
@@ -269,7 +284,7 @@ FocusScope {
                                 if (root.replying)
                                     replyInput.forceActiveFocus();
                             } else if (root.backend)
-                                root.backend.invokeAction(root.notification.id, modelData.key);
+                                root.backend.activate(root.notification.id, modelData.key, root.Window.window);
                         }
                     }
                 }

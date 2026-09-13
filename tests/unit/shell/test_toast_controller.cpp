@@ -26,6 +26,7 @@ private Q_SLOTS:
     void sendWithNoHostFails();
     void deadHostsAreDropped();
     void reattachUpdatesTheFlags();
+    void richPayloadAndLifecycleReachTheHost();
 };
 
 namespace {
@@ -39,6 +40,20 @@ public:
     QVariantMap lastToast;
     int calls = 0;
     int nextId = 7;
+    uint removed = 0;
+    bool cleared = false;
+    Q_INVOKABLE void updateNotification(const QVariant& value)
+    {
+        lastToast = value.toMap();
+    }
+    Q_INVOKABLE void dismiss(const QVariant& id)
+    {
+        removed = id.toUInt();
+    }
+    Q_INVOKABLE void clear()
+    {
+        cleared = true;
+    }
 
     Q_INVOKABLE QVariant show(const QVariant& toast)
     {
@@ -119,6 +134,29 @@ void TestToastController::reattachUpdatesTheFlags()
     controller.send(QStringLiteral("Hi"), QString());
     QCOMPARE(a.calls, 0);
     QCOMPARE(b.calls, 1);
+}
+
+void TestToastController::richPayloadAndLifecycleReachTheHost()
+{
+    ToastController controller;
+    FakeHost host;
+    controller.attachHost(&host, QStringLiteral("DP-1"), true);
+    QVariantMap payload{
+        {QStringLiteral("id"), 42},
+        {QStringLiteral("appIcon"), QStringLiteral("mail-message")},
+        {QStringLiteral("imageSource"), QStringLiteral("image://test/picture")},
+        {QStringLiteral("urgency"), 2},
+        {QStringLiteral("body"), QString(2048, QLatin1Char('x'))},
+        {QStringLiteral("actions"), QVariantList{QVariantMap{{QStringLiteral("key"), QStringLiteral("open")}}}}};
+    controller.show(payload);
+    QCOMPARE(host.lastToast, payload);
+    payload[QStringLiteral("body")] = QStringLiteral("Updated");
+    controller.update(payload);
+    QCOMPARE(host.lastToast, payload);
+    controller.remove(42);
+    QCOMPARE(host.removed, 42u);
+    controller.clear();
+    QVERIFY(host.cleared);
 }
 
 QTEST_MAIN(TestToastController)

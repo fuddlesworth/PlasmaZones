@@ -11,6 +11,19 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void notificationPreferencesSurvivePresetAndReload()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QVERIFY(store.setValue(QStringLiteral("notificationGrouping"), QStringLiteral("time")));
+        QVERIFY(store.setValue(QStringLiteral("notificationPreviews"), false));
+        QVERIFY(!store.setValue(QStringLiteral("notificationGrouping"), QStringLiteral("invalid")));
+        QVERIFY(store.applyPreset(QStringLiteral("ember")));
+        AppearanceStore loaded(path);
+        QCOMPARE(loaded.values().value(QStringLiteral("notificationGrouping")).toString(), QStringLiteral("time"));
+        QCOMPARE(loaded.values().value(QStringLiteral("notificationPreviews")).toBool(), false);
+    }
     void sharedPalettePreservesApprovedColors()
     {
         QTemporaryDir dir;

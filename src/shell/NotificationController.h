@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QSet>
 #include <QVariantMap>
+#include <QWindow>
 #include <memory>
 
 namespace PhosphorServiceNotifications {
@@ -70,6 +71,7 @@ public:
     Q_INVOKABLE void clearGroup(const QString& key);
     Q_INVOKABLE void undoClear();
     Q_INVOKABLE void invokeAction(uint id, const QString& actionKey, const QString& activationToken = QString());
+    Q_INVOKABLE void activate(uint id, const QString& actionKey, QWindow* window);
     Q_INVOKABLE bool reply(uint id, const QString& text);
     Q_INVOKABLE void setExpiryPaused(uint id, bool paused);
     Q_INVOKABLE void markRead(uint id);

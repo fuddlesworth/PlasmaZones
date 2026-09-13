@@ -2443,6 +2443,10 @@ if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
             PhosphorServiceNotifications::PhosphorServiceNotifications
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
     )
+    if(TARGET KF6::WindowSystem)
+        target_link_libraries(test_notification_controller PRIVATE KF6::WindowSystem)
+        target_compile_definitions(test_notification_controller PRIVATE PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM)
+    endif()
     target_include_directories(test_notification_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
     add_test(NAME test_notification_controller COMMAND test_notification_controller)
 endif()

@@ -20,10 +20,24 @@ mark-as-read, DND, clear/undo and empty states. Appearance controls app/time
 grouping and preview privacy across both surfaces. Opening the center, DND and
 session locking suppress arrival popups. The default bar includes the inbox.
 
-Data/service phase: `fc2c9bda0`. Native surface phase: this commit. Native KWin
+Data/service phase: `fc2c9bda0`. Native surface phase: `e826322e8`. Native KWin
 checks cover grouped history and real D-Bus pictures, expansion and reply input;
 unit coverage includes retention, replacement, unread bounds, undo with newer
 arrivals, action validation, expiry pause, rich rendering and preview privacy.
+
+Final integration adds Wayland activation tokens ahead of app actions, rounded
+attachment images, compositor blur on arrival surfaces, and `notify.toggle` /
+`notify.hide` shortcuts. The reusable nested fixture at
+`scripts/nested-shell/notification-fixture.py` supports rich messages, replacement,
+expiry, bursts, actions and reply observation on the private session bus.
+
+Validation: the build succeeds and all 541 CTest targets pass (540 executed, the
+existing decoration-orientation target skipped). Native captures cover Phosphor,
+Paper, Ember with its bottom bar, and Stage. Native input verifies inline replies
+reach their originating client while a second observer receives no reply text;
+activation emits its token before the action; expanded messages pause expiry and
+opening the center resumes it; a 60-arrival burst retains 50 entries; mark-all-read
+updates the unread filter; and Undo keeps the notification received after Clear.
 
 ## Mockup fidelity correction (mockups-v3)
 

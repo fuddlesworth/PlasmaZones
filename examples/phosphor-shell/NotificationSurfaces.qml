@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Window
 import Phosphor.Shell
+import Phosphor.Ipc
 import Phosphor.Notifications
 import Phosphor.Theme
 
@@ -11,6 +12,19 @@ Item {
     property bool locked: false
     property bool centerOpen: false
     signal openCenterRequested
+    // Scripted notifications and bar shortcuts share the D-Bus lifecycle.
+    IpcTarget {
+        target: "notify"
+        function send(summary: string, body: string): int {
+            return NotificationRegistry.send(summary, body);
+        }
+        function toggle(): void {
+            root.openCenterRequested();
+        }
+        function hide(): void {
+            Popouts.close(Popouts.handleFor("bar.panel.notification"));
+        }
+    }
     Binding {
         target: NotificationRegistry
         property: "popupsSuppressed"
@@ -42,13 +56,24 @@ Item {
                 id: host
                 anchors.fill: parent
                 backend: NotificationRegistry
+                property bool materialBlurred: Appearance.settings.material !== "solid"
+                function applyMaterial() {
+                    const region = materialBlurred && inputRects.length ? inputRects[0] : Qt.rect(0, 0, 0, 0);
+                    ShellEffects.setBlurBehind(host, region, Qt.rect(0, 0, 0, 0), Appearance.radius);
+                }
+                onInputRectsChanged: Qt.callLater(applyMaterial)
+                onMaterialBlurredChanged: Qt.callLater(applyMaterial)
+                Window.onWindowChanged: Qt.callLater(applyMaterial)
                 screenName: surface.screen ? surface.screen.name : ""
                 decoration: ShellChrome.decorationComponent
                 onOpenCenterRequested: root.openCenterRequested()
                 // Restore expiry when a hidden card loses its view, including
                 // center open, DND and output removal. Closed IDs are harmless.
                 onToastDismissed: id => NotificationRegistry.setExpiryPaused(id, false)
-                Component.onCompleted: ToastRegistry.attachHost(host, screenName, modelData.isPrimary)
+                Component.onCompleted: {
+                    ToastRegistry.attachHost(host, screenName, modelData.isPrimary);
+                    Qt.callLater(applyMaterial);
+                }
                 Component.onDestruction: {
                     clear();
                     ToastRegistry.detachHost(host);

@@ -7,6 +7,11 @@
 #include <PhosphorServiceIconTheme/IconImageProvider.h>
 #include <QCoreApplication>
 #include <QLocale>
+#include <QGuiApplication>
+#ifdef PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM
+#include <KWaylandExtras>
+#include <kwindowsystem_version.h>
+#endif
 #include <algorithm>
 
 using namespace PhosphorServiceNotifications;
@@ -298,6 +303,27 @@ void NotificationController::invokeAction(uint id, const QString& key, const QSt
         return;
     markRead(id);
     m_server->invokeAction(id, key, token);
+}
+void NotificationController::activate(uint id, const QString& key, QWindow* window)
+{
+    const int row = indexOf(id);
+    if (row < 0 || !m_entries[row].live)
+        return;
+#ifdef PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM
+#if KWINDOWSYSTEM_VERSION >= QT_VERSION_CHECK(6, 19, 0)
+    if (window && QGuiApplication::platformName().startsWith(QLatin1String("wayland"))) {
+        setExpiryPaused(id, true);
+        KWaylandExtras::xdgActivationToken(window, m_entries[row].appKey)
+            .then(this, [this, id, key](const QString& token) {
+                setExpiryPaused(id, false);
+                invokeAction(id, key, token);
+            });
+        return;
+    }
+#endif
+#endif
+    Q_UNUSED(window)
+    invokeAction(id, key);
 }
 bool NotificationController::reply(uint id, const QString& text)
 {
