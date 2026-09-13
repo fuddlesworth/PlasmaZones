@@ -46,15 +46,22 @@ BarWidget {
     signal expandRequested(bool menu)
     signal activated
 
-    readonly property int restHeight: Appearance.compact ? 22 : 26
+    readonly property int restHeight: Math.min(29, Appearance.barHeight - 20)
     readonly property int hoverHeight: root.restHeight
     readonly property real _aspect: root.map && root.map.aspect > 0 ? root.map.aspect : 16 / 9
     readonly property int _mapH: hover.hovered || root.expanded ? root.hoverHeight : root.restHeight
-    readonly property int _mapW: Math.round(Math.max(24, Math.min(56, root._mapH * root._aspect)))
+    readonly property int _mapW: Math.round(root._mapH * 66 / 29)
 
     available: root.map !== null
-    contentWidth: root._mapW + 12 + caption.width
-    contentHeight: root.restHeight + 4
+    contentWidth: root._mapW + 13 + caption.width + 20
+    contentHeight: Appearance.barHeight - 12
+
+    Rectangle {
+        anchors.fill: parent
+        radius: Appearance.compact ? 6 : 8
+        color: Appearance.recess
+        z: -1
+    }
 
     Accessible.role: Accessible.PageTabList
     Accessible.name: qsTr("Placement map")
@@ -75,16 +82,16 @@ BarWidget {
         id: mini
 
         anchors.left: parent.left
+        anchors.leftMargin: 10
         // Grows out of the band, never into the exclusive zone.
         anchors.top: parent.top
-        anchors.topMargin: (root.restHeight - root._mapH) / 2
+        anchors.topMargin: (root.contentHeight - root._mapH) / 2
         width: root._mapW
         height: root._mapH
         model: root.map
         interactive: true
         onCellClicked: id => {
-            if (root.map)
-                root.map.activate(id);
+            root.expandRequested(false);
         }
         onCellMoved: (fromId, toId) => {
             if (root.map)
@@ -210,45 +217,26 @@ BarWidget {
 
     Column {
         id: caption
-        x: root._mapW + 12
+        x: root._mapW + 23
         anchors.verticalCenter: parent.verticalCenter
-        width: 104
+        width: Math.max(workspaceLabel.implicitWidth, modeLabel.implicitWidth)
         spacing: 2
         Text {
-            text: qsTr("Workspace %1").arg(root.map ? root.map.currentDesktop + 1 : 1)
+            id: workspaceLabel
+            text: Shell.Workspaces.activeName || qsTr("Workspace %1").arg(root.map ? root.map.currentDesktop + 1 : 1)
             color: Appearance.text
             font.family: Tokens.font_family_ui
-            font.pixelSize: 11
+            font.pixelSize: Appearance.compact ? 9 : 10
         }
         Text {
+            id: modeLabel
             readonly property int offscreen: root.map ? root.map.overflowLeft + root.map.overflowRight : 0
             text: root.map && root.map.mode === 2 ? qsTr("Scrolling") + (offscreen > 0 ? "  +" + offscreen : "") : root.map && root.map.mode === 1 ? qsTr("Tiling") : root.map && root.map.mode === 0 ? qsTr("Snapping") : qsTr("Placement off")
             color: Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 10
+            font.pixelSize: Appearance.compact ? 9 : 10
         }
-        TapHandler {
-            onTapped: root.expandRequested(false)
-        }
-    }
-
-    // Desktop ticks: the only trace of the old dots, demoted to a ruler.
-    Row {
-        x: (root._mapW - width) / 2
-        anchors.top: parent.top
-        anchors.topMargin: root.restHeight + 1
-        spacing: 2
-
-        Repeater {
-            model: root.map ? root.map.desktopCount : 0
-            delegate: Rectangle {
-                required property int index
-                width: 2
-                height: 1
-                color: Spectrum.focus
-                opacity: root.map && index === root.map.currentDesktop ? 0.9 : 0.25
-            }
-        }
+        TapHandler {}
     }
 
     // A vertical delta of exactly 0 is a horizontal wheel or a touchpad

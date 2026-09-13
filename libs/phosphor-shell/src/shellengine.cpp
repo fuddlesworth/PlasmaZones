@@ -657,11 +657,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // Role::isValid REJECTS an Overlay that reserves or respects a
             // zone, and the factory refuses to create on an invalid role, so
             // every branch below would make an overlay panel fail outright.
-            // -1 is the only value an overlay can carry.
             // exclusiveZoneEnabled defaults to TRUE, so testing it alone
             // would warn for every overlay panel that never asked for
-            // anything. Warn only when a branch below would really have
-            // reserved a zone.
+            // anything. Warn only for a requested reservation.
             const bool wouldHaveReserved =
                 panel->exclusiveZone() >= 0 || (effectiveFill && panel->exclusiveZoneEnabled());
             if (wouldHaveReserved) {
@@ -669,6 +667,8 @@ bool ShellEngine::materializePanels(QString* failureReason)
                     << "PanelWindow asks for an exclusive zone on the Overlay layer, which cannot reserve one;"
                     << "ignoring the zone request";
             }
+            role = role.withExclusiveZone(-1);
+        } else if (panel->panelLayer() == PanelWindow::LayerBackground && !panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(-1);
         } else if (effectiveFill && panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(panel->thickness());

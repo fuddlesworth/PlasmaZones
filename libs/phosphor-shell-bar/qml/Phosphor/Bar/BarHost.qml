@@ -59,6 +59,13 @@ PanelWindow {
         return c && c.widget ? c.widget : null;
     }
 
+    Binding {
+        target: rightSlot.cellFor("clock")?.widget ?? centerSlot.cellFor("clock")?.widget ?? leftSlot.cellFor("clock")?.widget ?? null
+        property: "expanded"
+        value: BarRegistry.openPanelId === "clock"
+        when: target !== null
+    }
+
     Connections {
         target: panel._mapWidget
 
@@ -222,11 +229,13 @@ PanelWindow {
     ShellSurface {
         id: band
         property bool shaderAnchor: true
-        x: Appearance.gap
-        y: Appearance.bottom ? panel.height - Tokens.bar_thickness + Appearance.gap : Appearance.gap
-        width: panel.width - 2 * Appearance.gap
+        x: Appearance.barInset
+        y: Appearance.bottom ? panel.height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset
+        width: panel.width - 2 * Appearance.barInset
         height: Appearance.barHeight
-        accented: false
+        accented: true
+        barSurface: true
+        radius: Appearance.stage ? Appearance.radius : Appearance.radius * 0.65
     }
     inputRegion: {
         const areas = [panel.bandRect];
@@ -246,9 +255,10 @@ PanelWindow {
     // ─── The rail ───────────────────────────────────────────────────────
     SpectrumRail {
         id: rail
+        visible: false
 
         x: band.x + band.radius
-        y: Appearance.bottom ? band.y : band.y + band.height - thickness
+        y: band.y
         width: band.width - 2 * band.radius
         gleam: Appearance.glow && Appearance.motion
         // Bound axis on a scrolling screen: the rail shows the same slice
@@ -268,7 +278,7 @@ PanelWindow {
             required property int index
             readonly property bool _left: index === 0
             readonly property int _count: panel.placementMap ? (_left ? panel.placementMap.overflowLeft : panel.placementMap.overflowRight) : 0
-            visible: panel._scrolling && _count > 0
+            visible: false
             x: _left ? band.x + band.radius : band.x + band.width - band.radius - width
             y: rail.y
             width: 48
@@ -374,9 +384,9 @@ PanelWindow {
         id: leftSlot
 
         anchors.left: parent.left
-        anchors.leftMargin: Appearance.gap + Tokens.spacing_m
+        anchors.leftMargin: Appearance.barInset + 12
         anchors.verticalCenter: band.verticalCenter
-        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.gap - Tokens.spacing_m * 2)
+        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.barInset - 24)
         groups: panel.leftGroups
         registry: BarRegistry
         screenWidth: panel.width
@@ -388,7 +398,7 @@ PanelWindow {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: band.verticalCenter
-        maximumWidth: Math.max(0, panel.width * 0.32 - Appearance.gap)
+        maximumWidth: Math.max(0, panel.width * 0.32 - Appearance.barInset)
         groups: panel.centerGroups
         registry: BarRegistry
         screenWidth: panel.width
@@ -399,9 +409,9 @@ PanelWindow {
         id: rightSlot
 
         anchors.right: parent.right
-        anchors.rightMargin: Appearance.gap + Tokens.spacing_m
+        anchors.rightMargin: Appearance.barInset + 12
         anchors.verticalCenter: band.verticalCenter
-        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.gap - Tokens.spacing_m * 2)
+        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.barInset - 24)
         groups: panel.rightGroups
         registry: BarRegistry
         screenWidth: panel.width

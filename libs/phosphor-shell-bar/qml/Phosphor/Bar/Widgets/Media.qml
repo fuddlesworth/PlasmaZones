@@ -27,7 +27,7 @@ BarWidget {
     /// BarWidget.
     signal activated
 
-    readonly property int maxTitleWidth: 200
+    readonly property int maxTitleWidth: 135
 
     MprisHost {
         id: host
@@ -93,21 +93,12 @@ BarWidget {
         opacity: root._controllable ? 1 : StateLayer.disabled_content
         spacing: Tokens.spacing_xs
 
-        SpectrumVisualizer {
-            width: 32
-            height: 18
-            anchors.verticalCenter: parent.verticalCenter
-            style: "bars"
-            visible: Appearance.visualizer !== "off"
-            playing: root.isPlaying
-        }
-
         Kirigami.Icon {
-            width: 16
-            height: 16
-            source: root.isPlaying ? "media-playback-pause" : "media-playback-start"
+            width: 14
+            height: 14
+            source: "audio-x-generic"
             isMask: true
-            color: Appearance.text
+            color: Appearance.muted
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -117,15 +108,23 @@ BarWidget {
             // assistive tech reads the composed name and then re-reads
             // this fragment.
             Accessible.ignored: true
-            text: root._label
-            color: Appearance.text
-            font.pixelSize: Tokens.font_size_label_l
-            font.family: Tokens.font_family
+            text: root.trackTitle
+            color: Appearance.muted
+            font.pixelSize: 10
+            font.family: Tokens.font_family_ui
             elide: Text.ElideRight
             // Setting width below the natural implicitWidth triggers the
             // elide; implicitWidth is intrinsic so there is no binding loop.
             width: Math.min(implicitWidth, root.maxTitleWidth)
             anchors.verticalCenter: parent.verticalCenter
+        }
+        SpectrumVisualizer {
+            width: 32
+            height: 18
+            anchors.verticalCenter: parent.verticalCenter
+            style: "bars"
+            visible: Appearance.visualizer !== "off"
+            playing: root.isPlaying
         }
     }
 
@@ -165,7 +164,7 @@ BarWidget {
             if (mouse.button === Qt.RightButton)
                 root.activated();
             else
-                root._toggle();
+                root.activated();
         }
     }
 }

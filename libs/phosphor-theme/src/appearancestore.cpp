@@ -20,21 +20,19 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("monoFont"), QString()},
             {QStringLiteral("barLayout"),
              QVariantMap{{QStringLiteral("left"),
-                          QVariantList{QVariantList{QStringLiteral("placementmap")},
-                                       QVariantList{QStringLiteral("focusedapp")}}},
-                         {QStringLiteral("center"), QVariantList{QVariantList{QStringLiteral("clock")}}},
+                          QVariantList{QVariantList{QStringLiteral("launcher")},
+                                       QVariantList{QStringLiteral("focusedapp"), QStringLiteral("media")}}},
+                         {QStringLiteral("center"),
+                          QVariantList{QVariantList{QStringLiteral("placementmap"), QStringLiteral("workspaces")}}},
                          {QStringLiteral("right"),
-                          QVariantList{QVariantList{QStringLiteral("media")}, QVariantList{QStringLiteral("tray")},
-                                       QVariantList{QStringLiteral("audio"), QStringLiteral("network"),
-                                                    QStringLiteral("bluetooth"), QStringLiteral("battery")},
-                                       QVariantList{QStringLiteral("notification"), QStringLiteral("controlcenter"),
-                                                    QStringLiteral("power")}}}}},
+                          QVariantList{QVariantList{QStringLiteral("clock"), QStringLiteral("tray"),
+                                                    QStringLiteral("controlcenter"), QStringLiteral("appearance")}}}}},
             {QStringLiteral("palette"), QStringLiteral("spectrum")},
             {QStringLiteral("material"), QStringLiteral("glass")},
             {QStringLiteral("edge"), QStringLiteral("top")},
             {QStringLiteral("density"), QStringLiteral("comfortable")},
             {QStringLiteral("radius"), 18},
-            {QStringLiteral("gap"), 12},
+            {QStringLiteral("gap"), 16},
             {QStringLiteral("glow"), true},
             {QStringLiteral("motion"), true},
             {QStringLiteral("surfacePacks"), false},
@@ -222,12 +220,14 @@ bool AppearanceStore::applyPreset(const QString& preset)
         next[QStringLiteral("palette")] = QStringLiteral("wallpaper");
         next[QStringLiteral("material")] = QStringLiteral("light");
         next[QStringLiteral("radius")] = 24;
+        next[QStringLiteral("gap")] = 22;
         next[QStringLiteral("glow")] = false;
     } else if (preset == QLatin1String("ember")) {
         next[QStringLiteral("palette")] = QStringLiteral("ember");
         next[QStringLiteral("material")] = QStringLiteral("solid");
         next[QStringLiteral("density")] = QStringLiteral("compact");
         next[QStringLiteral("radius")] = 8;
+        next[QStringLiteral("gap")] = 10;
         next[QStringLiteral("edge")] = QStringLiteral("bottom");
         next[QStringLiteral("glow")] = false;
     } else if (preset != QLatin1String("phosphor"))

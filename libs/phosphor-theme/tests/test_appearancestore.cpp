@@ -100,12 +100,17 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        auto layout = AppearanceStore::defaults().value(QStringLiteral("barLayout")).toMap();
+        layout[QStringLiteral("left")] =
+            QVariantList{QVariantList{QStringLiteral("focusedapp")}, QVariantList{QStringLiteral("media")}};
+        QVERIFY(store.setValue(QStringLiteral("barLayout"), layout));
         QVERIFY(store.moveWidget(QStringLiteral("placementmap"), QStringLiteral("left"), 1));
         QVariantList flattened;
         for (const auto& group :
              store.values().value(QStringLiteral("barLayout")).toMap().value(QStringLiteral("left")).toList())
             flattened += group.toList();
-        QCOMPARE(flattened, (QVariantList{QStringLiteral("focusedapp"), QStringLiteral("placementmap")}));
+        QCOMPARE(flattened,
+                 (QVariantList{QStringLiteral("focusedapp"), QStringLiteral("placementmap"), QStringLiteral("media")}));
     }
     void failedWriteKeepsCurrentAppearance()
     {

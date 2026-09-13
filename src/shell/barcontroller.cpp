@@ -56,6 +56,9 @@ const QList<BarController::BuiltinWidget>& BarController::builtinWidgets()
     // the shell's strings when that story lands; translating these alone
     // would localise the one label nothing displays.
     static const QList<BuiltinWidget> widgets{
+        {QStringLiteral("launcher"), QStringLiteral("Launcher"), QStringLiteral("LauncherButton")},
+        {QStringLiteral("appearance"), QStringLiteral("Appearance"), QStringLiteral("AppearanceButton")},
+        {QStringLiteral("workspaces"), QStringLiteral("Workspaces"), QStringLiteral("WorkspaceButtons")},
         {QStringLiteral("clock"), QStringLiteral("Clock"), QStringLiteral("Clock")},
         {QStringLiteral("focusedapp"), QStringLiteral("Focused App"), QStringLiteral("FocusedApp")},
         {QStringLiteral("placementmap"), QStringLiteral("Placement Map"), QStringLiteral("PlacementMap")},

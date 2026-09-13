@@ -121,6 +121,6 @@ QtObject {
     // A coloured hairline on a bright field needs more ink (A1 §2.5).
     readonly property real stroke_resting_light: 0.55
     readonly property real stroke_active: 1.0
-    readonly property int bar_thickness: Appearance.barHeight + 2 * Appearance.gap
+    readonly property int bar_thickness: Appearance.barHeight + 2 * Appearance.barOffset
     readonly property int rail_thickness: 2
 }

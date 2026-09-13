@@ -84,6 +84,9 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Slot.qml
     qml/Phosphor/Bar/Widgets/BarIconButton.qml
     qml/Phosphor/Bar/Widgets/BarWidget.qml
+    qml/Phosphor/Bar/Widgets/LauncherButton.qml
+    qml/Phosphor/Bar/Widgets/AppearanceButton.qml
+    qml/Phosphor/Bar/Widgets/WorkspaceButtons.qml
     qml/Phosphor/Bar/Widgets/Clock.qml
     qml/Phosphor/Bar/Widgets/FocusedApp.qml
     qml/Phosphor/Bar/Widgets/PlacementMap.qml

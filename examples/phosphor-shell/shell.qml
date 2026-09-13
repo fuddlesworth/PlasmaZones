@@ -102,6 +102,9 @@ Item {
         model: PhosphorShell.screens
 
         delegate: WallpaperSurface {
+            fallbackWallpaper: Component {
+                DefaultWallpaper {}
+            }
             service: PhosphorShell.wallpaper
         }
     }
@@ -534,10 +537,6 @@ Item {
         // reach for a QScreen any other way from QML.
         root._lastPanelSource = source;
         const target = ControlCenterRegistry.screenOf(source);
-        // Anchored under its own chip, like every other panel. It used to
-        // take the bar-centre default, which was invisible while it was an
-        // engine-placed pane (the engine decided where it went) and became
-        // wrong the moment it started being positioned by the shell.
         const centre = BarRegistry.anchorCenterFor(source);
         const anchored = centre >= 0;
         const railT = anchored && target && target.width > 0 ? Math.max(0, Math.min(1, centre / target.width)) : 0.5;
@@ -548,12 +547,6 @@ Item {
             "anchor": Appearance.stage ? PhosphorPopout.Anchor.BottomCenter : anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
-            // Closes on an outside click, like every other panel. This was
-            // false, which was right while it was an engine-placed pane —
-            // A2 §4.7: a pane is a tile and tiles do not vanish when you
-            // look elsewhere — and became a trap the moment it stopped
-            // being one: a transient that ignores click-outside has no way
-            // out at all, since it has no close button either.
             "dismissOnFocusLoss": true,
             // No keyboard for the same reason the other panels take none:
             // it is a pointer surface, and holding focus takes it off
@@ -821,7 +814,9 @@ Item {
                 source.expandRequested(false);
             else if (id === "power")
                 root.togglePowerMenu(source);
-            else if (id === "controlcenter")
+            else if (id === "launcher")
+                root.toggleLauncher();
+            else if (id === "controlcenter" || id === "media")
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
                 root.toggleControlCenter(source);

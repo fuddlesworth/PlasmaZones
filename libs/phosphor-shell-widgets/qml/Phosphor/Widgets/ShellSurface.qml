@@ -1,18 +1,28 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import QtQuick
+import QtQuick.Effects
 import Phosphor.Theme
 
 Rectangle {
     id: root
     property real railT: 0.5
-    property bool accented: true
+    property bool accented: false
+    property bool barSurface: false
+    property bool shadowed: true
     radius: Appearance.radius
-    color: Qt.alpha(Appearance.surface, Appearance.glass ? 0.96 : 1)
+    color: Qt.alpha(Appearance.surface, Appearance.surfaceOpacity)
     border.width: 1
     border.color: Appearance.outline
-
-    // A quiet wash gives the surface depth without competing with content.
+    RectangularShadow {
+        anchors.fill: parent
+        z: -1
+        visible: root.shadowed
+        radius: root.radius
+        blur: root.barSurface ? 25 : 55
+        offset: Qt.vector2d(0, root.barSurface ? 8 : 22)
+        color: root.barSurface ? "#33000000" : Qt.alpha("#030b1a", Appearance.light ? 0.25 : 0.5)
+    }
     Rectangle {
         anchors.fill: parent
         anchors.margins: 1
@@ -20,32 +30,50 @@ Rectangle {
         gradient: Gradient {
             GradientStop {
                 position: 0
-                color: Qt.alpha(Appearance.at(root.railT), Appearance.glow ? 0.15 : 0.05)
+                color: Qt.alpha(Appearance.accent, 0.07)
             }
             GradientStop {
-                position: 0.65
+                position: 0.55
                 color: "transparent"
             }
         }
+    }
+    Rectangle {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: root.radius
+        anchors.rightMargin: root.radius
+        height: 1
+        color: "#10ffffff"
     }
     Rectangle {
         visible: root.accented
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: root.radius
-        anchors.rightMargin: root.radius
+        anchors.leftMargin: root.barSurface ? 14 : 22
+        anchors.rightMargin: root.barSurface ? 14 : 22
         height: 2
-        opacity: Appearance.glow ? 0.8 : 0.45
+        radius: 1
+        opacity: root.barSurface ? 0.8 : 1
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
                 position: 0
-                color: Appearance.at(Math.max(0, root.railT - 0.2))
+                color: Appearance.stops[0]
+            }
+            GradientStop {
+                position: 0.34
+                color: Appearance.stops[1]
+            }
+            GradientStop {
+                position: 0.68
+                color: Appearance.stops[2]
             }
             GradientStop {
                 position: 1
-                color: Appearance.at(Math.min(1, root.railT + 0.2))
+                color: Appearance.stops[3]
             }
         }
     }

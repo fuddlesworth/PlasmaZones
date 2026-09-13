@@ -182,6 +182,7 @@ Workspaces::Workspaces(QObject* parent)
     }
 
     m_activeId = activeId();
+    m_activeName = activeName();
     m_activeIndex = activeIndex();
     m_count = mgr->desktopIds().size();
 
@@ -192,8 +193,10 @@ Workspaces::Workspaces(QObject* parent)
         // would otherwise leave activeIndex stale with no notification.
         const QString nextActive = activeId();
         const int nextIndex = activeIndex();
-        if (nextActive != m_activeId || nextIndex != m_activeIndex) {
+        const QString nextName = activeName();
+        if (nextActive != m_activeId || nextIndex != m_activeIndex || nextName != m_activeName) {
             m_activeId = nextActive;
+            m_activeName = nextName;
             m_activeIndex = nextIndex;
             Q_EMIT activeChanged();
         }
@@ -223,6 +226,12 @@ Workspaces* Workspaces::create(QQmlEngine* engine, QJSEngine* scriptEngine)
 QAbstractListModel* Workspaces::model() const
 {
     return m_model;
+}
+
+QString Workspaces::activeName() const
+{
+    auto* manager = sharedManager();
+    return manager ? manager->desktopNames().value(manager->currentDesktop() - 1) : QString();
 }
 
 QString Workspaces::activeId() const

@@ -56,6 +56,7 @@ qt_add_qml_module(phosphor_shell_example
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Phosphor/Shell/Example
     QML_FILES
         shell.qml
+        DefaultWallpaper.qml
         TopPanel.qml
         Taskbar.qml
         PanelPopupHost.qml
@@ -69,6 +70,9 @@ qt_add_qml_module(phosphor_shell_example
         TrayMenuPopup.qml
         SessionLockCoordinator.qml
     RESOURCES
+        wallpapers/spectrum.png
+        wallpapers/wallpaper.png
+        wallpapers/ember.png
         shaders/frosted_glass.frag
         shaders/gradient.frag
         shaders/corners.glsl

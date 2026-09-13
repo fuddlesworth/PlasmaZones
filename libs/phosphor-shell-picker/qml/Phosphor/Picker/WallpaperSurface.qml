@@ -36,6 +36,7 @@ PanelWindow {
     // `effectivePathChanged(screenName)` signal, where "" means every
     // screen. Null draws the ground alone.
     property var service: null
+    property Component fallbackWallpaper: null
     // Through PanelWindow.screen, which reads null once the output dies,
     // rather than a snapshot of the row.
     readonly property string screenName: surface.screen ? surface.screen.name : ""
@@ -150,6 +151,12 @@ PanelWindow {
     Rectangle {
         anchors.fill: parent
         color: Appearance.recess
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: priv.frontPath === ""
+        sourceComponent: surface.fallbackWallpaper
     }
 
     Image {
