@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "3.4.18",
+            "date": "2026-09-12",
+            "highlights": [
+                "New: Shader presets for every kind of pack. Save a tuned look once and assign it to window animations, decorations, the pointer and zone overlays. Editing the preset updates everything using it straight away, and pack authors and rules can name presets too (#1100)",
+                "Changed: Save Preset and Load Preset are gone from the shader browser. The preset row on every pack replaces them, and presets saved with the old buttons are imported automatically (#1100)",
+                "Fixed: The pointer trail no longer disappears when you shake the mouse, and it still stops when a software KVM such as Deskflow takes the cursor away (#1097, #1102)"
+            ]
+        },
+        {
             "version": "3.4.17",
             "date": "2026-09-10",
             "highlights": [
