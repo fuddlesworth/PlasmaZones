@@ -59,6 +59,25 @@ private Q_SLOTS:
         QVERIFY(store.importPreset(exported));
         QCOMPARE(store.values(), reloaded.values());
     }
+    void lockPrivacyChoicesPersistAcrossPresets()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QCOMPARE(store.values().value(QStringLiteral("lockMedia")).toBool(), false);
+        QCOMPARE(store.values().value(QStringLiteral("lockNotifications")).toBool(), true);
+        QVERIFY(store.setValue(QStringLiteral("lockLayout"), QStringLiteral("centered")));
+        QVERIFY(store.setValue(QStringLiteral("lockMedia"), true));
+        QVERIFY(store.setValue(QStringLiteral("lockNotifications"), false));
+        QVERIFY(store.applyPreset(QStringLiteral("paper")));
+        QCOMPARE(store.values().value(QStringLiteral("lockLayout")).toString(), QStringLiteral("centered"));
+        QCOMPARE(store.values().value(QStringLiteral("lockMedia")).toBool(), true);
+        QCOMPARE(store.values().value(QStringLiteral("lockNotifications")).toBool(), false);
+        AppearanceStore restored(path);
+        QCOMPARE(restored.values(), store.values());
+        QVERIFY(!store.setValue(QStringLiteral("lockLayout"), QStringLiteral("unknown")));
+        QVERIFY(!store.setValue(QStringLiteral("lockMedia"), QStringLiteral("true")));
+    }
     void rejectsInvalidWithoutChangingMemoryOrDisk()
     {
         QTemporaryDir dir;

@@ -1,22 +1,9 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShellLock, the Phosphor.Lock lockscreen surface (A3 §6).
-#
-# One C++ type, LockSurface (a QQuickWindow that is one output's
-# ext_session_lock_surface_v1, built on phosphor-wayland's LockSurface
-# marker and the QPA plugin's lock-surface role), plus the QML content:
-# LockScreen (the per-output composition), LockLayout (the placement map
-# as static spectrum outlines), LockAuthField (the 320 x 44 password
-# field), LockController (the one password behind every screen) and
-# LockRegion.js (the largest empty region of a placement map).
-#
-# Authentication is NOT here: the shell hands a LockService
-# (phosphor-service-lock) to LockController, which is duck-typed so the
-# tests drive it with a fake. Themed through phosphor-theme, built on the
-# phosphor-shell-widgets atoms (TabularText).
-#
-# Phase 4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
+# Phosphor.Lock provides the ext-session-lock window, responsive lock-screen
+# composition, and a shared authentication controller. Services are injected
+# by the shell so previews and tests never require PAM or system actions.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -70,10 +57,13 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(_phosphor_lock_qml_files
     qml/Phosphor/Lock/LockScreen.qml
-    qml/Phosphor/Lock/LockLayout.qml
+    qml/Phosphor/Lock/LockBackdrop.qml
+    qml/Phosphor/Lock/LockClock.qml
+    qml/Phosphor/Lock/LockCard.qml
+    qml/Phosphor/Lock/LockMedia.qml
+    qml/Phosphor/Lock/LockPowerMenu.qml
     qml/Phosphor/Lock/LockAuthField.qml
     qml/Phosphor/Lock/LockController.qml
-    qml/Phosphor/Lock/LockRegion.js
 )
 
 # Pin each QML file's resource alias to its basename so import resolution

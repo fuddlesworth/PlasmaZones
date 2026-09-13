@@ -40,6 +40,9 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("surfacePacks"), false},
             {QStringLiteral("desktopStyle"), true},
             {QStringLiteral("media"), true},
+            {QStringLiteral("lockLayout"), QStringLiteral("split")},
+            {QStringLiteral("lockMedia"), false},
+            {QStringLiteral("lockNotifications"), true},
             {QStringLiteral("visualizer"), QStringLiteral("ribbon")}};
 }
 AppearanceStore::AppearanceStore(QObject* parent)
@@ -78,6 +81,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         {QStringLiteral("material"), {QStringLiteral("glass"), QStringLiteral("solid"), QStringLiteral("light")}},
         {QStringLiteral("edge"), {QStringLiteral("top"), QStringLiteral("bottom")}},
         {QStringLiteral("density"), {QStringLiteral("comfortable"), QStringLiteral("compact")}},
+        {QStringLiteral("lockLayout"), {QStringLiteral("split"), QStringLiteral("centered")}},
         {QStringLiteral("visualizer"),
          {QStringLiteral("ribbon"), QStringLiteral("bars"), QStringLiteral("halo"), QStringLiteral("off")}}};
     for (auto it = values.cbegin(); it != values.cend(); ++it) {
@@ -242,9 +246,11 @@ bool AppearanceStore::applyPreset(const QString& preset)
     if (next.isEmpty()) {
         return fail(tr("Unknown appearance preset."));
     }
-    for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
-                            QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
-                            QStringLiteral("surfacePacks"), QStringLiteral("desktopStyle")})
+    for (const auto& key :
+         {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
+          QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
+          QStringLiteral("surfacePacks"), QStringLiteral("desktopStyle"), QStringLiteral("lockLayout"),
+          QStringLiteral("lockMedia"), QStringLiteral("lockNotifications")})
         next[key] = m_values.value(key);
     return commit(next);
 }

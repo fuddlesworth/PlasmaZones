@@ -13,6 +13,9 @@ QtObject {
     readonly property bool glow: settings.glow
     readonly property bool surfacePacks: settings.surfacePacks
     readonly property bool motion: settings.motion && !Motion.reducedMotion
+    readonly property string lockLayout: settings.lockLayout
+    readonly property bool lockMedia: settings.lockMedia
+    readonly property bool lockNotifications: settings.lockNotifications
     readonly property bool media: settings.media
     readonly property string visualizer: settings.visualizer
     readonly property int radius: settings.radius

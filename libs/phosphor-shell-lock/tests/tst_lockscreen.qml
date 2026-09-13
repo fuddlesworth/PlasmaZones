@@ -1,13 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// LockScreen against a fake placement map and a fake LockService: the
-// outline count equals the map's window count, the content block lands in
-// the largest empty region (or the centre with no room), and the auth
-// field's phase follows typing, submit, failure and unlock.
+// Authentication, multi-output input, and responsive lock-screen composition.
 
 import QtQuick
 import QtTest
 import Phosphor.Lock
+import Phosphor.Theme
 
 TestCase {
     id: testCase
@@ -95,50 +93,6 @@ TestCase {
         }
     }
 
-    // A PlacementMapScreen stand-in: two columns on the left two thirds,
-    // the right third free.
-    Component {
-        id: fakeMapComponent
-
-        QtObject {
-            property var cells: [
-                {
-                    "id": "a",
-                    "x": 0,
-                    "y": 0,
-                    "w": 1 / 3,
-                    "h": 1,
-                    "t": 0.1,
-                    "occupied": true,
-                    "appId": "firefox",
-                    "title": "Firefox"
-                },
-                {
-                    "id": "b",
-                    "x": 1 / 3,
-                    "y": 0,
-                    "w": 1 / 3,
-                    "h": 1,
-                    "t": 0.5,
-                    "occupied": true,
-                    "appId": "kate",
-                    "title": ""
-                },
-                {
-                    "id": "z",
-                    "x": 2 / 3,
-                    "y": 0,
-                    "w": 1 / 3,
-                    "h": 1,
-                    "t": 0.9,
-                    "occupied": false
-                }
-            ]
-            property rect workArea: Qt.rect(0, 0, 1920, 1080)
-            signal changed
-        }
-    }
-
     Component {
         id: controllerComponent
 
@@ -163,80 +117,89 @@ TestCase {
         };
     }
 
-    function makeScene(withMap, lockComponent) {
+    function makeScene(lockComponent) {
         const lock = createTemporaryObject(lockComponent === undefined ? fakeLockComponent : lockComponent, testCase);
         const controller = createTemporaryObject(controllerComponent, testCase, {
             "lock": lock
         });
-        const map = withMap ? createTemporaryObject(fakeMapComponent, testCase) : null;
         const screen = createTemporaryObject(screenComponent, testCase, {
             "controller": controller,
-            "map": map
+            "userName": "test-user"
         });
         verify(screen);
         return {
             "lock": lock,
             "controller": controller,
-            "map": map,
             "screen": screen
         };
     }
 
-    function test_outlineCountEqualsWindowCount() {
-        const s = makeScene(true);
-        // Three cells, two occupied: the empty zone is not a window.
-        compare(s.screen.outlineCount, 2);
+    function init() {
+        AppearanceStore.applyPreset("phosphor");
+        AppearanceStore.setValue("lockLayout", "split");
+        AppearanceStore.setValue("lockMedia", false);
+        AppearanceStore.setValue("lockNotifications", true);
+        AppearanceStore.setValue("motion", true);
     }
 
-    function test_contentLandsInTheFreeThird() {
-        const s = makeScene(true);
-        verify(!s.screen.contentCentred);
-        fuzzyCompare(s.screen.contentRegion.x, 1280, 0.5);
-        compare(s.screen.contentRegion.y, 0);
-        fuzzyCompare(s.screen.contentRegion.width, 640, 0.5);
-        compare(s.screen.contentRegion.height, 1080);
-        // Left-aligned to the region, inset.
-        compare(s.screen.blockX, Math.round(1280 + s.screen.blockInset));
+    function test_referenceComposition() {
+        const s = makeScene();
+        s.screen.width = 1440;
+        s.screen.height = 900;
+        const card = findChild(s.screen, "lockCard");
+        const clock = findChild(s.screen, "lockClock");
+        fuzzyCompare(card.mapToItem(s.screen, 0, 0).x, 890, 1);
+        fuzzyCompare(card.mapToItem(s.screen, 0, 0).y, 298, 1);
+        compare(card.width, 382);
+        fuzzyCompare(clock.mapToItem(s.screen, 0, 0).x, 132, 1);
+        fuzzyCompare(clock.mapToItem(s.screen, 0, 0).y, 293, 1);
     }
 
-    function test_contentCentresWithoutAMap() {
-        const s = makeScene(false);
-        // No cells means the whole screen is the region and the block sits
-        // at its left inset; centring is for the no-room case below.
-        verify(!s.screen.contentCentred);
-        compare(s.screen.contentRegion.width, 1920);
+    function test_smallOutputKeepsUnlockAndPowerReachable() {
+        const s = makeScene();
+        s.screen.width = 360;
+        s.screen.height = 640;
+        verify(s.screen.centered);
+        const card = findChild(s.screen, "lockCard");
+        compare(card.width, 320);
+        const power = findChild(s.screen, "lockPower");
+        verify(power.x >= 0 && power.x + power.width <= 360);
+        verify(power.y + power.height <= 640);
     }
 
-    function test_contentCentresWhenNoRegionFits() {
-        const s = makeScene(true);
-        // Fill the last third too: nothing is free.
-        s.map.cells = [
-            {
-                "id": "a",
-                "x": 0,
-                "y": 0,
-                "w": 0.5,
-                "h": 1,
-                "t": 0.1,
-                "occupied": true
-            },
-            {
-                "id": "b",
-                "x": 0.5,
-                "y": 0,
-                "w": 0.5,
-                "h": 1,
-                "t": 0.7,
-                "occupied": true
-            }
-        ];
-        s.map.changed();
-        verify(s.screen.contentCentred);
-        compare(s.screen.outlineCount, 2);
+    function test_sharedPasswordAcrossOutputsAndLongInput() {
+        const s = makeScene();
+        const second = createTemporaryObject(screenComponent, testCase, {
+            controller: s.controller
+        });
+        s.controller.password = "p".repeat(200);
+        compare(findChild(s.screen, "lockPassword").dotCount, 200);
+        compare(findChild(second, "lockPassword").dotCount, 200);
+        s.controller.password = "a🙂";
+        s.controller.handleKey(keyEvent(Qt.Key_Backspace));
+        compare(s.controller.password, "a");
+        s.controller.clear();
+        compare(findChild(second, "lockPassword").dotCount, 0);
+    }
+
+    function test_keyboardInputReachesReadyField() {
+        const s = makeScene();
+        s.screen.focusPassword();
+        keyClick(Qt.Key_P);
+        compare(s.controller.password, "p");
+        keyClick(Qt.Key_Return);
+        compare(s.lock.lastPassword, "p");
+        s.lock.fail("That password didn’t match. Try again.");
+        verify(findChild(s.screen, "lockPassword").activeFocus);
+        keyClick(Qt.Key_X);
+        compare(s.controller.password, "x");
+        keyClick(Qt.Key_Escape);
+        compare(s.controller.password, "");
+        verify(s.controller.locked);
     }
 
     function test_typingFillsTheSharedField() {
-        const s = makeScene(true);
+        const s = makeScene();
         const c = s.controller;
         compare(c.phase, "idle");
         verify(c.handleKey(keyEvent(Qt.Key_A, "a")));
@@ -253,7 +216,7 @@ TestCase {
     }
 
     function test_enterSubmitsAndTheEdgeGoesBlue() {
-        const s = makeScene(true);
+        const s = makeScene();
         const c = s.controller;
         // Enter on an empty field submits nothing.
         c.handleKey(keyEvent(Qt.Key_Return));
@@ -270,7 +233,7 @@ TestCase {
     }
 
     function test_failureClearsAndShowsTheReason() {
-        const s = makeScene(true);
+        const s = makeScene();
         const c = s.controller;
         const failedSpy = createTemporaryObject(spyComponent, testCase, {
             "target": c,
@@ -291,7 +254,7 @@ TestCase {
     }
 
     function test_successDismissesThenReleasesTheSurfaces() {
-        const s = makeScene(true);
+        const s = makeScene();
         const c = s.controller;
         const dismissedSpy = createTemporaryObject(spyComponent, testCase, {
             "target": c,
@@ -313,7 +276,7 @@ TestCase {
     }
 
     function test_releaseHandshakeHoldsTheLockUntilTheExitHasPlayed() {
-        const s = makeScene(true, fakeReleasingLockComponent);
+        const s = makeScene(fakeReleasingLockComponent);
         const c = s.controller;
         const dismissedSpy = createTemporaryObject(spyComponent, testCase, {
             "target": c,
@@ -343,7 +306,7 @@ TestCase {
     function test_altGrCharactersReachThePassword() {
         // A German layout's "@" is AltGr+Q; a Polish "ą" is AltGr+A. Both must
         // land, or those users cannot type their password at all.
-        const c = makeScene(true).controller;
+        const c = makeScene().controller;
         c.handleKey(keyEvent(Qt.Key_Q, "@", Qt.GroupSwitchModifier));
         // The platforms that spell AltGr as Control+Alt must work too.
         c.handleKey(keyEvent(Qt.Key_A, "ą", Qt.ControlModifier | Qt.AltModifier));
@@ -353,16 +316,8 @@ TestCase {
         compare(c.password, "@ą");
     }
 
-    function test_outlineClickSetsThePlaceholder() {
-        const s = makeScene(true);
-        s.controller.placeholderFor("Firefox");
-        verify(s.controller.placeholder.indexOf("Firefox") >= 0);
-        s.controller.placeholderFor("");
-        compare(s.controller.placeholder, "");
-    }
-
     function test_clockIsTabularTime() {
-        const s = makeScene(true);
+        const s = makeScene();
         verify(/^\d\d:\d\d$/.test(s.screen.clockText));
     }
 

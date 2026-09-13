@@ -13,6 +13,20 @@ Item {
     implicitWidth: 19
     implicitHeight: 19
     readonly property string drawing: {
+        if (source === "object-locked" || source === "object-unlocked")
+            return '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10 V6 A3 3 0 0 1 15 6' + (source === "object-locked" ? ' V10' : '') + ' M12 14 V17"/>';
+        if (source === "input-keyboard")
+            return '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M5 9 H6 M9 9 H10 M13 9 H14 M17 9 H18 M5 12 H6 M9 12 H10 M13 12 H14 M17 12 H18 M7 15 H17"/>';
+        if (source === "notifications")
+            return '<path d="M4 17 H20 L18 14 V9 A6 6 0 0 0 6 9 V14 Z M10 21 H14"/>';
+        if (source === "system-shutdown")
+            return '<path d="M12 2 V12 M6 5 A9 9 0 1 0 18 5"/>';
+        if (source === "arrow-right")
+            return '<path d="M4 12 H20 M14 6 L20 12 L14 18"/>';
+        if (source === "media-skip-backward")
+            return '<path d="M17 6 L8 12 L17 18 Z M5 5 V19"/>';
+        if (source === "media-skip-forward")
+            return '<path d="M7 6 L16 12 L7 18 Z M19 5 V19"/>';
         if (source.indexOf("network-wireless") === 0)
             return '<path d="M3 8 Q12 1 21 8 M6 12 Q12 7 18 12 M9 16 Q12 13 15 16"/><circle cx="12" cy="20" r="0.7"/>';
         if (source.indexOf("bluetooth") === 0)

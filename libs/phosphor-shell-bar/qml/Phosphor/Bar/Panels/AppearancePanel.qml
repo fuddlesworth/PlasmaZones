@@ -304,6 +304,28 @@ FocusScope {
                     label: qsTr("Motion")
                     settingKey: "motion"
                 }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    FieldLabel {
+                        text: qsTr("Lock screen")
+                    }
+                    Choice {
+                        Layout.fillWidth: true
+                        model: [qsTr("Split clock and unlock card"), qsTr("Centered clock and unlock card")]
+                        currentIndex: ["split", "centered"].indexOf(Appearance.lockLayout)
+                        Accessible.name: qsTr("Lock screen layout")
+                        onActivated: AppearanceStore.setValue("lockLayout", ["split", "centered"][currentIndex])
+                    }
+                    SettingCheck {
+                        label: qsTr("Show media while locked")
+                        settingKey: "lockMedia"
+                    }
+                    SettingCheck {
+                        label: qsTr("Show notification count")
+                        settingKey: "lockNotifications"
+                    }
+                }
                 ShellButton {
                     text: root.advanced ? qsTr("Fewer options") : qsTr("More options")
                     Layout.fillWidth: true
