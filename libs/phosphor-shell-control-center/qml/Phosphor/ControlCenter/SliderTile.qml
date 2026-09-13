@@ -1,28 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.ControlCenter.SliderTile, the chrome for one continuous rail.
-//
-// The companion to Tile: a control with a range (volume, brightness).
-// Same 52 px rail, but the 2 px underline along the bottom IS the slider
-// (A3 §2b): its length is the value and its colour is the state-axis
-// sample of that value, cyan low to rose at the limit. The whole rail is
-// the drag surface; the wheel steps it.
-//
-//   SliderTile {
-//       iconName: "audio-volume-high"
-//       label: qsTr("Volume")
-//       value: sink.volumePercent
-//       onMoved: v => sink.setVolume(v / 100)
-//       muted: sink.muted
-//       onIconActivated: sink.setMuted(!sink.muted)
-//   }
-//
-// Like Tile, this does not latch: `moved` asks the service to change and
-// `value` follows the service's echo, so a clamped or quantised request
-// never leaves the line somewhere the hardware never went.
+// Service-controlled level with separate mute, details and slider targets.
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Widgets
@@ -73,7 +55,7 @@ Item {
     }
 
     implicitWidth: 320
-    implicitHeight: Math.max(52, content.implicitHeight + Tokens.spacing_m)
+    implicitHeight: Appearance.compact ? 68 : 78
     opacity: root.available ? 1 : StateLayer.disabled_content
 
     readonly property real _fraction: root.to > root.from ? Math.max(0, Math.min(1, (root.value - root.from) / (root.to - root.from))) : 0
@@ -107,194 +89,88 @@ Item {
         root.moved(root.from + f * (root.to - root.from));
     }
 
-    HoverHandler {
-        id: hover
-
-        enabled: root.available
-        cursorShape: Qt.SizeHorCursor
-    }
-
-    // The whole rail is the drag surface.
-    DragHandler {
-        id: drag
-
-        enabled: root.available
-        target: null
-        yAxis.enabled: false
-        onActiveChanged: {
-            if (active)
-                root._moveTo(centroid.position.x);
-        }
-        onCentroidChanged: {
-            if (active)
-                root._moveTo(centroid.position.x);
-        }
-    }
-    TapHandler {
-        enabled: root.available
-        onTapped: eventPoint => root._moveTo(eventPoint.position.x)
-    }
-    // A wheel notch steps the value; a two-finger horizontal swipe on a
-    // touchpad (A3 §5) arrives as an x delta and steps it the same way,
-    // right for more.
-    WheelHandler {
-        enabled: root.available
-        onWheel: event => {
-            const delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
-            // Both components zero is a scroll-phase or end event, not a
-            // downward notch. Without this the ternary falls to -1 and the
-            // event quietly turns the volume or the brightness DOWN.
-            if (delta === 0) {
-                return;
-            }
-            root._step(delta > 0 ? 1 : -1);
-        }
-    }
-
     RowLayout {
         id: content
-
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Tokens.spacing_xs
-        anchors.rightMargin: root.hasDetail ? chevron.width + Tokens.spacing_s : Tokens.spacing_xs
-        spacing: Tokens.spacing_m
-
-        Item {
-            id: iconButton
-
-            implicitWidth: 16
-            implicitHeight: 16
-            Layout.alignment: Qt.AlignVCenter
-
-            Accessible.role: root.hasIconAction ? Accessible.Button : Accessible.Graphic
-            Accessible.ignored: !root.hasIconAction
-            Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
-            Accessible.onPressAction: root._activateIcon()
-
-            activeFocusOnTab: root.available && root.hasIconAction
-            Keys.onSpacePressed: event => root._activateIconFromKey(event)
-            Keys.onReturnPressed: event => root._activateIconFromKey(event)
-            Keys.onEnterPressed: event => root._activateIconFromKey(event)
-
-            Kirigami.Icon {
-                anchors.fill: parent
-                source: root.iconName
-                isMask: true
-                color: Theme.on_surface
-                opacity: root.muted ? 0.45 : 1
-            }
-
-            HoverHandler {
-                enabled: root.available && root.hasIconAction
-                cursorShape: Qt.PointingHandCursor
-            }
-
-            TapHandler {
-                enabled: root.available && root.hasIconAction
-                gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: root._activateIcon()
-            }
+        anchors.top: parent.top
+        anchors.topMargin: 2
+        spacing: 10
+        ShellButton {
+            implicitWidth: 34
+            implicitHeight: 34
+            iconName: root.iconName
+            label: root.hasIconAction ? (root.muted ? qsTr("Unmute") : qsTr("Mute")) : root.label
+            enabled: root.available && root.hasIconAction
+            onClicked: root._activateIcon()
         }
-
         Text {
-            Accessible.ignored: true
-            text: root.label
-            color: Theme.on_surface
-            font.family: Tokens.font_family_ui
-            font.pixelSize: Tokens.font_size_body_l
-            font.weight: Tokens.font_weight_medium
-            elide: Text.ElideRight
             Layout.fillWidth: true
+            text: root.label
+            color: Appearance.text
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 13
+            elide: Text.ElideRight
         }
-
-        TabularText {
-            Accessible.ignored: true
+        Text {
             text: root._readout
-            color: Theme.on_surface_variant
-            font.pixelSize: Tokens.font_size_body_m
-            tickOnChange: true
-            t: root._fraction
+            color: Appearance.muted
+            font.family: Tokens.font_family_mono
+            font.pixelSize: 12
+        }
+        ShellButton {
+            visible: root.hasDetail
+            iconName: "go-next"
+            label: qsTr("%1 details").arg(root.label)
+            implicitWidth: 34
+            implicitHeight: 34
+            enabled: root.available
+            onClicked: root.detailRequested()
         }
     }
-
-    // Track: the resting line under the whole rail.
-    Rectangle {
+    Slider {
+        id: slider
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 2
-        color: Theme.on_surface
-        opacity: 0.12
-    }
-
-    // The slider: length is the value, colour is the value.
-    SpectrumUnderline {
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        length: root.width
-        value: root.muted ? 0 : root._fraction
-        t: root._fraction
-        opacity: hover.hovered || drag.active ? 1 : 0.9
-    }
-
-    // The knob shows only while the rail is being aimed at.
-    Rectangle {
-        x: root.width * root._fraction - width / 2
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: -3
-        width: 8
-        height: 8
-        radius: 4
-        color: Spectrum.focus
-        opacity: (hover.hovered || drag.active) && !root.muted ? 0.9 : 0
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: hover.hovered ? Motion.duration_enter : Motion.duration_release
-                easing: hover.hovered ? Motion.enter : Motion.release
+        height: 30
+        from: root.from
+        to: root.to
+        value: root.value
+        enabled: root.available
+        Accessible.name: root.label
+        onMoved: root.moved(value)
+        background: Rectangle {
+            x: slider.leftPadding
+            y: slider.topPadding + slider.availableHeight / 2 - height / 2
+            width: slider.availableWidth
+            height: 8
+            radius: 4
+            color: Appearance.card
+            Rectangle {
+                width: parent.width * slider.visualPosition
+                height: parent.height
+                radius: parent.radius
+                color: root.muted ? Appearance.muted : Appearance.at(root.railT)
             }
         }
-    }
-
-    SpectrumStroke {
-        anchors.fill: parent
-        radius: Tokens.radius_edge
-        focused: root.activeFocus
-        // See Tile.qml: `visible` suppresses the resting stroke; an added
-        // `opacity: 0` would suppress the focus ring along with it.
-        visible: root.activeFocus
-    }
-
-    Item {
-        id: chevron
-
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        width: 28
-        height: 28
-        visible: root.hasDetail
-
-        Kirigami.Icon {
-            anchors.centerIn: parent
+        handle: Rectangle {
+            x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
+            y: slider.topPadding + slider.availableHeight / 2 - height / 2
             width: 16
             height: 16
-            source: "go-next-symbolic"
-            isMask: true
-            color: Theme.on_surface
-            opacity: 0.7
+            radius: 8
+            color: Appearance.light ? Appearance.accent : Appearance.text
+            border.width: slider.visualFocus ? 2 : 0
+            border.color: Appearance.accent
         }
-
-        HoverHandler {
-            enabled: root.available && root.hasDetail
-            cursorShape: Qt.PointingHandCursor
-        }
-
-        TapHandler {
-            enabled: root.available && root.hasDetail
-            gesturePolicy: TapHandler.ReleaseWithinBounds
-            onTapped: root.detailRequested()
+        WheelHandler {
+            enabled: root.available
+            onWheel: event => {
+                const delta = event.angleDelta.x || event.angleDelta.y;
+                if (delta !== 0)
+                    root._step(delta > 0 ? 1 : -1);
+            }
         }
     }
 }

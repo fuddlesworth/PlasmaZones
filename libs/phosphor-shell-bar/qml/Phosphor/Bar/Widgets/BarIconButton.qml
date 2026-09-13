@@ -77,7 +77,7 @@ Item {
         height: 16
         source: root.iconName
         isMask: true
-        color: Theme.on_surface
+        color: Appearance.text
         opacity: !root.enabled ? StateLayer.disabled_content : (hover.hovered || root.activeFocus || root.panelOpen ? 1 : root.restOpacity)
         scale: tap.pressed ? 0.96 : 1
 

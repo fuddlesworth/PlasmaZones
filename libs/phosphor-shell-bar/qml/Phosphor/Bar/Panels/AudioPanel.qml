@@ -136,7 +136,7 @@ PanelFrame {
         width: parent.width
         visible: streams.count > 0
         text: qsTr("Applications")
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.pixelSize: Tokens.font_size_label_s
         font.family: Tokens.font_family_ui
         topPadding: Tokens.spacing_s

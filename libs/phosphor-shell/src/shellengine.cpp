@@ -410,6 +410,11 @@ void ShellEngine::onScreensChanged()
     m_reloadTimer->start();
 }
 
+void ShellEngine::requestReload()
+{
+    m_reloadTimer->start();
+}
+
 void ShellEngine::onFileChanged()
 {
     // Triggered by both the file watcher and screen-topology changes

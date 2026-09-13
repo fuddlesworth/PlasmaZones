@@ -42,7 +42,7 @@ PanelFrame {
         width: parent.width
         visible: players.count === 0
         text: qsTr("Nothing is playing")
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.pixelSize: Tokens.font_size_body_s
         font.family: Tokens.font_family_ui
         topPadding: Tokens.spacing_s
@@ -51,105 +51,10 @@ PanelFrame {
 
     Repeater {
         model: players
-
-        delegate: Item {
-            id: playerEntry
-
-            required property var player
-
-            readonly property bool _playing: playerEntry.player ? playerEntry.player.isPlaying : false
-            readonly property bool _controllable: playerEntry.player ? playerEntry.player.canControl : false
-
+        delegate: MediaCard {
+            required property var model
+            player: model.player
             width: parent ? parent.width : 0
-            implicitHeight: entryLayout.implicitHeight + Tokens.spacing_s
-
-            RowLayout {
-                id: entryLayout
-
-                width: playerEntry.width
-                spacing: Tokens.spacing_s
-
-                // Album art when the player publishes a URL. Kirigami.Icon
-                // takes a URL as readily as a theme name, so one item covers
-                // both the art and the fallback glyph without a Loader.
-                Kirigami.Icon {
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    Layout.alignment: Qt.AlignVCenter
-                    source: playerEntry.player && playerEntry.player.trackArtUrl !== "" ? playerEntry.player.trackArtUrl : "media-optical"
-                    // Art is a picture and must not be recoloured; only the
-                    // fallback glyph is a mask.
-                    isMask: !(playerEntry.player && playerEntry.player.trackArtUrl !== "")
-                    color: Theme.on_surface_variant
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: playerEntry.player && playerEntry.player.trackTitle !== "" ? playerEntry.player.trackTitle : qsTr("Unknown track")
-                        color: Theme.on_surface
-                        font.pixelSize: Tokens.font_size_body_m
-                        font.family: Tokens.font_family_ui
-                        font.weight: playerEntry._playing ? Tokens.font_weight_medium : Tokens.font_weight_regular
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        // Artist when there is one, otherwise the player's
-                        // own name, so the line is never blank and always
-                        // says something about which row this is.
-                        text: playerEntry.player && playerEntry.player.trackArtist !== "" ? playerEntry.player.trackArtist : (playerEntry.player ? playerEntry.player.identity : "")
-                        color: Theme.on_surface_variant
-                        font.pixelSize: Tokens.font_size_label_s
-                        font.family: Tokens.font_family_ui
-                        elide: Text.ElideRight
-                    }
-                }
-
-                BarIconButton {
-                    Layout.alignment: Qt.AlignVCenter
-                    iconName: "media-skip-backward"
-                    label: qsTr("Previous")
-                    enabled: playerEntry.player !== null && playerEntry.player.canGoPrevious
-                    onActivated: playerEntry.player.previous()
-                }
-
-                BarIconButton {
-                    Layout.alignment: Qt.AlignVCenter
-                    iconName: playerEntry._playing ? "media-playback-pause" : "media-playback-start"
-                    label: playerEntry._playing ? qsTr("Pause") : qsTr("Play")
-                    // canPause governs only the pause direction; a stopped
-                    // player that can play must still offer the button.
-                    enabled: playerEntry.player !== null && (playerEntry._playing ? playerEntry.player.canPause : playerEntry.player.canPlay)
-                    onActivated: playerEntry.player.togglePlaying()
-                }
-
-                BarIconButton {
-                    Layout.alignment: Qt.AlignVCenter
-                    iconName: "media-skip-forward"
-                    label: qsTr("Next")
-                    enabled: playerEntry.player !== null && playerEntry.player.canGoNext
-                    onActivated: playerEntry.player.next()
-                }
-            }
-
-            // A press anywhere else on the row raises the player's window,
-            // which is what someone looking at a list of players usually
-            // wants next. This handler is on the row ITSELF while the
-            // transport buttons are descendants, and Qt delivers a press to
-            // the deepest item first, so pressing a button does not also
-            // raise the window.
-            TapHandler {
-                enabled: playerEntry._controllable
-                onTapped: {
-                    if (playerEntry.player)
-                        playerEntry.player.raise();
-                }
-            }
         }
     }
 }

@@ -35,15 +35,10 @@ QtObject {
     readonly property int radius_xl: 24
     readonly property int radius_xxl: 32
     readonly property int radius_full: 9999
-    // Shell chrome radii (docs/phosphor-shell-design/05-visual-identity.md
-    // R3). Chrome uses ONLY these four: edge for OSD cards, fields and
-    // outlined chips; tile for engine-placed panes; container for floating
-    // cards; mini for placement-map miniature cells. radius_l / radius_xl /
-    // radius_xxl / radius_full above are settings-page tokens and are
-    // forbidden on shell chrome (no pills, nothing above 10 px).
-    readonly property int radius_edge: 6
-    readonly property int radius_tile: 8
-    readonly property int radius_container: 10
+    // Shell chrome follows the persisted appearance independently of settings pages.
+    readonly property int radius_edge: Math.min(10, Appearance.radius)
+    readonly property int radius_tile: Math.max(4, Appearance.radius - 5)
+    readonly property int radius_container: Appearance.radius
     readonly property int radius_mini: 3
     // ─── Elevation (per tier) ────────────────────────────────────────────
     // Settings pages only. Shell chrome carries no drop shadow (R2): depth
@@ -126,6 +121,6 @@ QtObject {
     // A coloured hairline on a bright field needs more ink (A1 §2.5).
     readonly property real stroke_resting_light: 0.55
     readonly property real stroke_active: 1.0
-    readonly property int bar_thickness: 28
+    readonly property int bar_thickness: Appearance.barHeight + 2 * Appearance.gap
     readonly property int rail_thickness: 2
 }

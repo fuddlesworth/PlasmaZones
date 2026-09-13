@@ -110,7 +110,7 @@ BarWidget {
         TabularText {
             Accessible.ignored: true
             text: usage.cpuPercent + "% " + usage.memoryPercent + "%"
-            color: Theme.on_surface_variant
+            color: Appearance.muted
             font.pixelSize: Tokens.font_size_label_m
             anchors.verticalCenter: parent.verticalCenter
             visible: opacity > 0

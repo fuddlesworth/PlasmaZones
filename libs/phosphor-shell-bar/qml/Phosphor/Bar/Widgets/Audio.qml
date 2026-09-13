@@ -100,7 +100,7 @@ BarWidget {
         isMask: true
         // State is brightness, not colour: muted sits back at 35%, live
         // sits at 90%, and the chip never paints a background (A2 §5).
-        color: Theme.on_surface
+        color: Appearance.text
         opacity: root.muted ? 0.35 : 0.9
         scale: pressGuard.pressed ? 0.94 : 1
 

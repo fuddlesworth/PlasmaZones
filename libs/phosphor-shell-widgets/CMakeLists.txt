@@ -3,7 +3,7 @@
 #
 # PhosphorShellWidgets, the Phosphor.Widgets M3 atom library.
 #
-# A pure-QML module of themeable building blocks (button, slider, text
+# Themeable QML building blocks with a shared audio spectrum provider (button, slider, text
 # field, card, pill, ripple, elevation shadow) that every Phosphor shell
 # surface composes. The atoms bind through PhosphorTheme's Theme / Motion
 # / StateLayer singletons, so a palette or motion retune propagates here
@@ -36,6 +36,9 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
     find_package(PhosphorTheme CONFIG QUIET)
 endif()
+if(NOT TARGET PhosphorAudio::PhosphorAudio)
+    find_package(PhosphorAudio CONFIG REQUIRED)
+endif()
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML module
 # resource prefix.
@@ -49,11 +52,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # QML module, STATIC (in-tree linkable)
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# Pure-QML module: the atoms are .qml files with no backing C++ types.
+# The visual atoms are QML; AudioSpectrum owns their shared CAVA subscription.
 # The glue translation unit gives qt_add_qml_module a compilation unit
 # for the generated plugin + type registrar.
 
 set(_phosphor_widgets_qml_files
+    qml/Phosphor/Widgets/ShellSurface.qml
+    qml/Phosphor/Widgets/ShellButton.qml
+    qml/Phosphor/Widgets/MediaCard.qml
+    qml/Phosphor/Widgets/SpectrumVisualizer.qml
     qml/Phosphor/Widgets/PhosphorRipple.qml
     qml/Phosphor/Widgets/PhosphorButton.qml
     qml/Phosphor/Widgets/PhosphorCard.qml
@@ -115,6 +122,8 @@ qt_add_qml_module(PhosphorShellWidgetsQml
         org.phosphor.animation
     SOURCES
         src/phosphorshellwidgets_qml_plugin.cpp
+        src/AudioSpectrum.h
+        src/audiospectrum.cpp
     QML_FILES ${_phosphor_widgets_qml_files}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Widgets
 )
@@ -125,6 +134,7 @@ target_compile_features(PhosphorShellWidgetsQml PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorShellWidgetsQml
     PUBLIC
+        PhosphorAudio::PhosphorAudio
         Qt6::Core
         Qt6::Gui
         Qt6::Qml

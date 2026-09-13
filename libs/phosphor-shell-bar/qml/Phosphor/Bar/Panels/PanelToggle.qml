@@ -62,7 +62,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         text: root.checked ? qsTr("On") : qsTr("Off")
-        color: Theme.on_surface
+        color: Appearance.text
         // Brightness carries the state, exactly as it does on the bar's own
         // chips: on reads at full, off sits back.
         opacity: root.checked ? 1 : (hover.hovered ? 0.8 : 0.55)
@@ -83,7 +83,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 2
-        color: root.checked ? Spectrum.at(0.33) : Theme.on_surface
+        color: root.checked ? Spectrum.at(0.33) : Appearance.text
         opacity: root.checked ? 1 : (hover.hovered ? 0.45 : 0.22)
 
         Behavior on opacity {

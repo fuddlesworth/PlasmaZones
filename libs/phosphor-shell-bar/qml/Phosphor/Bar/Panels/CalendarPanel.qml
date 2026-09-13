@@ -1,22 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.CalendarPanel, the clock chip's transient.
-//
-// A month grid in tabular figures with today underlined, and nothing
-// else. Reading a date is a glance, so this is a transient (A2 §4.7) and
-// not a pane: it does not move anyone's windows, and it goes on the next
-// click elsewhere.
-//
-// It is deliberately NOT the dashboard. The dashboard draws a calendar
-// cell too (A3 §7), at overview scale, alongside every desktop's
-// placement map — that is a different errand, and routing the clock there
-// meant a full-screen takeover to answer "what is the date", which is
-// what the first implementation shipped.
-//
-// Today is marked with the 2px spectrum underline rather than a filled
-// circle, for the same reason every other value on a Phosphor surface is:
-// R1 puts colour in underlines, never in fills.
-
 import QtQuick
 import QtQuick.Layouts
 import Phosphor.Theme
@@ -25,107 +8,147 @@ import Phosphor.Shell
 
 PanelFrame {
     id: root
-
-    title: Qt.formatDate(clock.date, "MMMM yyyy")
-    iconName: "view-calendar"
+    title: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0")
     subtitle: Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.LongFormat))
-    panelWidth: 268
-
+    iconName: "view-calendar"
+    panelWidth: Appearance.panelWidth
+    maxBodyHeight: 440
     SystemClock {
         id: clock
-
-        // Minutes, not seconds: nothing here shows a second, and a
-        // per-second wakeup for a surface that shows a month would be a
-        // timer running for no reason.
         precision: SystemClock.Minutes
     }
+    // QDate crosses into JavaScript at UTC midnight. Rebuild a local
+    // calendar date explicitly so western time zones do not select yesterday.
+    readonly property date today: {
+        const parts = Qt.formatDate(clock.date, "yyyy-MM-dd").split("-");
+        return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12);
+    }
+    property date selectedDate: new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    property date displayedMonth: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
+    readonly property int firstWeekday: Qt.locale().firstDayOfWeek % 7
+    readonly property int lead: (displayedMonth.getDay() - firstWeekday + 7) % 7
 
-    readonly property date _today: clock.date
-    readonly property int _year: root._today.getFullYear()
-    readonly property int _month: root._today.getMonth()
+    function sameDay(a: date, b: date): bool {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+    function browseMonth(delta: int): void {
+        displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + delta, 1);
+        const last = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 0).getDate();
+        selectedDate = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth(), Math.min(selectedDate.getDate(), last));
+    }
+    function selectDate(value: date): void {
+        selectedDate = value;
+        displayedMonth = new Date(value.getFullYear(), value.getMonth(), 1);
+    }
+    function stepDay(delta: int): void {
+        selectDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() + delta));
+    }
+    focus: true
+    Component.onCompleted: forceActiveFocus()
+    Keys.onLeftPressed: stepDay(-1)
+    Keys.onRightPressed: stepDay(1)
+    Keys.onUpPressed: stepDay(-7)
+    Keys.onDownPressed: stepDay(7)
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Home) {
+            selectDate(today);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_PageUp) {
+            browseMonth(-1);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_PageDown) {
+            browseMonth(1);
+            event.accepted = true;
+        }
+    }
 
-    // Monday-first offset of the 1st. getDay() is Sunday-based, so the
-    // shift maps Sunday's 0 onto 6 and leaves the rest one lower.
-    readonly property int _lead: (new Date(root._year, root._month, 1).getDay() + 6) % 7
-    readonly property int _days: new Date(root._year, root._month + 1, 0).getDate()
-
+    RowLayout {
+        width: parent ? parent.width : 0
+        Text {
+            Layout.fillWidth: true
+            text: Qt.formatDate(root.displayedMonth, "MMMM yyyy")
+            color: Appearance.text
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 16
+            font.weight: Font.DemiBold
+        }
+        ShellButton {
+            iconName: "go-previous"
+            label: qsTr("Previous month")
+            onClicked: root.browseMonth(-1)
+        }
+        ShellButton {
+            iconName: "go-next"
+            label: qsTr("Next month")
+            onClicked: root.browseMonth(1)
+        }
+    }
     Item {
-        width: parent.width
-        implicitHeight: grid.implicitHeight + Tokens.spacing_s
-
-        GridLayout {
-            id: grid
-
-            width: parent.width
-            columns: 7
-            columnSpacing: 0
-            rowSpacing: 2
-
-            Repeater {
-                model: [qsTr("M"), qsTr("T"), qsTr("W"), qsTr("T"), qsTr("F"), qsTr("S"), qsTr("S")]
-
-                delegate: Text {
-                    required property string modelData
-
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: modelData
-                    color: Theme.on_surface_variant
-                    opacity: 0.6
-                    font.pixelSize: Tokens.font_size_label_s
-                    font.family: Tokens.font_family_ui
-                    bottomPadding: Tokens.spacing_xs
+        width: 1
+        height: 10
+    }
+    GridLayout {
+        width: parent ? parent.width : 0
+        columns: 7
+        columnSpacing: 2
+        rowSpacing: 3
+        Repeater {
+            model: 7
+            delegate: Text {
+                required property int index
+                Layout.fillWidth: true
+                Layout.preferredHeight: 24
+                text: Qt.locale().standaloneDayName((root.firstWeekday + index) % 7, Locale.ShortFormat)
+                horizontalAlignment: Text.AlignHCenter
+                color: Appearance.muted
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 10
+            }
+        }
+        Repeater {
+            model: 42
+            delegate: ShellButton {
+                id: day
+                required property int index
+                readonly property date dateValue: new Date(root.displayedMonth.getFullYear(), root.displayedMonth.getMonth(), index - root.lead + 1)
+                Layout.fillWidth: true
+                Layout.preferredHeight: Appearance.compact ? 32 : 37
+                implicitWidth: 32
+                flat: true
+                text: dateValue.getDate()
+                label: Qt.formatDate(dateValue, Qt.locale().dateFormat(Locale.LongFormat))
+                highlighted: root.sameDay(dateValue, root.selectedDate)
+                opacity: dateValue.getMonth() === root.displayedMonth.getMonth() ? 1 : 0.4
+                onClicked: root.selectDate(dateValue)
+                Rectangle {
+                    visible: root.sameDay(day.dateValue, root.today)
+                    width: 4
+                    height: 4
+                    radius: 2
+                    color: Appearance.accent
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 3
                 }
             }
-
-            // Blanks before the 1st, so the first row starts on the right
-            // weekday. A Repeater over a count of zero mounts nothing,
-            // which is the wanted behaviour when the 1st is a Monday.
-            Repeater {
-                model: root._lead
-
-                delegate: Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 26
-                }
-            }
-
-            Repeater {
-                model: root._days
-
-                delegate: Item {
-                    id: day
-
-                    required property int index
-
-                    readonly property int _date: day.index + 1
-                    readonly property bool _isToday: day._date === root._today.getDate()
-
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 26
-
-                    TabularText {
-                        anchors.centerIn: parent
-                        text: day._date
-                        // Today is white, because focus and urgency are
-                        // white and never a hue (R9). Everything else is
-                        // the ordinary body colour.
-                        color: day._isToday ? Theme.on_surface : Theme.on_surface_variant
-                        font.pixelSize: Tokens.font_size_body_s
-                        font.weight: day._isToday ? Tokens.font_weight_medium : Tokens.font_weight_regular
-                    }
-
-                    Rectangle {
-                        visible: day._isToday
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 2
-                        width: 14
-                        height: 2
-                        color: Spectrum.at(root.railT)
-                    }
-                }
-            }
+        }
+    }
+    Item {
+        width: 1
+        height: 12
+    }
+    RowLayout {
+        width: parent ? parent.width : 0
+        Text {
+            Layout.fillWidth: true
+            text: Qt.formatDate(root.selectedDate, "ddd, MMM d")
+            color: Appearance.muted
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 12
+        }
+        ShellButton {
+            text: qsTr("Today")
+            onClicked: root.selectDate(root.today)
         }
     }
 }

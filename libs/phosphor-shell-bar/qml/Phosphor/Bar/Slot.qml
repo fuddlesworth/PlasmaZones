@@ -103,7 +103,7 @@ RowLayout {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 1
                 height: 12
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: 0.25
             }
 

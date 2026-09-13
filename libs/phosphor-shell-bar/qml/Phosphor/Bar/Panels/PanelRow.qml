@@ -92,7 +92,7 @@ Item {
                 Layout.preferredHeight: 18
                 source: root.iconName
                 isMask: true
-                color: Theme.on_surface
+                color: Appearance.text
                 // Brightness carries state here too, matching the chips.
                 opacity: root.current ? 1 : (hover.hovered ? 0.9 : 0.55)
                 scale: tap.pressed ? 0.94 : 1
@@ -114,7 +114,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: root.label
-                    color: root.current ? Theme.on_surface : Theme.on_surface_variant
+                    color: root.current ? Appearance.text : Appearance.muted
                     font.pixelSize: Tokens.font_size_body_m
                     font.family: Tokens.font_family_ui
                     font.weight: root.current ? Tokens.font_weight_medium : Tokens.font_weight_regular
@@ -125,7 +125,7 @@ Item {
                     Layout.fillWidth: true
                     visible: root.sublabel !== ""
                     text: root.sublabel
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                     font.pixelSize: Tokens.font_size_label_s
                     font.family: Tokens.font_family_ui
                     elide: Text.ElideRight
@@ -135,7 +135,7 @@ Item {
             Text {
                 visible: root.trailingText !== ""
                 text: root.trailingText
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.pixelSize: Tokens.font_size_label_s
                 font.family: Tokens.font_family
             }

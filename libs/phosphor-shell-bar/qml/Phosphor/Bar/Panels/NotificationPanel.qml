@@ -49,7 +49,7 @@ PanelFrame {
         width: parent.width
         visible: NotificationRegistry.count === 0
         text: NotificationRegistry.serverActive ? qsTr("No notifications") : qsTr("Notifications are being handled by another program, so none arrive here.")
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.pixelSize: Tokens.font_size_body_s
         font.family: Tokens.font_family_ui
         wrapMode: Text.Wrap
@@ -90,7 +90,7 @@ PanelFrame {
                     // would flatten a logo into a silhouette.
                     source: entry.appIcon !== "" ? entry.appIcon : "notifications"
                     isMask: entry.appIcon === ""
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                     // An expired entry is a record rather than something
                     // still asking for attention, so it sits back.
                     opacity: entry.live ? 1 : StateLayer.disabled_content
@@ -107,7 +107,7 @@ PanelFrame {
                         Text {
                             Layout.fillWidth: true
                             text: entry.summary
-                            color: Theme.on_surface
+                            color: Appearance.text
                             font.pixelSize: Tokens.font_size_body_m
                             font.family: Tokens.font_family_ui
                             font.weight: Tokens.font_weight_medium
@@ -116,7 +116,7 @@ PanelFrame {
 
                         Text {
                             text: Qt.formatTime(entry.timestamp, Qt.locale().timeFormat(Locale.ShortFormat))
-                            color: Theme.on_surface_variant
+                            color: Appearance.muted
                             font.pixelSize: Tokens.font_size_label_s
                             font.family: Tokens.font_family
                         }
@@ -126,7 +126,7 @@ PanelFrame {
                         Layout.fillWidth: true
                         visible: entry.body !== ""
                         text: entry.body
-                        color: Theme.on_surface_variant
+                        color: Appearance.muted
                         font.pixelSize: Tokens.font_size_label_s
                         font.family: Tokens.font_family_ui
                         wrapMode: Text.Wrap
@@ -141,7 +141,7 @@ PanelFrame {
                         Layout.fillWidth: true
                         visible: entry.appName !== ""
                         text: entry.appName
-                        color: Theme.on_surface_variant
+                        color: Appearance.muted
                         font.pixelSize: Tokens.font_size_label_s
                         font.family: Tokens.font_family_ui
                         opacity: 0.7

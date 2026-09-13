@@ -21,6 +21,7 @@
 #include "shell/QmlComponentBarWidgetFactory.h"
 
 #include <QFile>
+#include <QJSEngine>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -87,61 +88,47 @@ void TestBarWidgetTypes::theDefaultBarLayoutOnlyUsesRegisteredIds()
              "BarHost.qml is not in the module resource; the layout guard cannot run");
     const QString source = QString::fromUtf8(barHost.readAll());
 
-    // property var leftGroups: [["focusedapp"]]  ->  the quoted ids within.
-    //
-    // Escaped literals rather than raw strings: moc's preprocessor mis-parses
-    // a raw string containing parentheses and quotes, and fails this file
-    // with "missing ')' in macro usage".
-    // Balance-aware extraction, not a regex capture over the literal: any
-    // regex form has a truncation mode (a lazy multi-line match ends at
-    // the first `]` that reaches end-of-line, a greedy one swallows the
-    // next declaration), and a truncated match still LOOKS parsed, so no
-    // count check catches it. Locating each declaration and scanning to
-    // the matching bracket by depth is format-proof: one-line and
-    // reformatted multi-line lists both extract in full.
-    static const QRegularExpression groupsDeclaration(
+    // Evaluate the shipped bindings at both responsive widths. This checks
+    // every branch and concat result, rather than assuming a literal array.
+    static const QRegularExpression declaration(
         QStringLiteral("property\\s+var\\s+(?:left|center|right)Groups\\s*:\\s*"));
-    static const QRegularExpression quotedId(QStringLiteral("\"([^\"]+)\""));
-
     QStringList layoutIds;
-    int parsedDeclarations = 0;
-    int declaredCount = 0;
-    auto declarations = groupsDeclaration.globalMatch(source);
+    int count = 0;
+    auto declarations = declaration.globalMatch(source);
     while (declarations.hasNext()) {
-        const auto match = declarations.next();
-        ++declaredCount;
-        const qsizetype open = match.capturedEnd(0);
-        if (open >= source.size() || source.at(open) != QLatin1Char('[')) {
-            continue; // counted but not parsed: the QCOMPARE below fails loudly
-        }
+        const qsizetype start = declarations.next().capturedEnd();
+        qsizetype end = start;
         int depth = 0;
-        qsizetype close = open;
-        for (; close < source.size(); ++close) {
-            const QChar c = source.at(close);
-            if (c == QLatin1Char('[')) {
+        for (; end < source.size(); ++end) {
+            const QChar c = source.at(end);
+            if (c == QLatin1Char('[') || c == QLatin1Char('(') || c == QLatin1Char('{')) {
                 ++depth;
-            } else if (c == QLatin1Char(']') && --depth == 0) {
+            } else if (c == QLatin1Char(']') || c == QLatin1Char(')') || c == QLatin1Char('}')) {
+                --depth;
+            } else if (c == QLatin1Char('\n') && depth == 0) {
                 break;
             }
         }
-        if (depth != 0) {
-            continue; // unbalanced: same loud failure below
+        QCOMPARE(depth, 0);
+        const QString expression = source.mid(start, end - start);
+        for (const int width : {400, 800, 1440}) {
+            QJSEngine evaluator;
+            auto panel = evaluator.newObject();
+            panel.setProperty(QStringLiteral("width"), width);
+            evaluator.globalObject().setProperty(QStringLiteral("panel"), panel);
+            const auto value = evaluator.evaluate(expression);
+            QVERIFY2(!value.isError(), qPrintable(value.toString()));
+            QVERIFY(value.isArray());
+            for (const auto& group : value.toVariant().toList()) {
+                for (const auto& id : group.toList()) {
+                    layoutIds.append(id.toString());
+                }
+            }
         }
-        ++parsedDeclarations;
-        const QString literal = source.mid(open, close - open + 1);
-        auto ids = quotedId.globalMatch(literal);
-        while (ids.hasNext()) {
-            layoutIds << ids.next().captured(1);
-        }
+        ++count;
     }
-    // Every declaration must have produced a fully-extracted literal, so a
-    // formatting change that defeats the extraction fails loudly instead
-    // of shrinking coverage in silence.
-    QCOMPARE(parsedDeclarations, declaredCount);
-
-    // Guard the guard: a parse that silently found nothing would pass
-    // vacuously forever.
-    QVERIFY2(!layoutIds.isEmpty(), "no *Groups ids parsed out of BarHost.qml; the layout guard is vacuous");
+    QCOMPARE(count, 3);
+    QVERIFY(!layoutIds.isEmpty());
 
     BarController controller;
     const QStringList registered = controller.factoryIds();

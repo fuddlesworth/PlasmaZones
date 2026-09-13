@@ -376,7 +376,7 @@ Item {
         radius: root.cellRadius
         color: "transparent"
         border.width: 1
-        border.color: Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, 0.14)
+        border.color: Qt.rgba(Appearance.text.r, Appearance.text.g, Appearance.text.b, 0.14)
     }
 
     // Right-click off any cell.
@@ -485,7 +485,7 @@ Item {
                 height: 12
                 visible: root.labels && cell.occupied && valid && source !== "" && cell.width >= 16 && cell.height >= 16
                 source: cell.appId
-                color: Theme.on_surface
+                color: Appearance.text
             }
             TabularText {
                 anchors.centerIn: parent
@@ -711,10 +711,9 @@ Item {
         }
     }
 
-    // Gutter columns for the strip's off-screen columns, packed at the
-    // ends in their structure-axis hues.
+    // Bounded overflow markers. The bar caption reports the full count.
     Repeater {
-        model: root._scrolling ? root._overflowLeft : 0
+        model: root._scrolling ? Math.min(3, root._overflowLeft) : 0
         delegate: Rectangle {
             required property int index
             x: 1 + index * 2
@@ -725,10 +724,10 @@ Item {
         }
     }
     Repeater {
-        model: root._scrolling ? root._overflowRight : 0
+        model: root._scrolling ? Math.min(3, root._overflowRight) : 0
         delegate: Rectangle {
             required property int index
-            x: root.width - 2 - (root._overflowRight - 1 - index) * 2
+            x: root.width - 2 - (Math.min(3, root._overflowRight) - 1 - index) * 2
             y: 1
             width: 1
             height: root.height - 2

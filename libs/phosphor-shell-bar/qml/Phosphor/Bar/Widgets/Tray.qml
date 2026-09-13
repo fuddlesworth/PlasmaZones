@@ -72,7 +72,7 @@ BarWidget {
                 width: root.delegateSize
                 height: root.delegateSize
                 radius: Tokens.radius_s
-                color: trayMouse.containsMouse ? Theme.surface_container_high : "transparent"
+                color: trayMouse.containsMouse ? Appearance.card : "transparent"
 
                 Behavior on color {
                     ColorAnimation {
@@ -90,7 +90,7 @@ BarWidget {
                     width: root.iconSize
                     height: root.iconSize
                     radius: width / 2
-                    color: Theme.surface_container_high
+                    color: Appearance.card
                     // Dim Passive items exactly like the Image path below,
                     // so an icon-less passive item doesn't stay at full
                     // strength.
@@ -103,7 +103,7 @@ BarWidget {
                         // accessible name; without this the bare letter is
                         // announced alongside it as its own StaticText node.
                         Accessible.ignored: true
-                        color: Theme.on_surface
+                        color: Appearance.text
                         font.pixelSize: Tokens.font_size_label_s
                         font.weight: Tokens.font_weight_bold
                         font.family: Tokens.font_family

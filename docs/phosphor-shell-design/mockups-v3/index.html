@@ -1,0 +1,86 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phosphor / Identity, interaction, expression</title>
+<link rel="stylesheet" href="studies.css">
+</head>
+<body>
+<header class="review-header">
+  <div><span class="eyebrow">PHOSPHOR / REDESIGN STUDIES</span><h1>One identity. Two ways to work.</h1></div>
+  <nav class="study-switch" aria-label="Interaction study">
+    <button data-study="navigator" aria-pressed="true"><b>A</b> Navigator <small>Stay in context</small></button>
+    <button data-study="stage" aria-pressed="false"><b>B</b> Stage <small>Work with the space</small></button>
+  </nav>
+</header>
+<div class="review-toolbar">
+  <nav aria-label="Preview state" class="view-switch">
+    <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button>
+    <button data-view="controls">Quick settings</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button>
+  </nav>
+  <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
+  <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Customize this shell</button>
+</div>
+<div class="review-layout">
+<main class="frame" aria-label="Interactive desktop mock">
+<div id="desktop" class="desktop navigator">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="wifi" viewBox="0 0 24 24"><path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r=".8"/></symbol>
+<symbol id="bluetooth" viewBox="0 0 24 24"><path d="m7 7 10 10-5 4V3l5 4L7 17"/></symbol>
+<symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+<symbol id="volume" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM17 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+<symbol id="battery" viewBox="0 0 24 24"><rect x="2" y="6" width="18" height="12" rx="3"/><path d="M23 10v4M6 9v6m4-6v6m4-6v6"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></symbol>
+<symbol id="power" viewBox="0 0 24 24"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></symbol>
+<symbol id="grid" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="18" rx="2"/><rect x="14" y="3" width="7" height="8" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+<symbol id="folder" viewBox="0 0 24 24"><path d="M3 6h7l2 3h9v11H3zM3 6V4h7l2 2h8v3"/></symbol>
+<symbol id="terminal" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="4"/><path d="m6 8 4 4-4 4m8 0h4"/></symbol>
+<symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+<symbol id="music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="17" cy="16" rx="3" ry="3"/></symbol>
+</defs></svg>
+  <div class="wallpaper" aria-hidden="true"><div class="orb"></div><div class="landscape"></div><div class="contour"></div></div>
+  <div class="desktop-watermark">PHOSPHOR<span>your windows, in place</span></div>
+  <header id="bar" class="bar material"></header>
+  <div id="windows" class="windows"></div>
+  <div class="stage-shade hidden" id="stage-shade"></div>
+  <section id="overview" class="hidden" aria-label="Window navigation"></section>
+  <section id="controls" class="hidden" aria-label="Quick settings"></section>
+  <section id="launcher" class="hidden" aria-label="Launcher"></section>
+  <section id="datetime" class="hidden" aria-label="Date and time"></section>
+  <div id="osd" class="osd hidden" role="status"></div>
+  <div id="toast" class="toast material hidden" role="status"></div>
+</div>
+</main>
+<aside id="customizer" class="customizer hidden" aria-label="Shell customization">
+  <div class="customizer-heading"><div><span class="eyebrow">MAKE IT YOURS</span><h2>Same Phosphor.<br>Your expression.</h2></div><button id="close-customizer" aria-label="Close customization">×</button></div>
+  <p>Changes apply to both studies. Your choices stay when you switch between them.</p>
+  <label>Starting point<select id="preset"><option value="custom">Custom</option><option value="phosphor" selected>Phosphor / deep glass</option><option value="paper">Paper / bright & quiet</option><option value="ember">Ember / warm & compact</option></select></label>
+  <label>Color field<select data-setting="palette"><option value="spectrum">Phosphor spectrum</option><option value="wallpaper">Wallpaper / iris to peach</option><option value="ember">Ember / honey to rust</option></select></label>
+  <label>Surface material<select data-setting="material"><option value="glass">Tinted glass</option><option value="solid">Opaque</option><option value="light">Light ceramic</option></select></label>
+  <label>Bar placement<select data-setting="edge"><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+  <label>Density<select data-setting="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+  <label>Corner radius <output id="radius-value">18 px</output><input data-setting="radius" type="range" min="4" max="30" value="18"></label>
+  <label>Window gap <output id="gap-value">16 px</output><input data-setting="gap" type="range" min="6" max="30" value="16"></label>
+  <label class="check"><input data-setting="glow" type="checkbox" checked> Edge glow</label>
+  <label class="check"><input data-setting="media" type="checkbox" checked> Media widget in bar</label>
+  <label>Media visualizer<select data-setting="visualizer"><option value="ribbon">Ribbon</option><option value="bars">Bars</option><option value="halo">Halo</option><option value="off">Off</option></select></label>
+  <label class="check"><input data-setting="motion" type="checkbox" checked> Motion</label>
+  <div class="customizer-actions"><button id="export">Export preset ↓</button><button id="reset">Reset</button></div>
+  <div class="customizer-note">The signature is the relationship between map, windows, and color field. The default palette is a starting point; the geometry and focus cues still work in every preset.</div>
+</aside>
+</div>
+<section class="review-notes">
+  <div><span class="eyebrow" id="study-kicker"></span><h2 id="study-title"></h2><p id="study-description"></p></div>
+  <div><span class="eyebrow">01 / VISUAL IDENTITY</span><p>One spectrum across the rail, placement map, and window edges. White marks focus. Tinted fills, inset controls, and selective glow add depth around that structure.</p></div>
+  <div><span class="eyebrow">02 / GOOD UX</span><p id="ux-description"></p></div>
+  <div><span class="eyebrow">03 / RICEABILITY</span><p>Change material, color field, density, corners, gaps, bar edge, media, and motion. Presets are editable starting points. Export captures your choices.</p></div>
+</section>
+<footer class="review-footer">Browser interaction studies with simulated windows and devices. Mode changes, window focus, workspace switching, and customization are functional in the mock. No system settings are changed.</footer>
+<script src="visualizer.js"></script>
+<script src="studies.js"></script>
+</body>
+</html>

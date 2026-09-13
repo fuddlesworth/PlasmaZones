@@ -82,7 +82,7 @@ BarWidget {
         Text {
             Accessible.ignored: true
             text: root._date
-            color: Theme.on_surface_variant
+            color: Appearance.muted
             font.pixelSize: Tokens.font_size_body_s
             font.family: Tokens.font_family_ui
             anchors.verticalCenter: timeLabel.verticalCenter

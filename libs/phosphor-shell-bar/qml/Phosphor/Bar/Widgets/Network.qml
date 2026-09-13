@@ -104,7 +104,7 @@ BarWidget {
         height: root.iconSize
         source: root.iconName
         isMask: true
-        color: root.online ? Theme.on_surface : root.limited ? Theme.warning : Theme.on_surface_variant
+        color: root.online ? Appearance.text : root.limited ? Theme.warning : Appearance.muted
         // The press reads on the glyph, since the chip has no state layer.
         scale: trigger.pressed ? 0.94 : 1
         opacity: trigger.lit ? 1 : 0.85

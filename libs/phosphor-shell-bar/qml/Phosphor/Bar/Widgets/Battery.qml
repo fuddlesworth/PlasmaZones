@@ -55,7 +55,7 @@ BarWidget {
             height: 18
             source: root.available && battery.displayDevice.iconName ? battery.displayDevice.iconName : "battery"
             isMask: true
-            color: root.charging ? Theme.success : Theme.on_surface
+            color: root.charging ? Theme.success : Appearance.text
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -66,7 +66,7 @@ BarWidget {
             // this fragment.
             Accessible.ignored: true
             text: root.percent + "%"
-            color: root.charging ? Theme.success : Theme.on_surface
+            color: root.charging ? Theme.success : Appearance.text
             font.pixelSize: Tokens.font_size_label_l
             font.family: Tokens.font_family
             anchors.verticalCenter: parent.verticalCenter

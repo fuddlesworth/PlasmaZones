@@ -50,7 +50,7 @@ BarWidget {
         // unknown-icon fallback.
         source: root.powered ? "network-bluetooth-activated" : "network-bluetooth"
         isMask: true
-        color: root.powered ? Theme.primary : Theme.on_surface_variant
+        color: root.powered ? Theme.primary : Appearance.muted
         scale: trigger.pressed ? 0.94 : 1
         opacity: trigger.lit ? 1 : 0.85
 

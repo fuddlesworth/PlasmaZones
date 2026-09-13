@@ -45,14 +45,14 @@ BarWidget {
 
     signal expandRequested(bool menu)
 
-    readonly property int restHeight: 18
-    readonly property int hoverHeight: 22
+    readonly property int restHeight: Appearance.compact ? 22 : 26
+    readonly property int hoverHeight: root.restHeight
     readonly property real _aspect: root.map && root.map.aspect > 0 ? root.map.aspect : 16 / 9
     readonly property int _mapH: hover.hovered || root.expanded ? root.hoverHeight : root.restHeight
     readonly property int _mapW: Math.round(Math.max(24, Math.min(56, root._mapH * root._aspect)))
 
     available: root.map !== null
-    contentWidth: root._mapW
+    contentWidth: root._mapW + 12 + caption.width
     contentHeight: root.restHeight + 4
 
     Accessible.role: Accessible.PageTabList
@@ -73,7 +73,7 @@ BarWidget {
     PlacementMiniature {
         id: mini
 
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.left: parent.left
         // Grows out of the band, never into the exclusive zone.
         anchors.top: parent.top
         anchors.topMargin: (root.restHeight - root._mapH) / 2
@@ -207,9 +207,33 @@ BarWidget {
         root.map.registerDropProxy(rect, DropProxy.cellRects(rect, root.map.cells));
     }
 
+    Column {
+        id: caption
+        x: root._mapW + 12
+        anchors.verticalCenter: parent.verticalCenter
+        width: 104
+        spacing: 2
+        Text {
+            text: qsTr("Workspace %1").arg(root.map ? root.map.currentDesktop + 1 : 1)
+            color: Appearance.text
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 11
+        }
+        Text {
+            readonly property int offscreen: root.map ? root.map.overflowLeft + root.map.overflowRight : 0
+            text: root.map && root.map.mode === 2 ? qsTr("Scrolling") + (offscreen > 0 ? "  +" + offscreen : "") : root.map && root.map.mode === 1 ? qsTr("Tiling") : root.map && root.map.mode === 0 ? qsTr("Snapping") : qsTr("Placement off")
+            color: Appearance.muted
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 10
+        }
+        TapHandler {
+            onTapped: root.expandRequested(false)
+        }
+    }
+
     // Desktop ticks: the only trace of the old dots, demoted to a ruler.
     Row {
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: (root._mapW - width) / 2
         anchors.top: parent.top
         anchors.topMargin: root.restHeight + 1
         spacing: 2

@@ -10,6 +10,7 @@
 import QtQuick
 import QtTest
 import Phosphor.Widgets
+import Phosphor.Theme
 
 TestCase {
     id: testCase
@@ -80,7 +81,7 @@ TestCase {
         const c = createTemporaryObject(cardComp, testCase);
         verify(c, "PhosphorCard instantiates");
         compare(c.elevation, 1, "default elevation 1");
-        compare(c.radius, 10, "default radius is the container radius");
+        compare(c.radius, Appearance.radius, "default radius is the container radius");
         compare(c.padding, 16, "default padding 16");
     }
 

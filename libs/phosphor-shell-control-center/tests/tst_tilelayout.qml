@@ -1,17 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Layout contract between ControlCenter and its tiles.
-//
-// A toggle is a CARD in a two-column grid; a range (volume, brightness)
-// spans both columns, because its 2 px underline is its control and a
-// longer line is a finer one to drag. Both fill the width they are given,
-// and neither fills the HEIGHT: stretching cards vertically is what turned
-// a five-control panel into five slabs when the surface was zone-sized.
-//
-// This previously asserted the opposite — that every control is a rail
-// spanning the pane. That was the shape when the control center was an
-// engine-placed pane and took the whole zone; it is a card grid in a
-// content-sized transient now.
+// Controls keep their natural height in a single-column surface.
 
 import QtQuick
 import QtQuick.Layouts
@@ -23,6 +12,7 @@ TestCase {
 
     name: "TileLayout"
     when: windowShown
+    visible: true
     width: 400
     height: 400
 
@@ -54,10 +44,32 @@ TestCase {
         }
     }
 
-    function test_only_ranges_span_both_columns() {
+    function test_split_action_does_not_toggle_when_opening_details() {
+        const tile = createTemporaryObject(toggleComp, testCase, {
+            width: 320,
+            height: 58,
+            detailPanelId: "network"
+        });
+        let toggles = 0;
+        let details = 0;
+        tile.toggled.connect(() => ++toggles);
+        tile.detailRequested.connect(() => ++details);
+        mouseClick(tile, 300, 29);
+        compare(details, 1);
+        compare(toggles, 0);
+        mouseClick(tile, 100, 29);
+        compare(toggles, 1);
+        tile.available = false;
+        mouseClick(tile, 300, 29);
+        mouseClick(tile, 100, 29);
+        compare(details, 1);
+        compare(toggles, 1);
+    }
+
+    function test_controls_span_the_row() {
         const toggle = createTemporaryObject(toggleComp, testCase);
         const slider = createTemporaryObject(sliderComp, testCase);
-        compare(toggle.spansRow, false, "a toggle is a card in one column");
+        compare(toggle.spansRow, true, "a connection spans the row");
         compare(slider.spansRow, true, "a range spans both columns");
     }
 
@@ -72,14 +84,15 @@ TestCase {
         // declared order (plus the layout's own internals, which carry no
         // spansRow).
         const tiles = [];
-        for (let i = 0; i < cc.children.length; ++i) {
-            const layer = cc.children[i];
-            for (let j = 0; j < layer.children.length; ++j) {
-                const child = layer.children[j];
+        function collect(item) {
+            for (const child of item.children) {
                 if (child.spansRow !== undefined)
                     tiles.push(child);
+                else
+                    collect(child);
             }
         }
+        collect(cc);
         compare(tiles.length, 2, "both tiles were materialised into the grid");
         for (let k = 0; k < tiles.length; ++k) {
             compare(tiles[k].Layout.fillWidth, true, "tile " + k + " fills its column");
@@ -91,6 +104,6 @@ TestCase {
         }
         // A range takes both columns; a toggle takes one.
         for (let m = 0; m < tiles.length; ++m)
-            compare(tiles[m].Layout.columnSpan, tiles[m].spansRow ? 2 : 1, "tile " + m + " spans by its kind");
+            compare(tiles[m].Layout.columnSpan, 1, "tile " + m + " spans the single column");
     }
 }

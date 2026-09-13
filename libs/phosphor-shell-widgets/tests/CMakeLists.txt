@@ -45,3 +45,9 @@ set_property(TEST test_phosphor_shell_widgets APPEND PROPERTY LABELS "phosphorsh
 # Headless run: the QtQuickTest runner spins up a QQuickView, so it needs
 # a platform plugin. offscreen keeps it display-server-free on CI.
 phosphor_append_test_environment(test_phosphor_shell_widgets "QT_QPA_PLATFORM=offscreen")
+
+add_executable(test_audiospectrum test_audiospectrum.cpp)
+target_link_libraries(test_audiospectrum PRIVATE PhosphorShellWidgetsQml Qt6::Test)
+add_test(NAME test_audiospectrum COMMAND test_audiospectrum)
+phosphor_apply_test_isolation(test_audiospectrum)
+set_property(TEST test_audiospectrum APPEND PROPERTY LABELS "phosphorshellwidgets")

@@ -16,6 +16,7 @@
 import QtQuick
 import org.kde.kirigami as Kirigami
 import Phosphor.Theme
+import Phosphor.Widgets
 import Phosphor.Service.Mpris
 
 BarWidget {
@@ -73,7 +74,7 @@ BarWidget {
             root.player.togglePlaying();
     }
 
-    available: root.player !== null && (root.trackTitle.length > 0 || root.trackArtist.length > 0)
+    available: Appearance.media && root.player !== null && (root.trackTitle.length > 0 || root.trackArtist.length > 0)
     contentWidth: row.implicitWidth
     contentHeight: row.implicitHeight
 
@@ -92,12 +93,21 @@ BarWidget {
         opacity: root._controllable ? 1 : StateLayer.disabled_content
         spacing: Tokens.spacing_xs
 
+        SpectrumVisualizer {
+            width: 32
+            height: 18
+            anchors.verticalCenter: parent.verticalCenter
+            style: "bars"
+            visible: Appearance.visualizer !== "off"
+            playing: root.isPlaying
+        }
+
         Kirigami.Icon {
             width: 16
             height: 16
             source: root.isPlaying ? "media-playback-pause" : "media-playback-start"
             isMask: true
-            color: Theme.on_surface
+            color: Appearance.text
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -108,7 +118,7 @@ BarWidget {
             // this fragment.
             Accessible.ignored: true
             text: root._label
-            color: Theme.on_surface
+            color: Appearance.text
             font.pixelSize: Tokens.font_size_label_l
             font.family: Tokens.font_family
             elide: Text.ElideRight

@@ -73,7 +73,7 @@ PanelFrame {
 
             TabularText {
                 text: root._display ? Math.round(root._display.percentage) + "%" : "—"
-                color: root._display && root._display.state === UPowerDevice.Charging ? Theme.success : Theme.on_surface
+                color: root._display && root._display.state === UPowerDevice.Charging ? Theme.success : Appearance.text
                 font.pixelSize: Tokens.font_size_display_s
             }
 
@@ -127,7 +127,7 @@ PanelFrame {
         width: parent.width
         visible: peripherals.count > 0
         text: qsTr("Other devices")
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.pixelSize: Tokens.font_size_label_s
         font.family: Tokens.font_family_ui
         topPadding: Tokens.spacing_s

@@ -23,6 +23,7 @@
 
 #include <PhosphorShellLauncher/LauncherModel.h>
 #include <PhosphorShellPicker/RetintController.h>
+#include <PhosphorTheme/AppearanceStore.h>
 #include <PhosphorTheme/PaletteStore.h>
 
 #include <PhosphorServiceIdle/IdleService.h>
@@ -641,6 +642,15 @@ int main(int argc, char* argv[])
     // so its embedder can react.
     QObject::connect(&engine, &PhosphorShell::ShellEngine::failed, &app, [](const QString& reason) {
         qCCritical(lcShell) << "shell engine failed:" << reason << "— the shell is now headless until the next reload";
+    });
+
+    engine.addEngineHook([&engine](QQmlEngine* qmlEngine) {
+        auto* appearance = qmlEngine->singletonInstance<PhosphorTheme::AppearanceStore*>(
+            QStringLiteral("Phosphor.Theme"), QStringLiteral("AppearanceStore"));
+        if (appearance) {
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, &engine,
+                             &PhosphorShell::ShellEngine::requestReload);
+        }
     });
 
     if (!engine.load(shellUrl)) {

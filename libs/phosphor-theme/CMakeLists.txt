@@ -47,6 +47,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphortheme_public_HDRS
     include/PhosphorTheme/PhosphorTheme.h
     include/PhosphorTheme/IThemeService.h
+    include/PhosphorTheme/AppearanceStore.h
     include/PhosphorTheme/FontFaces.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/PaletteStore.h
@@ -55,6 +56,7 @@ set(phosphortheme_public_HDRS
 
 set(phosphortheme_SRCS
     src/defaultpalette.cpp
+    src/appearancestore.cpp
     src/fontfaces.cpp
     src/matugenrunner.cpp
     src/palettestore.cpp
@@ -128,6 +130,7 @@ set_target_properties(PhosphorTheme PROPERTIES
 # the store via `qmlRegisterSingletonInstance` before QML import.
 
 set(_phosphor_theme_qml_singletons
+    qml/Phosphor/Theme/Appearance.qml
     qml/Phosphor/Theme/Theme.qml
     qml/Phosphor/Theme/Tokens.qml
     qml/Phosphor/Theme/Motion.qml
@@ -160,6 +163,7 @@ set(_phosphor_theme_qml_sources
     # The IMPLEMENTATIONS still live in PhosphorTheme.so (linked below);
     # the QML module only needs the type metadata.
     include/PhosphorTheme/PaletteStore.h
+    include/PhosphorTheme/AppearanceStore.h
     include/PhosphorTheme/FontFaces.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/TemplateEngine.h

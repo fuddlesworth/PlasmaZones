@@ -23,6 +23,7 @@ function(phosphortheme_add_test name)
     phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
+phosphortheme_add_test(test_appearancestore)
 phosphortheme_add_test(test_palettestore)
 # test_palettestore_files holds the loadFromFile slots; test_palettestore_hotreload
 # holds the hot-reload slots + the white-box resetToDefaults_releasesDirectoryWatch

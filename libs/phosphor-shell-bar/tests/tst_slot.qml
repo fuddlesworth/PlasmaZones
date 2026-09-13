@@ -172,7 +172,7 @@ TestCase {
         // no test noticed because none of them asserted a colour.
         // Groups paint no background any more; the hairline between groups
         // is the one themed colour, and it must read the Phosphor token.
-        compare(chipAt(s, 1).children[0].color, Theme.on_surface, "the hairline paints the theme token, so Theme is not shadowed");
+        compare(chipAt(s, 1).children[0].color, Appearance.text, "the hairline paints the theme token, so Theme is not shadowed");
     }
 
     function test_chip_collapses_when_every_widget_hides() {

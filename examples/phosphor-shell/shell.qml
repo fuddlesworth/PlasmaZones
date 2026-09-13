@@ -21,6 +21,7 @@ import Phosphor.Picker
 import Phosphor.Polkit
 import Phosphor.Popout
 import Phosphor.Power
+import Phosphor.Service.Mpris
 import Phosphor.Service.UPower
 import Phosphor.Shell
 import Phosphor.Theme
@@ -60,7 +61,7 @@ Item {
     Binding {
         target: Motion
         property: "reducedMotion"
-        value: ShellMotion.reducedMotion
+        value: ShellMotion.reducedMotion || !Appearance.settings.motion
     }
 
     // Surface packs on the chrome (A1 §2.4): the one decoration host every
@@ -76,7 +77,7 @@ Item {
             property string surfacePath: ""
             property bool focused: true
 
-            decorationChain: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
+            decorationChain: Appearance.surfacePacks && ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
             decorationOuterPadding: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.outerPaddingFor(surfacePath) : 0
             surfaceFocused: focused
             // The chrome sits in transformed and clipped hosts (a settling
@@ -215,6 +216,10 @@ Item {
             // surface reservation cannot grow after materialization.
             paneContent: Component {
                 ControlCenter {
+                    MprisHost {
+                        id: controlsMpris
+                    }
+                    mediaPlayer: controlsMpris.playerCount > 0 ? controlsMpris.playerAt(0) : null
                     provider: ControlCenterRegistry
                     tileIds: ControlCenterRegistry.tileIds
                 }
@@ -398,6 +403,10 @@ Item {
         id: paneComponent
 
         ControlCenter {
+            MprisHost {
+                id: controlsMpris
+            }
+            mediaPlayer: controlsMpris.playerCount > 0 ? controlsMpris.playerAt(0) : null
             provider: ControlCenterRegistry
             tileIds: ControlCenterRegistry.tileIds
             // A card drilling in opens the bar panel that card names, which
@@ -651,6 +660,10 @@ Item {
     // granted keyboard focus cannot receive a keystroke at all — the field
     // would look editable and silently swallow everything typed into it.
     readonly property var widgetPanels: ({
+            "appearance": {
+                "component": appearancePanelComponent,
+                "keyboard": true
+            },
             "network": {
                 "component": networkPanelComponent,
                 "keyboard": true
@@ -677,7 +690,7 @@ Item {
             },
             "clock": {
                 "component": calendarPanelComponent,
-                "keyboard": false
+                "keyboard": true
             }
         })
 
@@ -715,6 +728,11 @@ Item {
         id: notificationPanelComponent
 
         NotificationPanel {}
+    }
+
+    Component {
+        id: appearancePanelComponent
+        AppearancePanel {}
     }
 
     Component {
@@ -849,6 +867,16 @@ Item {
     // a pointer would, with the button itself as the source, so whatever it
     // opens lands where a click would put it. For a keybind, and for the
     // nested harness, which cannot inject pointer input.
+    IpcTarget {
+        target: "appearance"
+        function show(): void {
+            root.toggleWidgetPanel("appearance", null);
+        }
+        function preset(name: string): bool {
+            return AppearanceStore.applyPreset(name);
+        }
+    }
+
     IpcTarget {
         target: "bar"
 

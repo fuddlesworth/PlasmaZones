@@ -114,7 +114,7 @@ PanelFrame {
                 return qsTr("Turn Wi-Fi on to see networks");
             return qsTr("Looking for networks…");
         }
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.pixelSize: Tokens.font_size_body_s
         font.family: Tokens.font_family_ui
         wrapMode: Text.Wrap

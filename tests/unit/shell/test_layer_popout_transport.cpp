@@ -67,6 +67,7 @@ private Q_SLOTS:
     void aFailedSurfaceRoutesToTheCallback();
     void barAnchorsPlaceTheHostBelowTheReservedBand();
     void barAnchorWithoutAProviderHangsFromTheScreenEdge();
+    void bottomBarReservationReachesTheHost();
     void screenCenterAndCustomAnchorsMapToTheirPlacements();
     void reopeningWhileClosingRetiresTheDrainingSurface();
 
@@ -223,6 +224,32 @@ void TestLayerPopoutTransport::barAnchorsPlaceTheHostBelowTheReservedBand()
     QCOMPARE(host->property("placement").toString(), QStringLiteral("barCenter"));
     QCOMPARE(host->property("reservedTop").toInt(), 68);
 
+    transport.drain();
+}
+
+void TestLayerPopoutTransport::bottomBarReservationReachesTheHost()
+{
+    m_content->setData("import QtQuick\nItem { implicitWidth: 320; implicitHeight: 700 }",
+                       QUrl(QStringLiteral("qrc:/popout_test_content.qml")));
+    QVERIFY(m_content->isReady());
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    transport.setReservedMarginsProvider([](QScreen*) {
+        return QMargins(0, 0, 0, 66);
+    });
+    PopoutRequest request = makeRequest();
+    request.anchor = PhosphorPopout::Anchor::BarRight;
+    QVERIFY(!transport.openSurface(request).isEmpty());
+    QTRY_VERIFY(m_wire->m_attachCount >= 1);
+    QQuickItem* host = lastHost();
+    QVERIFY(host);
+    QCOMPARE(host->property("reservedTop").toInt(), 0);
+    QCOMPARE(host->property("reservedBottom").toInt(), 66);
+    host->setHeight(400);
+    auto* content = host->property("contentItem").value<QQuickItem*>();
+    QVERIFY(content);
+    QTRY_VERIFY(content->height() > 0 && content->height() <= host->height() - 66 - 12);
+    QVERIFY(content->height() < content->implicitHeight());
     transport.drain();
 }
 

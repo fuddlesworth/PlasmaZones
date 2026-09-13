@@ -173,6 +173,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // asking for it hears that it did not get it.
     QString placement = QStringLiteral("center");
     int reservedTop = 0;
+    int reservedBottom = 0;
     switch (request.anchor) {
     case PhosphorPopout::Anchor::BarLeft:
         placement = QStringLiteral("barLeft");
@@ -202,6 +203,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (placement.startsWith(QLatin1String("bar"))) {
         if (m_reservedMargins) {
             reservedTop = m_reservedMargins(screen).top();
+            reservedBottom = m_reservedMargins(screen).bottom();
         } else {
             // Not fatal: the popout still opens, hanging from the screen's
             // top edge instead of the bar's bottom edge. But that is a
@@ -342,6 +344,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (!hostItem->setProperty("reservedTop", reservedTop)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the reservedTop write";
     }
+    hostItem->setProperty("reservedBottom", reservedBottom);
     // The inset is a one-shot write, so a popout open across an output
     // geometry change kept hanging at the offset the bar had when it opened.
     // Re-push it while this host is alive; the guarded QPointer means a
@@ -354,6 +357,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
             if (!guardedHost || !m_reservedMargins) {
                 return;
             }
+            guardedHost->setProperty("reservedBottom", m_reservedMargins(screen).bottom());
             if (!guardedHost->setProperty("reservedTop", m_reservedMargins(screen).top())) {
                 qCWarning(lcPopoutTransport) << "popout" << popoutId << "— PopoutHost rejected a reservedTop update";
             }

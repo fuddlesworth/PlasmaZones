@@ -104,6 +104,7 @@ FocusScope {
 
     property string placement: "center"
     property int reservedTop: 0
+    property int reservedBottom: 0
 
     // The horizontal inset a bar-anchored popout aligns to, matching the bar
     // capsule's own inset from the screen edge.
@@ -529,6 +530,23 @@ FocusScope {
             _lastBound = root.contentItem;
         }
 
+        // Prebuilt delegates follow the same bounded frame as Loader content.
+        // Restore caller sizing when the delegate is detached or replaced.
+        Binding {
+            target: root.contentItem
+            property: "width"
+            value: contentFrame.width
+            when: root.contentItem !== null
+            restoreMode: Binding.RestoreBindingOrValue
+        }
+        Binding {
+            target: root.contentItem
+            property: "height"
+            value: contentFrame.height
+            when: root.contentItem !== null
+            restoreMode: Binding.RestoreBindingOrValue
+        }
+
         // Explicit x/y rather than anchors.centerIn: an anchor would fight
         // every placement but "center". The bar placements align to the
         // capsule's inset (`barInset`, defaulting to the token BarHost uses)
@@ -571,7 +589,7 @@ FocusScope {
             case "barCenter":
             case "barRight":
             case "barItem":
-                return Math.round(root.reservedTop + Tokens.spacing_m);
+                return root.reservedBottom > root.reservedTop ? Math.max(0, Math.round(root.height - root.reservedBottom - height - Tokens.spacing_m)) : Math.round(root.reservedTop + Tokens.spacing_m);
             case "custom":
                 return Math.round(root.customY);
             default:
@@ -603,7 +621,7 @@ FocusScope {
         // somewhere arbitrary. Measured at -32 px wide, at x 24 instead of
         // 1366, before snapping into place on the configure.
         width: _visibleDelegate ? (root.width > 0 ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : _visibleDelegate.implicitWidth) : 0
-        height: _visibleDelegate ? (root.height > 0 ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : _visibleDelegate.implicitHeight) : 0
+        height: _visibleDelegate ? (root.height > 0 ? Math.min(_visibleDelegate.implicitHeight, root.height - (root.placement.indexOf("bar") === 0 ? Math.max(root.reservedTop, root.reservedBottom) + Tokens.spacing_m + Tokens.spacing_l : 2 * Tokens.spacing_l)) : _visibleDelegate.implicitHeight) : 0
         // Nothing is painted until the frame has a real size on a surface
         // with a real size, so the first frame the user sees is already in
         // its final position.

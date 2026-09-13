@@ -1,27 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.ControlCenter.ControlCenter, the control-tile surface.
-//
-// A vertical list of control RAILS (network, bluetooth, audio,
-// brightness, ...), each a 52 px row whose 2 px underline is the control
-// (A3 §2b), with a slide-over detail panel for the rail the user drills
-// into. No header, no tile grid, no filled buttons.
-//
-// Like OSDHost and ToastHost, this renders into whatever item it is
-// parented to. It owns no surface of its own, so the shell decides how it
-// is presented: hung from the bar as a tethered pane, or parented into a
-// standalone layer-shell popout opened through PopoutController. Neither
-// choice reaches into this file.
-//
-// Tiles come from a `provider` exposing
-//   createTile(id, parent) -> Item
-// backed in the shell by a Registry<IControlCenterTileFactory>. The host
-// stays registry-agnostic so a test can pass any object with that method.
-// Per the factory contract a null return means "unavailable in this
-// environment" (no service, no hardware) and is not an error.
+// Registry-backed quick settings with shared appearance and live media.
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import Phosphor.Theme
 import Phosphor.Widgets
 
@@ -60,49 +43,24 @@ Item {
     /// because the cards divide whatever width they are given and would
     /// otherwise collapse to their text. Matches the bar's other panels, so
     /// moving between them is not re-reading a differently shaped surface.
-    property real panelWidth: 360
+    property real panelWidth: Appearance.panelWidth
 
     implicitWidth: root.panelWidth
     // The taller of the two views, not just the grid. A host that sizes
     // itself to this would otherwise clip a detail view taller than the
     // grid behind it, and neither view scrolls or clips, so the overflow
     // would simply be cut off.
-    implicitHeight: Math.max(grid.implicitHeight, detail.implicitHeight) + 2 * Tokens.spacing_m
+    implicitHeight: Math.max(main.implicitHeight, detail.implicitHeight) + 2 * Appearance.padding
 
     /// Where this surface sits along the screen, 0..1, for the stroke and
     /// the top band. Set by the host from the chip that opened it.
     property real railT: 0.5
 
-    // The surface's own material. It had none: as an engine-placed pane it
-    // borrowed PaneHost's ground, and the moment it became an ordinary
-    // popout the cards were left floating on the bare desktop with no
-    // surface under them. The layers are 05 §5's, the same ones the bar's
-    // other panels draw.
-    Rectangle {
+    ShellSurface {
         anchors.fill: parent
-        radius: Tokens.radius_l
-        color: Theme.isDark ? Qt.rgba(0.027, 0.059, 0.133, 0.94) : Qt.rgba(0.96, 0.976, 1, 0.94)
+        railT: root.railT
     }
-
-    SpectrumStroke {
-        anchors.fill: parent
-        radius: Tokens.radius_l
-        t: root.railT
-    }
-
-    // The top edge IS the rail over this surface's x-range, so the panel and
-    // the bar above it match hue for hue, and it carries the gleam.
-    SpectrumRail {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.leftMargin: Tokens.radius_l
-        anchors.rightMargin: Tokens.radius_l
-        thickness: 2
-        gleam: true
-        sliceStart: Math.max(0, root.railT - 0.09)
-        sliceEnd: Math.min(1, root.railT + 0.09)
-    }
+    property var mediaPlayer: null
 
     QtObject {
         id: priv
@@ -214,7 +172,7 @@ Item {
                 // them to fill was what turned a five-control panel into
                 // five 230 px slabs.
                 item.Layout.fillHeight = false;
-                item.Layout.columnSpan = wide ? 2 : 1;
+                item.Layout.columnSpan = 1;
                 // Step each card along the shared field by its position, so
                 // the grid reads as one gradient rather than a set of
                 // independently coloured cards (05 R1).
@@ -258,39 +216,70 @@ Item {
         root.rebuild();
     }
 
-    GridLayout {
-        id: grid
-
-        // Top-anchored, and the surface is sized to IT rather than the other
-        // way round. This surface is a transient now, not an engine-placed
-        // tile, so it gets the size it asks for.
-        //
-        // It has been both other things and both were wrong. Filling a
-        // zone-sized pane stretched five controls across 830 px, so each
-        // card became enormous. Hugging the top of a zone-sized pane left
-        // two thirds of it empty. Neither is fixable by layout, because the
-        // fault was the surface taking a whole zone at all.
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: Tokens.spacing_m
-        columns: 2
-        columnSpacing: Tokens.spacing_m
-        rowSpacing: Tokens.spacing_m
-        // Hidden, not merely covered, while a detail view is open. The
-        // detail panel is a sibling rather than a child, so leaving the grid
-        // visible underneath would keep every tile in the accessibility tree
-        // and in the tab order behind a panel the user cannot see past.
-        // Hiding it is exactly what takes them out of both, which is the
-        // intent: the grid is not reachable while the user is drilled in.
+    Flickable {
+        id: scroller
+        anchors.fill: parent
+        anchors.margins: Appearance.padding
+        contentWidth: width
+        contentHeight: main.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: contentHeight > height
         visible: priv.detailTileId === ""
+        ScrollBar.vertical: ScrollBar {
+            active: scroller.interactive
+        }
+        ColumnLayout {
+            id: main
+            width: scroller.width
+            spacing: 14
+            visible: priv.detailTileId === ""
+            RowLayout {
+                Layout.fillWidth: true
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 3
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Quick settings")
+                        color: Appearance.text
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 19
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Connections & controls")
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 11
+                    }
+                }
+                ShellButton {
+                    iconName: "configure"
+                    label: qsTr("Appearance")
+                    onClicked: root.panelRequested("appearance")
+                }
+            }
+            GridLayout {
+                id: grid
+                Layout.fillWidth: true
+                columns: 1
+                rowSpacing: 10
+            }
+            MediaCard {
+                Layout.fillWidth: true
+                visible: Appearance.media
+                player: root.mediaPlayer
+            }
+        }
     }
 
     DetailPanel {
         id: detail
 
         anchors.fill: parent
-        anchors.margins: Tokens.spacing_m
+        anchors.margins: Appearance.padding
         tileId: priv.detailTileId
         open: priv.detailTileId !== ""
         // Fed from the tile being drilled into. Without these the panel

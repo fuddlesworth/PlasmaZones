@@ -109,7 +109,7 @@ PanelFrame {
         width: parent.width
         visible: devices.count === 0
         text: root._powered ? qsTr("Looking for devices…") : qsTr("Turn Bluetooth on to see devices")
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.pixelSize: Tokens.font_size_body_s
         font.family: Tokens.font_family_ui
         wrapMode: Text.Wrap

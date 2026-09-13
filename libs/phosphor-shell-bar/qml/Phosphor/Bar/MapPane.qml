@@ -92,7 +92,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: root.modeLabel(root.map ? root.map.mode : -1)
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: 0.9
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_l
@@ -101,7 +101,7 @@ Item {
             }
             Text {
                 text: qsTr("Close")
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: closeHover.hovered ? 1 : 0.6
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_m
@@ -206,7 +206,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: Theme.on_surface
+            color: Appearance.text
             opacity: 0.25
             visible: menu.count > 0
         }
@@ -244,7 +244,7 @@ Item {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         text: row.label
-                        color: Theme.on_surface
+                        color: Appearance.text
                         opacity: row.current || rowHover.hovered ? 1 : 0.7
                         font.family: Tokens.font_family_ui
                         font.pixelSize: Tokens.font_size_label_m

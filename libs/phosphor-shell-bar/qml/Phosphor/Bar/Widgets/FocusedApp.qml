@@ -52,7 +52,7 @@ BarWidget {
 
                 Accessible.ignored: true
                 text: root._appTitle
-                color: Theme.on_surface
+                color: Appearance.text
                 font.pixelSize: Tokens.font_size_label_l
                 font.weight: Tokens.font_weight_medium
                 font.family: Tokens.font_family_ui

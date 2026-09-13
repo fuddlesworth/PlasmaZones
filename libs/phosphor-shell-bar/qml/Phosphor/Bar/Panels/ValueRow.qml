@@ -97,7 +97,7 @@ Item {
                 isMask: true
                 // Brightness is the state, exactly as it is on the bar's
                 // own chips: no colour change, no filled background.
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: root.toggled ? 0.35 : (glyphHover.hovered ? 1 : 0.9)
 
                 Behavior on opacity {
@@ -131,7 +131,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: root.label
-                    color: Theme.on_surface
+                    color: Appearance.text
                     font.pixelSize: Tokens.font_size_body_m
                     font.family: Tokens.font_family_ui
                     elide: Text.ElideRight
@@ -141,7 +141,7 @@ Item {
                     Layout.fillWidth: true
                     visible: root.sublabel !== ""
                     text: root.sublabel
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                     font.pixelSize: Tokens.font_size_label_s
                     font.family: Tokens.font_family_ui
                     elide: Text.ElideRight
@@ -150,7 +150,7 @@ Item {
 
             TabularText {
                 text: root.toggled ? qsTr("muted") : root.percent + "%"
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.pixelSize: Tokens.font_size_label_s
                 // R7: the changed digit takes a 2px spectrum underline that
                 // enters and releases. Free here, since the atom does it.
@@ -167,7 +167,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: 0.10
             }
 
