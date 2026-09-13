@@ -961,6 +961,14 @@ int WindowPlacementStore::renumberDesktopZones(int removedDesktop)
                 }
                 byDesktop = std::move(shifted);
             }
+            // The record-level desktop indexes the same numbering.
+            if (p.virtualDesktop == removedDesktop) {
+                p.virtualDesktop = 0;
+                touched = true;
+            } else if (p.virtualDesktop > removedDesktop) {
+                --p.virtualDesktop;
+                touched = true;
+            }
             if (touched) {
                 p.sequence = ++m_sequence;
                 ++changed;

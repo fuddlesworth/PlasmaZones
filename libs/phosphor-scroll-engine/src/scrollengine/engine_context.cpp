@@ -567,7 +567,20 @@ void ScrollEngine::dropWindowBookkeeping(const PhosphorEngine::PlacementStateKey
     m_contextParkedEdge.remove(key);
     const QStringList windows = state->managedWindows();
     for (const QString& windowId : windows) {
-        if (m_states.membershipsForWindow(windowId).size() > 1) {
+        // A membership survives only if its state is still live. In a sweep
+        // that reaps several of a window's contexts at once (an activity
+        // going away takes every desktop of it), the earlier ones are already
+        // out of the forward map by the time the later ones are visited, so
+        // a raw membership count would keep the memos of a window with no
+        // context left.
+        bool survives = false;
+        for (const PhosphorEngine::PlacementStateKey& other : m_states.membershipsForWindow(windowId)) {
+            if (other != key && m_states.stateForKey(other)) {
+                survives = true;
+                break;
+            }
+        }
+        if (survives) {
             continue;
         }
         m_lastAppliedRect.remove(windowId);

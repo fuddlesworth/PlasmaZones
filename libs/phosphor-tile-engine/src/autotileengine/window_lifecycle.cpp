@@ -368,6 +368,12 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 qCInfo(PhosphorTileEngine::lcTileEngine) << "windowOpened: removed" << windowId << "from old screen"
                                                          << oldKey.screenId << "before adding to" << screenId;
                 scheduleRetileForScreen(oldKey.screenId);
+                // The scheduled retile relayouts the screen's CURRENT context;
+                // a removal from a background one is remembered and retiled
+                // when that context comes back on screen.
+                if (oldKey != currentKeyForScreen(oldKey.screenId)) {
+                    m_dirtyBackgroundContexts.insert(oldKey);
+                }
                 // A move out of every context the window held, not only the
                 // one resolved above: its other desktops' states would keep
                 // the tile otherwise.
@@ -767,8 +773,13 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
         << "Window" << windowId << "moved from" << oldKey.screenId << "to" << newScreenId << "- migrating";
     // Close the hole the departing window left on the SOURCE screen — the
     // destination's own insert schedules a retile there, but nothing else
-    // retiles the source (mirrors windowOpened's migration path).
+    // retiles the source (mirrors windowOpened's migration path). That retile
+    // relayouts the screen's CURRENT context; a departure from a background
+    // one is remembered and retiled when the context comes back on screen.
     scheduleRetileForScreen(oldKey.screenId);
+    if (oldKey != currentKeyForScreen(oldKey.screenId)) {
+        m_dirtyBackgroundContexts.insert(oldKey);
+    }
     if (isAutotileScreen(newScreenId)) {
         // Re-add to the new screen's normal flow (will be overflow-checked
         // on next retile). Mark the re-add as a migration ARRIVAL for the

@@ -256,8 +256,21 @@ bool ScrollEngine::adoptIntoContext(const QString& windowId, const PlacementStat
     }
     // The applied-geometry memos describe the OTHER desktop's strip and are
     // keyed by window alone, so they would gate this context's first batch
-    // against a rect that was never on this strip. Drop them; the retile the
-    // caller schedules re-derives every one.
+    // against a rect that was never on this strip. A window arriving from
+    // exactly one other context has never had its memo parked (the switch
+    // swap skips single-membership windows), so it is parked under that
+    // context now rather than dropped, and the switch back restores it. The
+    // retile the caller schedules re-derives this context's own.
+    const QList<PlacementStateKey> priorHeld = m_states.membershipsForWindow(windowId);
+    if (priorHeld.size() == 2) { // this key was just added; the other is the source
+        const PlacementStateKey source = priorHeld.first() == key ? priorHeld.last() : priorHeld.first();
+        if (const auto rect = m_lastAppliedRect.constFind(windowId); rect != m_lastAppliedRect.constEnd()) {
+            m_contextRectMemory[source].insert(windowId, *rect);
+        }
+        if (const auto edge = m_parkedScrollEdge.constFind(windowId); edge != m_parkedScrollEdge.constEnd()) {
+            m_contextParkedEdge[source].insert(windowId, *edge);
+        }
+    }
     m_lastAppliedRect.remove(windowId);
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
@@ -290,24 +303,25 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
         state->removeFloating(windowId);
     }
     m_states.removeMembership(windowId, key);
+    forgetContextMemo(key, windowId);
     if (!state) {
         // A membership whose state is gone (torn down earlier in the same
         // sweep) owes no relayout and no dirty mark: there is no strip on
         // that context, and a retile scheduled for a screen that is leaving
         // the set would re-announce the strip it just released.
-        m_contextRectMemory[key].remove(windowId);
-        m_contextParkedEdge[key].remove(windowId);
         return;
     }
-    m_contextRectMemory[key].remove(windowId);
-    m_contextParkedEdge[key].remove(windowId);
-    // Same reason the adopt arm drops them: what is remembered describes the
-    // strip the window just left. All four, the set the header keeps
-    // together.
-    m_lastAppliedRect.remove(windowId);
-    m_parkedScrollEdge.remove(windowId);
-    m_lastAppliedWindowedFs.remove(windowId);
-    m_lastAppliedMaximizedToEdges.remove(windowId);
+    const bool releasedInView = (key == currentKeyForScreen(key.screenId));
+    if (releasedInView) {
+        // The window-level memos describe the strip the window just left.
+        // All four, the set the header keeps together. A BACKGROUND release
+        // leaves them alone: after the context switch they describe the strip
+        // the window is still in, and the released key's own copy went above.
+        m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
+    }
     // The window's float state is per store; the daemon's mirror is per
     // window. A float that lived only on the released desktop has to be
     // withdrawn from the mirror, or the effect keeps float chrome on a window
@@ -325,7 +339,7 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
         m_scrollFloatedWindows.remove(windowId);
         Q_EMIT windowFloatingStateSynced(windowId, false, key.screenId);
     }
-    if (key == currentKeyForScreen(key.screenId)) {
+    if (releasedInView) {
         m_forceEmitScreens.insert(key.screenId);
         scheduleRetileForScreen(key.screenId);
     }
@@ -338,6 +352,24 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
                            << "of" << key.screenId << "— its desktop span no longer covers it";
 }
 
+void ScrollEngine::forgetContextMemo(const PlacementStateKey& key, const QString& windowId)
+{
+    // find() rather than operator[]: a release must not mint an empty inner
+    // map for every context it ever touched.
+    if (auto it = m_contextRectMemory.find(key); it != m_contextRectMemory.end()) {
+        it->remove(windowId);
+        if (it->isEmpty()) {
+            m_contextRectMemory.erase(it);
+        }
+    }
+    if (auto it = m_contextParkedEdge.find(key); it != m_contextParkedEdge.end()) {
+        it->remove(windowId);
+        if (it->isEmpty()) {
+            m_contextParkedEdge.erase(it);
+        }
+    }
+}
+
 void ScrollEngine::dropFromOtherContexts(const QString& windowId, const PlacementStateKey& keepKey)
 {
     // A window leaving the engine (close, handoff, prune, mode reassignment)
@@ -348,6 +380,11 @@ void ScrollEngine::dropFromOtherContexts(const QString& windowId, const Placemen
     // ever reaped — pruneStaleWindows walks tracked ids, which no longer
     // named the window, and adoptIntoContext refused to re-adopt a window
     // its strip already held.
+    // The kept key's parked memo goes too: every caller takes the window
+    // out of keepKey right after (a close, a handoff, a replace onto the
+    // destination), and a parked entry left under it would be restored onto
+    // a later re-adoption there as "on screen at the old rect".
+    forgetContextMemo(keepKey, windowId);
     for (const PlacementStateKey& key : m_states.membershipsForWindow(windowId)) {
         if (key == keepKey) {
             continue;
@@ -358,8 +395,7 @@ void ScrollEngine::dropFromOtherContexts(const QString& windowId, const Placemen
             state->removeFloating(windowId);
         }
         m_states.removeMembership(windowId, key);
-        m_contextRectMemory[key].remove(windowId);
-        m_contextParkedEdge[key].remove(windowId);
+        forgetContextMemo(key, windowId);
         if (!state) {
             continue; // torn down already: nothing to reflow or mark
         }
@@ -386,34 +422,48 @@ void ScrollEngine::swapContextRectMemory(const QString& screenId, const Placemen
     // each context keeps its own copy: the leaving context's memo is parked
     // under its key, and the entering context's is put back (or, with none,
     // the window reads as arriving, which on its first batch there it is).
+    //
+    // The two arms are independent: a switch that passes THROUGH a desktop
+    // the window is not on (1 → 2 → 3 for a window on {1,3}) parks on the way
+    // out of 1 and restores on the way into 3, with nothing to do at 2.
     for (const QString& windowId : m_states.trackedWindowIds()) {
-        if (m_states.membershipsForWindow(windowId).size() < 2 || !m_states.hasMembership(windowId, newKey)) {
+        const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
+        if (held.size() < 2 || held.first().screenId != screenId) {
             continue;
         }
-        if (m_states.hasMembership(windowId, oldKey)) {
+        if (held.contains(oldKey)) {
+            // Park the leaving context's memo under its key. The window-level
+            // entry is cleared with it: what stays would describe a strip
+            // that is no longer on screen.
             if (const auto rect = m_lastAppliedRect.constFind(windowId); rect != m_lastAppliedRect.constEnd()) {
                 m_contextRectMemory[oldKey].insert(windowId, *rect);
+                m_lastAppliedRect.erase(rect);
             }
             if (const auto edge = m_parkedScrollEdge.constFind(windowId); edge != m_parkedScrollEdge.constEnd()) {
                 m_contextParkedEdge[oldKey].insert(windowId, *edge);
+                m_parkedScrollEdge.erase(edge);
             }
         }
-        m_lastAppliedRect.remove(windowId);
-        m_parkedScrollEdge.remove(windowId);
-        if (auto entering = m_contextRectMemory.find(newKey); entering != m_contextRectMemory.end()) {
-            if (const auto rect = entering->constFind(windowId); rect != entering->constEnd()) {
-                m_lastAppliedRect.insert(windowId, *rect);
-                entering->erase(rect);
+        if (held.contains(newKey)) {
+            // Restore the entering context's memo, or leave none: with no
+            // memo the window reads as arriving, which on its first batch
+            // there it is.
+            m_lastAppliedRect.remove(windowId);
+            m_parkedScrollEdge.remove(windowId);
+            if (auto entering = m_contextRectMemory.find(newKey); entering != m_contextRectMemory.end()) {
+                if (const auto rect = entering->constFind(windowId); rect != entering->constEnd()) {
+                    m_lastAppliedRect.insert(windowId, *rect);
+                    entering->erase(rect);
+                }
             }
-        }
-        if (auto entering = m_contextParkedEdge.find(newKey); entering != m_contextParkedEdge.end()) {
-            if (const auto edge = entering->constFind(windowId); edge != entering->constEnd()) {
-                m_parkedScrollEdge.insert(windowId, *edge);
-                entering->erase(edge);
+            if (auto entering = m_contextParkedEdge.find(newKey); entering != m_contextParkedEdge.end()) {
+                if (const auto edge = entering->constFind(windowId); edge != entering->constEnd()) {
+                    m_parkedScrollEdge.insert(windowId, *edge);
+                    entering->erase(edge);
+                }
             }
         }
     }
-    Q_UNUSED(screenId)
 }
 
 } // namespace PhosphorScrollEngine

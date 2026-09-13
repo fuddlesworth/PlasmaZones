@@ -8,8 +8,8 @@
 // a deliberate refactor rather than a mechanical file split. Same rationale
 // as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
 // per-desktop membership change: the membership pass and its helpers, the
-// per-desktop seed / restore-desktop resolution, and the window-scoped
-// resnap.
+// per-desktop seed / restore-desktop resolution, the window-scoped resnap,
+// the pinned-desktop store resolution and the float residence helper.
 
 #pragma once
 
@@ -177,7 +177,11 @@ public:
      * When unset (default), the engine behaves as if every context is
      * active — the historical default that unit tests rely on.
      */
-    using ShouldRestorePredicate = std::function<bool(const QString& screenId)>;
+    /// Answers whether a stored snap may be re-applied on (@p screenId,
+    /// @p desktop): the desktop the window is being restored ONTO, which
+    /// under per-output desktops and session restore is not necessarily the
+    /// one the screen is showing.
+    using ShouldRestorePredicate = std::function<bool(const QString& screenId, int desktop)>;
 
     /**
      * @brief Inject the auto-snap-restore gate. See ShouldRestorePredicate.
@@ -371,13 +375,6 @@ public:
     /// window living only there has no membership to reconcile.
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
-    /// Drop @p windowId's zone assignment, floating bit and screen record from
-    /// the store at @p key. The reconcile's release for snapping: a window that
-    /// left this desktop must stop being an occupant of the zone it was in,
-    /// because zone occupancy is queried across EVERY store rather than the one
-    /// in view, so a stale entry is a live navigation target that yanks the
-    /// user to another desktop when it is picked.
-    void releaseFromContext(const PhosphorEngine::PlacementStateKey& key, const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
     void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) override;
@@ -573,14 +570,19 @@ public:
     /// enumerations (occupied zones, snapped/floating windows, flat-map views).
     QList<SnapState*> allSnapStates() const;
 
-    /// Resolve-or-register the owning state for @p windowId placed/acting on
-    /// @p screenId, and return it. On first placement it derives the key from the
-    /// screen, lazily creates the state, and records the reverse-map entry; an
-    /// already-tracked window keeps its existing owning state (its screen value is
-    /// updated in place by the store call the caller makes). A screenless call
+    /// Resolve-or-register the state @p windowId's data belongs in for a write
+    /// on @p screenId, and return it. With @p desktop pinned (>= 1) that is the
+    /// store for (screen, desktop, activity), created and granted a membership
+    /// on first use: a commit that names a desktop other than the one the
+    /// screen is showing (a RouteToDesktop rule, a cross-desktop move, a
+    /// restore onto a background desktop) has to land in THAT desktop's store,
+    /// or the membership pass reads the store's key as the assignment's
+    /// desktop and releases it on the next switch. Unpinned (0), an
+    /// already-tracked window keeps its primary store and a first placement
+    /// derives the key from the screen's current context. A screenless call
     /// resolves to the global holder. Public so the WTS facade routes its
     /// screen-carrying writes here.
-    SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId);
+    SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId, int desktop = 0);
 
     /// Drop every membership @p windowId holds AND its data in each member
     /// store (window closed / fully removed). A window present on several
@@ -627,6 +629,13 @@ public:
     reconcileWindowMemberships(const QString& windowId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
     /// Point the container's primary resolution at currentKeyForScreen.
     void installContextResolver();
+    /// Float @p windowId in its primary store. A window present on several
+    /// desktops that holds no screen in that store (adopted into the desktop
+    /// in view, never snapped there) has its screen and desktop residence
+    /// recorded with the float (setFloatingOnScreen), so the capture and the
+    /// cross-desktop focus walk can place it; every other float is the bare
+    /// bit, as before.
+    void setFloatingWithResidence(const QString& windowId, const QString& screenId);
     /// Re-seed a restored record's other desktops' zones into their stores,
     /// keyed under @p activity (the record's, when it has one).
     void seedPersistedDesktopZones(const QString& windowId, const PhosphorEngine::EngineSlot& slot,

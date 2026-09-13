@@ -638,6 +638,12 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 
 void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
 {
+    // The dirty-background memo for a departed output goes with its states:
+    // a replugged connector reusing the id must not inherit a stale retile.
+    m_dirtyBackgroundContexts.removeIf([&physicalScreenId](const TilingStateKey& key) {
+        return PhosphorIdentity::VirtualScreenId::extractPhysicalId(key.screenId) == physicalScreenId
+            || key.screenId == physicalScreenId;
+    });
     if (physicalScreenId.isEmpty()) {
         return;
     }

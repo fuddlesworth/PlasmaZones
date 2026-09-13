@@ -266,8 +266,19 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         // ever being moved: the live frame is still the zone rect. Skip
                         // until the frame differs from the pre-float zones' geometry — the
                         // user's next move while floating captures the real free spot.
-                        const bool stillOnSnapRect =
+                        // Every desktop's zones count, not only the flat
+                        // zoneIds: a window present on several desktops and
+                        // unsnapped on the one in view is still physically on
+                        // the zone it holds on another, and a capture there
+                        // carries an empty zoneIds beside a per-desktop map
+                        // that names that zone.
+                        bool stillOnSnapRect =
                             !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
+                        for (auto d = slot.zonesByDesktop.constBegin();
+                             !stillOnSnapRect && d != slot.zonesByDesktop.constEnd(); ++d) {
+                            stillOnSnapRect =
+                                !d.value().isEmpty() && m_service->resolveZoneGeometry(d.value(), screenKey) == frame;
+                        }
                         // Tiled analogue of the same poison guard (see the
                         // helper doc). The isWindowEngineTiled gate above
                         // cannot catch the float-toggle edge:

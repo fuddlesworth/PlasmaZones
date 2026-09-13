@@ -129,6 +129,10 @@ void AutotileEngine::syncFloatMirrorForContext(const QString& screenId, const Ti
     // is the one the mirror should describe, so re-announce it for every
     // window that holds a place on several desktops; single-desktop windows
     // never diverge and are left alone. Passive sync: no geometry moves.
+    // Announced without an engine-side change gate on purpose: the value the
+    // mirror holds is not knowable here (it latched whichever context spoke
+    // last), and the adaptor's last-broadcast gate is the dedup that keeps an
+    // unchanged bit off the wire.
     const PhosphorTiles::TilingState* state = m_states.stateForKey(currentKey);
     if (!state) {
         return;
@@ -220,8 +224,18 @@ bool AutotileEngine::adoptIntoContext(const QString& windowId, const TilingState
     // carries the window's float state on the desktop it came from across,
     // so a window the user floated there is floated here rather than given a
     // tile while the daemon's per-window mirror still says "floating".
-    const PhosphorTiles::TilingState* primary = m_states.forWindow(windowId);
-    const bool wasFloating = primary && primary->isFloating(windowId);
+    // "Floating" is read from EVERY context the window holds, not the
+    // primary: with no membership in the current context the primary falls
+    // back to the first-adopted desktop, which is not the one the user just
+    // left. A float the user made anywhere is the float they last saw.
+    bool wasFloating = false;
+    for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
+        if (const PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);
+            heldState && heldState->isFloating(windowId)) {
+            wasFloating = true;
+            break;
+        }
+    }
     QScopeGuard clearArrival([this] {
         m_migrationArrival.reset();
     });

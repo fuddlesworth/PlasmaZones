@@ -29,6 +29,7 @@
 #include "snapenginelogging.h"
 
 #include <algorithm>
+#include <optional>
 
 namespace PhosphorSnapEngine {
 
@@ -69,10 +70,30 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
     // same form here, or the restore desktop's membership and the seeded ones
     // would sit under two different keys and never count as one window.
     const QString canonical = canonicalWindowId(windowId);
+    // The desktops the window is on NOW, when the registry knows: a record
+    // written while the window was on {1,2} and restored onto a window the
+    // compositor put on {2} alone must not seed desktop 1, where the window
+    // is not; the membership pass would only release it again, and until it
+    // ran the zone counted a phantom occupant. A known, narrower span drops
+    // the persisted entry with the seed, so a later capture does not revive
+    // it. Sticky, or unknown, seeds everything the record names.
+    std::optional<QSet<int>> presentOn;
+    if (m_windowRegistry) {
+        if (const auto ctx = m_windowRegistry->desktopContext(windowId);
+            ctx && !ctx->sticky.value_or(false) && !ctx->virtualDesktops.isEmpty()) {
+            presentOn = QSet<int>(ctx->virtualDesktops.cbegin(), ctx->virtualDesktops.cend());
+        }
+    }
     for (auto it = slot.zonesByDesktop.constBegin(); it != slot.zonesByDesktop.constEnd(); ++it) {
         const int desktop = it.key();
         if (desktop < 1 || desktop == restoreDesktop || it.value().isEmpty()) {
             continue; // the restore desktop is applied by the caller
+        }
+        if (presentOn && !presentOn->contains(desktop)) {
+            if (m_windowTracker) {
+                m_windowTracker->forgetDesktopZones(windowId, engineId(), desktop);
+            }
+            continue;
         }
         const PlacementStateKey key{screenId, desktop, activity};
         SnapState* state = ensureStateForKey(key);

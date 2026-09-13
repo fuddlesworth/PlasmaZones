@@ -502,7 +502,10 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // the compositor to relocate the real window, then apply the target zone's
     // geometry. The effect's geometry apply has no current-desktop guard, so it
     // lands correctly even though the target desktop isn't visible yet.
-    stateForWindowOnScreen(windowId, screenId)->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
+    // Pinned to the TARGET desktop's store: the assignment belongs to the
+    // desktop the window is moving to, not the one in view.
+    stateForWindowOnScreen(windowId, screenId, targetDesktop)
+        ->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
     if (m_windowTracker) {
         if (auto placement = capturePlacement(windowId)) {
             placement->virtualDesktop = targetDesktop;

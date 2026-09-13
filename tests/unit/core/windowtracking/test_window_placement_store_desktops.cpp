@@ -139,6 +139,25 @@ private Q_SLOTS:
         QCOMPARE(store.renumberDesktopZones(0), 0);
     }
 
+    // The record-level desktop indexes the same numbering as the map, so it
+    // shifts with it; a record ON the removed desktop no longer knows where
+    // it was.
+    void renumberDesktopZones_shiftsTheRecordsOwnDesktop()
+    {
+        WindowPlacementStore store;
+        WindowPlacement above = snappedOn(kWindow, {{3, {kZoneC}}});
+        above.virtualDesktop = 3;
+        store.record(above);
+        WindowPlacement removed = snappedOn(kSibling, {});
+        removed.virtualDesktop = 2;
+        store.record(removed);
+
+        QCOMPARE(store.renumberDesktopZones(2), 2);
+        QCOMPARE(recordFor(store, kWindow)->virtualDesktop, 2);
+        QCOMPARE(zonesByDesktopOf(store, kWindow).value(2), QStringList{kZoneC});
+        QCOMPARE(recordFor(store, kSibling)->virtualDesktop, 0);
+    }
+
     // The whole point of the map is surviving a restart.
     void serializeRoundTrip_keepsZonesByDesktop()
     {

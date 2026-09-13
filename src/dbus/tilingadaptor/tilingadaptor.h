@@ -106,10 +106,11 @@ public:
     /// belongs to none of them; but a window that leaves a desktop must stop
     /// being an occupant of the zone it was snapped into, because zone
     /// occupancy is queried across EVERY store rather than the one in view, so
-    /// a stale entry stays a live navigation target. These engines are released
-    /// through IPlacementEngine::releaseFromContext instead of the pipeline
-    /// release, which carries re-announce bookkeeping they have no use for.
-    /// Borrowed; cleared by clearEngine().
+    /// a stale entry stays a live navigation target. Their releases come
+    /// out of their own membership pass (reconcileWindowMemberships), and the
+    /// adaptor re-captures the record and tells the effect's zone cache,
+    /// rather than running the pipeline release, which carries re-announce
+    /// bookkeeping they have no use for. Borrowed; cleared by clearEngine().
     void setMembershipEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
 
     /// Subscribe to the compositor-fed WindowRegistry so a window's CONTEXT

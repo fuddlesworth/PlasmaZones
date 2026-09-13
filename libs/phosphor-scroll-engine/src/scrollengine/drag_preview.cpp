@@ -406,6 +406,9 @@ void ScrollEngine::commitDragInsertPreview()
         m_lastAppliedWindowedFs.remove(p.windowId);
         m_lastAppliedMaximizedToEdges.remove(p.windowId);
         m_states.addMembership(p.windowId, p.targetKey);
+        if (p.hadPriorState && p.priorKey.screenId != p.targetScreenId) {
+            dropFromOtherContexts(p.windowId, p.targetKey); // it left its prior output for good
+        }
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
         return;
@@ -444,6 +447,12 @@ void ScrollEngine::commitDragInsertPreview()
     // instead — see reanchorForDropCommit.
     strip.reanchorForDropCommit(preDropViewOffset, params);
     m_states.addMembership(p.windowId, p.targetKey);
+    // A cross-OUTPUT drop: the window left its prior screen for good, so the
+    // places it held on that screen's other desktops go too (begin moved only
+    // the membership the drag started from, so a cancel could leave them).
+    if (p.hadPriorState && p.priorKey.screenId != p.targetScreenId) {
+        dropFromOtherContexts(p.windowId, p.targetKey);
+    }
 
     // Drop the last-applied memory so the re-tile emit survives the
     // emit-on-change gate even when the window resolves back to its
@@ -623,6 +632,9 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
                 }
             }
             m_states.addMembership(p.windowId, p.targetKey);
+            if (p.priorKey.screenId != p.targetScreenId) {
+                dropFromOtherContexts(p.windowId, p.targetKey); // re-homed onto another output
+            }
             m_lastAppliedRect.remove(p.windowId);
             m_parkedScrollEdge.remove(p.windowId);
             applyLayout(p.targetScreenId, false);

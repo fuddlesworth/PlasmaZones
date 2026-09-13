@@ -8,7 +8,7 @@
 // scatter one interface across headers for line count alone. Same rationale
 // as its peers (SnapEngine.h, AutotileEngine.h, LayoutRegistry.h). Grew with
 // the per-desktop membership change: the adopt / release / drop helpers,
-// the per-context rect memos and the adoption insert flag.
+// the per-context rect memos, their forget, and the adoption insert flag.
 
 #pragma once
 
@@ -1336,6 +1336,9 @@ private:
     /// @p newKey's, on a context switch. See m_contextRectMemory.
     void swapContextRectMemory(const QString& screenId, const PhosphorEngine::PlacementStateKey& oldKey,
                                const PhosphorEngine::PlacementStateKey& newKey);
+    /// Drop @p windowId's parked memo under @p key, reaping the inner map when
+    /// it empties.
+    void forgetContextMemo(const PhosphorEngine::PlacementStateKey& key, const QString& windowId);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -1530,9 +1533,11 @@ private:
     /// owes a geometry batch the change gate would otherwise suppress. See
     /// that member for the full contract. And the membership pass
     /// (engine_membership.cpp) arms the screen whose strip in view it
-    /// adopted a window into or released one from: the window's rect memory
-    /// belongs to another desktop's strip, so the change gate cannot be
-    /// trusted to notice.
+    /// adopted a window into or released one from — dropFromOtherContexts,
+    /// on the close / handoff / prune / cross-output paths, is the same
+    /// producer for the strips it empties: the window's rect memory belongs
+    /// to another desktop's strip, so the change gate cannot be trusted to
+    /// notice.
     ///
     /// A screen ADDED to the set is armed too, and the reason is worth stating
     /// because the obvious argument for leaving it unarmed is wrong. That

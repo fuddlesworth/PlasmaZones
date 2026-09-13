@@ -1170,7 +1170,8 @@ private:
     /// Whether @p state holds a membership for the window (see
     /// SnapStateResolver::holdsWindow). Unwired: only the primary store does.
     bool snapHoldsWindow(const QString& windowId, const PhosphorSnapEngine::SnapState* state) const;
-    PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId);
+    PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId,
+                                                         int desktop = 0);
     PhosphorSnapEngine::SnapState* snapForScreen(const QString& screenId) const;
     /// The store holding the single representative last-used zone: the one with the
     /// highest lastUsedSeq() among all stores that have a non-empty last-used zone,

@@ -88,9 +88,10 @@ void WindowTrackingService::forEachZoneAssignedWindow(
             // is reported from every member store with that store's desktop.
             // Kept in lockstep with SnapEngine::stateForWindowOnScreen's
             // eviction, which spares member stores for the same reason.
-            // A window untracked by the reverse map (owner == nullptr, e.g. the
-            // global holder's screenless entries) is left to the callback's own
-            // screen/desktop guards, preserving prior behaviour.
+            // An untracked window resolves to the global holder, so only its
+            // entries in that holder are reported (that store is its own
+            // owner); a leftover it has in a per-screen store is a phantom and
+            // is skipped like any other non-member store.
             const PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
             if (owner && owner != state && !snapHoldsWindow(it.key(), state)) {
                 continue;

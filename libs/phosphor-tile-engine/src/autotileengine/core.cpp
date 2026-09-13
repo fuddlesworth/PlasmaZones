@@ -105,6 +105,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // down its state, mirroring windowClosed — else commit/cancel would
         // later re-add or float a dead id.
         dropClosedWindowFromDragPreview(windowId);
+        // A dead window's background contexts lose a tile nothing retiles
+        // now; remember them so their return closes the hole (the same memo
+        // onWindowRemoved keeps).
+        for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
+            if (held != currentKeyForScreen(held.screenId)) {
+                m_dirtyBackgroundContexts.insert(held);
+            }
+        }
         const QString screenId = removeTrackedWindowNoRetile(windowId);
         if (!screenId.isEmpty()) {
             affectedScreens.insert(screenId);
@@ -332,6 +340,9 @@ void AutotileEngine::connectSignals()
                     // membership: a released window may hold a place on
                     // another screen this teardown did not touch.
                     m_states.removeWindowsIf([&orphanedVsIds](const QString&, const TilingStateKey& key) {
+                        return orphanedVsIds.contains(key.screenId);
+                    });
+                    m_dirtyBackgroundContexts.removeIf([&orphanedVsIds](const TilingStateKey& key) {
                         return orphanedVsIds.contains(key.screenId);
                     });
                     if (!releasedWindows.isEmpty()) {

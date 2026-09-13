@@ -194,7 +194,7 @@ private Q_SLOTS:
         m_wts->setSnapState(engine.snapState());
 
         // Predicate marks DP-OFF as a disabled context, every other screen active.
-        engine.setShouldRestorePredicate([](const QString& screenId) {
+        engine.setShouldRestorePredicate([](const QString& screenId, int) {
             return screenId != QStringLiteral("DP-OFF");
         });
 
@@ -214,7 +214,7 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        engine.setShouldRestorePredicate([](const QString& screenId) {
+        engine.setShouldRestorePredicate([](const QString& screenId, int) {
             return screenId != QStringLiteral("DP-OFF");
         });
 

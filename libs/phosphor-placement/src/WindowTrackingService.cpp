@@ -123,8 +123,10 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
 
     // Resolve (and, on first placement, register) the per-screen store that owns
     // this window. A screen-carrying write is the reverse map's authoritative
-    // seed point.
-    PhosphorSnapEngine::SnapState* snapState = snapForWindowOnScreen(windowId, screenId);
+    // seed point. A pinned desktop (a RouteToDesktop commit, a cross-desktop
+    // move, a background-desktop restore) names that desktop's store, so the
+    // assignment lives in the context it is for.
+    PhosphorSnapEngine::SnapState* snapState = snapForWindowOnScreen(windowId, screenId, virtualDesktop);
     if (!snapState) {
         return;
     }
@@ -883,9 +885,18 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     // Read zone/screen for logging BEFORE unsnapForFloat clears them.
     QStringList zoneIds = snapState->zonesForWindow(windowId);
     QString screenId = snapState->screenForWindow(windowId);
+    // The desktop this store's assignment belongs to, for the persisted map:
+    // a window present on several desktops keeps its pre-float zones in
+    // slot.zoneIds (the float-back), but its per-desktop entry has to go, or
+    // a restart onto another desktop seeds the zone back as a live snap on
+    // the desktop the user had floated it on.
+    const int floatedDesktop = snapState->desktopForWindow(windowId);
 
     // SnapState::unsnapForFloat saves pre-float state (windowId-keyed) and unassigns.
     auto unassignResult = snapState->unsnapForFloat(windowId);
+    if (floatedDesktop >= 1) {
+        forgetDesktopZones(windowId, PhosphorEngine::WindowPlacement::snapEngineId(), floatedDesktop);
+    }
 
     // Also write an appId-keyed entry into the SAME store for session-restore
     // fallback. SnapState::unsnapForFloat only writes the windowId key; the appId

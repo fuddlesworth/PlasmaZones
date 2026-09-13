@@ -592,7 +592,13 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // already contains the window, and unkeying a live tile would just
         // create the mirror inconsistency.)
         if (!state->strip().containsWindow(windowId) && !state->isFloating(windowId)) {
-            m_states.removeWindow(windowId);
+            if (adoption) {
+                // An adoption's membership is the one just added for THIS
+                // context; the window keeps the others it holds.
+                m_states.removeMembership(windowId, currentKeyForScreen(screenId));
+            } else {
+                m_states.removeWindow(windowId);
+            }
         }
     }
     // Which arm placed the arrival, and whether it ended up as the strip's

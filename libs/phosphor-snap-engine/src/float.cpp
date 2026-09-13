@@ -66,8 +66,12 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
         // never recorded the float, the chrome said floating, and the next
         // toggle read "not floating". With the own-write applied the WTS call
         // is a no-op whenever the routing agrees; it stays for the unwired
-        // legacy path's bookkeeping.
-        setFloating(windowId, true);
+        // legacy path's bookkeeping. With a screen in hand the float records
+        // its residence too: a window adopted into this desktop without ever
+        // being snapped here has no screen/desktop in the store, and a bare
+        // float bit would leave the capture screenless and the cross-desktop
+        // focus walk blind to it.
+        setFloatingWithResidence(windowId, screenId);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         applyFloatGeometryUnlessMinimized(windowId, screenId);
@@ -138,8 +142,9 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // confinement can never fire because home == live by construction.
         m_windowTracker->unsnapForFloat(windowId);
         // Own store first — see toggleWindowFloat's float branch for why the
-        // routed WTS write alone cannot be trusted to land here.
-        setFloating(windowId, true);
+        // routed WTS write alone cannot be trusted to land here, and why the
+        // residence is recorded with it.
+        setFloatingWithResidence(windowId, screenId);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         // Guarded: the minimize path reaches here via setWindowFloatingForScreen
@@ -389,9 +394,18 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         // resolveWindowRestore's take(), never this path.
         if (const auto rec = m_windowTracker->placementStore().peekExact(windowId)) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
-            if (!slot.zoneIds.isEmpty()
+            // A window present on several desktops has one home per desktop,
+            // and the flat zoneIds is whichever desktop was in view at the
+            // last capture. Its home HERE is the map's entry for the desktop
+            // the unfloat lands on; with none, the window was unsnapped on
+            // this desktop and there is nothing to return it to.
+            QStringList recordZones = slot.zoneIds;
+            if (m_states.membershipsForWindow(canonicalWindowId(windowId)).size() > 1) {
+                recordZones = slot.zonesByDesktop.value(currentKeyForScreen(fallbackScreen).desktop);
+            }
+            if (!recordZones.isEmpty()
                 && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {
-                zoneIds = slot.zoneIds;
+                zoneIds = recordZones;
                 // Home-screen hint. Exact for a stale SNAPPED slot (captured as the
                 // snap screen); an approximation for a FLOATING slot, whose record
                 // screen is the screen the window was floating on at capture time —
@@ -609,7 +623,9 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                     setFloating(ctx.windowId, false);
                     m_windowTracker->setWindowFloating(ctx.windowId, false);
                 }
-                SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId);
+                // Pinned to the destination desktop's store (see
+                // stateForWindowOnScreen): the handoff names it.
+                SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop);
                 if (ctx.sourceZoneIds.size() > 1) {
                     targetState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
                 } else {
@@ -735,10 +751,9 @@ bool SnapEngine::isWindowTracked(const QString& windowId) const
     // assignment is never empty, so a non-empty result means "present".
     // Plain statement, no null-check: stateForWindow is NEVER null (see the
     // accessor's contract, which names this function as the tracked/untracked
-    // test). The trailing facade-level isFloating is NOT redundant — the
-    // state's own isFloating consults only the owning store, while the facade
-    // sweeps every store, catching a float recorded outside the reverse map's
-    // target.
+    // test). The facade-level isFloating is NOT redundant — the state's own
+    // isFloating consults only the owning store, while the facade also reads
+    // the global holder, catching a screenless float recorded there.
     // The trailing heldKeyForWindow is the multi-desktop arm: a window
     // present on several desktops is adopted into the desktop in view with a
     // membership and NO data, so its primary store answers false on every

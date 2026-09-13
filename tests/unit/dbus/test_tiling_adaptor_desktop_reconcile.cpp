@@ -183,13 +183,45 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QVERIFY(d1->containsWindow(kWindow));
 
-        // An EMPTY reported set — a sticky window, or one whose desktop the
-        // compositor did not report. The keep comes from the empty-set early
-        // return, not from any sticky-aware branch: the reconcile cannot tell
-        // the two apart and treats both as "nothing to check".
+        // An EMPTY reported set with no sticky bit is a window whose desktop
+        // the compositor did not report: UNKNOWN, and unknown is "nothing to
+        // check". (A sticky window is a different thing: the metadata's
+        // isSticky says so, and the rows below cover it.)
         f.registry.upsert(kInstance, onDesktop(0));
         QCoreApplication::processEvents();
         QVERIFY(d1->containsWindow(kWindow));
+    }
+
+    // The sticky bit travels in the same metadata push as the desktop set.
+    // Flipping it on adopts the window into the desktop in view (a sticky
+    // window is on every desktop); flipping it off with a set that no longer
+    // names the old desktop releases that desktop's tile and keeps the one
+    // the set still covers.
+    void autotile_stickyFlip_adoptsOnTheDesktopInViewAndUnstickReleasesTheRest()
+    {
+        AutotileFixture f;
+        PhosphorTiles::TilingState* d1 = f.openOn(1, {kWindow});
+        QVERIFY(d1 != nullptr);
+        QVERIFY(d1->containsWindow(kWindow));
+
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        f.engine.setAutotileScreens({kScreen});
+        PhosphorEngine::WindowMetadata stuck = onDesktop(1);
+        stuck.isSticky = true;
+        f.registry.upsert(kInstance, stuck);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = f.engine.tilingStateForScreen(kScreen);
+        QVERIFY(d2 != nullptr);
+        QVERIFY2(d2->containsWindow(kWindow), "sticky on: the desktop in view adopts the window");
+        QVERIFY2(d1->containsWindow(kWindow), "and the desktop it came from keeps it");
+
+        PhosphorEngine::WindowMetadata unstuck = onDesktop(2, {2});
+        unstuck.isSticky = false;
+        f.registry.upsert(kInstance, unstuck);
+        QCoreApplication::processEvents();
+        QVERIFY2(!d1->containsWindow(kWindow), "sticky off onto desktop 2: desktop 1's tile goes");
+        QVERIFY(d2->containsWindow(kWindow));
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 2);
     }
 
     // A title tick that leaves the desktop fields alone must not reconcile at

@@ -923,7 +923,11 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     // Same pre-untrack read as windowClosed, for the same focus re-read. Both
     // this and the untrack below go to the NAMED engine when the caller
     // supplied one — see releaseWindowTrackingVia's doc for why re-deriving
-    // either through the id-based predicate would be wrong there.
+    // either through the id-based predicate would be wrong there. The
+    // membership reconcile is the one caller that arrives AFTER the engine
+    // dropped every context, so its read is empty and no focus re-read runs
+    // here; a current-context release relays placementChanged → tilingChanged
+    // → refreshFocusedWindow on its own, and a background one moves no focus.
     const QString releasingScreen = owner ? owner->screenForTrackedWindow(windowId) : trackedScreenForWindow(windowId);
     if (PhosphorEngine::IPlacementEngine* engine = owner ? owner : engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);

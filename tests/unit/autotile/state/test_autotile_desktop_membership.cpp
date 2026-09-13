@@ -225,6 +225,51 @@ private Q_SLOTS:
         QVERIFY2(f.stateOn(2)->isFloating(kWindow), "the float state crosses with the window");
     }
 
+    // The float a window carries into a new desktop is read from EVERY
+    // context it holds, not from the primary: with no membership yet in the
+    // desktop being entered, the primary falls back to the first-adopted
+    // desktop, which is not the one the user floated it on.
+    void adoptionReadsTheFloatFromAnyHeldContext()
+    {
+        Fixture f;
+        f.open(1, {kOther, kWindow});
+        f.switchAndReconcile(2, sticky());
+        QVERIFY(!f.stateOn(2)->isFloating(kWindow));
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        f.engine.setWindowFloat(kWindow, true, kScreen);
+        QVERIFY(f.stateOn(2)->isFloating(kWindow));
+        QVERIFY(!f.stateOn(1)->isFloating(kWindow));
+
+        f.switchAndReconcile(3, sticky());
+        QVERIFY(f.stateOn(3)->containsWindow(kWindow));
+        QVERIFY2(f.stateOn(3)->isFloating(kWindow), "the float the user last saw is the one that crosses");
+    }
+
+    // The minimize-suspension shape: floated on the desktop it was on, the
+    // user switches desktops while it is hidden (a minimized window is not
+    // adopted), and the unminimize's unfloat arrives with the screen showing
+    // a desktop the window holds no place in. The suspension is lifted in
+    // every context that holds it and the desktop in view adopts the window
+    // as a tile, instead of the primary reading "not floating" and leaving
+    // it unmanaged where the user sees it.
+    void unfloatOnAnUnheldDesktopLiftsTheSuspensionAndAdopts()
+    {
+        Fixture f;
+        f.open(1, {kOther, kWindow});
+        f.engine.setWindowFloat(kWindow, true, kScreen);
+        QVERIFY(f.stateOn(1)->isFloating(kWindow));
+
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        f.engine.setAutotileScreens({kScreen});
+        QVERIFY(!f.engine.tilingStateForScreen(kScreen)->containsWindow(kWindow));
+        f.engine.setWindowFloat(kWindow, false, kScreen);
+        QCoreApplication::processEvents();
+        QVERIFY2(f.stateOn(2)->containsWindow(kWindow), "the desktop in view adopts the window");
+        QVERIFY(!f.stateOn(2)->isFloating(kWindow));
+        QVERIFY2(!f.stateOn(1)->isFloating(kWindow), "the suspension float is lifted where it was set");
+        QVERIFY(f.stateOn(1)->containsWindow(kWindow));
+    }
+
     // A membership under the screen's sticky pin is not evidence the window
     // left anything: the pin keys every desktop's state by the pinned desktop,
     // and the engine's own unpin migration moves it.

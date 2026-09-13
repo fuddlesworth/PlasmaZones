@@ -5,7 +5,8 @@
 // Daemon composition root — every engine's construction, provider wiring and
 // signal fan-out in the one place the ordering contract between them can be
 // read top to bottom. Splitting by engine would scatter the cross-engine
-// defer/reciprocity wiring this file exists to keep adjacent.
+// defer/reciprocity wiring this file exists to keep adjacent. Grew with the
+// per-desktop membership change: the snap resolver's membership arm.
 
 #include "daemon/daemon.h"
 #include "helpers.h"
@@ -460,9 +461,9 @@ void Daemon::initEnginesAndWiring()
         snapResolver.forWindow = [e = QPointer(snapEngine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
             return e ? e->stateForWindow(id) : nullptr;
         };
-        snapResolver.forWindowOnScreen =
-            [e = QPointer(snapEngine)](const QString& id, const QString& screenId) -> PhosphorSnapEngine::SnapState* {
-            return e ? e->stateForWindowOnScreen(id, screenId) : nullptr;
+        snapResolver.forWindowOnScreen = [e = QPointer(snapEngine)](const QString& id, const QString& screenId,
+                                                                    int desktop) -> PhosphorSnapEngine::SnapState* {
+            return e ? e->stateForWindowOnScreen(id, screenId, desktop) : nullptr;
         };
         snapResolver.forScreen = [e = QPointer(snapEngine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
             return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;

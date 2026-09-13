@@ -129,7 +129,7 @@ void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engi
     // by then, so the bookkeeping is the whole point.
     QSet<QString> fullyReleased;
     for (const auto& [windowId, key] : result.released) {
-        if (!engine->heldKeyForWindow(windowId)) {
+        if (lifecycleEngine && !engine->heldKeyForWindow(windowId)) {
             fullyReleased.insert(windowId);
         }
         if (!lifecycleEngine && m_windowTrackingAdaptor) {

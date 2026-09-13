@@ -331,11 +331,11 @@ p_add_test(test_autotile_ext_startup_float autotile/behavior/test_autotile_ext_s
 p_add_test(test_autotile_ext_algoswitch autotile/behavior/test_autotile_ext_algoswitch.cpp)
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_script_state_stash autotile/state/test_autotile_script_state_stash.cpp)
+target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 # The tiling engine's per-desktop membership arm: adopt on switch, the
 # per-window release, and the close / handoff paths over every member state.
 p_add_test(test_autotile_desktop_membership autotile/state/test_autotile_desktop_membership.cpp)
 target_sources(test_autotile_desktop_membership PRIVATE helpers/AutotileFakes.h)
-target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 # The split-tree case needs a screen with real geometry: the restore hangs off
 # recalculateLayout, which bails before it without one. Same fake provider
 # test_autotile_virtual uses.

@@ -267,7 +267,7 @@ rm -f "$NEST/env.sh" "$NEST/daemon.pid"
 if [ "$KEEP_STATE" = "1" ] && [ -f "$NEST/daemon.log" ]; then
     mv -f "$NEST/daemon.log" "$NEST/daemon.log.prev"
 else
-    rm -f "$NEST/daemon.log"
+    rm -f "$NEST/daemon.log" "$NEST/daemon.log.prev"
 fi
 mkdir -p "$HOME_N/config" "$HOME_N/data" "$HOME_N/cache" "$HOME_N/state"
 # env.sh carries the session bus address; keep the tree private even when

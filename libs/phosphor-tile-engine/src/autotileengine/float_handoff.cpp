@@ -595,6 +595,38 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // logging and the windowFloatingStateSynced emission at the tail still
     // announced a float that never happened — the effect's float cache then
     // latched at "floating" and never came back (Discussion #1028).
+    // A window present on several desktops, unfloated on a desktop it holds
+    // no place in yet: the minimize-suspension case. Its minimize floated it
+    // in the context it was on, the user switched desktops while it was
+    // hidden (the membership pass refuses a minimized window), and the
+    // unminimize arrives here with the screen showing a desktop the window
+    // has no membership in. The primary would resolve to the FIRST held
+    // context, read "not floating" and return, leaving the window unmanaged
+    // where the user sees it and floating where they do not. So: the
+    // suspension float is lifted in every context that holds it, and the
+    // desktop in view adopts the window as a tile.
+    if (!shouldFloat && !callerScreenId.isEmpty()) {
+        const TilingStateKey viewKey = currentKeyForScreen(callerScreenId);
+        if (m_states.hasWindow(windowId) && !m_states.hasMembership(windowId, viewKey)
+            && isAutotileScreen(callerScreenId)) {
+            for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
+                PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);
+                if (heldState && heldState->isFloating(windowId)) {
+                    heldState->setFloating(windowId, false);
+                    if (held != currentKeyForScreen(held.screenId)) {
+                        m_dirtyBackgroundContexts.insert(held);
+                    }
+                }
+            }
+            m_overflow.clearOverflow(windowId);
+            if (adoptIntoContext(windowId, viewKey)) {
+                retileAfterOperation(callerScreenId, true);
+            }
+            Q_EMIT windowFloatingStateSynced(windowId, false, callerScreenId);
+            return;
+        }
+    }
+
     PhosphorTiles::TilingState* state = stateForWindow(windowId);
     if (!state || !state->containsWindow(windowId)) {
         qCDebug(PhosphorTileEngine::lcTileEngine)

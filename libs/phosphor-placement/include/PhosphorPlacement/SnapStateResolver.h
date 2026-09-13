@@ -36,8 +36,11 @@ struct SnapStateResolver
     /// while this service still holds the resolver (a real teardown order).
     std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
     /// Owning state for a window placed/acting on a screen: resolves the state
-    /// (creating it on first placement) AND records the reverse-map entry.
-    std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId)> forWindowOnScreen;
+    /// (creating it on first placement) AND records the reverse-map entry. A
+    /// pinned @p desktop (>= 1) names that desktop's store outright (see
+    /// SnapEngine::stateForWindowOnScreen); 0 resolves the primary.
+    std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId, int desktop)>
+        forWindowOnScreen;
     /// Owning state for a SCREEN's current (screen, desktop, activity) context,
     /// independent of any window — resolves (creating on first use) the per-key
     /// store a screen-scoped write (last-used-zone) targets. An empty screenId
