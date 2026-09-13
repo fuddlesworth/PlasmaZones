@@ -138,6 +138,34 @@ private Q_SLOTS:
             .arg(columns);
     }
 
+    void navigationRetainsEveryColumnAndInactiveTab()
+    {
+        const auto strip = parseStripModel(tenColumnStrip(300, 4));
+        QCOMPARE(strip.cells.size(), 3);
+        QCOMPARE(strip.windows.size(), 10);
+        QVERIFY(strip.windows[0].offscreen);
+        QVERIFY(!strip.windows[4].offscreen);
+        QVERIFY(strip.windows[4].focused);
+        QVERIFY(strip.windows[9].offscreen);
+        QCOMPARE(strip.windows[9].windowId, QStringLiteral("w9"));
+        auto model = QJsonDocument::fromJson(tenColumnStrip(300, 4).toUtf8()).object();
+        auto columns = model[QLatin1String("columns")].toArray();
+        auto column = columns[4].toObject();
+        auto tiles = column[QLatin1String("tiles")].toArray();
+        tiles.append(
+            QJsonObject{{QStringLiteral("windowId"), QStringLiteral("tab")}, {QStringLiteral("minimized"), true}});
+        column[QLatin1String("tiles")] = tiles;
+        column[QLatin1String("activeTile")] = 1;
+        columns[4] = column;
+        model[QLatin1String("columns")] = columns;
+        const auto tabs = parseStripModel(QString::fromUtf8(QJsonDocument(model).toJson()));
+        QCOMPARE(tabs.windows.size(), 11);
+        QVERIFY(!tabs.windows[4].focused);
+        QVERIFY(tabs.windows[5].focused);
+        QVERIFY(tabs.windows[5].minimized);
+        QCOMPARE(tabs.windows[5].columnIndex, 4);
+    }
+
     void stripModelGivesLensOverflowAndStructureAxis()
     {
         const StripParse parse = parseStripModel(tenColumnStrip(300, 4));

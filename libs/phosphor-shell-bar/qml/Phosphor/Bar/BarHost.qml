@@ -39,7 +39,7 @@ PanelWindow {
     property bool mapPaneOpen: false
     // Opened on its menu section (a right-click).
     property bool mapPaneMenuFocused: false
-    property int mapPaneWidth: 360
+    property int mapPaneWidth: 680
 
     // What the pane machinery below actually shows: the host's pane, or
     // the map pane when that is the one open.
@@ -449,13 +449,13 @@ PanelWindow {
         const p = c.mapToItem(panel.contentItem, 0, 0);
         return Qt.rect(p.x, p.y, c.width, c.height);
     }
-    readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width)
+    readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width - 2 * Appearance.gap)
     // The map pane is as deep as its content; the host's pane takes the
     // reserved depth.
     readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight) + Tokens.rail_thickness) : panel._usablePaneDepth
     // Right-aligned under the chip, clamped to the screen: a trailing chip
     // gets a pane that ends where the chip ends.
-    readonly property real _paneX: Math.max(0, Math.min(panel.width - panel._paneW, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
+    readonly property real _paneX: Math.max(Appearance.gap, Math.min(panel.width - panel._paneW - Appearance.gap, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
     readonly property real _paneT: Spectrum.tForX(panel._paneX + panel._paneW / 2, panel.width)
 
     // The tether: rail hue at the chip's x, dropping from the rail to the
@@ -507,32 +507,9 @@ PanelWindow {
         // hit-testable, and the collapse outlasts the fade.
         enabled: panel._paneOpenEff && !panel._paneExternalEff
 
-        Rectangle {
+        ShellSurface {
             anchors.fill: parent
-            radius: Tokens.radius_tile
-            color: Appearance.surface
-            opacity: 0.96
-        }
-        SpectrumStroke {
-            anchors.fill: parent
-            radius: Tokens.radius_tile
-            t: panel._paneT
-            active: panel._paneOpenEff
-        }
-        // The pane's top edge carries the rail gradient over its own
-        // x-range, so it matches the bar above it in hue.
-        Item {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: Tokens.rail_thickness
-            clip: true
-            SpectrumRail {
-                x: -pane.x
-                width: panel.width
-                height: Tokens.rail_thickness
-                opacity: 1
-            }
+            railT: panel._paneT
         }
 
         // Latched by a plain flag rather than the Loader reading its own

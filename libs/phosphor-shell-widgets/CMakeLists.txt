@@ -72,6 +72,7 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/TabularText.qml
     qml/Phosphor/Widgets/SettleAnimation.qml
     qml/Phosphor/Widgets/DecorationSlot.qml
+    qml/Phosphor/Widgets/WorkspaceNavigator.qml
     qml/Phosphor/Widgets/PlacementMiniature.qml
     qml/Phosphor/Widgets/MiniatureEdges.js
 )

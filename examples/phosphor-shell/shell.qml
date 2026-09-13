@@ -834,7 +834,9 @@ Item {
             // itself Modal and toggles, so it stays reachable.
             if (Popouts.modalActive && id !== "power")
                 return;
-            if (id === "power")
+            if (id === "placementmap" && source)
+                source.expandRequested(false);
+            else if (id === "power")
                 root.togglePowerMenu(source);
             else if (id === "controlcenter")
                 // "controlcenter" is the bar widget's registered id

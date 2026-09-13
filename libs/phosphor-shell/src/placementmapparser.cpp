@@ -265,6 +265,28 @@ StripParse parseStripModel(const QString& modelJson)
         // screen, so a column entirely before or after it is off-lens.
         const qreal start = qreal(pos - viewOffset) / viewport;
         const qreal length = qreal(len) / viewport;
+        // Keep a separate, complete navigation model. The miniature still
+        // depicts only the viewport, independent of how long the strip grows.
+        for (int tileIndex = 0; tileIndex < tiles.size(); ++tileIndex) {
+            const QJsonObject tile = tiles[tileIndex].toObject();
+            const QString windowId = tile[WindowId].toString();
+            if (windowId.isEmpty()) {
+                continue;
+            }
+            Cell window =
+                makeCell(windowId, vertical ? QRectF(0.0, start, 1.0, length) : QRectF(start, 0.0, length, 1.0));
+            window.windowId = windowId;
+            window.columnIndex = column[Index].toInt(-1);
+            window.stripT = std::clamp(qreal(pos) / extent, 0.0, 1.0);
+            window.t = window.stripT;
+            window.stack = tiles.size();
+            window.occupied = true;
+            window.focused =
+                window.columnIndex == activeColumn && tileIndex == column[QLatin1String("activeTile")].toInt(0);
+            window.offscreen = start + length <= 0.0 || start >= 1.0;
+            window.minimized = tile[Minimized].toBool(false);
+            parse.windows.append(window);
+        }
         if (start + length <= 0.0) {
             ++parse.overflowLeft;
             continue;
@@ -467,6 +489,8 @@ QVariantList toVariantList(const QList<Cell>& cells)
         map.insert(QStringLiteral("appId"), cell.appId);
         map.insert(QStringLiteral("title"), cell.title);
         map.insert(QStringLiteral("urgent"), cell.urgent);
+        map.insert(QStringLiteral("offscreen"), cell.offscreen);
+        map.insert(QStringLiteral("minimized"), cell.minimized);
         list.append(map);
     }
     return list;

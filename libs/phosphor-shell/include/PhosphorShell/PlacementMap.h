@@ -82,6 +82,7 @@ class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
     Q_PROPERTY(qreal aspect READ aspect NOTIFY aspectChanged)
     Q_PROPERTY(QRect workArea READ workArea NOTIFY workAreaChanged)
     Q_PROPERTY(QVariantList cells READ cells NOTIFY cellsChanged)
+    Q_PROPERTY(QVariantList windows READ windows NOTIFY windowsChanged)
     Q_PROPERTY(QVariantMap lens READ lens NOTIFY lensChanged)
     Q_PROPERTY(int overflowLeft READ overflowLeft NOTIFY overflowChanged)
     Q_PROPERTY(int overflowRight READ overflowRight NOTIFY overflowChanged)
@@ -115,6 +116,9 @@ public:
     [[nodiscard]] qreal aspect() const;
     [[nodiscard]] QRect workArea() const;
     [[nodiscard]] QVariantList cells() const;
+    [[nodiscard]] QVariantList windows() const;
+    /// Activate a window from the complete navigation model.
+    Q_INVOKABLE void activateNavigationWindow(const QString& windowId);
     [[nodiscard]] QVariantMap lens() const;
     [[nodiscard]] int overflowLeft() const;
     [[nodiscard]] int overflowRight() const;
@@ -162,6 +166,7 @@ public:
     /// Re-fetch `menuModel` for the current mode. Async; `menuModelChanged`
     /// fires when the list is in.
     Q_INVOKABLE void refreshMenu();
+    Q_INVOKABLE void setPlacementMode(int mode);
     /// Apply one `menuModel` entry: assign the layout / algorithm /
     /// template to this screen and desktop, or run the verb.
     Q_INVOKABLE void applyMenuChoice(const QString& kind, const QString& id);
@@ -206,6 +211,7 @@ Q_SIGNALS:
     void aspectChanged();
     void workAreaChanged();
     void cellsChanged();
+    void windowsChanged();
     void lensChanged();
     void overflowChanged();
     void stripExtentChanged();
@@ -294,6 +300,8 @@ private:
 
     // Source data, before occupancy and focus are layered on.
     QList<PlacementMapParser::Cell> m_source;
+    QList<PlacementMapParser::Cell> m_sourceWindows;
+    QList<PlacementMapParser::Cell> m_resolvedWindows;
     QList<PlacementMapParser::TileRect> m_lastBatch;
     QRectF m_sourceLens;
     int m_sourceOverflowLeft = 0;
@@ -305,6 +313,7 @@ private:
 
     // Published values, change-gated.
     QVariantList m_cells;
+    QVariantList m_windows;
     QVariantMap m_lens;
     QRect m_publishedWorkArea;
     qreal m_aspect = 0.0;

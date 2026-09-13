@@ -44,6 +44,7 @@ BarWidget {
     readonly property bool urgent: root.map ? root.map.urgent : false
 
     signal expandRequested(bool menu)
+    signal activated
 
     readonly property int restHeight: Appearance.compact ? 22 : 26
     readonly property int hoverHeight: root.restHeight

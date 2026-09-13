@@ -100,6 +100,10 @@ QVariantList PlacementMapScreen::cells() const
 {
     return m_cells;
 }
+QVariantList PlacementMapScreen::windows() const
+{
+    return m_windows;
+}
 QVariantMap PlacementMapScreen::lens() const
 {
     return m_lens;
@@ -133,6 +137,7 @@ void PlacementMapScreen::reseed()
 {
     ++m_generation;
     m_source.clear();
+    m_sourceWindows.clear();
     m_lastBatch.clear();
     m_sourceLens = QRectF();
     m_sourceOverflowLeft = 0;
@@ -151,6 +156,7 @@ void PlacementMapScreen::serviceLost()
 {
     ++m_generation;
     m_source.clear();
+    m_sourceWindows.clear();
     m_lastBatch.clear();
     m_sourceLens = QRectF();
     m_sourceStripExtentPx = 0;
@@ -246,6 +252,7 @@ void PlacementMapScreen::setMode(int mode)
         return;
     }
     m_mode = mode;
+    m_sourceWindows.clear();
     // The drop proxy is a snapping surface; leaving the mode withdraws it.
     if (mode != Snapping) {
         unregisterDropProxy();
@@ -278,6 +285,7 @@ void PlacementMapScreen::fetchModeData()
         break;
     default:
         m_source.clear();
+        m_sourceWindows.clear();
         m_sourceLens = QRectF();
         m_sourceStripExtentPx = 0;
         rebuildFromSource();
@@ -291,6 +299,7 @@ void PlacementMapScreen::fetchSnappingLayout()
         Iface::LayoutRegistry, QStringLiteral("getLayoutForScreen"), {m_screenId}, [this](const QString& layoutId) {
             if (layoutId.isEmpty() || layoutId == NoneLayout || layoutId.startsWith(AutotilePrefix)) {
                 m_source.clear();
+                m_sourceWindows.clear();
                 rebuildFromSource();
                 return;
             }
@@ -334,6 +343,7 @@ void PlacementMapScreen::fetchVisibleStrip()
 void PlacementMapScreen::applyStrip(const StripParse& parse)
 {
     m_source = parse.cells;
+    m_sourceWindows = parse.windows;
     m_sourceLens = parse.lens;
     m_sourceOverflowLeft = parse.overflowLeft;
     m_sourceOverflowRight = parse.overflowRight;
@@ -371,6 +381,11 @@ void PlacementMapScreen::applyTiles(const QList<TileRect>& tiles)
         return;
     }
     m_source = parseTileBatch(tiles, m_screenId, m_workArea);
+    auto navigationTiles = tiles;
+    for (auto& tile : navigationTiles) {
+        tile.monocle = false;
+    }
+    m_sourceWindows = parseTileBatch(navigationTiles, m_screenId, m_workArea);
     m_sourceLens = QRectF();
     m_sourceStripExtentPx = 0;
     rebuildFromSource();
@@ -517,8 +532,32 @@ void PlacementMapScreen::rebuildFromSource()
     // shared across screens. Cells whose window has not answered yet are
     // published unlabelled and re-resolved when the answer lands.
     applyMetadata(m_resolved, m_map->windowMetadata());
+    m_resolvedWindows = m_sourceWindows.isEmpty() ? m_resolved : m_sourceWindows;
+    if (m_mode == Snapping) {
+        const auto occupants = isPinned() ? m_pinnedOccupants : m_map->occupantsForScreen(m_screenId);
+        m_resolvedWindows.clear();
+        for (const auto& occupant : occupants) {
+            Cell window;
+            for (const auto& cell : std::as_const(m_resolved)) {
+                if (occupant.zoneIds.contains(cell.id)) {
+                    window = cell;
+                    break;
+                }
+            }
+            window.id = occupant.windowId;
+            window.windowId = occupant.windowId;
+            window.occupied = true;
+            window.focused = occupant.windowId == focused;
+            m_resolvedWindows.append(window);
+        }
+    } else if (m_mode == Tiling) {
+        applyFocusByWindowId(m_resolvedWindows, focused);
+    }
+    applyMetadata(m_resolvedWindows, m_map->windowMetadata());
+    applyUrgency(m_resolvedWindows, m_map->urgentWindows());
     QSet<QString> referenced;
-    for (const Cell& cell : std::as_const(m_resolved)) {
+    const auto referencedCells = m_resolved + m_resolvedWindows;
+    for (const Cell& cell : referencedCells) {
         if (!cell.windowId.isEmpty()) {
             referenced.insert(cell.windowId);
             m_map->requestMetadata(cell.windowId);
@@ -539,6 +578,11 @@ void PlacementMapScreen::publish()
     if (cells != m_cells) {
         m_cells = cells;
         Q_EMIT cellsChanged();
+    }
+    const QVariantList windows = toVariantList(m_resolvedWindows);
+    if (windows != m_windows) {
+        m_windows = windows;
+        Q_EMIT windowsChanged();
     }
     const QVariantMap lens = m_mode == Scrolling ? lensToVariant(m_sourceLens) : QVariantMap();
     if (lens != m_lens) {
@@ -580,6 +624,11 @@ void PlacementMapScreen::publish()
 const Cell* PlacementMapScreen::cellById(const QString& id) const
 {
     for (const Cell& c : m_resolved) {
+        if (c.id == id) {
+            return &c;
+        }
+    }
+    for (const Cell& c : m_resolvedWindows) {
         if (c.id == id) {
             return &c;
         }

@@ -60,6 +60,8 @@ struct PHOSPHORSHELL_EXPORT Cell
     /// Snapping: any occupant demands attention. Tiling and scrolling:
     /// the cell's window does.
     bool urgent = false;
+    bool offscreen = false;
+    bool minimized = false;
 };
 
 /// One non-floating window on a screen, for `applyOccupancy`: the zones
@@ -109,6 +111,8 @@ struct PHOSPHORSHELL_EXPORT TileRect
 struct PHOSPHORSHELL_EXPORT StripParse
 {
     QList<Cell> cells;
+    /// Every window, including offscreen columns and inactive tabs.
+    QList<Cell> windows;
     QRectF lens;
     int overflowLeft = 0;
     int overflowRight = 0;
