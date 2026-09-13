@@ -62,18 +62,25 @@ bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QR
 #endif
 }
 
-bool ShellEffects::setOverviewRegions(QQuickItem* item, const QRect& bar, const QRect& preview)
+bool ShellEffects::setOverviewRegions(QQuickItem* item, const QRect& bar, const QRect& preview,
+                                      const QVariantList& windows, qreal radius)
 {
     QQuickWindow* window = item ? item->window() : nullptr;
     if (!window || window->width() <= 0 || window->height() <= 0) {
         return false;
     }
     const QRegion bounds(QRect(0, 0, window->width(), window->height()));
-    window->setMask(bounds.subtracted(QRegion(bar)));
+    const auto barRegion = roundedRegion(bar, radius);
+    window->setMask(bounds.subtracted(barRegion));
 #ifdef PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM
-    KWindowEffects::enableBlurBehind(window, true, bounds.subtracted(QRegion(bar)).subtracted(QRegion(preview)));
+    QRegion apertures;
+    for (const auto& rect : windows)
+        apertures += roundedRegion(rect.toRectF().toAlignedRect(), radius);
+    apertures &= QRegion(preview);
+    KWindowEffects::enableBlurBehind(window, true, bounds.subtracted(barRegion).subtracted(apertures));
 #else
     Q_UNUSED(preview)
+    Q_UNUSED(windows)
 #endif
     window->update();
     return true;

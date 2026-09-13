@@ -142,8 +142,7 @@ bool ShellOverview::onOutput(KWin::LogicalOutput* output) const
 }
 bool ShellOverview::appliesTo(KWin::EffectWindow* window) const
 {
-    return window && onOutput(window->screen())
-        && (window->isNormalWindow() || window->isDialog() || window->isDesktop())
+    return window && onOutput(window->screen()) && (window->isNormalWindow() || window->isDialog())
         && !window->windowClass().contains(QLatin1String("phosphor-shell"))
         && !window->windowClass().contains(QLatin1String("plasmazones"));
 }
@@ -170,6 +169,7 @@ bool ShellOverview::begin(const QString& screen, double x, double y, double widt
         m_rect = geometry;
     }
     m_output = output;
+    m_targetRect = target;
     m_owner = owner;
     m_token = token;
     m_ownerWatcher.setWatchedServices(owner.isEmpty() ? QStringList() : QStringList{owner});
@@ -214,8 +214,16 @@ void ShellOverview::transform(KWin::EffectWindow* window, KWin::WindowPaintData&
     const qreal sx = m_rect.width() / screen.width();
     const qreal sy = m_rect.height() / screen.height();
     data.setXTranslation(m_rect.x() + (frame.x() - screen.x() + data.xTranslation()) * sx - frame.x());
-    data.setYTranslation(m_rect.y() + (frame.y() - screen.y() + data.yTranslation()) * sy - frame.y());
+    // Stage paints an unscaled 43 px titlebar. Fit the complete client below
+    // it instead of hiding the first rows of app content behind that header.
+    // The adjustment fades with the compositor transform on entry and exit.
+    const qreal progress = std::clamp((1 - sx) / std::max(0.001, 1 - m_targetRect.width() / screen.width()), 0.0, 1.0);
+    const qreal top = std::max(0.0, window->clientGeometry().y() - frame.y());
+    const qreal header = top * sy + progress * (43 - top * sy);
+    const qreal bodyScale = std::max(0.01, (frame.height() * sy - header) / std::max(1.0, frame.height() - top));
+    data.setYTranslation(m_rect.y() + (frame.y() - screen.y()) * sy + header - top * bodyScale
+                         + data.yTranslation() * bodyScale - frame.y());
     data.setXScale(data.xScale() * sx);
-    data.setYScale(data.yScale() * sy);
+    data.setYScale(data.yScale() * bodyScale);
 }
 }

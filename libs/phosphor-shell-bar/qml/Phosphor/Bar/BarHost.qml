@@ -17,8 +17,8 @@ PanelWindow {
     // Reserve the floating band and its inset, keeping tiled windows clear.
     thickness: Tokens.bar_thickness
     alignment: PanelWindow.Fill
-    // Keyboard focus is available after a user clicks the placement pane.
-    keyboardFocus: PanelWindow.OnDemand
+    // Navigation keys work immediately, including when opened from a shortcut.
+    keyboardFocus: mapPaneOpen ? PanelWindow.Exclusive : PanelWindow.None
 
     // ─── Pane (the bar-anchored popout) ─────────────────────────────────
     //
@@ -39,6 +39,20 @@ PanelWindow {
     // pane opening.
     signal overviewRequested
     property bool mapPaneOpen: false
+    function closeMapPane(restoreFocus: bool): void {
+        const windows = panel.placementMap ? (panel.placementMap.windows ?? []) : [];
+        const previous = windows.find(window => window.focused);
+        panel.mapPaneOpen = false;
+        if (restoreFocus && previous)
+            panel.placementMap.activateNavigationWindow(previous.windowId);
+    }
+    Connections {
+        target: panel.Window.window
+        function onActiveChanged(): void {
+            if (panel.mapPaneOpen && !panel.Window.window.active)
+                panel.mapPaneOpen = false;
+        }
+    }
     // Opened on its menu section (a right-click).
     property bool mapPaneMenuFocused: false
     property int mapPaneWidth: 700
@@ -80,7 +94,7 @@ PanelWindow {
             if (panel.paneOpen)
                 return;
             if (panel.mapPaneOpen && !menu) {
-                panel.mapPaneOpen = false;
+                panel.closeMapPane(true);
                 return;
             }
             panel.mapPaneMenuFocused = menu;
@@ -621,7 +635,7 @@ PanelWindow {
                 workspaces: Shell.Workspaces
                 mapFor: index => Shell.PlacementMap.forScreenDesktop(panel.screen ? panel.screen.name : "", index)
                 menuFocused: panel.mapPaneMenuFocused
-                onCloseRequested: panel.mapPaneOpen = false
+                onCloseRequested: restoreFocus => panel.closeMapPane(restoreFocus)
             }
         }
     }

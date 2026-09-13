@@ -3,60 +3,52 @@
 
 # 04: Implementation Record
 
-## Floating-shell redesign (mockups-v3)
+## Mockup fidelity correction (mockups-v3)
 
-The approved direction is implemented in six phases. Each implementation
-phase was built and checked with its affected suites and the isolated nested
-harness. The final phase runs the entire suite against the completed tree.
+The first six-phase implementation did not reproduce the approved mockups.
+The correction below uses the HTML studies at 1440×900 as the visual reference
+and checks the rendered shell in an isolated KWin session.
 
 | Phase | Commit | Result |
 |---|---|---|
-| 1. Shared appearance and everyday panels | `11b8cfc04` | Floating materials, Phosphor/Paper/Ember, appearance persistence, connection rows, service-backed media visualization and calendar. |
-| 2. Bounded Navigator | `2629bf5d8` | Complete window navigation for snapping, tiling and scrolling; readable fixed cards; constant-size bar mini with offscreen counts. |
-| 3. Stage | `ce3e82053` | Full-screen workspace overview, inspector and real desktop transform with a map fallback. |
-| 4. Shelf and surface consistency | `92c125542` | Three-column quick settings with narrow-screen reflow; launcher, notifications, OSD, power, picker, lock and polkit adopt the selected palette/material. |
-| 5. Customization | `9693f02e8` | Saved widget regions/order/visibility, overflow controls, configurable fonts, preserved preferences across presets and live settings without source reloads. |
-| 6. Regression and handoff | This final phase | Full build/test pass, final nested checks and updated design records. |
+| A. Desktop and bar | `7ec9926ae` | Floating bar geometry, shared palette, wallpaper, rail, material and default widget ordering. |
+| B. Quick settings | `0c3b8e7fd` | Navigator panel and Stage shelf, continuous connection rows, sliders, service-backed controls and CAVA media visualization. |
+| C. Workspace navigation | `009f06964` | Distinct Navigator and Stage layouts, complete native window catalogue, bounded scrolling, window actions and safe popup teardown during reload. |
+| D. Date and time | `3ee723de9` | Calendar typography and layout, local timezone, real dates, optional agenda provider, keyboard navigation and rounded compositor blur. |
+| E. Launcher | `a5c63d5f6` | Navigator result list and Stage pinned-app shelf, native window search, activation and saved pins. |
+| F. Appearance and feedback | `88252edf9` | Appearance controls, preserved popup position and scroll state through reload, compact OSD and toast styling. |
+| G. Native desktop windows | `1071fc53c` | KDecoration3 titlebars, shared stable window colors, palette and radius updates, real placement gaps and reversible desktop styling. |
+| H. Final visual and interaction checks | This commit | Readable Stage titlebars over live content, rounded preview silhouettes, immediate popup keyboard input and focus restoration on dismissal. |
 
-### Final result
+### Validation
 
 `cmake --build build --parallel 8` succeeds. The completed tree passes
-`dbus-run-session -- ctest --test-dir build --output-on-failure --parallel 4`:
-538 tests registered, 537 passed and the existing
-`test_surface_decoration_orientation` skipped. No tests failed.
+`ctest --test-dir build --output-on-failure --parallel 8`: 540 test targets,
+539 passed and the existing `test_surface_decoration_orientation` skipped.
 
-The final native pass includes reduced motion, rapid overview replacement
-and return to the normal desktop. Each Stage instance carries an ownership
-token, so a previous popup's late destructor cannot restore the replacement's
-preview. The narrow quick-settings scrollbar has a separate gutter.
+Native checks include both presentations and all three presets, the 800×600
+control center and calendar, Stage selection versus activation, and twenty
+real scrolling windows. Home/End and Enter reach the first and last windows
+without a pointer click. Esc returns focus to the app, and clicking another
+window dismisses Navigator. The bar miniature remains bounded as the strip
+grows. Repeated overview replacement and appearance reloads leave the shell
+and compositor running.
 
-### Validation coverage
+The native window decoration is built with the shell under
+`org.kde.kdecoration3`. Appearance's “Match desktop windows” option applies
+the frame and spacing together. A journal preserves the prior settings;
+disabling the option or a clean shutdown restores only values still owned
+by the shell. Per-window colors are shared with the bar and workspace maps.
+Stage keeps the wallpaper in place and fits each complete app view below
+its full-size titlebar without changing the real window's desktop geometry.
 
-- Scrolling was exercised with twenty real nested windows; Stage used four live tiling windows.
-  Parser and QML tests cover hidden columns, minimized windows, inactive
-  tabs, deletion, keyboard selection and all three placement modes.
-- Stage's compositor transform was captured from the visible nested window,
-  including a portrait output. A headless capture separately verified the
-  map fallback. Tests cover full-screen geometry, selection versus activation,
-  asynchronous begin/hide races and compositor-client lifetime.
-- The vertical settings panel was checked at 800×600 and the wide shelf at
-  1440×900. Connection rows, calendar and all three materials were captured.
-  The shelf test preserves control instances and values while reflowing.
-- Media was exercised with a controlled MPRIS player and a real CAVA process.
-  Provider tests cover visibility/playback gating and sanitized samples.
-- Appearance tests cover atomic persistence and import/export, invalid input,
-  layout/font preservation across presets and widget reordering. The editor
-  click test covers the saved result and immediate UI update. Live font and
-  widget commands keep the settings panel open.
-- Source-watcher tests distinguish appearance saves, identical atomic source
-  replacement, subsequent direct edits and changed atomic source replacement.
-
-The nested session does not verify physical Wi-Fi/Bluetooth connections,
-real audio output or backlight changes, host power actions, session locking,
-seat-owned authentication or physical gesture input. Their existing service
-contracts and UI behavior have automated coverage. No host power action was
-invoked. Calendar appointments and weather remain separate service features;
-the redesign does not supply fictional data for them.
+Third-party app content and live service data naturally differ from the
+illustrative mockup data. Calendar appointments require an agenda provider.
+Media visualization was checked with a controlled MPRIS player and a real
+CAVA process. No host power action was invoked. The nested compositor does
+not verify physical connectivity, backlight or audio changes, session
+locking, seat-owned authentication, or physical gestures; their service and
+UI contracts retain automated coverage.
 
 ## Historical spectrum implementation (mockups-v2)
 

@@ -37,6 +37,11 @@ FocusScope {
     readonly property rect canvas: Qt.rect(workArea.x + canvasLeft, workArea.y + canvasTop, Math.max(1, workArea.width - 2 * canvasLeft), Math.max(1, workArea.height - canvasTop - canvasBottom))
     readonly property rect nativeRect: Qt.rect(previewRect.x - canvas.x * previewRect.width / canvas.width, previewRect.y - canvas.y * previewRect.height / canvas.height, width * previewRect.width / canvas.width, height * previewRect.height / canvas.height)
     readonly property rect barRect: Qt.rect(Appearance.barInset, Appearance.bottom ? height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset, width - Appearance.barInset * 2, Appearance.barHeight)
+    function windowRect(window) {
+        return Qt.rect(previewRect.x + (window.x * workArea.width - canvasLeft) * previewRect.width / canvas.width, previewRect.y + (window.y * workArea.height - canvasTop) * previewRect.height / canvas.height, window.w * workArea.width * previewRect.width / canvas.width, window.h * workArea.height * previewRect.height / canvas.height);
+    }
+    readonly property var windowRects: windows.filter(w => !w.offscreen && !w.minimized).map(w => windowRect(w))
+    onWindowRectsChanged: Qt.callLater(refreshSurface)
     readonly property bool scrolling: map && map.mode === 2
     readonly property string selectedApp: selectedWindow ? appName(selectedWindow.appId) : qsTr("No window selected")
     signal closeRequested
@@ -99,7 +104,7 @@ FocusScope {
     }
     function refreshSurface() {
         if (surfaceEffects)
-            surfaceEffects.setOverviewRegions(root, barRect, previewRect);
+            surfaceEffects.setOverviewRegions(root, barRect, previewRect, windowRects, Appearance.radius);
     }
     function appName(id) {
         const name = String(id || "").replace(/\.desktop$/, "").split(".").pop();
@@ -156,21 +161,11 @@ FocusScope {
 
     // An aperture preserves the live desktop and the bar. The matching
     // input region lets clicks reach the bar's own layer surface.
-    Shape {
+    StageBackdrop {
         anchors.fill: parent
-        ShapePath {
-            strokeWidth: 0
-            fillColor: Qt.alpha(Appearance.recess, 0.76)
-            fillRule: ShapePath.OddEvenFill
-            PathSvg {
-                path: {
-                    function rect(r) {
-                        return "M " + r.x + " " + r.y + " h " + r.width + " v " + r.height + " h " + (-r.width) + " Z ";
-                    }
-                    return rect(Qt.rect(0, 0, root.width, root.height)) + rect(root.previewRect) + rect(root.barRect);
-                }
-            }
-        }
+        bar: root.barRect
+        preview: root.previewRect
+        windows: root.windowRects
     }
     MouseArea {
         anchors.fill: parent
@@ -312,11 +307,11 @@ FocusScope {
                 Accessible.name: modelData.title || modelData.appId
                 onClicked: root.select(index)
                 onDoubleClicked: root.openSelected()
-                background: Rectangle {
-                    radius: Appearance.radius
-                    color: "transparent"
-                    border.width: root.selectedId === liveWindow.modelData.windowId ? 1 : 0
-                    border.color: Appearance.windowColor(liveWindow.modelData.colorIndex >= 0 ? liveWindow.modelData.colorIndex : liveWindow.index)
+                background: StageWindowFrame {
+                    windowInfo: liveWindow.modelData
+                    appName: root.appName(liveWindow.modelData.appId)
+                    selected: root.selectedId === liveWindow.modelData.windowId
+                    hue: Appearance.windowColor(liveWindow.modelData.colorIndex >= 0 ? liveWindow.modelData.colorIndex : liveWindow.index)
                 }
                 contentItem: Item {
                     Rectangle {

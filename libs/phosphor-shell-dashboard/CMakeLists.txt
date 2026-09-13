@@ -62,6 +62,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(_phosphor_dashboard_qml_files
     qml/Phosphor/Dashboard/StageOverview.qml
+    qml/Phosphor/Dashboard/StageBackdrop.qml
+    qml/Phosphor/Dashboard/StageWindowFrame.qml
     qml/Phosphor/Dashboard/Dashboard.qml
     qml/Phosphor/Dashboard/DesktopCell.qml
     qml/Phosphor/Dashboard/CalendarCell.qml

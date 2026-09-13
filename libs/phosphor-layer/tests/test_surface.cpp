@@ -72,6 +72,25 @@ private Q_SLOTS:
         QCOMPARE(spy.at(2).at(0).value<Surface::State>(), Surface::State::Shown);
     }
 
+    void keyboardPolicyUpdatesWithoutRecreatingTheSurface()
+    {
+        MockTransport transport;
+        MockScreenProvider screens;
+        SurfaceFactory factory(PhosphorLayer::Testing::makeDeps(&transport, &screens));
+        auto* surface = factory.create(buildConfig(screens.primary()));
+        surface->setKeyboardInteractivity(KeyboardInteractivity::OnDemand);
+        surface->show();
+        QCOMPARE(transport.m_lastArgs.keyboard, KeyboardInteractivity::OnDemand);
+        auto* window = surface->window();
+        surface->setKeyboardInteractivity(KeyboardInteractivity::Exclusive);
+        QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
+        surface->setKeyboardInteractivity(KeyboardInteractivity::OnDemand);
+        QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::OnDemand);
+        QCOMPARE(surface->config().effectiveKeyboard(), KeyboardInteractivity::OnDemand);
+        QCOMPARE(transport.m_attachCount, 1);
+        QCOMPARE(surface->window(), window);
+    }
+
     void warmUpStaysAtHidden()
     {
         MockTransport t;

@@ -547,11 +547,8 @@ Item {
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "dismissOnFocusLoss": true,
-            // No keyboard for the same reason the other panels take none:
-            // it is a pointer surface, and holding focus takes it off
-            // whatever the user was typing in. It also kept the surface
-            // alive by holding the grab.
             "keyboardFocus": true,
+            "exclusiveKeyboard": true,
             "props": {
                 "railT": railT,
                 "panelWidth": Appearance.stage && target ? Math.max(364, target.geometry.width - 190) : Appearance.panelWidth
@@ -762,6 +759,7 @@ Item {
             // Per panel; see widgetPanels above for why this is not one
             // shared value.
             "keyboardFocus": panel.keyboard,
+            "exclusiveKeyboard": panel.keyboard,
             // Transients close on outside click or focus loss (A2 §4.7).
             // That is the line between this class and a pane: a pane is a
             // tile and does not vanish when you look elsewhere, and these
@@ -937,6 +935,7 @@ Item {
             "anchor": PhosphorPopout.Anchor.ScreenCenter,
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "keyboardFocus": true,
+            "exclusiveKeyboard": true,
             "dismissOnFocusLoss": true
         });
     }
@@ -1217,6 +1216,7 @@ Item {
             "anchor": PhosphorPopout.Anchor.ScreenCenter,
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "keyboardFocus": true,
+            "exclusiveKeyboard": true,
             "dismissOnFocusLoss": false
         });
     }

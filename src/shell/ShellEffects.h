@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QRect>
+#include <QVariantList>
 
 QT_BEGIN_NAMESPACE
 class QQuickItem;
@@ -44,7 +45,8 @@ public:
                                           qreal radius = 0);
 
     /// Leave a visible region, such as the bar, available to the surface below.
-    Q_INVOKABLE static bool setOverviewRegions(QQuickItem* item, const QRect& bar, const QRect& preview);
+    Q_INVOKABLE static bool setOverviewRegions(QQuickItem* item, const QRect& bar, const QRect& preview,
+                                               const QVariantList& windows = {}, qreal radius = 0);
 };
 
 } // namespace PhosphorShellApp

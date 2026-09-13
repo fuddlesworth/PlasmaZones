@@ -49,6 +49,7 @@ private:
     QString m_token;
     QVariantAnimation m_animation;
     QRectF m_rect;
+    QRectF m_targetRect;
     bool m_closing = false;
     QTimer m_windowChanges;
     QString m_lastFocusedWindow;

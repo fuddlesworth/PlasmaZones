@@ -618,25 +618,12 @@ bool ShellEngine::materializePanels(QString* failureReason)
 
         PhosphorLayer::Role role;
         role = role.withAnchors(anchors).withScopePrefix(QStringLiteral("phosphor-shell"));
-        // Per-panel keyboard interactivity from the QML property —
-        // defaults to None so clicking the panel doesn't steal focus
-        // from the user's active app (matches Plasma's panel
-        // behaviour). Popups attached to the panel still get their
-        // own xdg_popup grab and can receive keyboard input even
-        // when the parent panel is None.
-        PhosphorLayer::KeyboardInteractivity interactivity = PhosphorLayer::KeyboardInteractivity::None;
-        switch (panel->keyboardFocus()) {
-        case PanelWindow::None:
-            interactivity = PhosphorLayer::KeyboardInteractivity::None;
-            break;
-        case PanelWindow::OnDemand:
-            interactivity = PhosphorLayer::KeyboardInteractivity::OnDemand;
-            break;
-        case PanelWindow::Exclusive:
-            interactivity = PhosphorLayer::KeyboardInteractivity::Exclusive;
-            break;
-        }
-        role = role.withKeyboard(interactivity);
+        const auto panelKeyboard = [panel] {
+            return panel->keyboardFocus() == PanelWindow::Exclusive ? PhosphorLayer::KeyboardInteractivity::Exclusive
+                : panel->keyboardFocus() == PanelWindow::OnDemand   ? PhosphorLayer::KeyboardInteractivity::OnDemand
+                                                                    : PhosphorLayer::KeyboardInteractivity::None;
+        };
+        role = role.withKeyboard(panelKeyboard());
 
         switch (panel->panelLayer()) {
         case PanelWindow::LayerBackground:
@@ -770,6 +757,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
         }
         if (ownedSurface) {
             auto* surface = ownedSurface.get();
+            connect(panel, &PanelWindow::keyboardFocusChanged, surface, [surface, panelKeyboard] {
+                surface->setKeyboardInteractivity(panelKeyboard());
+            });
             m_surfaces.emplace_back(std::move(ownedSurface));
             // What this panel reserved, for reservedMarginsFor(). The zone
             // recorded is the Role's, i.e. what was actually advertised —

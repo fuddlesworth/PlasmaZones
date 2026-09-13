@@ -12,7 +12,7 @@ FocusScope {
     property var workspaces: null
     property var mapFor: null
     property bool menuFocused: false
-    signal closeRequested
+    signal closeRequested(bool restoreFocus)
     implicitWidth: 700
     implicitHeight: layout.implicitHeight + (Appearance.padding + 1) * 2
     focus: true
@@ -21,7 +21,7 @@ FocusScope {
             map.refreshMenu();
         navigator.forceActiveFocus();
     }
-    Keys.onEscapePressed: root.closeRequested()
+    Keys.onEscapePressed: root.closeRequested(true)
     function verbLabel(id) {
         switch (id) {
         case "editLayout":
@@ -123,7 +123,7 @@ FocusScope {
                     onClicked: if (root.menuFocused)
                         root.menuFocused = false
                     else
-                        root.closeRequested()
+                        root.closeRequested(true)
                 }
             }
             WorkspaceNavigator {
@@ -133,7 +133,7 @@ FocusScope {
                 Layout.preferredHeight: implicitHeight
                 map: root.map
                 visible: !root.menuFocused
-                onActivated: root.closeRequested()
+                onActivated: root.closeRequested(false)
             }
             ListView {
                 visible: root.menuFocused
