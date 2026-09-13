@@ -29,6 +29,7 @@ import Phosphor.Service.Lock 1.0
 QtObject {
     id: root
     property LockService service: LockService {}
+    readonly property string userName: root.service.userName
     readonly property bool serviceSupported: root.service.supported
     readonly property int serviceState: root.service.state
     readonly property bool serviceLocked: root.service.locked
@@ -70,6 +71,7 @@ void LockQmlFacadeTest::moduleLoadsAndServiceBinds()
 
     // Under the offscreen platform there is no compositor, so the service is
     // unsupported and starts in the Unlocked state.
+    QVERIFY(!root->property("userName").toString().isEmpty());
     QCOMPARE(root->property("serviceSupported").toBool(), false);
     QCOMPARE(root->property("serviceState").toInt(), n(State::Unlocked));
     QCOMPARE(root->property("serviceLocked").toBool(), false);

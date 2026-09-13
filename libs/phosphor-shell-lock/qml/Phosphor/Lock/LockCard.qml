@@ -8,6 +8,7 @@ import Phosphor.Widgets
 FocusScope {
     id: root
     property var controller: null
+    property Component decoration: null
     property string userName: ""
     property var keyboard: null
     readonly property int inset: Appearance.compact ? 26 : 32
@@ -18,8 +19,16 @@ FocusScope {
         field.forceActiveFocus();
     }
     ShellSurface {
+        id: cardSurface
+        property bool shaderAnchor: true
         anchors.fill: parent
         accented: true
+    }
+    DecorationSlot {
+        anchors.fill: parent
+        component: root.decoration
+        contentItem: cardSurface
+        surfacePath: "shell.phosphor.lock"
     }
     ColumnLayout {
         id: content
@@ -80,6 +89,7 @@ FocusScope {
                 Text {
                     Layout.fillWidth: true
                     text: root.userName
+                    textFormat: Text.PlainText
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
                     font.pixelSize: 21
@@ -133,6 +143,7 @@ FocusScope {
             spacing: 8
             ShellButton {
                 objectName: "lockKeyboard"
+                opacity: 1
                 flat: true
                 implicitHeight: 26
                 implicitWidth: contentItem.implicitWidth

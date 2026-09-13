@@ -69,6 +69,7 @@ qt_add_qml_module(phosphor_shell_example
         MprisWidget.qml
         TrayMenuPopup.qml
         SessionLockCoordinator.qml
+        SessionLockScreens.qml
     RESOURCES
         wallpapers/spectrum.png
         wallpapers/wallpaper.png

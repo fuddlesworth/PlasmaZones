@@ -437,44 +437,9 @@ Item {
         id: sessionCoordinator
     }
 
-    // One controller drives authentication for every lock surface.
-    LockController {
-        id: lockController
-
-        lock: sessionCoordinator.lock
-    }
-
-    // The battery figure in the lock's bottom-left eyebrow. One host for
-    // every screen's LockScreen rather than one per surface, and declared
-    // here rather than inside Phosphor.Lock so that module stays free of
-    // Phosphor.Service.* imports (its tests run without the services).
-    UPowerHost {
-        id: lockBattery
-    }
-
-    PerScreen {
-        id: lockSurfaces
-
-        model: PhosphorShell.screens
-
-        delegate: LockSurface {
-            id: lockSurface
-
-            // PerScreen hands these in as initial properties.
-            required property var phosphorScreen
-            property string name: ""
-            property int index: 0
-            property bool isPrimary: false
-
-            screen: lockSurface.phosphorScreen
-            visible: lockController.surfacesWanted
-
-            LockScreen {
-                anchors.fill: parent
-                controller: lockController
-                battery: lockBattery
-            }
-        }
+    SessionLockScreens {
+        coordinator: sessionCoordinator
+        notificationCount: NotificationRegistry.unreadCount
     }
 
     // The session menu, per docs/phosphor-shell-design/mockups-v2/power-menu.svg:

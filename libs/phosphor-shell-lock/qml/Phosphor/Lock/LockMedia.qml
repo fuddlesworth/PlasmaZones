@@ -8,6 +8,7 @@ import Phosphor.Widgets
 ShellSurface {
     id: root
     property var player: null
+    property var spectrum: AudioSpectrum
     readonly property bool controllable: player !== null && player.canControl
     implicitWidth: 402
     implicitHeight: 106
@@ -49,6 +50,7 @@ ShellSurface {
             Text {
                 Layout.fillWidth: true
                 text: root.player ? (root.player.trackTitle || root.player.identity) : ""
+                textFormat: Text.PlainText
                 color: Appearance.text
                 font.family: Tokens.font_family_ui
                 font.pixelSize: 12
@@ -58,6 +60,7 @@ ShellSurface {
             Text {
                 Layout.fillWidth: true
                 text: root.player ? (root.player.trackArtist || root.player.identity) : ""
+                textFormat: Text.PlainText
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: 9
@@ -102,6 +105,7 @@ ShellSurface {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: -6
         opacity: .7
+        spectrum: root.spectrum
         playing: root.player !== null && root.player.isPlaying
     }
 }

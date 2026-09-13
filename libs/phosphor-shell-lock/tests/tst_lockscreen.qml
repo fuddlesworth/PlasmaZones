@@ -14,6 +14,7 @@ TestCase {
 
     width: 1920
     height: 1080
+    visible: true
     when: windowShown
 
     // A LockService stand-in: 0 Unlocked, 1 Locking, 2 Locked,

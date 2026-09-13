@@ -8,10 +8,12 @@ import Phosphor.Widgets
 FocusScope {
     id: root
     property var controller: null
+    property Component decoration: null
     property var battery: null
     property var keyboard: null
     property var session: null
     property var player: null
+    property var spectrum: AudioSpectrum
     property string userName: ""
     property int notificationCount: 0
     property date now: new Date()
@@ -32,6 +34,27 @@ FocusScope {
     }
     function focusPassword() {
         card.focusPassword();
+    }
+    function revealFocusedControl() {
+        if (!Window.window)
+            return;
+        const item = Window.window.activeFocusItem;
+        let ancestor = item;
+        while (ancestor && ancestor !== viewport.contentItem)
+            ancestor = ancestor.parent;
+        if (!ancestor)
+            return;
+        const point = item.mapToItem(viewport.contentItem, 0, 0);
+        if (point.y < viewport.contentY)
+            viewport.contentY = Math.max(0, point.y - 8);
+        else if (point.y + item.height > viewport.contentY + viewport.height)
+            viewport.contentY = Math.min(viewport.contentHeight - viewport.height, point.y + item.height - viewport.height + 8);
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            root.revealFocusedControl();
+        }
     }
     Component.onCompleted: focusPassword()
     Keys.onPressed: event => {
@@ -130,7 +153,7 @@ FocusScope {
             height: Math.max(1, parent.height - 170)
             clip: true
             contentWidth: width
-            contentHeight: Math.max(height, Math.max(card.y + card.height, extras.y + extras.height) + 24)
+            contentHeight: Math.max(height, Math.max(card.y + card.height, extras.y + extras.height) + 4)
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {
                 policy: viewport.contentHeight > viewport.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
@@ -149,19 +172,20 @@ FocusScope {
                 id: card
                 objectName: "lockCard"
                 controller: root.controller
+                decoration: root.decoration
                 keyboard: root.keyboard
                 userName: root.userName
                 width: Math.min(382, root.width - root.edgeInset * 2)
                 height: implicitHeight
                 x: root.centered ? (root.width - width) / 2 : Math.min(root.width - width - root.edgeInset, root.width * .618056)
-                y: root.centered ? clock.y + clock.height + (root.showMedia ? 50 : 56) : Math.max(0, root.height * .331111 - viewport.y)
+                y: root.centered ? clock.y + clock.height + (root.showMedia ? 46 : 52) : Math.max(0, root.height * .331111 - viewport.y)
             }
             Column {
                 id: extras
                 objectName: "lockExtras"
                 width: Math.min(402, root.width - root.edgeInset * 2)
                 x: root.centered ? (root.width - width) / 2 : root.width * .097222
-                y: root.centered ? card.y + card.height + 24 : Math.max(clock.y + clock.height + 40, root.height - 138 - viewport.y - height)
+                y: root.centered ? Math.max(card.y + card.height + 16, root.height - (root.showMedia ? 94 : 103) - viewport.y - height) : Math.max(clock.y + clock.height + 40, root.height - 138 - viewport.y - height)
                 spacing: root.centered ? 12 : 19
                 Loader {
                     active: root.showMedia
@@ -170,6 +194,7 @@ FocusScope {
                     sourceComponent: LockMedia {
                         objectName: "lockMedia"
                         player: root.player
+                        spectrum: root.spectrum
                     }
                 }
                 Row {
@@ -219,6 +244,11 @@ FocusScope {
                 font.family: Tokens.font_family_ui
                 font.pixelSize: 10
             }
+        }
+        MouseArea {
+            anchors.fill: parent
+            visible: power.open
+            onClicked: power.close()
         }
         LockPowerMenu {
             id: power

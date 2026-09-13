@@ -82,3 +82,8 @@ target_link_libraries(test_phosphor_shell_lock_surface
 )
 add_test(NAME test_phosphor_shell_lock_surface COMMAND test_phosphor_shell_lock_surface)
 phosphorshelllock_isolate_test(test_phosphor_shell_lock_surface)
+
+add_executable(test_phosphor_lock_keyboard test_lockkeyboard.cpp)
+target_link_libraries(test_phosphor_lock_keyboard PRIVATE ${_phosphorshelllock_test_libs} Qt6::Test Qt6::DBus)
+add_test(NAME test_phosphor_lock_keyboard COMMAND test_phosphor_lock_keyboard)
+phosphorshelllock_isolate_test(test_phosphor_lock_keyboard)
