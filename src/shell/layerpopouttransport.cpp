@@ -22,12 +22,8 @@
 namespace {
 Q_LOGGING_CATEGORY(lcPopoutTransport, "phosphorshell.popout.transport")
 
-// The scrim is the only thing that distinguishes a modal popout from a
-// cooperative one visually, so the two alphas are a designed pair rather than
-// two independent numbers: the modal reads as "the rest is unavailable", the
-// cooperative as "this is on top of, not instead of".
+// Only modal surfaces dim the desktop. Cooperative panels retain context.
 constexpr int kModalScrimAlpha = 160;
-constexpr int kCooperativeScrimAlpha = 60;
 
 // Handle prefix. RoutingPopoutTransport keys close-routing on the handle
 // string and documents these as disjoint by construction, so this must not
@@ -314,15 +310,14 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (!hostItem->setProperty("keyboardFocus", request.keyboardFocus)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the keyboardFocus write";
     }
-    // The scrim is what makes a Modal read as modal. Cooperative popouts get
-    // a light wash, Detached none at all so they never darken the desktop.
+    // The approved floating panels leave the desktop and bar at full brightness.
     QColor backdrop;
     switch (request.exclusive) {
     case PhosphorPopout::ExclusiveMode::Modal:
         backdrop = QColor(0, 0, 0, kModalScrimAlpha);
         break;
     case PhosphorPopout::ExclusiveMode::Cooperative:
-        backdrop = QColor(0, 0, 0, kCooperativeScrimAlpha);
+        backdrop = QColor(Qt::transparent);
         break;
     case PhosphorPopout::ExclusiveMode::Detached:
         backdrop = QColor(Qt::transparent);

@@ -204,8 +204,21 @@ Item {
                         id: controlsMpris
                     }
                     mediaPlayer: controlsMpris.playerCount > 0 ? controlsMpris.playerAt(0) : null
+                    UPowerHost {
+                        id: controlsPower
+                    }
+                    focusEnabled: NotificationRegistry.doNotDisturb
+                    focusAvailable: NotificationRegistry.serverActive
+                    nightLightEnabled: QuickSettings.nightLightEnabled
+                    nightLightAvailable: QuickSettings.nightLightAvailable
+                    batterySummary: controlsPower.displayDevice && controlsPower.displayDevice.isPresent ? Math.round(controlsPower.displayDevice.percentage) + "%" : ""
+                    powerSummary: QuickSettings.powerProfile === "balanced" ? qsTr("Balanced power") : QuickSettings.powerProfile === "power-saver" ? qsTr("Power saver") : QuickSettings.powerProfile === "performance" ? qsTr("Performance") : ""
+                    notificationSummary: NotificationRegistry.unreadCount ? qsTr("%1 unread notifications").arg(NotificationRegistry.unreadCount) : qsTr("No pending notifications")
+                    onFocusToggled: NotificationRegistry.doNotDisturb = !NotificationRegistry.doNotDisturb
+                    onNightLightToggled: QuickSettings.toggleNightLight()
+                    onCloseRequested: Popouts.close(Popouts.handleFor("control-center"))
                     provider: ControlCenterRegistry
-                    tileIds: ControlCenterRegistry.tileIds
+                    tileIds: ControlCenterRegistry.tileIds.filter(id => id !== "idle")
                 }
             }
         }
@@ -391,8 +404,21 @@ Item {
                 id: controlsMpris
             }
             mediaPlayer: controlsMpris.playerCount > 0 ? controlsMpris.playerAt(0) : null
+            UPowerHost {
+                id: controlsPower
+            }
+            focusEnabled: NotificationRegistry.doNotDisturb
+            focusAvailable: NotificationRegistry.serverActive
+            nightLightEnabled: QuickSettings.nightLightEnabled
+            nightLightAvailable: QuickSettings.nightLightAvailable
+            batterySummary: controlsPower.displayDevice && controlsPower.displayDevice.isPresent ? Math.round(controlsPower.displayDevice.percentage) + "%" : ""
+            powerSummary: QuickSettings.powerProfile === "balanced" ? qsTr("Balanced power") : QuickSettings.powerProfile === "power-saver" ? qsTr("Power saver") : QuickSettings.powerProfile === "performance" ? qsTr("Performance") : ""
+            notificationSummary: NotificationRegistry.unreadCount ? qsTr("%1 unread notifications").arg(NotificationRegistry.unreadCount) : qsTr("No pending notifications")
+            onFocusToggled: NotificationRegistry.doNotDisturb = !NotificationRegistry.doNotDisturb
+            onNightLightToggled: QuickSettings.toggleNightLight()
+            onCloseRequested: Popouts.close(Popouts.handleFor("control-center"))
             provider: ControlCenterRegistry
-            tileIds: ControlCenterRegistry.tileIds
+            tileIds: ControlCenterRegistry.tileIds.filter(id => id !== "idle")
             // A card drilling in opens the bar panel that card names, which
             // is the same surface its chip on the bar opens. The control
             // center closes first: two Cooperative popouts in one scope
@@ -406,39 +432,11 @@ Item {
         }
     }
 
-    // The one live SessionHost in the process. It must be a singleton in
-    // practice even though the type is instantiable: each instance opens its
-    // own logind connection and takes two real inhibitors (a sleep
-    // delay-lock, and a grab on the power/suspend/hibernate/lid keys), so a
-    // second one would double them. Everything that needs session actions
-    // takes this one by reference.
-    //
-    // Instantiating it here also starts the lock-before-sleep handshake,
-    // which had never actually run: the coordinator shipped in this module
-    // but nothing ever created it.
     SessionLockCoordinator {
         id: sessionCoordinator
     }
 
-    // The lockscreen (A3 §6): the layout you left, as an outline. One
-    // LockSurface window per output, each an ext_session_lock_surface_v1
-    // the compositor presents while the session is locked, with the
-    // screen's placement map drawn as static spectrum outlines and the
-    // clock + auth field in its largest empty region.
-    //
-    // PerScreen, not PerScreenPanels: these are real windows (a lock
-    // surface is its own protocol role, not a layer panel), created with a
-    // null parent as Wayland needs, and destroyed with the screen. The
-    // delegate's Component is declared HERE, so ids from this file resolve
-    // inside it; that is what lets every surface share one controller.
-    //
-    // One controller for every screen: there is one password being typed,
-    // whichever output the compositor gave keyboard focus. `surfacesWanted`
-    // is true from the compositor's `locked` through the unlock's dismiss,
-    // and the windows follow it; a LockSurface refuses to show outside a
-    // held lock, so binding on `locked` (rather than the lock request) is
-    // what keeps the two in step. The compositor blanks the outputs itself
-    // between the request and `locked`.
+    // One controller drives authentication for every lock surface.
     LockController {
         id: lockController
 
@@ -544,7 +542,7 @@ Item {
             "popoutId": "control-center",
             "content": paneComponent,
             "targetScreen": target,
-            "anchor": Appearance.stage ? PhosphorPopout.Anchor.BottomCenter : anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "anchor": Appearance.stage ? PhosphorPopout.Anchor.BottomCenter : PhosphorPopout.Anchor.BarRight,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "dismissOnFocusLoss": true,
@@ -554,7 +552,8 @@ Item {
             // alive by holding the grab.
             "keyboardFocus": true,
             "props": {
-                "railT": railT
+                "railT": railT,
+                "panelWidth": Appearance.stage && target ? Math.max(364, target.geometry.width - 190) : Appearance.panelWidth
             }
         };
         // The arbiter keys on the popout id alone, which is right for the

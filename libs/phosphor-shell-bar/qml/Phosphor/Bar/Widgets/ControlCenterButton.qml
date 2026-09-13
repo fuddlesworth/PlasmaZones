@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import Phosphor.Widgets
 import Phosphor.Theme
 import Phosphor.Service.Network
 import Phosphor.Service.UPower
@@ -33,7 +34,7 @@ AbstractButton {
     contentItem: Row {
         id: symbols
         spacing: 12
-        Kirigami.Icon {
+        ShellIcon {
             width: 15
             height: 15
             anchors.verticalCenter: parent.verticalCenter
@@ -41,7 +42,7 @@ AbstractButton {
             isMask: true
             color: Appearance.text
         }
-        Kirigami.Icon {
+        ShellIcon {
             width: 15
             height: 15
             anchors.verticalCenter: parent.verticalCenter

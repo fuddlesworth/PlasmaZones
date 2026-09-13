@@ -152,7 +152,9 @@ bool AppearanceStore::commit(const QVariantMap& values)
         return fail(file.errorString());
     fail(QString());
     if (m_values != validated) {
-        const bool geometry = m_values.value(QStringLiteral("edge")) != validated.value(QStringLiteral("edge"))
+        const bool geometry =
+            m_values.value(QStringLiteral("presentation")) != validated.value(QStringLiteral("presentation"))
+            || m_values.value(QStringLiteral("edge")) != validated.value(QStringLiteral("edge"))
             || m_values.value(QStringLiteral("density")) != validated.value(QStringLiteral("density"))
             || m_values.value(QStringLiteral("gap")) != validated.value(QStringLiteral("gap"));
         m_values = validated;
@@ -213,8 +215,8 @@ bool AppearanceStore::applyPreset(const QString& preset)
 {
     auto next = defaults();
     for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
-                            QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("media"),
-                            QStringLiteral("visualizer"), QStringLiteral("surfacePacks")})
+                            QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
+                            QStringLiteral("surfacePacks")})
         next[key] = m_values.value(key);
     if (preset == QLatin1String("paper")) {
         next[QStringLiteral("palette")] = QStringLiteral("wallpaper");
@@ -225,6 +227,7 @@ bool AppearanceStore::applyPreset(const QString& preset)
     } else if (preset == QLatin1String("ember")) {
         next[QStringLiteral("palette")] = QStringLiteral("ember");
         next[QStringLiteral("material")] = QStringLiteral("solid");
+        next[QStringLiteral("media")] = false;
         next[QStringLiteral("density")] = QStringLiteral("compact");
         next[QStringLiteral("radius")] = 8;
         next[QStringLiteral("gap")] = 10;

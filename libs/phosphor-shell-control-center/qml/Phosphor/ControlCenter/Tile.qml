@@ -45,7 +45,7 @@ Item {
     signal detailRequested
 
     implicitWidth: 320
-    implicitHeight: Math.max(Appearance.rowHeight, content.implicitHeight + 20)
+    implicitHeight: Math.max(Appearance.rowHeight, root.sublabel ? 57 : 43)
     opacity: root.available ? 1 : StateLayer.disabled_content
 
     activeFocusOnTab: true
@@ -75,15 +75,15 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: Math.max(4, Appearance.radius - 5)
-        color: root && root.active ? Qt.tint(Appearance.card, Qt.alpha(Appearance.at(root.railT), 0.18)) : Appearance.card
+        radius: Appearance.radius * 0.6
+        color: root && root.active ? Qt.tint(Appearance.card, Qt.alpha(Appearance.accent, 0.12)) : Appearance.card
         border.width: 1
         border.color: root.activeFocus ? Appearance.text : Appearance.outline
     }
 
     Item {
         anchors.fill: parent
-        anchors.rightMargin: root.hasDetail ? 46 : 0
+        anchors.rightMargin: root.hasDetail ? 44 : 0
         HoverHandler {
             id: hover
             enabled: root.available
@@ -100,15 +100,15 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 16
-        anchors.rightMargin: root.hasDetail ? 58 : 16
-        spacing: 14
-        Kirigami.Icon {
-            Layout.preferredWidth: 20
-            Layout.preferredHeight: 20
+        anchors.leftMargin: 13
+        anchors.rightMargin: root.hasDetail ? 57 : 13
+        spacing: 12
+        ShellIcon {
+            Layout.preferredWidth: 19
+            Layout.preferredHeight: 19
             source: root.iconName
             isMask: true
-            color: root && root.pending ? Appearance.at(0.66) : root && root.active ? Appearance.at(root.railT) : Appearance.muted
+            color: root && root.pending ? Appearance.at(0.66) : root && root.active ? Appearance.accent : Appearance.muted
         }
         ColumnLayout {
             Layout.fillWidth: true
@@ -119,7 +119,7 @@ Item {
                 text: root.label
                 color: Appearance.text
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 13
+                font.pixelSize: 11
                 elide: Text.ElideRight
             }
             Text {
@@ -129,7 +129,7 @@ Item {
                 text: root.sublabel
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 11
+                font.pixelSize: 9
                 elide: Text.ElideRight
             }
         }
@@ -141,7 +141,7 @@ Item {
         id: chevron
         anchors.right: parent.right
         height: parent.height
-        width: 46
+        width: 44
         visible: root.hasDetail
         activeFocusOnTab: root.available
         Accessible.role: Accessible.Button
@@ -162,7 +162,7 @@ Item {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             width: 1
-            height: parent.height - 22
+            height: parent.height * 0.5
             color: Appearance.outline
         }
         Rectangle {
@@ -173,7 +173,7 @@ Item {
             border.width: chevron.activeFocus ? 1 : 0
             border.color: Appearance.text
         }
-        Kirigami.Icon {
+        ShellIcon {
             anchors.centerIn: parent
             width: 16
             height: 16

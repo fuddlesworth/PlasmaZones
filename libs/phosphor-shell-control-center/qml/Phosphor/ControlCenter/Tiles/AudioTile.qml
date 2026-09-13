@@ -50,6 +50,7 @@ SliderTile {
     // Drills into the bar's audio panel, the same surface the audio
     // chip opens, instead of a second view of the same service.
     detailPanelId: "audio"
+    deviceName: root.node ? root.node.description : ""
     from: 0
     to: 100
     value: Math.round(root._amplitude * 100)

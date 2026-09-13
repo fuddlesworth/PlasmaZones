@@ -53,6 +53,7 @@ private Q_SLOTS:
     void markAllReadClearsOnlyTheBadge();
     void actingOnAClosedEntryIsRefused();
     void newestIsFirst();
+    void focusRetainsNotificationsWithoutToasting();
 
 private:
     /// Send a Notify over the wire and return the id the server assigned.
@@ -235,3 +236,21 @@ void TestNotificationController::newestIsFirst()
 QTEST_MAIN(TestNotificationController)
 
 #include "test_notification_controller.moc"
+
+void TestNotificationController::focusRetainsNotificationsWithoutToasting()
+{
+    QSignalSpy toasts(m_controller.get(), &NotificationController::notificationArrived);
+    QSignalSpy changes(m_controller.get(), &NotificationController::doNotDisturbChanged);
+    m_controller->setDoNotDisturb(true);
+    m_controller->setDoNotDisturb(true);
+    QCOMPARE(changes.count(), 1);
+    notify(QStringLiteral("Keep this for later"));
+    QCOMPARE(m_controller->rowCount(), 1);
+    QCOMPARE(m_controller->unreadCount(), 1);
+    QCOMPARE(toasts.count(), 0);
+    m_controller->setDoNotDisturb(false);
+    QCOMPARE(toasts.count(), 0); // No burst of old interruptions on leaving focus.
+    notify(QStringLiteral("Show this now"));
+    QCOMPARE(toasts.count(), 1);
+    QCOMPARE(m_controller->rowCount(), 2);
+}

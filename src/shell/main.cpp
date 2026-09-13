@@ -3,6 +3,7 @@
 
 #include "BarController.h"
 #include "ControlCenterController.h"
+#include "QuickSettingsController.h"
 #include "LauncherController.h"
 #include "LayerPopoutTransport.h"
 #include "OsdController.h"
@@ -292,6 +293,7 @@ int main(int argc, char* argv[])
     // notification with it. Same reverse-destruction placement as the
     // controllers above.
     PhosphorShellApp::NotificationController notificationController;
+    PhosphorShellApp::QuickSettingsController quickSettings;
 
     // The dashboard's media cell reads one MprisHost for the process.
     // Owned here rather than declared in QML because the dashboard popout
@@ -585,6 +587,9 @@ int main(int argc, char* argv[])
     // controller IS the model, so the panel binds it directly as
     // `model: NotificationRegistry` and reads serverActive / unreadCount
     // off the same object.
+    engine.addEngineHook([&quickSettings](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("QuickSettings"), &quickSettings);
+    });
     engine.addEngineHook([&notificationController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"), &notificationController);
     });

@@ -62,7 +62,8 @@ TestCase {
         slider.value = 57;
         compare(slider.parent.objectName, "levelsGrid");
         cc.width = 400;
-        compare(slider.parent.objectName, "connectionsGrid");
+        compare(cc.shelf, false);
+        tryVerify(() => slider.mapToItem(cc, 0, 0).y > findChild(cc, "toggle").mapToItem(cc, 0, 0).y);
         compare(findChild(cc, "slider"), slider);
         compare(slider.value, 57);
         cc.width = 1000;

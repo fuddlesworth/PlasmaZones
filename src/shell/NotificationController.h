@@ -43,6 +43,7 @@ namespace PhosphorShellApp {
 class NotificationController : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool doNotDisturb READ doNotDisturb WRITE setDoNotDisturb NOTIFY doNotDisturbChanged)
     /// Whether this process actually owns org.freedesktop.Notifications.
     /// False when another notification daemon holds the name.
     Q_PROPERTY(bool serverActive READ isServerActive NOTIFY serverActiveChanged)
@@ -81,6 +82,11 @@ public:
     ~NotificationController() override;
 
     [[nodiscard]] bool isServerActive() const;
+    [[nodiscard]] bool doNotDisturb() const
+    {
+        return m_doNotDisturb;
+    }
+    void setDoNotDisturb(bool enabled);
     [[nodiscard]] int unreadCount() const;
 
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
@@ -116,6 +122,7 @@ Q_SIGNALS:
     /// looked at, it disagreed with the other.
     void notificationArrived(const QString& summary, const QString& body);
 
+    void doNotDisturbChanged();
     void serverActiveChanged();
     void countChanged();
     void unreadCountChanged();
@@ -159,6 +166,7 @@ private:
     // Newest first, so the panel reads top-down without a proxy model.
     QList<Entry> m_entries;
     int m_unread = 0;
+    bool m_doNotDisturb = false;
     // Non-null for the whole lifetime. m_ownedServer holds it only when
     // this object constructed it; the injected server is owned by the
     // caller and outlives this by contract.

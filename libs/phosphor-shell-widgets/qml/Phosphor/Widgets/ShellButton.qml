@@ -10,13 +10,17 @@ Button {
     property string iconName: ""
     property string label: text
     implicitWidth: text.length ? Math.max(36, contentItem.implicitWidth + 24) : 36
-    implicitHeight: 36
+    property bool outlined: false
+    property color foreground: Appearance.text
+    property real cornerRadius: 8
+    property int labelSize: 11
+    implicitHeight: 30
     Accessible.name: label
     opacity: enabled ? 1 : 0.4
     background: Rectangle {
-        radius: Math.min(Appearance.radius, height / 2)
+        radius: root.cornerRadius
         color: root.highlighted || root.down ? Qt.alpha(Appearance.accent, 0.28) : root.hovered ? Qt.alpha(Appearance.text, 0.12) : root.flat ? "transparent" : Appearance.card
-        border.width: root.flat && !root.visualFocus ? 0 : 1
+        border.width: root.flat && !root.outlined && !root.visualFocus ? 0 : 1
         border.color: root.visualFocus ? Appearance.text : Appearance.outline
     }
     contentItem: Item {
@@ -26,21 +30,21 @@ Button {
             id: labelRow
             anchors.centerIn: parent
             spacing: root.iconName !== "" && root.text !== "" ? 6 : 0
-            Kirigami.Icon {
+            ShellIcon {
                 visible: root.iconName !== ""
                 width: visible ? 16 : 0
                 height: 16
                 anchors.verticalCenter: parent.verticalCenter
                 source: root.iconName
                 isMask: true
-                color: Appearance.text
+                color: root.foreground
             }
             Text {
                 text: root.text
                 anchors.verticalCenter: parent.verticalCenter
-                color: Appearance.text
+                color: root.foreground
                 font.family: Tokens.font_family_ui
-                font.pixelSize: Tokens.font_size_body_s
+                font.pixelSize: root.labelSize
             }
         }
     }

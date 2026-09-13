@@ -716,6 +716,8 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/layerpopouttransport.cpp
         shell/QmlComponentBarWidgetFactory.h
         shell/qmlcomponentbarwidgetfactory.cpp
+        shell/QuickSettingsController.h
+        shell/quicksettingscontroller.cpp
         shell/ControlCenterController.h
         shell/controlcentercontroller.cpp
         shell/QmlComponentTileFactory.h

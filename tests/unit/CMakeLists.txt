@@ -2414,6 +2414,14 @@ add_test(NAME test_bar_controller COMMAND test_bar_controller)
 # sources. An ungated link to a gated library fails the DEFAULT configure at
 # generate time, which takes the whole suite down instead of one test.
 if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
+    add_executable(test_quick_settings_controller
+        shell/test_quick_settings_controller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QuickSettingsController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/quicksettingscontroller.cpp
+    )
+    target_link_libraries(test_quick_settings_controller PRIVATE Qt6::Test Qt6::Core Qt6::DBus)
+    target_include_directories(test_quick_settings_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_quick_settings_controller COMMAND test_quick_settings_controller)
     add_executable(test_notification_controller
         shell/test_notification_controller.cpp
         ${CMAKE_SOURCE_DIR}/src/shell/NotificationController.h

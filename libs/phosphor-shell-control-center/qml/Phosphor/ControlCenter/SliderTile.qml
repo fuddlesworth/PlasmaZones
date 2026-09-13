@@ -30,6 +30,7 @@ Item {
     /// is not a warning — the file fails to compile and the tile vanishes
     /// from the grid, which is exactly what happened to the volume row.
     property string detailPanelId: ""
+    property string deviceName: ""
 
     readonly property bool hasDetail: root.detailEnabled && (root.detailContent !== null || root.detailPanelId !== "")
     // A level spans the grid: its underline is the control, and a longer
@@ -56,7 +57,7 @@ Item {
     }
 
     implicitWidth: 320
-    implicitHeight: Appearance.compact ? 68 : 78
+    implicitHeight: hasDetail ? 105 : 59
     opacity: root.available ? 1 : StateLayer.disabled_content
 
     readonly property real _fraction: root.to > root.from ? Math.max(0, Math.min(1, (root.value - root.from) / (root.to - root.from))) : 0
@@ -91,50 +92,44 @@ Item {
     }
 
     RowLayout {
-        id: content
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.topMargin: 2
-        spacing: 10
-        ShellButton {
-            implicitWidth: 34
-            implicitHeight: 34
-            iconName: root.iconName
-            label: root.hasIconAction ? (root.muted ? qsTr("Unmute") : qsTr("Mute")) : root.label
+        height: 18
+        spacing: 8
+        AbstractButton {
+            implicitWidth: 15
+            implicitHeight: 18
             enabled: root.available && root.hasIconAction
+            Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
             onClicked: root._activateIcon()
+            contentItem: ShellIcon {
+                source: root.iconName
+                isMask: true
+                color: Appearance.muted
+            }
         }
         Text {
             Layout.fillWidth: true
             text: root.label
-            color: Appearance.text
+            color: Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 13
-            elide: Text.ElideRight
+            font.pixelSize: 10
         }
         Text {
-            text: root._readout
-            color: Appearance.muted
+            text: root.available ? root._readout : qsTr("Unavailable")
+            color: Appearance.text
             font.family: Tokens.font_family_mono
-            font.pixelSize: 12
-        }
-        ShellButton {
-            visible: root.hasDetail
-            iconName: "go-next"
-            label: qsTr("%1 details").arg(root.label)
-            implicitWidth: 34
-            implicitHeight: 34
-            enabled: root.available
-            onClicked: root.detailRequested()
+            font.pixelSize: 10
         }
     }
     Slider {
         id: slider
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 30
+        y: 31
+        height: 22
+        padding: 0
         from: root.from
         to: root.to
         value: root.value
@@ -142,26 +137,35 @@ Item {
         Accessible.name: root.label
         onMoved: root.moved(value)
         background: Rectangle {
-            x: slider.leftPadding
-            y: slider.topPadding + slider.availableHeight / 2 - height / 2
-            width: slider.availableWidth
-            height: 8
-            radius: 4
-            color: Appearance.card
+            y: (slider.height - height) / 2
+            width: slider.width
+            height: 10
+            radius: 5
+            color: Appearance.recess
             Rectangle {
                 width: parent.width * slider.visualPosition
                 height: parent.height
                 radius: parent.radius
-                color: root.muted ? Appearance.muted : Appearance.at(root.railT)
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop {
+                        position: 0
+                        color: root.muted ? Appearance.muted : Appearance.stops[0]
+                    }
+                    GradientStop {
+                        position: 1
+                        color: root.muted ? Appearance.muted : Appearance.stops[2]
+                    }
+                }
             }
         }
         handle: Rectangle {
-            x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
-            y: slider.topPadding + slider.availableHeight / 2 - height / 2
-            width: 16
-            height: 16
-            radius: 8
-            color: Appearance.light ? Appearance.accent : Appearance.text
+            x: slider.visualPosition * (slider.width - width)
+            y: (slider.height - height) / 2
+            width: 7
+            height: 22
+            radius: 3
+            color: Appearance.text
             border.width: slider.visualFocus ? 2 : 0
             border.color: Appearance.accent
         }
@@ -171,6 +175,31 @@ Item {
                 const delta = event.angleDelta.x || event.angleDelta.y;
                 if (delta !== 0)
                     root._step(delta > 0 ? 1 : -1);
+            }
+        }
+    }
+    AbstractButton {
+        y: 70
+        width: parent.width
+        height: 28
+        visible: root.hasDetail
+        enabled: root.available
+        Accessible.name: qsTr("Change output")
+        onClicked: root.detailRequested()
+        contentItem: RowLayout {
+            Text {
+                Layout.fillWidth: true
+                text: root.deviceName
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 9
+                color: Appearance.muted
+                elide: Text.ElideRight
+            }
+            Text {
+                text: qsTr("Change output ›")
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 9
+                color: Appearance.muted
             }
         }
     }

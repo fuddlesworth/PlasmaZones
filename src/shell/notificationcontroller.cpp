@@ -140,6 +140,14 @@ NotificationController::Entry NotificationController::snapshot(Notification* not
     return entry;
 }
 
+void NotificationController::setDoNotDisturb(bool enabled)
+{
+    if (m_doNotDisturb == enabled)
+        return;
+    m_doNotDisturb = enabled;
+    Q_EMIT doNotDisturbChanged();
+}
+
 void NotificationController::onNotificationAdded(Notification* notification)
 {
     if (!notification) {
@@ -175,7 +183,9 @@ void NotificationController::onNotificationAdded(Notification* notification)
     setUnreadCount(m_unread + 1);
     // The toast is fed from HERE rather than from the ingest path, so the
     // stack and the centre can never show different sets.
-    Q_EMIT notificationArrived(entry.summary, entry.body);
+    if (!m_doNotDisturb || entry.urgency == 2) {
+        Q_EMIT notificationArrived(entry.summary, entry.body);
+    }
 }
 
 void NotificationController::refreshEntry(Notification* notification)

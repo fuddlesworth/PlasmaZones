@@ -113,7 +113,7 @@ FocusScope {
     // `screenInset` as settable and invites overriding it: a host that moves
     // its capsule in from the edge has to move its popouts with it, or the
     // two stop lining up. The default is the token both sides use.
-    property int barInset: Tokens.spacing_xl
+    property int barInset: 22
     property real customX: 0
     property real customY: 0
 
@@ -586,12 +586,12 @@ FocusScope {
         y: {
             switch (root.placement) {
             case "bottomCenter":
-                return Math.max(Tokens.spacing_l, root.height - root.reservedBottom - Tokens.spacing_l - height);
+                return Math.max(Tokens.spacing_l, root.height - (root.reservedBottom > 0 ? root.reservedBottom + 6 : 36) - height);
             case "barLeft":
             case "barCenter":
             case "barRight":
             case "barItem":
-                return root.reservedBottom > root.reservedTop ? Math.max(0, Math.round(root.height - root.reservedBottom - height - Tokens.spacing_m)) : Math.round(root.reservedTop + Tokens.spacing_m);
+                return root.reservedBottom > root.reservedTop ? Math.max(0, Math.round(root.height - root.reservedBottom - height - 2)) : Math.round(root.reservedTop + 2);
             case "custom":
                 return Math.round(root.customY);
             default:

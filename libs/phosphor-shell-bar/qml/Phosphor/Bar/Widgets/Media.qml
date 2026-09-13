@@ -93,7 +93,7 @@ BarWidget {
         opacity: root._controllable ? 1 : StateLayer.disabled_content
         spacing: Tokens.spacing_xs
 
-        Kirigami.Icon {
+        ShellIcon {
             width: 14
             height: 14
             source: "audio-x-generic"
