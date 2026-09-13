@@ -237,6 +237,7 @@ StripParse parseStripModel(const QString& modelJson)
     const int viewOffset = model[ViewOffsetPx].toInt(0);
     const int activeColumn = model[ActiveColumn].toInt(-1);
     const bool vertical = model[Axis].toInt(0) == 1;
+    parse.vertical = vertical;
     if (extent <= 0 || viewport <= 0) {
         return parse;
     }
@@ -323,7 +324,7 @@ StripParse parseStripModel(const QString& modelJson)
     } else {
         const qreal x = std::clamp(qreal(viewOffset) / extent, 0.0, 1.0);
         const qreal w = std::clamp(qreal(viewport) / extent, 0.0, 1.0 - x);
-        parse.lens = QRectF(x, 0.0, w, 1.0);
+        parse.lens = vertical ? QRectF(0.0, x, 1.0, w) : QRectF(x, 0.0, w, 1.0);
     }
     return parse;
 }
@@ -498,7 +499,7 @@ QVariantList toVariantList(const QList<Cell>& cells)
     return list;
 }
 
-QVariantMap lensToVariant(const QRectF& lens)
+QVariantMap lensToVariant(const QRectF& lens, bool vertical)
 {
     QVariantMap map;
     if (lens.isNull() || lens.width() <= 0.0) {
@@ -506,6 +507,9 @@ QVariantMap lensToVariant(const QRectF& lens)
     }
     map.insert(QStringLiteral("x"), lens.x());
     map.insert(QStringLiteral("w"), lens.width());
+    map.insert(QStringLiteral("y"), lens.y());
+    map.insert(QStringLiteral("h"), lens.height());
+    map.insert(QStringLiteral("vertical"), vertical);
     return map;
 }
 

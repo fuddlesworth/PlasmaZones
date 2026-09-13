@@ -117,6 +117,7 @@ struct PHOSPHORSHELL_EXPORT StripParse
     /// Every window, including offscreen columns and inactive tabs.
     QList<Cell> windows;
     QRectF lens;
+    bool vertical = false;
     int overflowLeft = 0;
     int overflowRight = 0;
     int viewOffsetPx = 0;
@@ -251,8 +252,8 @@ PHOSPHORSHELL_EXPORT QList<Cell> inactiveDesktopCells(const QList<Cell>& live, b
 /// and remove windows no longer on this output and desktop.
 PHOSPHORSHELL_EXPORT QList<Cell> mergeNavigationWindows(const QList<Cell>& placed, const QList<Cell>& live);
 
-/// `{x, w}` for a lens band, or an empty map for a null rect.
-PHOSPHORSHELL_EXPORT QVariantMap lensToVariant(const QRectF& lens);
+/// `{x, y, w, h, vertical}` for a lens band, or an empty map for a null rect.
+PHOSPHORSHELL_EXPORT QVariantMap lensToVariant(const QRectF& lens, bool vertical = false);
 
 /// Look up one screen's `mode` in a `getScreenStates` JSON array.
 /// Returns -1 when the screen is not listed or the document is malformed.

@@ -126,6 +126,57 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(map.activated, "b");
     }
+    function test_scrollingIncludesClippedHeadersAndPreservesAspectRatio() {
+        const map = createTemporaryObject(mapComponent, testCase);
+        map.mode = 2;
+        map.workArea = Qt.rect(0, 76, 1908, 1532);
+        // The top card is partly underneath the desktop bar. Another parked
+        // window has a huge offscreen position that must not affect the fit.
+        map.windows = [
+            {
+                windowId: "top",
+                nativeRect: Qt.rect(44 / 1908, -76 / 1532, 1820 / 1908, 552 / 1532)
+            },
+            {
+                windowId: "bottom",
+                nativeRect: Qt.rect(44 / 1908, 492 / 1532, 1820 / 1908, 924 / 1532)
+            },
+            {
+                windowId: "parked",
+                offscreen: true,
+                nativeRect: Qt.rect(0, 20, 1, 1)
+            }
+        ];
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            width: 1908,
+            height: 1608,
+            mapFor: () => map
+        });
+        const top = stage.windowRect(map.windows[0]);
+        const bottom = stage.windowRect(map.windows[1]);
+        verify(top.y >= stage.previewRect.y);
+        verify(bottom.y + bottom.height <= stage.previewRect.y + stage.previewRect.height + 0.001);
+        verify(bottom.y > top.y + top.height);
+        fuzzyCompare(top.width / 1820, top.height / 552, 0.001);
+        fuzzyCompare(bottom.width / 1820, bottom.height / 924, 0.001);
+        verify(top.height > 100);
+        fuzzyCompare(stage.nativeRect.x + 44 * stage.previewScale, top.x, 0.001);
+        fuzzyCompare(stage.nativeRect.y, top.y, 0.001);
+        // The same edge condition on a horizontal strip retains both headers.
+        map.windows = [
+            {
+                windowId: "left",
+                nativeRect: Qt.rect(-0.1, 0, 0.6, 1)
+            },
+            {
+                windowId: "right",
+                nativeRect: Qt.rect(0.51, 0, 0.6, 1)
+            }
+        ];
+        const left = stage.windowRect(map.windows[0]), right = stage.windowRect(map.windows[1]);
+        verify(left.x >= stage.previewRect.x - 0.001);
+        verify(right.x + right.width <= stage.previewRect.x + stage.previewRect.width + 0.001);
+    }
     function test_desktopCanvasMapsToPreviewAcrossOutputShapes() {
         const map = createTemporaryObject(mapComponent, testCase);
         const stage = createTemporaryObject(stageComponent, testCase, {

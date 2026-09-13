@@ -348,6 +348,7 @@ void PlacementMapScreen::applyStrip(const StripParse& parse)
     m_source = parse.cells;
     m_sourceWindows = parse.windows;
     m_sourceLens = parse.lens;
+    m_sourceVertical = parse.vertical;
     m_sourceOverflowLeft = parse.overflowLeft;
     m_sourceOverflowRight = parse.overflowRight;
     m_sourceStripExtentPx = parse.stripExtentPx;
@@ -600,7 +601,7 @@ void PlacementMapScreen::publish()
         m_windows = windows;
         Q_EMIT windowsChanged();
     }
-    const QVariantMap lens = m_mode == Scrolling ? lensToVariant(m_sourceLens) : QVariantMap();
+    const QVariantMap lens = m_mode == Scrolling ? lensToVariant(m_sourceLens, m_sourceVertical) : QVariantMap();
     if (lens != m_lens) {
         m_lens = lens;
         Q_EMIT lensChanged();

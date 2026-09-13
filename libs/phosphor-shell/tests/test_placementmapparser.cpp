@@ -244,6 +244,18 @@ private Q_SLOTS:
         const StripParse parse = parseStripModel(vertical);
         QCOMPARE(parse.cells.size(), 1);
         QCOMPARE(parse.cells[0].rect, QRectF(0, 0, 1, 0.5));
+        QVERIFY(parse.vertical);
+        QCOMPARE(parse.lens, QRectF(0, 0, 1, 0.5));
+        const auto lens = lensToVariant(parse.lens, parse.vertical);
+        QCOMPARE(lens.value(QStringLiteral("w")).toDouble(), 1.0);
+        QCOMPARE(lens.value(QStringLiteral("h")).toDouble(), 0.5);
+        QVERIFY(lens.value(QStringLiteral("vertical")).toBool());
+        auto panned = QJsonDocument::fromJson(tenColumnStrip(300, 4).toUtf8()).object();
+        panned[QStringLiteral("axis")] = 1;
+        const auto scroll = parseStripModel(QString::fromUtf8(QJsonDocument(panned).toJson()));
+        QCOMPARE(scroll.lens, QRectF(0, 0.3, 1, 0.3));
+        QCOMPARE(scroll.overflowLeft, 3);
+        QCOMPARE(scroll.overflowRight, 4);
         // The daemon's answer for a screen that is not scrolling.
         QVERIFY(parseStripModel(QStringLiteral("{}")).cells.isEmpty());
         QVERIFY(parseStripModel(QStringLiteral("{}")).lens.isNull());

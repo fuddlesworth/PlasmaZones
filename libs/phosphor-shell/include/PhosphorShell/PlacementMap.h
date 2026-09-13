@@ -317,6 +317,7 @@ private:
     int m_navigationGeneration = 0;
     QList<PlacementMapParser::TileRect> m_lastBatch;
     QRectF m_sourceLens;
+    bool m_sourceVertical = false;
     int m_sourceOverflowLeft = 0;
     int m_sourceOverflowRight = 0;
     int m_sourceStripExtentPx = 0;

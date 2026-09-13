@@ -120,13 +120,13 @@ BarWidget {
         DragHandler {
             id: lensDrag
 
-            property real sentX: 0
+            property real sent: 0
             property real pendingPx: 0
 
             enabled: root.map !== null && root.map.mode === 2 && root.map.stripExtentPx > 0
             target: null
-            xAxis.enabled: true
-            yAxis.enabled: false
+            xAxis.enabled: !mini.vertical
+            yAxis.enabled: mini.vertical
 
             function flush() {
                 const px = Math.round(pendingPx);
@@ -138,18 +138,20 @@ BarWidget {
 
             onActiveChanged: {
                 if (active) {
-                    sentX = 0;
+                    sent = 0;
                 } else {
                     flush();
                 }
                 pendingPx = 0;
             }
             onActiveTranslationChanged: {
-                if (!active || mini.width <= 0)
+                const extent = mini.vertical ? mini.height : mini.width;
+                if (!active || extent <= 0)
                     return;
-                const dx = activeTranslation.x - sentX;
-                sentX = activeTranslation.x;
-                pendingPx += dx * root.map.stripExtentPx / mini.width;
+                const position = mini.vertical ? activeTranslation.y : activeTranslation.x;
+                const delta = position - sent;
+                sent = position;
+                pendingPx += delta * root.map.stripExtentPx / extent;
             }
         }
 

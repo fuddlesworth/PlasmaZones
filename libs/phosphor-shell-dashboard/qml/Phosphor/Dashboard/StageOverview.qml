@@ -34,12 +34,38 @@ FocusScope {
     readonly property real canvasLeft: Appearance.settings.desktopStyle ? 36 : 0
     readonly property real canvasTop: Appearance.settings.desktopStyle ? (Appearance.bottom ? 36 : 14) : 0
     readonly property real canvasBottom: Appearance.settings.desktopStyle ? (Appearance.bottom ? 14 : 54) : 0
-    readonly property rect canvas: Qt.rect(workArea.x + canvasLeft, workArea.y + canvasTop, Math.max(1, workArea.width - 2 * canvasLeft), Math.max(1, workArea.height - canvasTop - canvasBottom))
-    readonly property rect nativeRect: Qt.rect(previewRect.x - canvas.x * previewRect.width / canvas.width, previewRect.y - canvas.y * previewRect.height / canvas.height, width * previewRect.width / canvas.width, height * previewRect.height / canvas.height)
+    readonly property rect baseCanvas: Qt.rect(workArea.x + canvasLeft, workArea.y + canvasTop, Math.max(1, workArea.width - 2 * canvasLeft), Math.max(1, workArea.height - canvasTop - canvasBottom))
+    readonly property rect canvas: completeCanvas()
+    readonly property real previewScale: Math.min(previewRect.width / canvas.width, previewRect.height / canvas.height)
+    // Scrolling can expose only part of an edge window on the desktop. Stage
+    // includes its whole frame, then fits the desktop without distorting it.
+    readonly property rect fittedPreview: scrolling ? Qt.rect(previewRect.x + (previewRect.width - canvas.width * previewScale) / 2, previewRect.y + (previewRect.height - canvas.height * previewScale) / 2, canvas.width * previewScale, canvas.height * previewScale) : previewRect
+    readonly property rect nativeRect: Qt.rect(fittedPreview.x - canvas.x * fittedPreview.width / canvas.width, fittedPreview.y - canvas.y * fittedPreview.height / canvas.height, width * fittedPreview.width / canvas.width, height * fittedPreview.height / canvas.height)
     readonly property rect barRect: Qt.rect(Appearance.barInset, Appearance.bottom ? height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset, width - Appearance.barInset * 2, Appearance.barHeight)
-    function windowRect(window) {
+    function desktopFrame(window) {
         const frame = window.nativeRect && window.nativeRect.width > 0 ? window.nativeRect : Qt.rect(window.x, window.y, window.w, window.h);
-        return Qt.rect(previewRect.x + (frame.x * workArea.width - canvasLeft) * previewRect.width / canvas.width, previewRect.y + (frame.y * workArea.height - canvasTop) * previewRect.height / canvas.height, frame.width * workArea.width * previewRect.width / canvas.width, frame.height * workArea.height * previewRect.height / canvas.height);
+        return Qt.rect(workArea.x + frame.x * workArea.width, workArea.y + frame.y * workArea.height, frame.width * workArea.width, frame.height * workArea.height);
+    }
+    function completeCanvas() {
+        let left = baseCanvas.x, top = baseCanvas.y, right = left + baseCanvas.width, bottom = top + baseCanvas.height;
+        if (scrolling) {
+            for (const window of windows) {
+                if (window.offscreen || window.minimized)
+                    continue;
+                const frame = desktopFrame(window);
+                if (!(frame.width > 0 && frame.height > 0))
+                    continue;
+                left = Math.min(left, frame.x);
+                top = Math.min(top, frame.y);
+                right = Math.max(right, frame.x + frame.width);
+                bottom = Math.max(bottom, frame.y + frame.height);
+            }
+        }
+        return Qt.rect(left, top, right - left, bottom - top);
+    }
+    function windowRect(window) {
+        const frame = desktopFrame(window);
+        return Qt.rect(fittedPreview.x + (frame.x - canvas.x) * fittedPreview.width / canvas.width, fittedPreview.y + (frame.y - canvas.y) * fittedPreview.height / canvas.height, frame.width * fittedPreview.width / canvas.width, frame.height * fittedPreview.height / canvas.height);
     }
     readonly property var windowRects: windows.filter(w => !w.offscreen && !w.minimized).map(w => windowRect(w))
     onWindowRectsChanged: Qt.callLater(refreshSurface)

@@ -62,6 +62,44 @@ TestCase {
         map.cells = windows.slice(0, 3);
         return map;
     }
+    Component {
+        id: miniatureComponent
+        PlacementMiniature {
+            width: 140
+            height: 80
+        }
+    }
+    function test_viewportMarkerFollowsTheScrollingAxis() {
+        const map = populate(4);
+        map.lens = {
+            x: 0,
+            y: 0.5,
+            w: 1,
+            h: 0.5,
+            vertical: true
+        };
+        const mini = createTemporaryObject(miniatureComponent, testCase, {
+            model: map
+        });
+        const lens = findChild(mini, "viewport-lens");
+        verify(mini.vertical);
+        compare(lens.x, 0);
+        compare(lens.y, 40);
+        compare(lens.width, 140);
+        compare(lens.height, 40);
+        map.lens = {
+            x: 0.5,
+            y: 0,
+            w: 0.5,
+            h: 1,
+            vertical: false
+        };
+        tryCompare(mini, "vertical", false);
+        tryCompare(lens, "x", 70);
+        tryCompare(lens, "y", 0);
+        tryCompare(lens, "width", 70);
+        tryCompare(lens, "height", 80);
+    }
     function test_manyWindowsStayBoundedAndKeyboardReachesLast() {
         const map = populate(20);
         const nav = createTemporaryObject(navigatorComponent, testCase, {

@@ -89,6 +89,7 @@ Item {
     // content: a bare `model.lens` test leaves a zero-width rect whose
     // 1 px border still paints a stray line down the left edge.
     readonly property var _lens: model && model.lens && Number(model.lens.w) > 0 ? model.lens : null
+    readonly property bool vertical: _scrolling && !!(_lens && _lens.vertical)
     // Live cell count, for hosts and tests. Retiring cells are excluded.
     readonly property int liveCount: cellModel.count - _retiring.length
     // Ids currently releasing, kept out of `liveCount` and re-adopted if
@@ -694,11 +695,12 @@ Item {
 
     // Scrolling: the viewport lens, white at 70 %.
     Rectangle {
+        objectName: "viewport-lens"
         visible: root.showLens && root._scrolling && root._lens !== null
         x: root._lens ? (Number(root._lens.x) || 0) * root.width : 0
         width: root._lens ? (Number(root._lens.w) || 0) * root.width : 0
-        y: 0
-        height: root.height
+        y: root._lens ? (Number(root._lens.y) || 0) * root.height : 0
+        height: root._lens ? Number(root._lens.h ?? 1) * root.height : root.height
         radius: root.cellRadius
         color: "transparent"
         border.width: 1
@@ -724,10 +726,10 @@ Item {
         model: root._scrolling ? Math.min(3, root._overflowLeft) : 0
         delegate: Rectangle {
             required property int index
-            x: 1 + index * 2
-            y: 1
-            width: 1
-            height: root.height - 2
+            x: root.vertical ? 1 : 1 + index * 2
+            y: root.vertical ? 1 + index * 2 : 1
+            width: root.vertical ? root.width - 2 : 1
+            height: root.vertical ? 1 : root.height - 2
             color: Spectrum.at(root._gutterT(index, -1))
         }
     }
@@ -735,10 +737,10 @@ Item {
         model: root._scrolling ? Math.min(3, root._overflowRight) : 0
         delegate: Rectangle {
             required property int index
-            x: root.width - 2 - (Math.min(3, root._overflowRight) - 1 - index) * 2
-            y: 1
-            width: 1
-            height: root.height - 2
+            x: root.vertical ? 1 : root.width - 2 - (Math.min(3, root._overflowRight) - 1 - index) * 2
+            y: root.vertical ? root.height - 2 - (Math.min(3, root._overflowRight) - 1 - index) * 2 : 1
+            width: root.vertical ? root.width - 2 : 1
+            height: root.vertical ? 1 : root.height - 2
             color: Spectrum.at(root._gutterT(index, 1))
         }
     }

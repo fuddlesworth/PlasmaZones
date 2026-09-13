@@ -282,8 +282,8 @@ PanelWindow {
         // viewport's fraction of the strip from Scrolling.stripModelJson,
         // so it narrows as columns pile up off screen; against an older
         // daemon the visible-cut fallback gives a full-width lens.
-        sliceStart: panel._lens && panel._lens.x !== undefined ? panel._lens.x : 0
-        sliceEnd: panel._lens && panel._lens.w !== undefined ? panel._lens.x + panel._lens.w : 1
+        sliceStart: panel._lens ? (panel._lens.vertical ? panel._lens.y : panel._lens.x) ?? 0 : 0
+        sliceEnd: panel._lens ? sliceStart + ((panel._lens.vertical ? panel._lens.h : panel._lens.w) ?? 1) : 1
     }
 
     // Overflow ends: on a scrolling screen with columns beyond an edge the
