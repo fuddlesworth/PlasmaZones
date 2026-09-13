@@ -325,6 +325,9 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
             hostItem->setProperty("decoration", QVariant::fromValue(decoration));
         }
     }
+    const auto effects = m_engine->rootContext()->contextProperty(QStringLiteral("ShellEffects"));
+    if (effects.isValid())
+        hostItem->setProperty("surfaceEffects", effects);
     if (!hostItem->setProperty("placement", placement)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the placement write";
     }

@@ -51,6 +51,35 @@ TestCase {
         keyClick(Qt.Key_Home);
         verify(view.sameDay(view.selectedDate, view.today));
     }
+    function test_agendaFollowsTheSelectedLocalDate() {
+        const provider = {
+            name: "Calendar",
+            eventsForDate: date => date.getDate() === 12 ? [
+                    {
+                        time: "11:00",
+                        title: "Review"
+                    }
+                ] : []
+        };
+        const view = createTemporaryObject(calendar, tests, {
+            agenda: provider
+        });
+        view.selectDate(new Date(2026, 8, 12, 12));
+        compare(view.events.length, 1);
+        verify(view.hasEvents(view.selectedDate));
+        view.stepDay(1);
+        compare(view.events.length, 0);
+        verify(!view.hasEvents(view.selectedDate));
+        view.clock = {
+            hours: 10,
+            minutes: 24,
+            date: new Date(2026, 8, 12, 12),
+            timeZoneName: "Kolkata",
+            timeZoneAbbreviation: "IST",
+            utcOffsetMinutes: 330
+        };
+        compare(view.utcOffset, "UTC +05:30");
+    }
     function test_appearanceControlsLoad() {
         const view = createTemporaryObject(appearance, tests);
         verify(view);

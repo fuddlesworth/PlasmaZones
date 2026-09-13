@@ -1,20 +1,33 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Phosphor.Theme
 import Phosphor.Widgets
 import Phosphor.Shell
 
-PanelFrame {
+FocusScope {
     id: root
-    title: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0")
-    subtitle: Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.LongFormat))
-    iconName: "view-calendar"
-    panelWidth: Appearance.panelWidth
-    maxBodyHeight: 440
+    property var clock: systemClock
+    // Calendar providers return {time, title, detail, color} for a local date.
+    property var agenda: null
+    readonly property var events: {
+        if (!agenda)
+            return [];
+        void agenda.revision;
+        return agenda.eventsForDate(selectedDate) || [];
+    }
+    readonly property string title: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0")
+    readonly property string utcOffset: {
+        const offset = clock.utcOffsetMinutes;
+        return "UTC " + (offset < 0 ? "−" : "+") + String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0") + ":" + String(Math.abs(offset) % 60).padStart(2, "0");
+    }
+    signal closeRequested
+    implicitWidth: 410
+    implicitHeight: layout.implicitHeight + (Appearance.padding + 1) * 2
     SystemClock {
-        id: clock
+        id: systemClock
         precision: SystemClock.Minutes
     }
     // QDate crosses into JavaScript at UTC midnight. Rebuild a local
@@ -25,7 +38,7 @@ PanelFrame {
     }
     property date selectedDate: new Date(today.getFullYear(), today.getMonth(), today.getDate())
     property date displayedMonth: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
-    readonly property int firstWeekday: Qt.locale().firstDayOfWeek % 7
+    property int firstWeekday: 1
     readonly property int lead: (displayedMonth.getDay() - firstWeekday + 7) % 7
 
     function sameDay(a: date, b: date): bool {
@@ -62,93 +75,309 @@ PanelFrame {
         }
     }
 
-    RowLayout {
-        width: parent ? parent.width : 0
-        Text {
-            Layout.fillWidth: true
-            text: Qt.formatDate(root.displayedMonth, "MMMM yyyy")
-            color: Appearance.text
-            font.family: Tokens.font_family_ui
-            font.pixelSize: 16
-            font.weight: Font.DemiBold
-        }
-        ShellButton {
-            iconName: "go-previous"
-            label: qsTr("Previous month")
-            onClicked: root.browseMonth(-1)
-        }
-        ShellButton {
-            iconName: "go-next"
-            label: qsTr("Next month")
-            onClicked: root.browseMonth(1)
-        }
+    Keys.onEscapePressed: closeRequested()
+    function hasEvents(date) {
+        if (!agenda)
+            return false;
+        void agenda.revision;
+        return (agenda.eventsForDate(date) || []).length > 0;
     }
-    Item {
-        width: 1
-        height: 10
+    ShellSurface {
+        anchors.fill: parent
+        accented: true
     }
-    GridLayout {
-        width: parent ? parent.width : 0
-        columns: 7
-        columnSpacing: 2
-        rowSpacing: 3
-        Repeater {
-            model: 7
-            delegate: Text {
-                required property int index
+    Flickable {
+        anchors.fill: parent
+        anchors.margins: Appearance.padding + 1
+        contentWidth: width
+        contentHeight: layout.implicitHeight
+        clip: true
+        interactive: contentHeight > height
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {}
+        ColumnLayout {
+            id: layout
+            width: parent.width
+            spacing: 0
+            Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 24
-                text: Qt.locale().standaloneDayName((root.firstWeekday + index) % 7, Locale.ShortFormat)
-                horizontalAlignment: Text.AlignHCenter
-                color: Appearance.muted
-                font.family: Tokens.font_family_ui
-                font.pixelSize: 10
-            }
-        }
-        Repeater {
-            model: 42
-            delegate: ShellButton {
-                id: day
-                required property int index
-                readonly property date dateValue: new Date(root.displayedMonth.getFullYear(), root.displayedMonth.getMonth(), index - root.lead + 1)
-                Layout.fillWidth: true
-                Layout.preferredHeight: Appearance.compact ? 32 : 37
-                implicitWidth: 32
-                flat: true
-                text: dateValue.getDate()
-                label: Qt.formatDate(dateValue, Qt.locale().dateFormat(Locale.LongFormat))
-                highlighted: root.sameDay(dateValue, root.selectedDate)
-                opacity: dateValue.getMonth() === root.displayedMonth.getMonth() ? 1 : 0.4
-                onClicked: root.selectDate(dateValue)
-                Rectangle {
-                    visible: root.sameDay(day.dateValue, root.today)
-                    width: 4
-                    height: 4
-                    radius: 2
-                    color: Appearance.accent
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 3
+                Layout.preferredHeight: 103
+                Text {
+                    y: 5
+                    width: parent.width - 40
+                    text: Qt.formatDate(root.today, "dddd, MMMM d").toUpperCase()
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                    font.letterSpacing: 1.8
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+                Text {
+                    y: 27
+                    height: 71
+                    text: root.title.replace(":", '<span style="color:' + Appearance.stops[2] + '">:</span>')
+                    textFormat: Text.RichText
+                    color: Appearance.text
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 62
+                    font.letterSpacing: -3
+                    font.weight: Font.Medium
+                    verticalAlignment: Text.AlignVCenter
+                }
+                ShellButton {
+                    anchors.right: parent.right
+                    text: "×"
+                    label: qsTr("Close date and time")
+                    labelSize: 17
+                    implicitWidth: 30
+                    flat: true
+                    outlined: true
+                    onClicked: root.closeRequested()
                 }
             }
-        }
-    }
-    Item {
-        width: 1
-        height: 12
-    }
-    RowLayout {
-        width: parent ? parent.width : 0
-        Text {
-            Layout.fillWidth: true
-            text: Qt.formatDate(root.selectedDate, "ddd, MMM d")
-            color: Appearance.muted
-            font.family: Tokens.font_family_ui
-            font.pixelSize: 12
-        }
-        ShellButton {
-            text: qsTr("Today")
-            onClicked: root.selectDate(root.today)
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                Layout.preferredHeight: 14
+                Text {
+                    Layout.fillWidth: true
+                    text: root.clock.timeZoneName + " · " + root.clock.timeZoneAbbreviation
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                }
+                Text {
+                    text: root.utcOffset
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 10
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 21
+                height: 1
+                color: Appearance.outline
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 18
+                Layout.preferredHeight: 29
+                spacing: 5
+                Text {
+                    Layout.fillWidth: true
+                    text: Qt.formatDate(root.displayedMonth, "MMMM yyyy")
+                    color: Appearance.text
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 15
+                    font.weight: Font.Medium
+                }
+                ShellButton {
+                    text: "‹"
+                    label: qsTr("Previous month")
+                    implicitWidth: 29
+                    implicitHeight: 29
+                    labelSize: 16
+                    flat: true
+                    onClicked: root.browseMonth(-1)
+                }
+                ShellButton {
+                    text: qsTr("Today")
+                    implicitWidth: 44
+                    implicitHeight: 29
+                    labelSize: 10
+                    onClicked: root.selectDate(root.today)
+                }
+                ShellButton {
+                    text: "›"
+                    label: qsTr("Next month")
+                    implicitWidth: 29
+                    implicitHeight: 29
+                    labelSize: 16
+                    flat: true
+                    onClicked: root.browseMonth(1)
+                }
+            }
+            Row {
+                Layout.fillWidth: true
+                Layout.topMargin: 15
+                Layout.preferredHeight: 13
+                spacing: 3
+                Repeater {
+                    model: 7
+                    Text {
+                        required property int index
+                        width: (parent.width - 18) / 7
+                        height: 13
+                        text: Qt.locale().standaloneDayName((root.firstWeekday + index) % 7, Locale.NarrowFormat)
+                        horizontalAlignment: Text.AlignHCenter
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 9
+                    }
+                }
+            }
+            Grid {
+                Layout.fillWidth: true
+                Layout.topMargin: 9
+                columns: 7
+                columnSpacing: 3
+                rowSpacing: 3
+                Repeater {
+                    model: 42
+                    AbstractButton {
+                        id: day
+                        required property int index
+                        readonly property date dateValue: new Date(root.displayedMonth.getFullYear(), root.displayedMonth.getMonth(), index - root.lead + 1, 12)
+                        readonly property bool selected: root.sameDay(dateValue, root.selectedDate)
+                        width: (parent.width - 18) / 7
+                        height: Appearance.compact ? 31 : 36
+                        Accessible.name: Qt.formatDate(dateValue, Qt.locale().dateFormat(Locale.LongFormat))
+                        Accessible.role: Accessible.Button
+                        checkable: true
+                        autoExclusive: true
+                        checked: selected
+                        opacity: selected || dateValue.getMonth() === root.displayedMonth.getMonth() ? 1 : 0.45
+                        onClicked: root.selectDate(dateValue)
+                        background: Rectangle {
+                            radius: Appearance.radius * 0.4
+                            color: day.selected ? Qt.tint(Appearance.recess, Qt.alpha(Appearance.stops[2], 0.24)) : day.hovered ? Appearance.card : "transparent"
+                            border.width: 1
+                            border.color: day.selected || day.visualFocus ? Appearance.text : root.sameDay(day.dateValue, root.today) ? Appearance.accent : "transparent"
+                        }
+                        contentItem: Text {
+                            text: day.dateValue.getDate()
+                            font.family: Tokens.font_family_mono
+                            font.pixelSize: 12
+                            color: day.dateValue.getMonth() === root.displayedMonth.getMonth() ? Appearance.text : Appearance.muted
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        Rectangle {
+                            width: 4
+                            height: 3
+                            radius: 2
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 3
+                            color: Appearance.stops[2]
+                            visible: root.hasEvents(day.dateValue)
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 18
+                height: 1
+                color: Appearance.outline
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 17
+                Layout.preferredHeight: 16
+                Text {
+                    Layout.fillWidth: true
+                    text: Qt.formatDate(root.selectedDate, "dddd, MMM d")
+                    color: Appearance.text
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    elide: Text.ElideRight
+                }
+                Text {
+                    text: root.agenda ? root.agenda.name || qsTr("Agenda") : ""
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                }
+            }
+            Column {
+                Layout.fillWidth: true
+                Layout.topMargin: 15
+                spacing: 16
+                Repeater {
+                    model: root.events
+                    RowLayout {
+                        required property var modelData
+                        width: parent.width
+                        height: 35
+                        spacing: 14
+                        Text {
+                            Layout.preferredWidth: 40
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 2
+                            text: modelData.time
+                            color: Appearance.muted
+                            font.family: Tokens.font_family_mono
+                            font.pixelSize: 10
+                        }
+                        Rectangle {
+                            Layout.fillHeight: true
+                            width: 2
+                            color: modelData.color || Appearance.accent
+                        }
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            Text {
+                                width: parent.width
+                                text: modelData.title
+                                font.family: Tokens.font_family_ui
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                                color: Appearance.text
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: modelData.detail || ""
+                                font.family: Tokens.font_family_ui
+                                font.pixelSize: 9
+                                color: Appearance.muted
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    width: parent.width
+                    height: 46
+                    visible: !root.events.length
+                    radius: 8
+                    color: Appearance.recess
+                    Text {
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        text: root.agenda ? qsTr("Nothing scheduled for this day.") : qsTr("No calendar connected.")
+                        color: Appearance.muted
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 11
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 19
+                Layout.preferredHeight: 13
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Arrow keys to browse · Esc to close")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                    elide: Text.ElideRight
+                }
+                Text {
+                    text: qsTr("Local time")
+                    color: Appearance.muted
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: 9
+                }
+            }
         }
     }
 }

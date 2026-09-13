@@ -101,6 +101,19 @@ FocusScope {
     // center LOST its pack the day it moved here from the pane route,
     // trading the frame A3 §2 promised for a bare stroke.
     property Component decoration: null
+    property var surfaceEffects: null
+    readonly property bool materialBlurred: Appearance.settings.material !== "solid"
+    readonly property real materialRadius: Appearance.radius
+    readonly property rect materialRect: Qt.rect(contentFrame.x, contentFrame.y, contentFrame.width, contentFrame.height)
+    function applyMaterial() {
+        if (surfaceEffects && !contentFrame.fullScreen)
+            surfaceEffects.setBlurBehind(root, materialBlurred ? materialRect : Qt.rect(0, 0, 0, 0), Qt.rect(0, 0, 0, 0), materialRadius);
+    }
+    onMaterialRectChanged: Qt.callLater(applyMaterial)
+    onSurfaceEffectsChanged: Qt.callLater(applyMaterial)
+    onMaterialBlurredChanged: Qt.callLater(applyMaterial)
+    onMaterialRadiusChanged: Qt.callLater(applyMaterial)
+    Window.onWindowChanged: Qt.callLater(applyMaterial)
 
     property string placement: "center"
     property int reservedTop: 0
@@ -253,6 +266,7 @@ FocusScope {
     onContentItemChanged: contentFrame.rebindContentItem()
     Component.onCompleted: {
         contentFrame.rebindContentItem();
+        Qt.callLater(applyMaterial);
         // Diagnostic: a host with neither contentItem nor
         // contentComponent renders an empty frame, which is silent in
         // QML and confusing in practice. Warn once at construction so

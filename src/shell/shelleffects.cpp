@@ -4,6 +4,7 @@
 #include "ShellEffects.h"
 
 #include <QLoggingCategory>
+#include <QPainterPath>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegion>
@@ -14,6 +15,14 @@
 
 namespace {
 Q_LOGGING_CATEGORY(lcEffects, "phosphorshell.effects")
+QRegion roundedRegion(const QRect& rect, qreal radius)
+{
+    if (rect.isEmpty())
+        return {};
+    QPainterPath path;
+    path.addRoundedRect(rect, radius, radius);
+    return QRegion(path.toFillPolygon().toPolygon());
+}
 }
 
 namespace PhosphorShellApp {
@@ -32,7 +41,7 @@ bool ShellEffects::blurAvailable()
 #endif
 }
 
-bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QRect& secondary)
+bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QRect& secondary, qreal radius)
 {
     QQuickWindow* window = item ? item->window() : nullptr;
     if (!window) {
@@ -40,12 +49,14 @@ bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QR
     }
 #ifdef PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM
     const bool enable = region.width() > 0 && region.height() > 0;
-    KWindowEffects::enableBlurBehind(window, enable, enable ? QRegion(region).united(QRegion(secondary)) : QRegion());
+    KWindowEffects::enableBlurBehind(
+        window, enable, enable ? roundedRegion(region, radius).united(roundedRegion(secondary, radius)) : QRegion());
     qCDebug(lcEffects) << (enable ? "blur behind" : "blur off for") << window->title() << region;
     return true;
 #else
     Q_UNUSED(region)
     Q_UNUSED(secondary)
+    Q_UNUSED(radius)
     qCDebug(lcEffects) << "no blur backend in this build; band stays a plain tint";
     return false;
 #endif

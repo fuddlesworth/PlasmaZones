@@ -171,15 +171,13 @@ Item {
             onScreenModeChanged: reportMode()
             onScreenChanged: reportMode()
 
-            // Band material (05 §5, A2 §3.2): phosphor-glass is real
-            // backdrop blur under a navy tint. A client cannot sample what
-            // is behind its surface, so the blur is the compositor's,
-            // requested behind the band's rect once the surface exists and
-            // again whenever the band's rect changes.
+            // Keep the compositor's blur region aligned to the visible material.
+            readonly property string blurMaterial: Appearance.settings.material
+            onBlurMaterialChanged: applyBlur()
             readonly property var bandWindow: bar.bandItem ? bar.bandItem.Window.window : null
             function applyBlur(): void {
                 if (bar.bandWindow)
-                    ShellEffects.setBlurBehind(bar.bandItem, Appearance.glass ? bar.bandRect : Qt.rect(0, 0, 0, 0), Appearance.glass ? bar.mapBlurRect : Qt.rect(0, 0, 0, 0));
+                    ShellEffects.setBlurBehind(bar.bandItem, Appearance.settings.material !== "solid" ? bar.bandRect : Qt.rect(0, 0, 0, 0), Appearance.settings.material !== "solid" ? bar.mapBlurRect : Qt.rect(0, 0, 0, 0), Appearance.radius);
             }
             onBandWindowChanged: applyBlur()
             onBandRectChanged: applyBlur()
@@ -714,7 +712,9 @@ Item {
     Component {
         id: calendarPanelComponent
 
-        CalendarPanel {}
+        CalendarPanel {
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.clock"))
+        }
     }
 
     // Open (or close) the panel belonging to bar widget `id`, hanging under
