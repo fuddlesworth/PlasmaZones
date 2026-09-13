@@ -28,7 +28,7 @@ QtObject {
     readonly property int panelWidth: 364
     readonly property color text: AppearanceStore.palette.text
     readonly property color muted: AppearanceStore.palette.muted
-    readonly property int barInset: stage ? 24 : 16
+    readonly property int barInset: settings.barInset
     readonly property int barOffset: 12
     readonly property real surfaceOpacity: AppearanceStore.palette.opacity
     readonly property color surface: AppearanceStore.palette.surface
@@ -36,7 +36,7 @@ QtObject {
     readonly property color recess: AppearanceStore.palette.recess
     readonly property color outline: AppearanceStore.palette.outline
     readonly property list<color> stops: AppearanceStore.palette.stops
-    readonly property color accent: stops[1]
+    readonly property color accent: stops[settings.accentIndex]
     function windowColor(index: int): color {
         return stops[[0, 2, 3, 1][Math.max(0, index) % 4]];
     }

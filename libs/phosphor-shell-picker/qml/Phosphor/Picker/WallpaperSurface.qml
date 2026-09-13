@@ -55,6 +55,7 @@ PanelWindow {
     inputRegion: []
 
     function sync(): void {
+        imageFit = service && typeof service.effectiveFit === "function" ? service.effectiveFit(screenName) : "fill";
         priv.show(surface.service ? String(surface.service.effectivePath(surface.screenName)) : "");
     }
 
@@ -70,6 +71,9 @@ PanelWindow {
                 surface.sync();
         }
     }
+
+    property string imageFit: "fill"
+    readonly property int placement: imageFit === "fit" ? Image.PreserveAspectFit : imageFit === "stretch" ? Image.Stretch : imageFit === "center" ? Image.Pad : Image.PreserveAspectCrop
 
     QtObject {
         id: priv
@@ -163,7 +167,7 @@ PanelWindow {
         id: slotA
 
         anchors.fill: parent
-        fillMode: Image.PreserveAspectCrop
+        fillMode: surface.placement
         asynchronous: true
         cache: true
         smooth: true
@@ -186,7 +190,7 @@ PanelWindow {
         id: slotB
 
         anchors.fill: parent
-        fillMode: Image.PreserveAspectCrop
+        fillMode: surface.placement
         asynchronous: true
         cache: true
         smooth: true

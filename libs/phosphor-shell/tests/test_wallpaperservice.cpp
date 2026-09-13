@@ -51,6 +51,24 @@ class TestWallpaperService : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void appearanceDraftRestoresExistingWallpaper()
+    {
+        auto service = make(m_alpha);
+        const auto saved = storedWallpapers();
+        const auto seed = service->appearanceSeed();
+        QCOMPARE(seed.value(QString()).toMap().value(QStringLiteral("path")).toString(), m_alpha);
+        const QVariantMap look{
+            {QStringLiteral("DP-1"),
+             QVariantMap{{QStringLiteral("path"), m_beta}, {QStringLiteral("fit"), QStringLiteral("fit")}}}};
+        service->setAppearance(look);
+        QCOMPARE(service->effectivePath(QStringLiteral("DP-1")), m_beta);
+        QCOMPARE(service->effectiveFit(QStringLiteral("DP-1")), QStringLiteral("fit"));
+        QCOMPARE(service->effectivePath(QStringLiteral("DP-2")), m_alpha);
+        QCOMPARE(storedWallpapers(), saved);
+        service->setAppearance(seed);
+        QCOMPARE(service->effectivePath(QStringLiteral("DP-1")), m_alpha);
+        QCOMPARE(service->effectiveFit(QStringLiteral("DP-1")), QStringLiteral("fill"));
+    }
     void init();
     void seedsFromTheDesktopOnlyWhileEmpty();
     void setPathPerScreenAndForAll();

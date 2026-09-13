@@ -26,6 +26,7 @@
 #include <PhosphorShellLauncher/LauncherModel.h>
 #include <PhosphorShellPicker/RetintController.h>
 #include <PhosphorTheme/AppearanceStore.h>
+#include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorTheme/PaletteStore.h>
 
 #include <PhosphorServiceIdle/IdleService.h>
@@ -678,12 +679,25 @@ int main(int argc, char* argv[])
         auto* appearance = qmlEngine->singletonInstance<PhosphorTheme::AppearanceStore*>(
             QStringLiteral("Phosphor.Theme"), QStringLiteral("AppearanceStore"));
         if (appearance) {
+            auto* global = qvariant_cast<PhosphorShell::ShellGlobal*>(
+                qmlEngine->rootContext()->contextProperty(QStringLiteral("PhosphorShell")));
+            if (global) {
+                auto* wallpaper = global->wallpaper();
+                if (appearance->values().value(QStringLiteral("wallpapers")).toMap().isEmpty()
+                    && !wallpaper->appearanceSeed().isEmpty())
+                    appearance->setValue(QStringLiteral("wallpapers"), wallpaper->appearanceSeed());
+                wallpaper->setAppearance(appearance->values().value(QStringLiteral("wallpapers")).toMap());
+                QObject::connect(
+                    appearance, &PhosphorTheme::AppearanceStore::changed, qmlEngine, [appearance, wallpaper] {
+                        wallpaper->setAppearance(appearance->values().value(QStringLiteral("wallpapers")).toMap());
+                    });
+            }
             desktopStyle.apply(appearance->values());
-            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::changed, &desktopStyle,
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::changed, qmlEngine,
                              [appearance, &desktopStyle] {
                                  desktopStyle.apply(appearance->values());
                              });
-            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, &engine,
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, qmlEngine,
                              [&engine, &popouts, &barController, &appearanceScreenToRestore] {
                                  appearanceScreenToRestore = popouts.isOpen(QStringLiteral("bar.panel.appearance"))
                                      ? barController.openPanelScreen()

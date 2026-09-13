@@ -97,18 +97,18 @@ QtObject {
     // settings-page face.
     readonly property string font_family_ui: AppearanceStore.values.uiFont || FontFaces.ui
     readonly property string font_family_mono: AppearanceStore.values.monoFont || FontFaces.mono
-    readonly property int font_size_display_l: 32
-    readonly property int font_size_display_m: 24
-    readonly property int font_size_display_s: 20
-    readonly property int font_size_title_l: 18
-    readonly property int font_size_title_m: 16
-    readonly property int font_size_title_s: 14
-    readonly property int font_size_body_l: 14
-    readonly property int font_size_body_m: 13
-    readonly property int font_size_body_s: 12
-    readonly property int font_size_label_l: 13
-    readonly property int font_size_label_m: 12
-    readonly property int font_size_label_s: 11
+    readonly property int font_size_display_l: Math.round(32 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_display_m: Math.round(24 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_display_s: Math.round(20 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_title_l: Math.round(18 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_title_m: Math.round(16 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_title_s: Math.round(14 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_body_l: Math.round(14 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_body_m: Math.round(13 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_body_s: Math.round(12 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_label_l: Math.round(13 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_label_m: Math.round(12 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_label_s: Math.round(11 * AppearanceStore.values.textScale / 100)
     readonly property int font_weight_regular: Font.Normal
     readonly property int font_weight_medium: Font.Medium
     readonly property int font_weight_demibold: Font.DemiBold

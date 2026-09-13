@@ -3,6 +3,11 @@
 #include <PhosphorTheme/AppearanceStore.h>
 #include <PhosphorTheme/ShellPalette.h>
 #include <QDir>
+#include <QCoreApplication>
+#include <QColor>
+#include <QPointer>
+#include <QQmlEngine>
+#include <QImageReader>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -14,6 +19,15 @@
 #include <cmath>
 
 namespace PhosphorTheme {
+AppearanceStore* AppearanceStore::create(QQmlEngine*, QJSEngine*)
+{
+    static QPointer<AppearanceStore> instance;
+    if (!instance)
+        instance = new AppearanceStore(qApp);
+    QQmlEngine::setObjectOwnership(instance, QQmlEngine::CppOwnership);
+    return instance;
+}
+
 QVariantMap AppearanceStore::defaults()
 {
     return {{QStringLiteral("presentation"), QStringLiteral("navigator")},
@@ -29,6 +43,14 @@ QVariantMap AppearanceStore::defaults()
                           QVariantList{QVariantList{QStringLiteral("clock"), QStringLiteral("notification"),
                                                     QStringLiteral("tray"), QStringLiteral("controlcenter"),
                                                     QStringLiteral("appearance"), QStringLiteral("power")}}}}},
+            {QStringLiteral("wallpapers"), QVariantMap{}},
+            {QStringLiteral("wallpaperColors"),
+             QVariantList{QStringLiteral("#919dcc"), QStringLiteral("#aca0d7"), QStringLiteral("#c0a5bd"),
+                          QStringLiteral("#d4b8b5")}},
+            {QStringLiteral("accentIndex"), 1},
+            {QStringLiteral("textScale"), 100},
+            {QStringLiteral("barInset"), 16},
+            {QStringLiteral("surfaceEffect"), QStringLiteral("none")},
             {QStringLiteral("palette"), QStringLiteral("spectrum")},
             {QStringLiteral("material"), QStringLiteral("glass")},
             {QStringLiteral("edge"), QStringLiteral("top")},
@@ -78,6 +100,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
 {
     result = defaults();
     const QMap<QString, QStringList> enums{
+        {QStringLiteral("surfaceEffect"), {QStringLiteral("none"), QStringLiteral("glass"), QStringLiteral("motes")}},
         {QStringLiteral("presentation"), {QStringLiteral("navigator"), QStringLiteral("stage")}},
         {QStringLiteral("palette"), {QStringLiteral("spectrum"), QStringLiteral("wallpaper"), QStringLiteral("ember")}},
         {QStringLiteral("material"), {QStringLiteral("glass"), QStringLiteral("solid"), QStringLiteral("light")}},
@@ -94,6 +117,29 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
             if (it.value().metaType().id() != QMetaType::QString
                 || !enums.value(it.key()).contains(it.value().toString()))
                 return false;
+        } else if (it.key() == QLatin1String("wallpapers")) {
+            if (it.value().metaType().id() != QMetaType::QVariantMap || it.value().toMap().size() > 32)
+                return false;
+            const auto wallpapers = it.value().toMap();
+            for (auto wall = wallpapers.cbegin(); wall != wallpapers.cend(); ++wall) {
+                const auto entry = wall.value().toMap();
+                if (wall.key().size() > 128
+                    || entry.keys() != QStringList{QStringLiteral("fit"), QStringLiteral("path")}
+                    || entry.value(QStringLiteral("path")).metaType().id() != QMetaType::QString
+                    || entry.value(QStringLiteral("path")).toString().size() > 4096
+                    || !QFileInfo(entry.value(QStringLiteral("path")).toString()).isAbsolute()
+                    || !QStringList{QStringLiteral("fill"), QStringLiteral("fit"), QStringLiteral("stretch"),
+                                    QStringLiteral("center")}
+                            .contains(entry.value(QStringLiteral("fit")).toString()))
+                    return false;
+            }
+        } else if (it.key() == QLatin1String("wallpaperColors")) {
+            if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() != 4)
+                return false;
+            for (const auto& color : it.value().toList()) {
+                if (color.metaType().id() != QMetaType::QString || !QColor(color.toString()).isValid())
+                    return false;
+            }
         } else if (it.key() == QLatin1String("barLayout")) {
             if (it.value().metaType().id() != QMetaType::QVariantMap)
                 return false;
@@ -131,8 +177,14 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
             if (type != QMetaType::Int && type != QMetaType::Double && type != QMetaType::LongLong)
                 return false;
             const double number = it.value().toDouble();
-            const int minimum = it.key() == QLatin1String("radius") ? 4 : 6;
-            if (!std::isfinite(number) || std::floor(number) != number || number < minimum || number > 30)
+            const int minimum = it.key() == QLatin1String("accentIndex") ? 0
+                : it.key() == QLatin1String("textScale")                 ? 90
+                : it.key() == QLatin1String("radius")                    ? 4
+                                                                         : 6;
+            const int maximum = it.key() == QLatin1String("accentIndex") ? 3
+                : it.key() == QLatin1String("textScale")                 ? 115
+                                                                         : 30;
+            if (!std::isfinite(number) || std::floor(number) != number || number < minimum || number > maximum)
                 return false;
         }
         result[it.key()] = it.value();
@@ -147,32 +199,88 @@ bool AppearanceStore::fail(const QString& error)
     }
     return false;
 }
+bool AppearanceStore::write(const QVariantMap& values)
+{
+    if (!QDir().mkpath(QFileInfo(m_path).absolutePath()))
+        return fail(tr("Cannot create the appearance settings directory."));
+    QSaveFile file(m_path);
+    const auto bytes = QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
+                                                 {QStringLiteral("settings"), QJsonObject::fromVariantMap(values)}})
+                           .toJson();
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+        return fail(file.errorString());
+    fail(QString());
+    return true;
+}
+void AppearanceStore::publish(const QVariantMap& values)
+{
+    if (m_values == values)
+        return;
+    bool geometry = false;
+    for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("edge"), QStringLiteral("density"),
+                            QStringLiteral("gap"), QStringLiteral("barInset")})
+        geometry |= m_values.value(key) != values.value(key);
+    m_values = values;
+    Q_EMIT changed();
+    if (geometry)
+        Q_EMIT geometryChanged();
+}
 bool AppearanceStore::commit(const QVariantMap& values)
 {
     QVariantMap validated;
     if (!validate(values, validated))
         return fail(tr("Invalid appearance settings."));
-    if (!QDir().mkpath(QFileInfo(m_path).absolutePath()))
-        return fail(tr("Cannot create the appearance settings directory."));
-    QSaveFile file(m_path);
-    const auto bytes = QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
-                                                 {QStringLiteral("settings"), QJsonObject::fromVariantMap(validated)}})
-                           .toJson();
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
-        return fail(file.errorString());
+    if (!m_editing && !write(validated))
+        return false;
     fail(QString());
-    if (m_values != validated) {
-        const bool geometry =
-            m_values.value(QStringLiteral("presentation")) != validated.value(QStringLiteral("presentation"))
-            || m_values.value(QStringLiteral("edge")) != validated.value(QStringLiteral("edge"))
-            || m_values.value(QStringLiteral("density")) != validated.value(QStringLiteral("density"))
-            || m_values.value(QStringLiteral("gap")) != validated.value(QStringLiteral("gap"));
-        m_values = validated;
-        Q_EMIT changed();
-        if (geometry)
-            Q_EMIT geometryChanged();
-    }
+    publish(validated);
     return true;
+}
+void AppearanceStore::beginPreview()
+{
+    if (m_editing)
+        return;
+    m_saved = m_values;
+    m_editing = true;
+    Q_EMIT changed();
+}
+bool AppearanceStore::applyPreview()
+{
+    if (!write(m_values))
+        return false;
+    m_saved = m_values;
+    Q_EMIT changed();
+    return true;
+}
+void AppearanceStore::revertPreview()
+{
+    if (!m_editing)
+        return;
+    fail(QString());
+    publish(m_saved);
+}
+void AppearanceStore::endPreview()
+{
+    revertPreview();
+    m_editing = false;
+    m_saved.clear();
+    Q_EMIT changed();
+}
+bool AppearanceStore::setValues(const QVariantMap& values)
+{
+    return commit(values);
+}
+bool AppearanceStore::setWallpaper(const QString& path, const QString& screen, const QString& fit)
+{
+    const QFileInfo info(path);
+    QImageReader reader(path);
+    if (!info.isFile() || !info.isReadable() || !reader.canRead())
+        return fail(tr("Choose a readable image."));
+    auto wallpapers = m_values.value(QStringLiteral("wallpapers")).toMap();
+    if (screen.isEmpty())
+        wallpapers.clear();
+    wallpapers[screen] = QVariantMap{{QStringLiteral("path"), info.absoluteFilePath()}, {QStringLiteral("fit"), fit}};
+    return setValue(QStringLiteral("wallpapers"), wallpapers);
 }
 bool AppearanceStore::setValue(const QString& key, const QVariant& value)
 {
@@ -250,8 +358,9 @@ bool AppearanceStore::applyPreset(const QString& preset)
         return fail(tr("Unknown appearance preset."));
     }
     for (const auto& key :
-         {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
-          QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
+         {QStringLiteral("wallpapers"), QStringLiteral("wallpaperColors"), QStringLiteral("presentation"),
+          QStringLiteral("barLayout"), QStringLiteral("uiFont"), QStringLiteral("monoFont"), QStringLiteral("motion"),
+          QStringLiteral("visualizer"), QStringLiteral("textScale"), QStringLiteral("surfaceEffect"),
           QStringLiteral("surfacePacks"), QStringLiteral("desktopStyle"), QStringLiteral("lockLayout"),
           QStringLiteral("lockMedia"), QStringLiteral("lockNotifications"), QStringLiteral("notificationGrouping"),
           QStringLiteral("notificationPreviews")})

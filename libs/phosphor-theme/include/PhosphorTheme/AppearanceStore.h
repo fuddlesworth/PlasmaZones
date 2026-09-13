@@ -8,6 +8,9 @@
 #include <QUrl>
 #include <QtQmlIntegration/qqmlintegration.h>
 
+class QQmlEngine;
+class QJSEngine;
+
 namespace PhosphorTheme {
 class PHOSPHORTHEME_EXPORT AppearanceStore : public QObject
 {
@@ -18,6 +21,8 @@ class PHOSPHORTHEME_EXPORT AppearanceStore : public QObject
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString currentPreset READ currentPreset NOTIFY changed)
     Q_PROPERTY(QVariantMap palette READ palette NOTIFY changed)
+    Q_PROPERTY(bool editing READ editing NOTIFY changed)
+    Q_PROPERTY(bool dirty READ dirty NOTIFY changed)
 public:
     explicit AppearanceStore(QObject* parent = nullptr);
     explicit AppearanceStore(const QString& path, QObject* parent = nullptr);
@@ -29,7 +34,25 @@ public:
     {
         return m_error;
     }
+    // Process-owned: a geometry reload must not destroy a live preview.
+    static AppearanceStore* create(QQmlEngine* engine, QJSEngine* scriptEngine);
     static QVariantMap defaults();
+    static bool validate(const QVariantMap& values, QVariantMap& result);
+    bool editing() const
+    {
+        return m_editing;
+    }
+    bool dirty() const
+    {
+        return m_editing && m_values != m_saved;
+    }
+    Q_INVOKABLE void beginPreview();
+    Q_INVOKABLE bool applyPreview();
+    Q_INVOKABLE void revertPreview();
+    Q_INVOKABLE void endPreview();
+    Q_INVOKABLE bool setValues(const QVariantMap& values);
+    Q_INVOKABLE bool setWallpaper(const QString& path, const QString& screen, const QString& fit);
+
     QString currentPreset() const;
     QVariantMap palette() const;
     Q_INVOKABLE bool setValue(const QString& key, const QVariant& value);
@@ -45,11 +68,14 @@ Q_SIGNALS:
 
 private:
     static QVariantMap presetValues(const QString& preset);
-    static bool validate(const QVariantMap& values, QVariantMap& result);
+    bool write(const QVariantMap& values);
+    void publish(const QVariantMap& values);
     bool commit(const QVariantMap& values);
     bool fail(const QString& error);
     QString m_path;
     QString m_error;
     QVariantMap m_values;
+    QVariantMap m_saved;
+    bool m_editing = false;
 };
 }
