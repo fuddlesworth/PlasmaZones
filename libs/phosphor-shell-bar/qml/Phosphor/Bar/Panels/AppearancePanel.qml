@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
@@ -8,326 +9,390 @@ import QtQuick.Dialogs
 import Phosphor.Theme
 import Phosphor.Widgets
 
-PanelFrame {
+FocusScope {
     id: root
     property var availableWidgets: []
-    property bool editingLayout: false
-    title: qsTr("Appearance")
-    subtitle: qsTr("Make Phosphor yours")
-    iconName: "configure"
-    panelWidth: 400
-    maxBodyHeight: 560
-
-    RowLayout {
-        width: parent ? parent.width : 0
-        ShellButton {
-            text: qsTr("Style")
-            Layout.fillWidth: true
-            highlighted: !root.editingLayout
-            onClicked: root.editingLayout = false
+    property real railT: 0.5
+    property var sessionState: null
+    property bool ready: false
+    Component.onCompleted: Qt.callLater(() => {
+        if (sessionState) {
+            editingLayout = sessionState.editingLayout;
+            advanced = sessionState.advanced;
+            viewport.contentY = Math.max(0, Math.min(sessionState.scrollOffset, viewport.contentHeight - viewport.height));
         }
-        ShellButton {
-            text: qsTr("Widgets")
-            Layout.fillWidth: true
-            highlighted: root.editingLayout
-            onClicked: root.editingLayout = true
+        ready = true;
+    })
+    onEditingLayoutChanged: if (ready && sessionState)
+        sessionState.editingLayout = editingLayout
+    onAdvancedChanged: if (ready && sessionState)
+        sessionState.advanced = advanced
+    property bool editingLayout: false
+    property bool advanced: false
+    readonly property string title: qsTr("Appearance")
+    function revealFocusedControl() {
+        if (!ready || !Window.window)
+            return;
+        const item = Window.window.activeFocusItem;
+        let ancestor = item;
+        while (ancestor && ancestor !== body)
+            ancestor = ancestor.parent;
+        if (!ancestor)
+            return;
+        const point = item.mapToItem(viewport.contentItem, 0, 0);
+        if (point.y < viewport.contentY)
+            viewport.contentY = Math.max(0, point.y);
+        else if (point.y + item.height > viewport.contentY + viewport.height)
+            viewport.contentY = Math.min(viewport.contentHeight - viewport.height, point.y + item.height - viewport.height);
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            root.revealFocusedControl();
         }
     }
-    Column {
-        width: parent ? parent.width : 0
-        spacing: 4
-        visible: !root.editingLayout
-        RowLayout {
-            width: parent ? parent.width : 0
-            ShellButton {
-                text: qsTr("Phosphor")
-                Layout.fillWidth: true
-                onClicked: AppearanceStore.applyPreset("phosphor")
-            }
-            ShellButton {
-                text: qsTr("Paper")
-                Layout.fillWidth: true
-                onClicked: AppearanceStore.applyPreset("paper")
-            }
-            ShellButton {
-                text: qsTr("Ember")
-                Layout.fillWidth: true
-                onClicked: AppearanceStore.applyPreset("ember")
-            }
+    signal closeRequested
+    implicitWidth: editingLayout ? 400 : 285
+    implicitHeight: Math.min(Screen.height - 104, body.implicitHeight + 42)
+    ShellSurface {
+        anchors.fill: parent
+    }
+    Flickable {
+        id: viewport
+        objectName: "appearanceScroll"
+        onContentYChanged: if (root.ready && root.sessionState)
+            root.sessionState.scrollOffset = contentY
+        anchors.fill: parent
+        anchors.margins: 21
+        clip: true
+        contentWidth: width
+        contentHeight: body.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {
+            x: parent.width + 5
+            width: 5
         }
-        Item {
-            height: 12
-            width: 1
-        }
-        Repeater {
-            model: [
-                {
-                    key: "presentation",
-                    label: qsTr("Overview"),
-                    names: [qsTr("Navigator"), qsTr("Stage")],
-                    values: ["navigator", "stage"]
-                },
-                {
-                    key: "palette",
-                    label: qsTr("Palette"),
-                    names: [qsTr("Spectrum"), qsTr("Wallpaper"), qsTr("Ember")],
-                    values: ["spectrum", "wallpaper", "ember"]
-                },
-                {
-                    key: "material",
-                    label: qsTr("Material"),
-                    names: [qsTr("Glass"), qsTr("Solid"), qsTr("Light")],
-                    values: ["glass", "solid", "light"]
-                },
-                {
-                    key: "density",
-                    label: qsTr("Density"),
-                    names: [qsTr("Comfortable"), qsTr("Compact")],
-                    values: ["comfortable", "compact"]
-                },
-                {
-                    key: "edge",
-                    label: qsTr("Bar position"),
-                    names: [qsTr("Top"), qsTr("Bottom")],
-                    values: ["top", "bottom"]
-                },
-                {
-                    key: "visualizer",
-                    label: qsTr("Visualizer"),
-                    names: [qsTr("Ribbon"), qsTr("Bars"), qsTr("Halo"), qsTr("Off")],
-                    values: ["ribbon", "bars", "halo", "off"]
-                }
-            ]
-            delegate: RowLayout {
-                required property var modelData
-                width: parent ? parent.width : 0
-                Text {
-                    Layout.fillWidth: true
-                    text: modelData.label
-                    color: Appearance.text
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: 12
-                }
-                Basic.ComboBox {
-                    id: choice
-                    implicitHeight: 34
-                    background: Rectangle {
-                        radius: Math.min(8, Appearance.radius)
-                        color: Appearance.card
-                        border.width: 1
-                        border.color: choice.visualFocus ? Appearance.text : Appearance.outline
-                    }
-                    indicator: Text {
-                        x: choice.width - width - 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "⌄"
+        ColumnLayout {
+            id: body
+            width: parent.width
+            spacing: 16
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: heading.implicitHeight
+                Column {
+                    id: heading
+                    spacing: 8
+                    Text {
+                        text: qsTr("MAKE IT YOURS")
                         color: Appearance.muted
-                        font.pixelSize: 18
+                        font.pixelSize: 9
+                        font.letterSpacing: 1.5
                     }
-                    palette.button: Appearance.card
-                    palette.buttonText: Appearance.text
-                    palette.base: Appearance.surface
-                    palette.text: Appearance.text
-                    palette.highlight: Appearance.accent
-                    palette.highlightedText: Appearance.text
-                    palette.window: Appearance.surface
-                    Layout.preferredWidth: 170
-                    model: modelData.names
-                    currentIndex: modelData.values.indexOf(Appearance.settings[modelData.key])
-                    Accessible.name: modelData.label
-                    onActivated: AppearanceStore.setValue(modelData.key, modelData.values[currentIndex])
+                    Text {
+                        text: qsTr("Same Phosphor.\nYour expression.")
+                        color: Appearance.text
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 18
+                        font.weight: Font.Medium
+                        lineHeightMode: Text.FixedHeight
+                        lineHeight: 27
+                    }
+                }
+                ShellButton {
+                    objectName: "closeAppearance"
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    implicitWidth: 26
+                    implicitHeight: 26
+                    flat: true
+                    iconName: "window-close"
+                    Accessible.name: qsTr("Close appearance")
+                    onClicked: root.closeRequested()
                 }
             }
-        }
-        Repeater {
-            model: [
-                {
-                    key: "radius",
-                    label: qsTr("Corner radius"),
-                    minimum: 4
-                },
-                {
-                    key: "gap",
-                    label: qsTr("Bar inset"),
-                    minimum: 6
-                }
-            ]
-            delegate: RowLayout {
-                required property var modelData
-                width: parent ? parent.width : 0
-                Text {
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Changes apply to both views. Your choices stay when you switch between them.")
+                color: Appearance.muted
+                font.family: Tokens.font_family_ui
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+                lineHeightMode: Text.FixedHeight
+                lineHeight: 18
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                ShellButton {
+                    text: qsTr("Style")
                     Layout.fillWidth: true
-                    text: modelData.label
-                    color: Appearance.text
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: 12
+                    highlighted: !root.editingLayout
+                    onClicked: root.editingLayout = false
                 }
-                Basic.Slider {
-                    id: slider
-                    implicitHeight: 32
-                    background: Rectangle {
-                        x: slider.leftPadding
-                        y: slider.topPadding + slider.availableHeight / 2 - height / 2
-                        width: slider.availableWidth
-                        height: 6
-                        radius: 3
-                        color: Appearance.card
-                        Rectangle {
-                            width: parent.width * slider.visualPosition
-                            height: parent.height
-                            radius: 3
-                            color: Appearance.accent
+                ShellButton {
+                    text: qsTr("Widgets")
+                    Layout.fillWidth: true
+                    highlighted: root.editingLayout
+                    onClicked: root.editingLayout = true
+                }
+            }
+            ColumnLayout {
+                visible: !root.editingLayout
+                Layout.fillWidth: true
+                spacing: 16
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    FieldLabel {
+                        text: qsTr("Starting point")
+                    }
+                    Choice {
+                        Layout.fillWidth: true
+                        model: [qsTr("Custom"), qsTr("Phosphor / deep glass"), qsTr("Paper / bright & quiet"), qsTr("Ember / warm & compact")]
+                        currentIndex: ["custom", "phosphor", "paper", "ember"].indexOf(AppearanceStore.currentPreset)
+                        Accessible.name: qsTr("Starting point")
+                        onActivated: {
+                            if (currentIndex > 0)
+                                AppearanceStore.applyPreset(["", "phosphor", "paper", "ember"][currentIndex]);
                         }
                     }
-                    handle: Rectangle {
-                        x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
-                        y: slider.topPadding + slider.availableHeight / 2 - height / 2
-                        width: 16
-                        height: 16
-                        radius: 8
-                        color: Appearance.text
-                        border.width: slider.visualFocus ? 2 : 0
-                        border.color: Appearance.accent
-                    }
-                    Layout.preferredWidth: 138
-                    from: modelData.minimum
-                    to: 30
-                    stepSize: 1
-                    value: Appearance.settings[modelData.key]
-                    Accessible.name: modelData.label
-                    onMoved: if (!pressed)
-                        AppearanceStore.setValue(modelData.key, Math.round(value))
-                    onPressedChanged: if (!pressed)
-                        AppearanceStore.setValue(modelData.key, Math.round(value))
                 }
-                Text {
-                    text: Math.round(slider.value)
-                    color: Appearance.muted
-                    font.family: Tokens.font_family_mono
-                    font.pixelSize: 12
-                }
-            }
-        }
-        Repeater {
-            model: [
-                {
-                    key: "glow",
-                    label: qsTr("Surface glow")
-                },
-                {
-                    key: "motion",
-                    label: qsTr("Animations")
-                },
-                {
-                    key: "media",
-                    label: qsTr("Show media")
-                },
-                {
-                    key: "surfacePacks",
-                    label: qsTr("Custom surface packs")
-                }
-            ]
-            delegate: Basic.Switch {
-                id: toggle
-                implicitHeight: 30
-                indicator: Rectangle {
-                    x: toggle.leftPadding
-                    y: toggle.topPadding + toggle.availableHeight / 2 - height / 2
-                    width: 34
-                    height: 20
-                    radius: 10
-                    color: toggle.checked ? Appearance.accent : Appearance.card
-                    border.width: 1
-                    border.color: toggle.visualFocus ? Appearance.text : Appearance.outline
-                    Rectangle {
-                        x: toggle.checked ? 16 : 2
-                        y: 2
-                        width: 16
-                        height: 16
-                        radius: 8
-                        color: Appearance.light ? "#ffffff" : Appearance.text
+                Repeater {
+                    model: [
+                        {
+                            key: "presentation",
+                            label: qsTr("Workspace view"),
+                            names: [qsTr("Navigator"), qsTr("Stage")],
+                            values: ["navigator", "stage"]
+                        },
+                        {
+                            key: "palette",
+                            label: qsTr("Color field"),
+                            names: [qsTr("Phosphor spectrum"), qsTr("Wallpaper / iris to peach"), qsTr("Ember / honey to rust")],
+                            values: ["spectrum", "wallpaper", "ember"]
+                        },
+                        {
+                            key: "material",
+                            label: qsTr("Surface material"),
+                            names: [qsTr("Tinted glass"), qsTr("Opaque"), qsTr("Light ceramic")],
+                            values: ["glass", "solid", "light"]
+                        },
+                        {
+                            key: "edge",
+                            label: qsTr("Bar placement"),
+                            names: [qsTr("Top"), qsTr("Bottom")],
+                            values: ["top", "bottom"]
+                        },
+                        {
+                            key: "density",
+                            label: qsTr("Density"),
+                            names: [qsTr("Comfortable"), qsTr("Compact")],
+                            values: ["comfortable", "compact"]
+                        }
+                    ]
+                    ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 8
+                        FieldLabel {
+                            text: parent.modelData.label
+                        }
+                        Choice {
+                            id: choice
+                            objectName: "appearanceChoice-" + parent.modelData.key
+                            Layout.fillWidth: true
+                            model: parent.modelData.names
+                            currentIndex: parent.modelData.values.indexOf(Appearance.settings[parent.modelData.key])
+                            Accessible.name: parent.modelData.label
+                            onActivated: AppearanceStore.setValue(parent.modelData.key, parent.modelData.values[currentIndex])
+                        }
                     }
                 }
-                required property var modelData
-                width: parent ? parent.width : 0
-                text: modelData.label
-                checked: Appearance.settings[modelData.key]
-                onToggled: AppearanceStore.setValue(modelData.key, checked)
-                palette.windowText: Appearance.text
-                palette.buttonText: Appearance.text
-                palette.text: Appearance.text
-                palette.highlight: Appearance.accent
-            }
-        }
-        Repeater {
-            model: [
-                {
-                    key: "uiFont",
-                    label: qsTr("Interface font")
-                },
-                {
-                    key: "monoFont",
-                    label: qsTr("Number font")
+                Repeater {
+                    model: [
+                        {
+                            key: "radius",
+                            label: qsTr("Corner radius"),
+                            minimum: 4
+                        },
+                        {
+                            key: "gap",
+                            label: qsTr("Window gap"),
+                            minimum: 6
+                        }
+                    ]
+                    ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 8
+                        RowLayout {
+                            Layout.fillWidth: true
+                            FieldLabel {
+                                Layout.fillWidth: true
+                                text: parent.parent.modelData.label
+                            }
+                            Text {
+                                text: qsTr("%1 px").arg(Math.round(slider.value))
+                                color: Appearance.muted
+                                font.family: Tokens.font_family_mono
+                                font.pixelSize: 10
+                            }
+                        }
+                        Basic.Slider {
+                            id: slider
+                            Layout.fillWidth: true
+                            implicitHeight: 16
+                            from: parent.modelData.minimum
+                            to: 30
+                            stepSize: 1
+                            value: Appearance.settings[parent.modelData.key]
+                            Accessible.name: parent.modelData.label
+                            onMoved: if (!pressed)
+                                AppearanceStore.setValue(parent.modelData.key, Math.round(value))
+                            onPressedChanged: if (!pressed)
+                                AppearanceStore.setValue(parent.modelData.key, Math.round(value))
+                            background: Rectangle {
+                                x: slider.leftPadding
+                                y: (slider.height - height) / 2
+                                width: slider.availableWidth
+                                height: 4
+                                radius: 2
+                                color: Appearance.recess
+                                Rectangle {
+                                    width: parent.width * slider.visualPosition
+                                    height: parent.height
+                                    radius: 2
+                                    color: Appearance.accent
+                                }
+                            }
+                            handle: Rectangle {
+                                x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
+                                y: (slider.height - height) / 2
+                                width: 12
+                                height: 12
+                                radius: 6
+                                color: Appearance.text
+                                border.width: slider.visualFocus ? 2 : 0
+                                border.color: Appearance.accent
+                            }
+                        }
+                    }
                 }
-            ]
-            Column {
-                required property var modelData
-                width: parent ? parent.width : 0
-                spacing: 4
-                Text {
-                    text: modelData.label
-                    color: Appearance.muted
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: 12
+                SettingCheck {
+                    label: qsTr("Edge glow")
+                    settingKey: "glow"
                 }
-                Basic.TextField {
-                    id: fontField
-                    width: parent.width
-                    text: Appearance.settings[modelData.key]
-                    placeholderText: qsTr("Default font")
-                    color: Appearance.text
-                    placeholderTextColor: Appearance.muted
-                    selectionColor: Appearance.accent
-                    selectedTextColor: Appearance.text
-                    font.family: Tokens.font_family_ui
-                    maximumLength: 80
-                    Accessible.name: modelData.label
-                    onEditingFinished: AppearanceStore.setValue(modelData.key, text.trim())
-                    background: Rectangle {
-                        radius: 8
-                        color: Appearance.card
-                        border.width: 1
-                        border.color: fontField.activeFocus ? Appearance.accent : Appearance.outline
+                SettingCheck {
+                    label: qsTr("Media widget in bar")
+                    settingKey: "media"
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    FieldLabel {
+                        text: qsTr("Media visualizer")
+                    }
+                    Choice {
+                        Layout.fillWidth: true
+                        model: [qsTr("Ribbon"), qsTr("Bars"), qsTr("Halo"), qsTr("Off")]
+                        currentIndex: ["ribbon", "bars", "halo", "off"].indexOf(Appearance.visualizer)
+                        Accessible.name: qsTr("Media visualizer")
+                        onActivated: AppearanceStore.setValue("visualizer", ["ribbon", "bars", "halo", "off"][currentIndex])
+                    }
+                }
+                SettingCheck {
+                    label: qsTr("Motion")
+                    settingKey: "motion"
+                }
+                ShellButton {
+                    text: root.advanced ? qsTr("Fewer options") : qsTr("Fonts and surface packs")
+                    Layout.fillWidth: true
+                    onClicked: root.advanced = !root.advanced
+                }
+                ColumnLayout {
+                    visible: root.advanced
+                    Layout.fillWidth: true
+                    spacing: 16
+                    SettingCheck {
+                        label: qsTr("Custom surface packs")
+                        settingKey: "surfacePacks"
+                    }
+                    Repeater {
+                        model: [
+                            {
+                                key: "uiFont",
+                                label: qsTr("Interface font")
+                            },
+                            {
+                                key: "monoFont",
+                                label: qsTr("Number font")
+                            }
+                        ]
+                        ColumnLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 8
+                            FieldLabel {
+                                text: parent.modelData.label
+                            }
+                            Basic.TextField {
+                                id: fontField
+                                Layout.fillWidth: true
+                                implicitHeight: 34
+                                text: Appearance.settings[parent.modelData.key]
+                                placeholderText: qsTr("Default font")
+                                color: Appearance.text
+                                placeholderTextColor: Appearance.muted
+                                selectionColor: Appearance.accent
+                                selectedTextColor: Appearance.text
+                                font.family: Tokens.font_family_ui
+                                font.pixelSize: 11
+                                maximumLength: 80
+                                Accessible.name: parent.modelData.label
+                                onEditingFinished: AppearanceStore.setValue(parent.modelData.key, text.trim())
+                                background: Rectangle {
+                                    radius: 6
+                                    color: Appearance.recess
+                                    border.width: 1
+                                    border.color: fontField.activeFocus ? Appearance.accent : Appearance.outline
+                                }
+                            }
+                        }
                     }
                 }
             }
+            BarLayoutEditor {
+                visible: root.editingLayout
+                Layout.fillWidth: true
+                availableWidgets: root.availableWidgets
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                ShellButton {
+                    text: qsTr("Export preset ↓")
+                    Layout.fillWidth: true
+                    onClicked: exportDialog.open()
+                }
+                ShellButton {
+                    text: qsTr("Reset")
+                    onClicked: AppearanceStore.applyPreset("phosphor")
+                }
+            }
+            ShellButton {
+                text: qsTr("Import preset")
+                Layout.fillWidth: true
+                onClicked: importDialog.open()
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: AppearanceStore.error !== ""
+                text: AppearanceStore.error
+                color: Appearance.at(1)
+                wrapMode: Text.WordWrap
+                font.pixelSize: 11
+            }
         }
-    }
-    BarLayoutEditor {
-        visible: root.editingLayout
-        width: parent ? parent.width : 0
-        availableWidgets: root.availableWidgets
-    }
-    RowLayout {
-        width: parent ? parent.width : 0
-        ShellButton {
-            text: qsTr("Import preset")
-            Layout.fillWidth: true
-            onClicked: importDialog.open()
-        }
-        ShellButton {
-            text: qsTr("Export preset")
-            Layout.fillWidth: true
-            onClicked: exportDialog.open()
-        }
-    }
-    Text {
-        width: parent ? parent.width : 0
-        visible: AppearanceStore.error !== ""
-        text: AppearanceStore.error
-        color: Appearance.at(1)
-        wrapMode: Text.WordWrap
-        font.pixelSize: 12
     }
     FileDialog {
         id: importDialog
@@ -342,5 +407,55 @@ PanelFrame {
         defaultSuffix: "json"
         nameFilters: [qsTr("JSON presets (*.json)")]
         onAccepted: AppearanceStore.exportPreset(selectedFile)
+    }
+    component FieldLabel: Text {
+        color: Appearance.muted
+        font.family: Tokens.font_family_ui
+        font.pixelSize: 11
+    }
+    component Choice: ShellComboBox {
+        implicitHeight: 34
+        background: Rectangle {
+            radius: 6
+            color: Appearance.recess
+            border.width: 1
+            border.color: parent.visualFocus ? Appearance.text : Appearance.outline
+        }
+    }
+    component SettingCheck: Basic.CheckBox {
+        id: check
+        property string label
+        property string settingKey
+        Layout.fillWidth: true
+        implicitHeight: 20
+        spacing: 9
+        checked: Appearance.settings[settingKey]
+        text: label
+        onToggled: AppearanceStore.setValue(settingKey, checked)
+        indicator: Rectangle {
+            x: check.leftPadding
+            y: (check.height - height) / 2
+            width: 13
+            height: 13
+            radius: 3
+            color: check.checked ? Appearance.accent : Appearance.recess
+            border.width: 1
+            border.color: check.visualFocus ? Appearance.text : Appearance.outline
+            Text {
+                anchors.centerIn: parent
+                text: "✓"
+                visible: check.checked
+                color: Appearance.recess
+                font.pixelSize: 11
+            }
+        }
+        contentItem: Text {
+            leftPadding: check.indicator.width + check.spacing
+            text: check.label
+            verticalAlignment: Text.AlignVCenter
+            color: Appearance.muted
+            font.family: Tokens.font_family_ui
+            font.pixelSize: 11
+        }
     }
 }

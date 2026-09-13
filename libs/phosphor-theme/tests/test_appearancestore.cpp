@@ -10,6 +10,20 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void presetNamesReflectStyleEdits()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        for (const auto& preset : {QStringLiteral("phosphor"), QStringLiteral("paper"), QStringLiteral("ember")}) {
+            QVERIFY(store.applyPreset(preset));
+            QCOMPARE(store.currentPreset(), preset);
+            QVERIFY(store.setValue(QStringLiteral("presentation"), QStringLiteral("stage")));
+            QCOMPARE(store.currentPreset(), preset);
+            QVERIFY(store.setValue(QStringLiteral("radius"), 29));
+            QCOMPARE(store.currentPreset(), QStringLiteral("custom"));
+        }
+    }
+
     void persistsAndRoundTrips()
     {
         QTemporaryDir dir;

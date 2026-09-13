@@ -1,24 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Notifications.Toast, a single notification card under its band.
-//
-// A toast is a 2 px spectrum band on the top edge of the window it
-// concerns, or of the work area when it has none (purple; rose while
-// critical, breathing), with the card hanging 8 px under it (A3 §3). The
-// band spans the toast's full width and the card is at most 360 px,
-// centred, so a host that sizes the toast to a window's width gets the
-// band across the window's edge with the card under its middle. The
-// card is abyss glass with a 1 px spectrum stroke, no shadow. It owns its
-// auto-dismiss timer, which pauses while the pointer hovers. Position
-// and stacking are the host's job (ToastHost).
-//
-//   Toast {
-//       appName: "Mail"; summary: "New message"
-//       body: "From <b>Ada</b>"; imageSource: "file:///.../avatar.png"
-//       urgency: 1; timeout: 5000
-//       onDismissed: ...
-//   }
-
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
@@ -48,7 +29,8 @@ Item {
     readonly property bool critical: toast.urgency >= 2
 
     implicitWidth: 360
-    implicitHeight: 2 + Tokens.spacing_s + card.implicitHeight
+    readonly property bool compact: !critical && appName === "" && body === "" && String(imageSource) === ""
+    implicitHeight: card.implicitHeight
 
     Accessible.role: Accessible.Notification
     Accessible.name: [toast.appName, toast.summary].filter(s => s !== "").join(", ")
@@ -60,31 +42,6 @@ Item {
     // The band: purple pending, rose hot. Enters from its centre outward
     // (the host animates `bandReveal`), and breathes while critical.
     property real bandReveal: 1
-
-    Rectangle {
-        id: band
-
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        width: parent.width * Math.max(0, Math.min(1, toast.bandReveal))
-        height: 2
-        color: toast.critical ? Spectrum.hot : Spectrum.pending
-
-        SequentialAnimation on opacity {
-            running: toast.critical && !Motion.reducedMotion
-            loops: Animation.Infinite
-            NumberAnimation {
-                to: 0.55
-                duration: 600
-                easing: Motion.release
-            }
-            NumberAnimation {
-                to: 1
-                duration: 600
-                easing: Motion.reveal
-            }
-        }
-    }
 
     // Swipe to dismiss (A3 §3): a two-finger or one-finger drag to the
     // right past the threshold dismisses; short of it the card settles
@@ -112,9 +69,9 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.horizontalCenterOffset: swipe.active ? Math.max(0, swipe.translation.x) : 0
         anchors.top: parent.top
-        anchors.topMargin: 2 + Tokens.spacing_s
-        width: Math.min(360, toast.width)
-        implicitHeight: Math.max(64, row.implicitHeight + 2 * Tokens.spacing_m)
+        anchors.topMargin: 0
+        width: Math.min(toast.width, toast.compact ? summaryMetrics.advanceWidth + 40 : 360)
+        implicitHeight: row.implicitHeight + 24
         height: implicitHeight
         // The card fades as it travels, and settles back on release.
         opacity: swipe.active ? Math.max(0.2, 1 - Math.max(0, swipe.translation.x) / (2 * toast.swipeThreshold)) : 1
@@ -139,14 +96,18 @@ Item {
         ShellSurface {
             anchors.fill: parent
             railT: toast.t
+            border.color: toast.critical ? Appearance.stops[3] : Appearance.outline
         }
 
         RowLayout {
             id: row
 
             anchors.fill: parent
-            anchors.margins: Tokens.spacing_m
-            spacing: Tokens.spacing_m
+            anchors.leftMargin: 20
+            anchors.rightMargin: 20
+            anchors.topMargin: 12
+            anchors.bottomMargin: 12
+            spacing: 12
 
             Rectangle {
                 visible: String(toast.imageSource) !== ""
@@ -178,7 +139,7 @@ Item {
                     textFormat: Text.PlainText
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: Tokens.font_size_label_s
+                    font.pixelSize: 9
                     font.weight: Tokens.font_weight_medium
                     elide: Text.ElideRight
                     Layout.fillWidth: true
@@ -191,8 +152,8 @@ Item {
                     textFormat: Text.PlainText
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: Tokens.font_size_body_l
-                    font.weight: Tokens.font_weight_demibold
+                    font.pixelSize: 11
+                    font.weight: Font.Normal
                     wrapMode: Text.WordWrap
                     maximumLineCount: 2
                     elide: Text.ElideRight
@@ -204,7 +165,7 @@ Item {
                     text: toast.body
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: Tokens.font_size_body_m
+                    font.pixelSize: 11
                     textFormat: Text.StyledText
                     wrapMode: Text.WordWrap
                     maximumLineCount: 4
@@ -216,8 +177,9 @@ Item {
             Item {
                 id: closeButton
 
-                Layout.preferredWidth: 22
-                Layout.preferredHeight: 22
+                visible: !toast.compact
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
                 Layout.alignment: Qt.AlignTop
 
                 Accessible.role: Accessible.Button
@@ -252,6 +214,13 @@ Item {
                 }
             }
         }
+    }
+
+    TextMetrics {
+        id: summaryMetrics
+        font.family: Tokens.font_family_ui
+        font.pixelSize: 11
+        text: toast.summary
     }
 
     Timer {

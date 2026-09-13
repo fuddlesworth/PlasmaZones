@@ -211,13 +211,9 @@ bool AppearanceStore::resetBarLayout()
 {
     return setValue(QStringLiteral("barLayout"), defaults().value(QStringLiteral("barLayout")));
 }
-bool AppearanceStore::applyPreset(const QString& preset)
+QVariantMap AppearanceStore::presetValues(const QString& preset)
 {
     auto next = defaults();
-    for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
-                            QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
-                            QStringLiteral("surfacePacks")})
-        next[key] = m_values.value(key);
     if (preset == QLatin1String("paper")) {
         next[QStringLiteral("palette")] = QStringLiteral("wallpaper");
         next[QStringLiteral("material")] = QStringLiteral("light");
@@ -234,9 +230,42 @@ bool AppearanceStore::applyPreset(const QString& preset)
         next[QStringLiteral("edge")] = QStringLiteral("bottom");
         next[QStringLiteral("glow")] = false;
     } else if (preset != QLatin1String("phosphor"))
+        return {};
+    return next;
+}
+bool AppearanceStore::applyPreset(const QString& preset)
+{
+    auto next = presetValues(preset);
+    if (next.isEmpty()) {
         return fail(tr("Unknown appearance preset."));
+    }
+    for (const auto& key : {QStringLiteral("presentation"), QStringLiteral("barLayout"), QStringLiteral("uiFont"),
+                            QStringLiteral("monoFont"), QStringLiteral("motion"), QStringLiteral("visualizer"),
+                            QStringLiteral("surfacePacks")})
+        next[key] = m_values.value(key);
     return commit(next);
 }
+
+QString AppearanceStore::currentPreset() const
+{
+    for (const auto& preset : {QStringLiteral("phosphor"), QStringLiteral("paper"), QStringLiteral("ember")}) {
+        const auto expected = presetValues(preset);
+        bool matches = true;
+        for (const auto& key : {QStringLiteral("palette"), QStringLiteral("material"), QStringLiteral("density"),
+                                QStringLiteral("radius"), QStringLiteral("gap"), QStringLiteral("glow"),
+                                QStringLiteral("media"), QStringLiteral("edge")}) {
+            if (m_values.value(key) != expected.value(key)) {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) {
+            return preset;
+        }
+    }
+    return QStringLiteral("custom");
+}
+
 bool AppearanceStore::importPreset(const QUrl& url)
 {
     if (!url.isLocalFile())

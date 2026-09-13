@@ -55,7 +55,7 @@ Item {
     // Default auto-dismiss when a toast doesn't specify one.
     property int defaultTimeout: 5000
     property real spacing: Tokens.spacing_s
-    property real margins: Tokens.spacing_l
+    property real margins: 26
     // Per-app-rules hook (see header). Null = no rules.
     property var rules: null
     // The surface pack Component every card instantiates (A1 §2.4); set
@@ -386,9 +386,10 @@ Item {
     ListView {
         id: list
 
-        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: host.margins
+        anchors.bottomMargin: host.margins
+        verticalLayoutDirection: ListView.BottomToTop
         width: 360
         height: Math.max(0, Math.min(contentHeight, parent.height - host.margins * 2))
         spacing: host.spacing

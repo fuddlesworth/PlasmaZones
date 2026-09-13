@@ -45,6 +45,7 @@ private Q_SLOTS:
     void registryChangesRefreshTheIdSet();
     void relaysActivationWithItsRegistryId();
     void activateWidgetWithoutALiveWidgetIsRefused();
+    void activationStaysOnTheRequestedScreen();
     void activationWithoutAnIdIsRefused();
     void aDynamicPropertyWriteReportsFailureButStoresTheValue();
     void screenOfANullItemFallsBackToPrimary();
@@ -74,6 +75,26 @@ Q_SIGNALS:
     void activated();
 };
 
+class FakeTriggerFactory : public PhosphorRegistry::IBarWidgetFactory
+{
+public:
+    QString id() const override
+    {
+        return QStringLiteral("test-trigger");
+    }
+    QString displayName() const override
+    {
+        return QStringLiteral("Test trigger");
+    }
+    QQuickItem* createWidget(QQmlEngine*, QObject* parent) override
+    {
+        auto* widget = new FakeTriggerWidget;
+        widget->setParent(parent);
+        widget->setParentItem(qobject_cast<QQuickItem*>(parent));
+        return widget;
+    }
+};
+
 } // namespace
 
 void TestBarController::registersEveryBuiltin()
@@ -85,11 +106,12 @@ void TestBarController::registersEveryBuiltin()
     // builtinWidgets() so that adding or dropping a widget has to be a
     // deliberate edit in two places.
     const QStringList expected{
-        QStringLiteral("audio"),         QStringLiteral("battery"),       QStringLiteral("bluetooth"),
-        QStringLiteral("clock"),         QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
-        QStringLiteral("media"),         QStringLiteral("network"),       QStringLiteral("notification"),
-        QStringLiteral("placementmap"),  QStringLiteral("power"),         QStringLiteral("spacer"),
-        QStringLiteral("systemmetrics"), QStringLiteral("tray"),
+        QStringLiteral("appearance"), QStringLiteral("audio"),        QStringLiteral("battery"),
+        QStringLiteral("bluetooth"),  QStringLiteral("clock"),        QStringLiteral("controlcenter"),
+        QStringLiteral("focusedapp"), QStringLiteral("launcher"),     QStringLiteral("media"),
+        QStringLiteral("network"),    QStringLiteral("notification"), QStringLiteral("placementmap"),
+        QStringLiteral("power"),      QStringLiteral("spacer"),       QStringLiteral("systemmetrics"),
+        QStringLiteral("tray"),       QStringLiteral("workspaces"),
     };
 
     QCOMPARE(ids.size(), expected.size());
@@ -232,6 +254,24 @@ void TestBarController::activateWidgetWithoutALiveWidgetIsRefused()
     QVERIFY(!controller.activateWidget(QStringLiteral("power")));
     QVERIFY(!controller.activateWidget(QString()));
     QCOMPARE(spy.count(), 0);
+}
+
+void TestBarController::activationStaysOnTheRequestedScreen()
+{
+    BarController controller;
+    QVERIFY(controller.registry().registerFactory(std::make_shared<FakeTriggerFactory>()));
+    QQmlEngine engine;
+    QQuickWindow window;
+    QQuickItem parent(window.contentItem());
+    QQmlEngine::setContextForObject(&parent, engine.rootContext());
+    auto* widget = controller.createWidgetFor(QStringLiteral("test-trigger"), &parent);
+    QVERIFY(widget);
+    QSignalSpy spy(&controller, &BarController::widgetActivated);
+    QVERIFY(!controller.activateWidgetForScreen(QStringLiteral("test-trigger"), QStringLiteral("missing-output")));
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(controller.activateWidgetForScreen(QStringLiteral("test-trigger"), window.screen()->name()));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(qvariant_cast<QQuickItem*>(spy.first().at(1)), widget);
 }
 
 void TestBarController::activationWithoutAnIdIsRefused()

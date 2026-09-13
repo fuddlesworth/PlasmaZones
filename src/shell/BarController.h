@@ -107,6 +107,7 @@ public:
     /// bar.activate`, and for a harness that cannot inject pointer input.
     /// False when no live widget carries the id or the id is not a trigger.
     Q_INVOKABLE bool activateWidget(const QString& id);
+    bool activateWidgetForScreen(const QString& id, const QString& screenName);
 
     /// The output `item` is displayed on, or the primary screen when it
     /// cannot be resolved (no window yet, or a null item). Never null while

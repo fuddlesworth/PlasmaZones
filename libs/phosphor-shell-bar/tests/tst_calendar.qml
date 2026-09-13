@@ -16,6 +16,37 @@ TestCase {
         id: appearance
         AppearancePanel {}
     }
+    Component {
+        id: appearanceSession
+        QtObject {
+            property real scrollOffset: 260
+            property bool editingLayout: false
+            property bool advanced: true
+        }
+    }
+    function test_appearanceRetainsItsPlace() {
+        const session = createTemporaryObject(appearanceSession, tests);
+        const view = createTemporaryObject(appearance, tests, {
+            sessionState: session,
+            width: 285,
+            height: 600
+        });
+        tryCompare(view, "ready", true);
+        compare(view.advanced, true);
+        const scroll = findChild(view, "appearanceScroll");
+        verify(scroll);
+        compare(scroll.contentY, 260);
+        scroll.contentY = 310;
+        compare(session.scrollOffset, 310);
+        verify(scroll.contentHeight > scroll.height);
+        scroll.contentY = 0;
+        const density = findChild(view, "appearanceChoice-density");
+        verify(density);
+        density.forceActiveFocus();
+        tryVerify(() => scroll.contentY > 0);
+        const point = density.mapToItem(scroll, 0, 0);
+        verify(point.y >= 0 && point.y + density.height <= scroll.height + 1);
+    }
     function test_monthEndAndLeapYear() {
         const view = createTemporaryObject(calendar, tests);
         verify(view);

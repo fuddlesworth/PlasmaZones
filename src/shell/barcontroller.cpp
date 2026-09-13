@@ -190,11 +190,21 @@ QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent
 
 bool BarController::activateWidget(const QString& id)
 {
+    return activateWidgetForScreen(id, QString());
+}
+
+bool BarController::activateWidgetForScreen(const QString& id, const QString& screenName)
+{
     // Drop the dead entries as they are met; a bar that unmounted takes
     // its widgets with it.
     for (auto it = m_triggers.find(id); it != m_triggers.end() && it.key() == id;) {
         if (it.value().isNull()) {
             it = m_triggers.erase(it);
+            continue;
+        }
+        const auto* screen = screenOf(it.value().data());
+        if (!screenName.isEmpty() && (!screen || screen->name() != screenName)) {
+            ++it;
             continue;
         }
         Q_EMIT widgetActivated(id, it.value().data());

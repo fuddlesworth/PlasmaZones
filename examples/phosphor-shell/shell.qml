@@ -258,6 +258,8 @@ Item {
 
                 anchors.fill: parent
                 provider: OsdRegistry
+                edgeMargin: 36
+                bottomInset: 54
                 decoration: ShellChrome.decorationComponent
                 // Through PanelWindow.screen, not modelData.screen, for the
                 // hot-unplug reason the bar delegate gives.
@@ -705,7 +707,9 @@ Item {
     Component {
         id: appearancePanelComponent
         AppearancePanel {
+            sessionState: AppearanceSession
             availableWidgets: BarRegistry.factoryIds
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.appearance"))
         }
     }
 
