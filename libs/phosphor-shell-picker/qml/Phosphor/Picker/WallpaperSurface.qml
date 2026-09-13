@@ -149,7 +149,7 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: Appearance.recess
     }
 
     Image {

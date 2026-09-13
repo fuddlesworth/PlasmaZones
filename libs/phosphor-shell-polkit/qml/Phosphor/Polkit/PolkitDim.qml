@@ -40,7 +40,7 @@ Item {
         y: 0
         width: dim.width
         height: dim.holed ? Math.max(0, dim.hole.y) : dim.height
-        color: Theme.background
+        color: Appearance.recess
         opacity: dim.level
     }
 
@@ -51,7 +51,7 @@ Item {
         y: dim.holed ? dim.hole.y + dim.hole.height : 0
         width: dim.width
         height: dim.holed ? Math.max(0, dim.height - y) : 0
-        color: Theme.background
+        color: Appearance.recess
         opacity: dim.level
     }
 
@@ -62,7 +62,7 @@ Item {
         y: dim.holed ? dim.hole.y : 0
         width: dim.holed ? Math.max(0, dim.hole.x) : 0
         height: dim.holed ? dim.hole.height : 0
-        color: Theme.background
+        color: Appearance.recess
         opacity: dim.level
     }
 
@@ -73,7 +73,7 @@ Item {
         y: dim.holed ? dim.hole.y : 0
         width: dim.holed ? Math.max(0, dim.width - x) : 0
         height: dim.holed ? dim.hole.height : 0
-        color: Theme.background
+        color: Appearance.recess
         opacity: dim.level
     }
 }

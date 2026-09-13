@@ -99,6 +99,8 @@ private Q_SLOTS:
             << QStringLiteral("PhosphorPopout.Anchor.BarCenter") << int(Anchor::BarCenter);
         QTest::newRow("Anchor.ScreenCenter")
             << QStringLiteral("PhosphorPopout.Anchor.ScreenCenter") << int(Anchor::ScreenCenter);
+        QTest::newRow("Anchor.BottomCenter")
+            << QStringLiteral("PhosphorPopout.Anchor.BottomCenter") << int(Anchor::BottomCenter);
         QTest::newRow("Anchor.Custom") << QStringLiteral("PhosphorPopout.Anchor.Custom") << int(Anchor::Custom);
         QTest::newRow("ExclusiveMode.Cooperative")
             << QStringLiteral("PhosphorPopout.ExclusiveMode.Cooperative") << int(ExclusiveMode::Cooperative);

@@ -71,7 +71,7 @@ Item {
         anchors.margins: Tokens.spacing_s
         text: qsTr("Calendar")
         font.pixelSize: Tokens.font_size_label_m
-        color: Theme.on_surface_variant
+        color: Appearance.muted
     }
 
     TabularText {
@@ -82,7 +82,7 @@ Item {
         anchors.margins: Tokens.spacing_s
         text: root.locale.standaloneMonthName(root.month, Locale.LongFormat) + " " + root.year
         font.pixelSize: Tokens.font_size_label_m
-        color: Theme.on_surface
+        color: Appearance.text
     }
 
     Grid {
@@ -110,7 +110,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.locale.dayName(((root.locale.firstDayOfWeek - 1 + parent.index) % 7) + 1, Locale.ShortFormat)
                     font.pixelSize: Tokens.font_size_label_s
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                 }
             }
         }
@@ -147,7 +147,7 @@ Item {
                     anchors.centerIn: parent
                     text: day.index + 1
                     font.pixelSize: Tokens.font_size_label_l
-                    color: day.isToday ? Theme.on_surface : Theme.on_surface_variant
+                    color: day.isToday ? Appearance.text : Appearance.muted
                 }
             }
         }

@@ -138,7 +138,7 @@ FocusScope {
     // Ground: void at 85 %, fading with the open progress.
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: Appearance.recess
         opacity: 0.85 * root.progress
     }
 
@@ -258,14 +258,14 @@ FocusScope {
                 anchors.centerIn: parent
                 text: "+"
                 font.pixelSize: Tokens.font_size_display_m
-                color: Theme.on_surface
+                color: Appearance.text
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Tokens.spacing_m
                 text: qsTr("new desktop")
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_m
             }

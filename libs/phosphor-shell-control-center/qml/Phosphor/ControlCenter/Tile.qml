@@ -35,6 +35,7 @@ Item {
     // a column; a level (volume, brightness) reads better across the row,
     // because its underline IS its control and a longer line is a finer one.
     property bool spansRow: true
+    property string controlGroup: "connections"
     /// Where this card sits on the shared field, 0..1. The host sets it from
     /// the card's position in the grid, so a row of cards steps along the
     /// spectrum instead of each one picking a colour.

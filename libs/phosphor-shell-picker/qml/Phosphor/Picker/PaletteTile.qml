@@ -41,7 +41,7 @@ Item {
         anchors.top: parent.top
         height: 46
         radius: Tokens.radius_edge
-        color: Theme.surface_variant
+        color: Appearance.card
         clip: true
 
         Row {
@@ -66,7 +66,7 @@ Item {
         radius: Tokens.radius_edge
         color: "transparent"
         border.width: tile.selected ? 2 : 1
-        border.color: tile.selected ? Spectrum.active : Theme.outline
+        border.color: tile.selected ? Spectrum.active : Appearance.outline
         opacity: tile.selected ? 1 : (tile.hovered ? Tokens.stroke_active : Tokens.stroke_resting)
 
         Behavior on opacity {
@@ -83,7 +83,7 @@ Item {
         anchors.top: strip.bottom
         anchors.topMargin: Tokens.spacing_xs
         text: tile.name
-        color: tile.selected ? Theme.on_surface : Theme.on_surface_variant
+        color: tile.selected ? Appearance.text : Appearance.muted
         font.family: Tokens.font_family_ui
         font.pixelSize: Tokens.font_size_label_s
         elide: Text.ElideRight

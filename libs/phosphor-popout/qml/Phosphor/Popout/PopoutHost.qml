@@ -585,6 +585,8 @@ FocusScope {
         }
         y: {
             switch (root.placement) {
+            case "bottomCenter":
+                return Math.max(Tokens.spacing_l, root.height - root.reservedBottom - Tokens.spacing_l - height);
             case "barLeft":
             case "barCenter":
             case "barRight":
@@ -622,7 +624,7 @@ FocusScope {
         // 1366, before snapping into place on the configure.
         readonly property bool fullScreen: _visibleDelegate && _visibleDelegate.fullScreen === true
         width: fullScreen ? root.width : _visibleDelegate ? (root.width > 0 ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : _visibleDelegate.implicitWidth) : 0
-        height: fullScreen ? root.height : _visibleDelegate ? (root.height > 0 ? Math.min(_visibleDelegate.implicitHeight, root.height - (root.placement.indexOf("bar") === 0 ? Math.max(root.reservedTop, root.reservedBottom) + Tokens.spacing_m + Tokens.spacing_l : 2 * Tokens.spacing_l)) : _visibleDelegate.implicitHeight) : 0
+        height: fullScreen ? root.height : _visibleDelegate ? (root.height > 0 ? Math.min(_visibleDelegate.implicitHeight, root.height - ((root.placement.indexOf("bar") === 0 || root.placement === "bottomCenter") ? Math.max(root.reservedTop, root.reservedBottom) + Tokens.spacing_m + Tokens.spacing_l : 2 * Tokens.spacing_l)) : _visibleDelegate.implicitHeight) : 0
         // Nothing is painted until the frame has a real size on a surface
         // with a real size, so the first frame the user sees is already in
         // its final position.

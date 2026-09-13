@@ -136,18 +136,9 @@ Item {
             }
         }
 
-        Rectangle {
+        ShellSurface {
             anchors.fill: parent
-            radius: Tokens.radius_container
-            color: Theme.surface_container
-            opacity: 0.92
-        }
-        SpectrumStroke {
-            anchors.fill: parent
-            radius: Tokens.radius_container
-            t: toast.t
-            active: toast.hovered
-            visible: !decorationSlot.active
+            railT: toast.t
         }
 
         RowLayout {
@@ -164,7 +155,7 @@ Item {
                 Layout.alignment: Qt.AlignTop
                 radius: Tokens.radius_edge
                 clip: true
-                color: Theme.surface_variant
+                color: Appearance.card
 
                 Image {
                     anchors.fill: parent
@@ -185,7 +176,7 @@ Item {
                     // Sender-controlled. The fdo spec allows the markup subset
                     // in the body only, so everything else stays plain.
                     textFormat: Text.PlainText
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_label_s
                     font.weight: Tokens.font_weight_medium
@@ -198,7 +189,7 @@ Item {
                     text: toast.summary
                     // Sender-controlled, and plain text per the fdo spec.
                     textFormat: Text.PlainText
-                    color: Theme.on_surface
+                    color: Appearance.text
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_l
                     font.weight: Tokens.font_weight_demibold
@@ -211,7 +202,7 @@ Item {
                 Text {
                     visible: toast.body !== ""
                     text: toast.body
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_m
                     textFormat: Text.StyledText
@@ -242,7 +233,7 @@ Item {
 
                     ShapePath {
                         fillColor: "transparent"
-                        strokeColor: Theme.on_surface
+                        strokeColor: Appearance.text
                         strokeWidth: 1.4
                         capStyle: ShapePath.RoundCap
 

@@ -44,6 +44,7 @@ enum class Anchor {
     ScreenCenter,
     AtPointer,
     Custom,
+    BottomCenter,
 };
 Q_ENUM_NS(Anchor)
 

@@ -565,7 +565,7 @@ Item {
             "popoutId": "control-center",
             "content": paneComponent,
             "targetScreen": target,
-            "anchor": anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
+            "anchor": Appearance.stage ? PhosphorPopout.Anchor.BottomCenter : anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
             "customAnchor": Qt.point(anchored ? centre : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             // Closes on an outside click, like every other panel. This was
@@ -579,7 +579,7 @@ Item {
             // it is a pointer surface, and holding focus takes it off
             // whatever the user was typing in. It also kept the surface
             // alive by holding the grab.
-            "keyboardFocus": false,
+            "keyboardFocus": true,
             "props": {
                 "railT": railT
             }

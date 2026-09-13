@@ -39,7 +39,7 @@ Item {
         width: text.contentWidth + Tokens.spacing_s * 2
         height: 20
         radius: Tokens.radius_edge
-        color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 0.9)
+        color: Qt.rgba(Appearance.surface.r, Appearance.surface.g, Appearance.surface.b, 0.9)
         border.width: 1
         border.color: root.hot || root.hovered ? Spectrum.focus : Spectrum.resting
 
@@ -56,7 +56,7 @@ Item {
             anchors.centerIn: parent
             text: root._text
             font.pixelSize: Tokens.font_size_label_m
-            color: Theme.on_surface
+            color: Appearance.text
         }
     }
 
@@ -67,7 +67,7 @@ Item {
         anchors.horizontalCenter: pill.horizontalCenter
         visible: root.hovered && text !== ""
         text: root.description !== "" ? root.description : root.label
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.family: Tokens.font_family_ui
         font.pixelSize: Tokens.font_size_body_m
     }

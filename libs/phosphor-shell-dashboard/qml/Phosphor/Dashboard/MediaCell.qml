@@ -93,7 +93,7 @@ Item {
         anchors.margins: Tokens.spacing_s
         text: qsTr("Media")
         font.pixelSize: Tokens.font_size_label_m
-        color: Theme.on_surface_variant
+        color: Appearance.muted
     }
 
     TabularText {
@@ -103,7 +103,7 @@ Item {
         visible: root.player !== null
         text: root.player ? root.player.identity : ""
         font.pixelSize: Tokens.font_size_label_m
-        color: Theme.on_surface_variant
+        color: Appearance.muted
     }
 
     Column {
@@ -116,7 +116,7 @@ Item {
         Text {
             width: parent.width
             text: root.player ? (root.title !== "" ? root.title : qsTr("Untitled")) : qsTr("Nothing playing")
-            color: Theme.on_surface
+            color: Appearance.text
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_title_s
             elide: Text.ElideRight
@@ -125,7 +125,7 @@ Item {
             width: parent.width
             visible: root.artist !== ""
             text: root.artist
-            color: Theme.on_surface_variant
+            color: Appearance.muted
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_body_m
             elide: Text.ElideRight
@@ -137,7 +137,7 @@ Item {
             height: 2
             Rectangle {
                 anchors.fill: parent
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: 0.14
             }
             SpectrumUnderline {
@@ -181,7 +181,7 @@ Item {
                     required property var modelData
 
                     text: modelData.glyph
-                    color: Theme.on_surface
+                    color: Appearance.text
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_label_l
                     opacity: !modelData.enabled ? 0.35 : glyphHover.hovered ? 1 : 0.8

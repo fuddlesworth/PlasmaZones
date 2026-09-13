@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtTest
 import Phosphor.ControlCenter
+import Phosphor.Theme
 
 TestCase {
     id: testCase
@@ -39,9 +40,34 @@ TestCase {
 
         function createTile(id, parent) {
             if (id === "slider")
-                return sliderComp.createObject(parent, {});
-            return toggleComp.createObject(parent, {});
+                return sliderComp.createObject(parent, {
+                    objectName: id
+                });
+            return toggleComp.createObject(parent, {
+                objectName: id
+            });
         }
+    }
+
+    function test_shelfReflowsWithoutRecreatingControls() {
+        AppearanceStore.setValue("presentation", "stage");
+        const cc = createTemporaryObject(controlCenterComp, testCase, {
+            provider: provider,
+            tileIds: ["toggle", "slider"],
+            width: 1000,
+            height: 400
+        });
+        const slider = findChild(cc, "slider");
+        verify(slider);
+        slider.value = 57;
+        compare(slider.parent.objectName, "levelsGrid");
+        cc.width = 400;
+        compare(slider.parent.objectName, "connectionsGrid");
+        compare(findChild(cc, "slider"), slider);
+        compare(slider.value, 57);
+        cc.width = 1000;
+        compare(slider.parent.objectName, "levelsGrid");
+        AppearanceStore.setValue("presentation", "navigator");
     }
 
     function test_split_action_does_not_toggle_when_opening_details() {

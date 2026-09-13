@@ -190,6 +190,9 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         // anchors. Only the horizontal differs.
         placement = QStringLiteral("barItem");
         break;
+    case PhosphorPopout::Anchor::BottomCenter:
+        placement = QStringLiteral("bottomCenter");
+        break;
     case PhosphorPopout::Anchor::Custom:
         placement = QStringLiteral("custom");
         break;
@@ -200,7 +203,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     case PhosphorPopout::Anchor::ScreenCenter:
         break;
     }
-    if (placement.startsWith(QLatin1String("bar"))) {
+    if (placement.startsWith(QLatin1String("bar")) || placement == QLatin1String("bottomCenter")) {
         if (m_reservedMargins) {
             reservedTop = m_reservedMargins(screen).top();
             reservedBottom = m_reservedMargins(screen).bottom();

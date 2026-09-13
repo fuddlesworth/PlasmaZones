@@ -148,18 +148,9 @@ FocusScope {
         width: prompt.cardWidth
         height: Math.max(140, column.implicitHeight + 2 * Tokens.spacing_l)
 
-        Rectangle {
+        ShellSurface {
             anchors.fill: parent
-            radius: Tokens.radius_container
-            color: Theme.background
-            opacity: 0.92
-        }
-        SpectrumStroke {
-            anchors.fill: parent
-            radius: Tokens.radius_container
-            t: 1
-            active: true
-            visible: !decorationSlot.active
+            railT: 1
         }
 
         ColumnLayout {
@@ -171,7 +162,7 @@ FocusScope {
 
             Text {
                 text: qsTr("Authentication").toUpperCase()
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_m
                 font.letterSpacing: Tokens.font_size_label_m * 0.08
@@ -184,7 +175,7 @@ FocusScope {
                 // not control. AutoText would sniff it and render markup, so an
                 // action could forge UI inside the authentication card.
                 textFormat: Text.PlainText
-                color: Theme.on_surface
+                color: Appearance.text
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_body_l
                 wrapMode: Text.WordWrap
@@ -197,7 +188,7 @@ FocusScope {
                 text: prompt.requester !== "" ? prompt.requester + " · " + prompt.actionId : prompt.actionId
                 // Both halves are derived from the requesting process.
                 textFormat: Text.PlainText
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.pixelSize: Tokens.font_size_label_m
                 elide: Text.ElideMiddle
                 Layout.fillWidth: true
@@ -226,7 +217,7 @@ FocusScope {
                     radius: Tokens.radius_edge
                     color: "transparent"
                     border.width: 1
-                    border.color: prompt.errorText !== "" ? Spectrum.hot : (field.activeFocus ? Spectrum.focus : Theme.outline)
+                    border.color: prompt.errorText !== "" ? Spectrum.hot : (field.activeFocus ? Spectrum.focus : Appearance.outline)
                     opacity: Math.max(field.activeFocus || prompt.errorText !== "" ? Tokens.stroke_active : Tokens.stroke_resting, fieldEdge.pulseBoost)
 
                     Behavior on border.color {
@@ -269,9 +260,9 @@ FocusScope {
                     echoMode: prompt.echo ? TextInput.Normal : TextInput.Password
                     passwordCharacter: "•"
                     inputMethodHints: prompt.echo ? Qt.ImhNone : (Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText)
-                    color: Theme.on_surface
+                    color: Appearance.text
                     selectionColor: Spectrum.hot
-                    selectedTextColor: Theme.on_surface
+                    selectedTextColor: Appearance.text
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_l
                     Accessible.role: Accessible.EditableText
@@ -286,7 +277,7 @@ FocusScope {
                     text: prompt.fieldPrompt
                     // PAM supplies this string.
                     textFormat: Text.PlainText
-                    color: Theme.on_surface_variant
+                    color: Appearance.muted
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_l
                     elide: Text.ElideRight

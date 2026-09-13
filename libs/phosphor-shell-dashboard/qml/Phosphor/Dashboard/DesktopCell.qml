@@ -76,7 +76,7 @@ Item {
         anchors.margins: Tokens.spacing_s
         text: (root.index + 1) + " · " + root.modeName
         font.pixelSize: Tokens.font_size_label_m
-        color: root.current ? Theme.on_surface : Theme.on_surface_variant
+        color: root.current ? Appearance.text : Appearance.muted
     }
 
     PlacementMiniature {
@@ -100,7 +100,7 @@ Item {
         anchors.centerIn: mini
         visible: root.map && root.map.cells.length === 0
         text: qsTr("no windows")
-        color: Theme.on_surface_variant
+        color: Appearance.muted
         font.family: Tokens.font_family_ui
         font.pixelSize: Tokens.font_size_label_m
         opacity: 0.7

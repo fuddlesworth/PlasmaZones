@@ -31,7 +31,7 @@ Item {
 
     signal clicked
 
-    implicitHeight: 44
+    implicitHeight: 54
 
     Accessible.role: Accessible.ListItem
     Accessible.name: root.subtitle.length > 0 ? qsTr("%1, %2").arg(root.title).arg(root.subtitle) : root.title
@@ -47,6 +47,13 @@ Item {
         onTapped: root.clicked()
     }
 
+    Rectangle {
+        anchors.fill: parent
+        radius: Math.min(12, Appearance.radius)
+        color: root.current ? Qt.alpha(Appearance.accent, 0.20) : hover.hovered ? Appearance.card : "transparent"
+        border.width: root.current ? 1 : 0
+        border.color: Qt.alpha(Appearance.accent, 0.4)
+    }
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Tokens.spacing_m
@@ -68,7 +75,7 @@ Item {
                 Accessible.ignored: true
                 text: root.title
                 textFormat: Text.PlainText
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: root.current || hover.hovered ? 1 : 0.85
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_body_l
@@ -81,7 +88,7 @@ Item {
                 Accessible.ignored: true
                 text: root.subtitle
                 textFormat: Text.PlainText
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_body_s
                 elide: Text.ElideRight
@@ -95,7 +102,7 @@ Item {
             visible: root.current
             text: root.hasAlternateAction ? qsTr("↵ %1 · Alt+↵ %2").arg(root.primaryActionLabel).arg(root.alternateActionLabel) : qsTr("↵ %1").arg(root.primaryActionLabel)
             textFormat: Text.PlainText
-            color: Theme.on_surface_variant
+            color: Appearance.muted
             font.pixelSize: Tokens.font_size_label_s
             elide: Text.ElideRight
             Layout.maximumWidth: root.width * 0.4

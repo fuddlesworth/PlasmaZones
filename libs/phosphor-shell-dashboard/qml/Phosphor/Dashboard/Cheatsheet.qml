@@ -243,7 +243,7 @@ FocusScope {
     // Ground: void at 60 %.
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: Appearance.recess
         opacity: 0.6
     }
 
@@ -263,7 +263,7 @@ FocusScope {
 
         Text {
             text: root.currentDesktop >= 0 ? qsTr("%1 · desktop %2").arg(root.modeName).arg(root.currentDesktop + 1) : root.modeName
-            color: Theme.on_surface
+            color: Appearance.text
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_body_m
         }
@@ -271,14 +271,14 @@ FocusScope {
             spacing: Tokens.spacing_xs
             Text {
                 text: root.filter !== "" ? qsTr("Search") : qsTr("Type to search")
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_m
             }
             TabularText {
                 text: root.filter
                 font.pixelSize: Tokens.font_size_label_m
-                color: Theme.on_surface
+                color: Appearance.text
             }
         }
     }
@@ -351,7 +351,7 @@ FocusScope {
 
         Text {
             text: qsTr("Not on the map")
-            color: Theme.on_surface_variant
+            color: Appearance.muted
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_label_m
             font.letterSpacing: 1
@@ -385,7 +385,7 @@ FocusScope {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     text: row.modelData.label
-                    color: row.modelData.assigned ? Theme.on_surface : Theme.on_surface_variant
+                    color: row.modelData.assigned ? Appearance.text : Appearance.muted
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Tokens.font_size_body_m
                     elide: Text.ElideRight

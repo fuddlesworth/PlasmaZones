@@ -68,7 +68,7 @@ Item {
         y: card._vertical ? 0 : card.height - 3
         width: card._vertical ? 3 : card.width
         height: card._vertical ? card.height : 3
-        color: Theme.on_surface
+        color: Appearance.text
         opacity: 0.12 * card.reveal
     }
 
@@ -102,6 +102,16 @@ Item {
         focused: card.reveal > 0
     }
 
+    ShellSurface {
+        x: readout.x - 10
+        y: readout.y - 6
+        width: readout.width + 20
+        height: readout.height + 12
+        radius: Math.min(Appearance.radius, height / 2)
+        accented: false
+        opacity: card.reveal
+    }
+
     // Glyph + readout riding the fill point.
     Row {
         id: readout
@@ -126,7 +136,7 @@ Item {
             font.pixelSize: Tokens.font_size_display_m
             font.weight: Tokens.font_weight_medium
             style: Text.Outline
-            styleColor: Theme.background
+            styleColor: Appearance.recess
             tickOnChange: true
             t: card._fraction
         }
@@ -136,9 +146,9 @@ Item {
             visible: !card.showProgress
             Accessible.ignored: true
             text: card.label
-            color: Theme.on_surface_variant
+            color: Appearance.muted
             style: Text.Outline
-            styleColor: Theme.background
+            styleColor: Appearance.recess
             font.family: Tokens.font_family_ui
             font.pixelSize: Tokens.font_size_label_m
             font.capitalization: Font.AllUppercase

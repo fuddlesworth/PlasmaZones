@@ -35,6 +35,7 @@ Item {
     // A level spans the grid: its underline is the control, and a longer
     // line is a finer one to drag.
     property bool spansRow: true
+    property string controlGroup: "levels"
     property real railT: 0.5
 
     signal moved(real value)

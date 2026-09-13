@@ -69,6 +69,7 @@ private Q_SLOTS:
     void barAnchorWithoutAProviderHangsFromTheScreenEdge();
     void bottomBarReservationReachesTheHost();
     void fullScreenContentFillsTheOutput();
+    void shelfRespectsTheBottomBar();
     void screenCenterAndCustomAnchorsMapToTheirPlacements();
     void reopeningWhileClosingRetiresTheDrainingSurface();
 
@@ -225,6 +226,27 @@ void TestLayerPopoutTransport::barAnchorsPlaceTheHostBelowTheReservedBand()
     QCOMPARE(host->property("placement").toString(), QStringLiteral("barCenter"));
     QCOMPARE(host->property("reservedTop").toInt(), 68);
 
+    transport.drain();
+}
+
+void TestLayerPopoutTransport::shelfRespectsTheBottomBar()
+{
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    transport.setReservedMarginsProvider([](QScreen*) {
+        return QMargins(0, 0, 0, 66);
+    });
+    auto request = makeRequest();
+    request.anchor = PhosphorPopout::Anchor::BottomCenter;
+    QVERIFY(!transport.openSurface(request).isEmpty());
+    auto* host = lastHost();
+    QVERIFY(host);
+    host->setSize(QSizeF(800, 600));
+    QCOMPARE(host->property("placement").toString(), QStringLiteral("bottomCenter"));
+    auto* content = host->property("contentItem").value<QQuickItem*>();
+    QVERIFY(content);
+    QTRY_VERIFY(content->parentItem()->y() > 400);
+    QVERIFY(content->parentItem()->y() + content->height() <= 600 - 66);
     transport.drain();
 }
 

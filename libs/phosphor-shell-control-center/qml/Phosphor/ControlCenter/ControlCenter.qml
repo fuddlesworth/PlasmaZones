@@ -43,7 +43,15 @@ Item {
     /// because the cards divide whatever width they are given and would
     /// otherwise collapse to their text. Matches the bar's other panels, so
     /// moving between them is not re-reading a differently shaped surface.
-    property real panelWidth: Appearance.panelWidth
+    property real panelWidth: Appearance.stage ? 1040 : Appearance.panelWidth
+    readonly property bool shelf: Appearance.stage && width >= 780
+    onShelfChanged: arrangeTiles()
+    function arrangeTiles() {
+        for (const id in priv.tiles) {
+            const tile = priv.tiles[id];
+            tile.parent = shelf && tile.controlGroup === "levels" ? levels : grid;
+        }
+    }
 
     implicitWidth: root.panelWidth
     // The taller of the two views, not just the grid. A host that sizes
@@ -201,6 +209,7 @@ Item {
             root.tileResolved(id, !!item);
         }
         priv.tiles = built;
+        arrangeTiles();
     }
 
     onProviderChanged: {
@@ -262,15 +271,65 @@ Item {
                 }
             }
             GridLayout {
-                id: grid
                 Layout.fillWidth: true
-                columns: 1
-                rowSpacing: 10
-            }
-            MediaCard {
-                Layout.fillWidth: true
-                visible: Appearance.media
-                player: root.mediaPlayer
+                columns: root.shelf ? 3 : 1
+                columnSpacing: 20
+                rowSpacing: 14
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: 1
+                    Text {
+                        visible: root.shelf
+                        text: qsTr("CONNECTIONS & FOCUS")
+                        color: Appearance.muted
+                        font.pixelSize: 10
+                        font.letterSpacing: 1
+                    }
+                    GridLayout {
+                        id: grid
+                        objectName: "connectionsGrid"
+                        Layout.fillWidth: true
+                        columns: 1
+                        rowSpacing: 10
+                    }
+                }
+                ColumnLayout {
+                    visible: root.shelf
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: 1
+                    Text {
+                        text: qsTr("SOUND & DISPLAY")
+                        color: Appearance.muted
+                        font.pixelSize: 10
+                        font.letterSpacing: 1
+                    }
+                    GridLayout {
+                        id: levels
+                        objectName: "levelsGrid"
+                        Layout.fillWidth: true
+                        columns: 1
+                        rowSpacing: 10
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: 1
+                    visible: Appearance.media
+                    Text {
+                        visible: root.shelf
+                        text: qsTr("NOW PLAYING")
+                        color: Appearance.muted
+                        font.pixelSize: 10
+                        font.letterSpacing: 1
+                    }
+                    MediaCard {
+                        Layout.fillWidth: true
+                        player: root.mediaPlayer
+                    }
+                }
             }
         }
     }
