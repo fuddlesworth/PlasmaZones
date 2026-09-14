@@ -1,5 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// FILE-SIZE EXCEPTION (sanctioned): the adaptor's window lifecycle is one
+// ordered pipeline (capture, screen and desktop change, open, close,
+// metadata, frame tracking, prune) whose steps read each other's state;
+// splitting it by step would scatter the ordering the comments here pin.
+// Grew with the per-desktop membership change: the capture's still-on-snap-
+// rect guard walks the record's per-desktop zones, and an output move
+// releases the old output's other-desktop memberships.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — window lifecycle
@@ -266,8 +274,19 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         // ever being moved: the live frame is still the zone rect. Skip
                         // until the frame differs from the pre-float zones' geometry — the
                         // user's next move while floating captures the real free spot.
-                        const bool stillOnSnapRect =
+                        // Every desktop's zones count, not only the flat
+                        // zoneIds: a window present on several desktops and
+                        // unsnapped on the one in view is still physically on
+                        // the zone it holds on another, and a capture there
+                        // carries an empty zoneIds beside a per-desktop map
+                        // that names that zone.
+                        bool stillOnSnapRect =
                             !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
+                        for (auto d = slot.zonesByDesktop.constBegin();
+                             !stillOnSnapRect && d != slot.zonesByDesktop.constEnd(); ++d) {
+                            stillOnSnapRect =
+                                !d.value().isEmpty() && m_service->resolveZoneGeometry(d.value(), screenKey) == frame;
+                        }
                         // Tiled analogue of the same poison guard (see the
                         // helper doc). The isWindowEngineTiled gate above
                         // cannot catch the float-toggle edge:
@@ -560,6 +579,13 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
                          << resolvedNewScreen << "- unsnapping";
+    // A window is on one screen: the migration re-homes the primary to the
+    // new screen and releases the old screen's OTHER desktop memberships
+    // (their zones dragged the window back on the next switch, seen live on
+    // two outputs); the unassign then clears the zone that came along.
+    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
+        snap->migrateWindowToScreen(windowId, resolvedNewScreen);
+    }
     m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 

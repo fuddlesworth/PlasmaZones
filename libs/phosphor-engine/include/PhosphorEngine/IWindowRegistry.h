@@ -4,11 +4,24 @@
 #pragma once
 
 #include <phosphorengine_export.h>
+#include <QList>
 #include <QString>
 
 #include <optional>
 
 namespace PhosphorEngine {
+
+/// The contexts the compositor last reported a window on, as far as the
+/// registry knows them. A restore or membership decision reads this instead
+/// of the SCREEN's current desktop, which is not the window's when the window
+/// is being placed onto a background desktop.
+struct WindowDesktopContext
+{
+    int virtualDesktop = 0; ///< 1-based x11 desktop; 0 = all desktops / unknown
+    QList<int> virtualDesktops; ///< full list when the window spans several desktops
+    std::optional<bool> sticky; ///< on all desktops; disengaged when never reported
+    QString activity; ///< empty = all activities / unknown
+};
 
 class PHOSPHORENGINE_EXPORT IWindowRegistry
 {
@@ -64,6 +77,17 @@ public:
      * test fakes stay honest instead of claiming visibility.
      */
     virtual std::optional<bool> minimizedState(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
+    /// The desktop set and activity last reported for @p windowId (bare
+    /// instance id or composite `appId|instanceId`), or nullopt when the
+    /// window is unknown. Default reports unknown, like minimizedState, so a
+    /// registry-less engine or a test fake falls back to the screen's current
+    /// context rather than inventing one.
+    virtual std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const
     {
         Q_UNUSED(windowId)
         return std::nullopt;

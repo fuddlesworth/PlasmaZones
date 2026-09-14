@@ -60,6 +60,8 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     // sub-controllers) — every method that dereferences a dependency guards
     // it locally. Do not Q_ASSERT here.
 
+    installContextResolver();
+
     // Guard timer: while active, refreshConfigFromSettings() skips overwriting
     // splitRatio/masterCount with Settings values. Mirrors the old SettingsBridge
     // m_shortcutSaveTimer — restarts on each write-back so rapid shortcut presses

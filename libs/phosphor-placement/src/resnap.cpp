@@ -161,7 +161,15 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
             continue;
-        addCandidate(rec.windowId, snapSlot.zoneIds, rec.screenId, rec.virtualDesktop);
+        // A multi-desktop record answers for the desktop its screen shows,
+        // stamped with that desktop so the filter above keeps it.
+        int desktop = rec.virtualDesktop;
+        if (!snapSlot.zonesByDesktop.isEmpty() && m_virtualDesktopManager) {
+            const int shown = m_virtualDesktopManager->currentDesktopForScreen(rec.screenId);
+            if (shown > 0)
+                desktop = shown;
+        }
+        addCandidate(rec.windowId, snapZonesOnDesktopInView(snapSlot, rec.screenId), rec.screenId, desktop);
     }
 
     if (!newBuffer.isEmpty()) {

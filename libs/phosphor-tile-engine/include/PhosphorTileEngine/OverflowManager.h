@@ -131,7 +131,15 @@ public:
 
 private:
     QHash<QString, QSet<QString>> m_overflow; // screenId -> overflow window IDs
-    QHash<QString, QString> m_windowToScreen; // windowId -> screenId (reverse index)
+    /// windowId -> screenId (reverse index). ONE mark per window, not one
+    /// per context: a window present on several desktops that overflows on
+    /// one and tiles on another shares the mark, so capturePlacement's
+    /// overflow-vs-user-float discriminator answers the same for both. The
+    /// residual is a per-desktop overflow float captured as tiled on the
+    /// desktop where it tiles, which is the honest state there; the reverse
+    /// (a tile captured as overflow) cannot arise because clearOverflow runs
+    /// on every un-float.
+    QHash<QString, QString> m_windowToScreen;
 };
 
 } // namespace PhosphorTileEngine

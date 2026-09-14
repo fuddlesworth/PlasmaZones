@@ -131,7 +131,23 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
             }
             return m_ruleStore->updateRule(merged);
         }
-        return m_ruleStore->addRule(rule);
+        if (!m_ruleStore->addRule(rule)) {
+            return false;
+        }
+        // The fresh top priority must not shadow the narrower assignments it
+        // now outranks: a screen-level write (the mode toggle, a bare
+        // assignLayoutToScreen) after per-desktop ones would otherwise
+        // resolve every desktop of that screen to itself.
+        QList<PWR::Rule> rules = m_ruleStore->ruleSet().rules();
+        for (const QUuid& id : liftNarrowerAssignmentsAbove(rules, rule)) {
+            for (const PWR::Rule& lifted : std::as_const(rules)) {
+                if (lifted.id == id) {
+                    m_ruleStore->updateRule(lifted);
+                    break;
+                }
+            }
+        }
+        return true;
     }
     rule.id = existing->id; // preserve the rule's identity across the update
     // makeAssignmentRule always stamps enabled = true; an upsert must not

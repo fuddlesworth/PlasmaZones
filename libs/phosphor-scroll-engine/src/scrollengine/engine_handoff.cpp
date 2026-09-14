@@ -34,6 +34,9 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     const ScrollLayoutParams params = layoutParamsForKey(key);
     state->strip().takeWindow(windowId, params);
     state->removeFloating(windowId);
+    // Every other context the window held goes with it: the receiving engine
+    // owns the window on every desktop now.
+    dropFromOtherContexts(windowId, key);
     m_states.removeWindow(windowId);
     // The durable slot goes with the tracking: a released window is one this
     // engine knowingly gave up, and a stale scrolling TILED slot left in the
@@ -122,7 +125,10 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // with the reverse map still naming staleKey, heldScreenForWindow
         // answers empty and screenForTrackedWindow answers the OLD screen.
         // Every subsequent path re-stamps the same key unconditionally, so
-        // stamping it here changes no end state.
+        // stamping it here changes no end state. The window's other stale
+        // contexts are emptied first: this is a move out of every one of
+        // them, and the replace below would otherwise leave their tiles.
+        dropFromOtherContexts(windowId, staleKey);
         m_states.setKeyForWindow(windowId, key);
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
@@ -152,7 +158,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // Already here — nothing to insert, but the reverse map may still
         // name the stale context the migration above just emptied, which
         // would leave the window tracked at a key that no longer holds it.
-        m_states.setKeyForWindow(windowId, key);
+        m_states.addMembership(windowId, key);
         // Honour the context payload this arm would otherwise discard: the
         // min-size clamp routes through the ordinary update entry (which
         // handles tile and float shapes plus the background-context guard,
@@ -192,7 +198,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // marker a later mode transition treats it as a snap float and
         // poisons the snap slot with the arrival frame.
         m_scrollFloatedWindows.insert(windowId);
-        m_states.setKeyForWindow(windowId, key);
+        m_states.addMembership(windowId, key);
         if (ctx.heldFocus) {
             // The arrival holds compositor focus and keeps it across the
             // handoff, so no focus report will arrive to record the side
@@ -258,7 +264,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         if (migratedMaximizedToEdges) {
             state->strip().setMaximizedToEdgesForWindow(windowId, true);
         }
-        m_states.setKeyForWindow(windowId, key);
+        m_states.addMembership(windowId, key);
         const bool isCurrentContext = key == currentKeyForScreen(ctx.toScreenId);
         if (isCurrentContext) {
             state->strip().focusWindow(windowId, params);

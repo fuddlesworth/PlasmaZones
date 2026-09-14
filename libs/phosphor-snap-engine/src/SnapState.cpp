@@ -503,7 +503,14 @@ void SnapState::migrateWindowTo(SnapState* target, const QString& rawWindowId, c
     bool moved = false;
 
     if (const auto it = m_windowZoneAssignments.constFind(windowId); it != m_windowZoneAssignments.constEnd()) {
-        target->m_windowZoneAssignments[windowId] = it.value();
+        // A zone the target ALREADY assigns is the window's own placement
+        // there (a window present on several desktops holds one per store)
+        // and outranks the source's, which names a zone of another context's
+        // layout. The source entry is dropped either way: the window is
+        // leaving this store.
+        if (!target->m_windowZoneAssignments.contains(windowId)) {
+            target->m_windowZoneAssignments[windowId] = it.value();
+        }
         m_windowZoneAssignments.remove(windowId);
         moved = true;
     }

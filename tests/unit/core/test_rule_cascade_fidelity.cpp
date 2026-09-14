@@ -753,6 +753,43 @@ private Q_SLOTS:
             QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
         }
     }
+
+    // ─── A broader write does not shadow narrower assignments ─────────────
+    // Priority-wins seeds every created assignment at the top, so a
+    // SCREEN-level write made after per-desktop ones (the mode toggle, a bare
+    // assignLayoutToScreen) outranked every desktop of that screen: desktop 1
+    // pinned to tiling read as snapping the moment the screen-level snapping
+    // pin was written. The narrower rules are lifted above the broader one.
+    void testBroaderAssignmentWrittenLaterDoesNotShadowNarrower()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        PhosphorZones::AssignmentEntry tiling;
+        tiling.mode = PhosphorZones::AssignmentEntry::Autotile;
+        tiling.tilingAlgorithm = QStringLiteral("bsp");
+        f.registry->setAssignmentEntryDirect(QStringLiteral("DP-1"), 1, QString(), tiling);
+        PhosphorZones::AssignmentEntry snapping;
+        snapping.mode = PhosphorZones::AssignmentEntry::Snapping;
+        snapping.snappingLayout = QStringLiteral("{columns-2}");
+        f.registry->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), snapping);
+
+        QCOMPARE(f.registry->modeForScreen(QStringLiteral("DP-1"), 1, QString()),
+                 PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(f.registry->modeForScreen(QStringLiteral("DP-1"), 2, QString()),
+                 PhosphorZones::AssignmentEntry::Snapping);
+
+        // A later per-desktop write still wins over the screen-level one, and
+        // a screen-level write on another screen lifts nothing here.
+        f.registry->setAssignmentEntryDirect(QStringLiteral("DP-1"), 2, QString(), tiling);
+        f.registry->setAssignmentEntryDirect(QStringLiteral("HDMI-1"), 0, QString(), snapping);
+        QCOMPARE(f.registry->modeForScreen(QStringLiteral("DP-1"), 1, QString()),
+                 PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(f.registry->modeForScreen(QStringLiteral("DP-1"), 2, QString()),
+                 PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(f.registry->modeForScreen(QStringLiteral("DP-1"), 3, QString()),
+                 PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(f.registry->modeForScreen(QStringLiteral("HDMI-1"), 1, QString()),
+                 PhosphorZones::AssignmentEntry::Snapping);
+    }
 };
 
 QTEST_MAIN(TestRuleCascadeFidelity)

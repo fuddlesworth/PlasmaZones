@@ -49,6 +49,10 @@ p_add_test(test_window_tracking_snap core/windowtracking/test_window_tracking_sn
 p_add_test(test_window_tracking_float core/windowtracking/test_window_tracking_float.cpp)
 p_add_test(test_window_placement_store core/windowtracking/test_window_placement_store.cpp)
 p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_placement_store_collapse.cpp)
+# The per-desktop zone map of a snap slot: merge on record, forget, renumber
+# on desktop removal, the save / load round trip and the restorable-content
+# predicates. Its own suite because the store suite sits at its size baseline.
+p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_placement_store_desktops.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
@@ -151,6 +155,14 @@ add_test(NAME test_snap_engine_exclude COMMAND test_snap_engine_exclude)
 add_executable(test_snap_per_monitor core/snap/test_snap_per_monitor.cpp)
 target_link_libraries(test_snap_per_monitor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
+
+# The snap engine's per-desktop membership arm: adoption grants a store of
+# its own on the desktop in view, the persisted per-desktop zone map, and the
+# close / release / restore paths over every member store. Same fixture shape
+# as test_snap_per_monitor (QTEST_MAIN so zone geometry resolves).
+add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membership.cpp)
+target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
 
 # resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
 # QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
@@ -320,6 +332,10 @@ p_add_test(test_autotile_ext_algoswitch autotile/behavior/test_autotile_ext_algo
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_script_state_stash autotile/state/test_autotile_script_state_stash.cpp)
 target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+# The tiling engine's per-desktop membership arm: adopt on switch, the
+# per-window release, and the close / handoff paths over every member state.
+p_add_test(test_autotile_desktop_membership autotile/state/test_autotile_desktop_membership.cpp)
+target_sources(test_autotile_desktop_membership PRIVATE helpers/AutotileFakes.h)
 # The split-tree case needs a screen with real geometry: the restore hangs off
 # recalculateLayout, which bails before it without one. Same fake provider
 # test_autotile_virtual uses.

@@ -7,10 +7,9 @@ namespace PhosphorEngine {
 
 PlacementStateKey ScreenContextTracker::currentKeyForScreen(const QString& screenId) const
 {
-    int desktop = m_currentDesktop;
-    if (auto perOut = m_screenCurrentDesktop.constFind(screenId); perOut != m_screenCurrentDesktop.constEnd()) {
-        desktop = perOut.value();
-    }
+    // Per-output desktop with the virtual-screen parent resolution; see
+    // screenDesktop().
+    int desktop = screenDesktop(screenId);
     if (auto pin = m_screenDesktopOverride.constFind(screenId); pin != m_screenDesktopOverride.constEnd()) {
         desktop = pin.value();
     }

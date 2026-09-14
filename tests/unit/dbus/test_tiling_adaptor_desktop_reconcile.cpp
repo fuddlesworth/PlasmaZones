@@ -149,8 +149,10 @@ private Q_SLOTS:
     }
 
     // The mirror move onto ANOTHER tiled desktop releases the source state
-    // too; adoption on the destination is the effect's, and is not run here.
-    void autotile_windowMovedBetweenTiledDesktops_isReleasedFromSourceState()
+    // and, because that desktop is the one in view, adopts the window into
+    // it in the same pass: the effect's re-announce then finds it already
+    // placed.
+    void autotile_windowMovedBetweenTiledDesktops_isReleasedFromSourceStateAndAdoptedOnTheDestination()
     {
         AutotileFixture f;
         PhosphorTiles::TilingState* d1 = f.openOn(1, {kWindow});
@@ -163,7 +165,9 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         QVERIFY(!d1->containsWindow(kWindow));
-        QVERIFY(!f.engine.isWindowTracked(kWindow));
+        QVERIFY(f.engine.isWindowTracked(kWindow));
+        QVERIFY(f.engine.tilingStateForScreen(kScreen)->containsWindow(kWindow));
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 2);
     }
 
     // A desktop set that merely GREW to include the holding desktop keeps the
@@ -179,13 +183,45 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QVERIFY(d1->containsWindow(kWindow));
 
-        // An EMPTY reported set — a sticky window, or one whose desktop the
-        // compositor did not report. The keep comes from the empty-set early
-        // return, not from any sticky-aware branch: the reconcile cannot tell
-        // the two apart and treats both as "nothing to check".
+        // An EMPTY reported set with no sticky bit is a window whose desktop
+        // the compositor did not report: UNKNOWN, and unknown is "nothing to
+        // check". (A sticky window is a different thing: the metadata's
+        // isSticky says so, and the rows below cover it.)
         f.registry.upsert(kInstance, onDesktop(0));
         QCoreApplication::processEvents();
         QVERIFY(d1->containsWindow(kWindow));
+    }
+
+    // The sticky bit travels in the same metadata push as the desktop set.
+    // Flipping it on adopts the window into the desktop in view (a sticky
+    // window is on every desktop); flipping it off with a set that no longer
+    // names the old desktop releases that desktop's tile and keeps the one
+    // the set still covers.
+    void autotile_stickyFlip_adoptsOnTheDesktopInViewAndUnstickReleasesTheRest()
+    {
+        AutotileFixture f;
+        PhosphorTiles::TilingState* d1 = f.openOn(1, {kWindow});
+        QVERIFY(d1 != nullptr);
+        QVERIFY(d1->containsWindow(kWindow));
+
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        f.engine.setAutotileScreens({kScreen});
+        PhosphorEngine::WindowMetadata stuck = onDesktop(1);
+        stuck.isSticky = true;
+        f.registry.upsert(kInstance, stuck);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = f.engine.tilingStateForScreen(kScreen);
+        QVERIFY(d2 != nullptr);
+        QVERIFY2(d2->containsWindow(kWindow), "sticky on: the desktop in view adopts the window");
+        QVERIFY2(d1->containsWindow(kWindow), "and the desktop it came from keeps it");
+
+        PhosphorEngine::WindowMetadata unstuck = onDesktop(2, {2});
+        unstuck.isSticky = false;
+        f.registry.upsert(kInstance, unstuck);
+        QCoreApplication::processEvents();
+        QVERIFY2(!d1->containsWindow(kWindow), "sticky off onto desktop 2: desktop 1's tile goes");
+        QVERIFY(d2->containsWindow(kWindow));
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 2);
     }
 
     // A title tick that leaves the desktop fields alone must not reconcile at
@@ -399,9 +435,11 @@ private Q_SLOTS:
 
         // Pin the screen. The predicate is the caller's, so the fixture can
         // pin without a window-tracking service.
-        f.engine.updateStickyScreenPins([](const QString&) {
-            return true;
-        });
+        f.engine.updateStickyScreenPins(
+            [](const QString&) {
+                return true;
+            },
+            PhosphorEngine::StickyPinPhase::Acquire);
         QCOMPARE(f.engine.stickyPinnedDesktopForScreen(kScreen), 2);
 
         // The compositor now reports the window on desktop 5. Its held key
@@ -507,21 +545,57 @@ private Q_SLOTS:
         QVERIFY(a != nullptr);
         QVERIFY(a->containsWindow(kWindow));
 
+        const auto spanOn = [](QSet<int> desktops, const QString& activity) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.desktops = std::move(desktops);
+            span.activity = activity;
+            return span;
+        };
         // Same desktop, same activity: nothing moved.
-        f.adaptor.reconcileWindowMembership(kWindow, {1}, kActivityA);
+        f.adaptor.reconcileWindowMembership(kWindow, spanOn({1}, kActivityA));
         QVERIFY(a->containsWindow(kWindow));
 
-        // Both axes unknown. This is a no-crash / redundancy check rather than
-        // a gate: leftTheContext already answers false for empty on either
-        // side, so the early return that also covers it cannot be pinned
-        // separately. Kept because the direct contract says an all-unknown call
-        // releases nothing, and that should be readable here.
-        f.adaptor.reconcileWindowMembership(kWindow, {}, QString());
+        // An UNKNOWN span (no desktop stamped yet) releases nothing and adopts
+        // nothing: the direct contract says so, and reading it as "every
+        // desktop" is the mistake that adopted windows everywhere.
+        f.adaptor.reconcileWindowMembership(kWindow, PhosphorEngine::DesktopSpan{});
         QVERIFY(a->containsWindow(kWindow));
 
         // Desktop still matches, activity does not.
-        f.adaptor.reconcileWindowMembership(kWindow, {1}, QStringLiteral("other-activity"));
+        f.adaptor.reconcileWindowMembership(kWindow, spanOn({1}, QStringLiteral("other-activity")));
         QVERIFY(!a->containsWindow(kWindow));
+    }
+
+    // A window present on several desktops holds a tile in each. When its
+    // span shrinks, only the desktop it left is released; the daemon-side
+    // reconcile used to release through windowClosed, which dropped every
+    // context and left the surviving desktop's tile behind as a ghost.
+    void autotile_multiDesktopWindowSpanShrink_releasesOnlyTheDesktopLeft()
+    {
+        AutotileFixture f;
+        f.registry.canonicalizeWindowId(kWindow);
+        f.registry.upsert(kInstance, onDesktop(1, {1, 2}));
+        PhosphorTiles::TilingState* d1 = f.openOn(1, {kWindow}, /*seedRegistry=*/false);
+        QVERIFY(d1 != nullptr);
+        QVERIFY(d1->containsWindow(kWindow));
+        // The switch to desktop 2 adopts it there (the daemon's screen-wide
+        // pass after a switch).
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        f.adaptor.reconcileDesktopMemberships(kScreen);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = f.engine.tilingStateForScreen(kScreen);
+        QVERIFY(d2 != nullptr);
+        QVERIFY(d2->containsWindow(kWindow));
+        QVERIFY(d1->containsWindow(kWindow));
+
+        // Un-spanned to desktop 2 only, reported through the registry.
+        f.registry.upsert(kInstance, onDesktop(2));
+        QCoreApplication::processEvents();
+
+        QVERIFY2(!d1->containsWindow(kWindow), "desktop 1 released");
+        QVERIFY2(d2->containsWindow(kWindow), "desktop 2 kept");
+        QVERIFY2(f.engine.isWindowTracked(kWindow), "still tracked, on the desktop it kept");
     }
 
     // Snapping keeps per-context stores like the tiling engines, but zone

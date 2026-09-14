@@ -195,15 +195,15 @@ private Q_SLOTS:
         const auto roundTripped = mgr->combinedAssignments();
         QCOMPARE(roundTripped, combined);
 
-        // Resolution check at the (screen, desktop, activity) tuple. Precedence
-        // is plain priority now (no specificity): both the Combined rule
-        // (DP-1, 3, work → LayoutA) and the broader Activity rule (DP-1, work →
-        // LayoutB) match this query, and the Activity rule was authored later so
-        // it seeded a higher priority and wins. The transposed-arg regression
-        // this used to guard is still caught by the round-trip hash equality
-        // above (a mis-built Combined rule reads back a different key).
+        // Resolution at the (screen, desktop, activity) tuple: a created
+        // assignment seeds the top priority, but a broader write lifts the
+        // narrower ones it would shadow (liftNarrowerAssignmentsAbove), so the
+        // Combined rule (DP-1, 3, work → LayoutA) still wins over the later
+        // Activity rule (DP-1, work → LayoutB) at its own tuple. The
+        // transposed-arg regression is still caught by the round-trip hash
+        // equality above.
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 3, QStringLiteral("work"))->name(),
-                 QStringLiteral("LayoutB"));
+                 QStringLiteral("LayoutA"));
 
         // The pure-Activity rule resolves at a desktop with no Combined entry.
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("work"))->name(),

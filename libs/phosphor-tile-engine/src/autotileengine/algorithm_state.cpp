@@ -576,6 +576,12 @@ QSet<int> AutotileEngine::desktopsWithActiveState() const
 
 void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 {
+    // The dirty-background memo for the desktop goes with its states: the
+    // count-shrink path prunes without renumbering, so nothing else would
+    // drop an entry a re-created desktop number could inherit.
+    m_dirtyBackgroundContexts.removeIf([removedDesktop](const TilingStateKey& key) {
+        return key.desktop == removedDesktop;
+    });
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
@@ -602,7 +608,7 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             // mis-reads them as user floats and they stick floating), and
             // clearing the screen-keyed seed maps would destroy an in-flight
             // strict order for the current desktop.
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false,
+            releaseScreenStateForTeardown(key, state, releasedWindows, /*drainOverflow=*/false,
                                           /*clearScreenOrderMaps=*/false);
             releasedScreens.insert(key.screenId);
             ++pruned;
@@ -638,9 +644,15 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 
 void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
 {
+    // The dirty-background memo for a departed output goes with its states:
+    // a replugged connector reusing the id must not inherit a stale retile.
     if (physicalScreenId.isEmpty()) {
         return;
     }
+    m_dirtyBackgroundContexts.removeIf([&physicalScreenId](const TilingStateKey& key) {
+        return !key.screenId.isEmpty()
+            && PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, physicalScreenId);
+    });
     // Match the physical id and every virtual sub-screen of it (samePhysical
     // strips the "/vs:N" suffix). All desktops/activities: this is the
     // whole-output reap that updateEngineScreens' current-context sweep
@@ -665,7 +677,7 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
             // can share a screenId, so overflow drains once per screen
             // below, after all captures (same shape as the orphaned-VS
             // loop).
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false);
+            releaseScreenStateForTeardown(key, state, releasedWindows, /*drainOverflow=*/false);
             releasedScreens.insert(key.screenId);
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
@@ -742,6 +754,9 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
 void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
     const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    m_dirtyBackgroundContexts.removeIf([&valid](const TilingStateKey& key) {
+        return !key.activity.isEmpty() && !valid.contains(key.activity);
+    });
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
@@ -757,7 +772,7 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
             // daemon and effect stop tracking windows this engine has dropped.
             // Both scope flags false for the same reason too — the screen
             // survives, only this activity's contexts are going away.
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false,
+            releaseScreenStateForTeardown(key, state, releasedWindows, /*drainOverflow=*/false,
                                           /*clearScreenOrderMaps=*/false);
             releasedScreens.insert(key.screenId);
             ++pruned;

@@ -91,9 +91,11 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // removal per id but retile each affected screen ONCE afterward, rather
     // than N immediate retiles of the same screen via onWindowRemoved.
     QStringList staleTracked;
-    for (auto it = m_states.windowKeys().constBegin(); it != m_states.windowKeys().constEnd(); ++it) {
-        if (!aliveWindowIds.contains(it.key())) {
-            staleTracked.append(it.key());
+    // Once per window however many states hold it: the teardown below drops
+    // every membership, so a multi-desktop window must not be listed twice.
+    for (const QString& trackedId : m_states.trackedWindowIds()) {
+        if (!aliveWindowIds.contains(trackedId)) {
+            staleTracked.append(trackedId);
         }
     }
     QSet<QString> affectedScreens;
@@ -103,6 +105,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // down its state, mirroring windowClosed — else commit/cancel would
         // later re-add or float a dead id.
         dropClosedWindowFromDragPreview(windowId);
+        // A dead window's background contexts lose a tile nothing retiles
+        // now; remember them so their return closes the hole (the same memo
+        // onWindowRemoved keeps).
+        for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
+            if (held != currentKeyForScreen(held.screenId)) {
+                m_dirtyBackgroundContexts.insert(held);
+            }
+        }
         const QString screenId = removeTrackedWindowNoRetile(windowId);
         if (!screenId.isEmpty()) {
             affectedScreens.insert(screenId);
@@ -292,7 +302,7 @@ void AutotileEngine::connectSignals()
                             // would blind capturePlacement's overflow
                             // discriminator for the remaining contexts.
                             orphanedVsIds.insert(sid);
-                            if (releaseScreenStateForTeardown(sid, state, releasedWindows,
+                            if (releaseScreenStateForTeardown(key, state, releasedWindows,
                                                               /*drainOverflow=*/false)) {
                                 placementChangedScreens.insert(sid);
                             }
@@ -326,9 +336,15 @@ void AutotileEngine::connectSignals()
                             && PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) == physicalScreenId
                             && !newVsSet.contains(sid);
                     });
-                    for (const QString& windowId : std::as_const(releasedWindows)) {
-                        m_states.removeWindow(windowId);
-                    }
+                    // The memberships on the orphaned outputs, not every
+                    // membership: a released window may hold a place on
+                    // another screen this teardown did not touch.
+                    m_states.removeWindowsIf([&orphanedVsIds](const QString&, const TilingStateKey& key) {
+                        return orphanedVsIds.contains(key.screenId);
+                    });
+                    m_dirtyBackgroundContexts.removeIf([&orphanedVsIds](const TilingStateKey& key) {
+                        return orphanedVsIds.contains(key.screenId);
+                    });
                     if (!releasedWindows.isEmpty()) {
                         Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
                     }

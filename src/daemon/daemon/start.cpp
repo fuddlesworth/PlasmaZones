@@ -374,19 +374,9 @@ void Daemon::connectDesktopActivity()
                 // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
                 // changing the desktop context, so currentKeyForScreen() still
                 // resolves existing TilingStates ("virtualdesktopsonlyonprimary").
-                if (m_windowTrackingAdaptor) {
-                    if (auto* service = m_windowTrackingAdaptor->service()) {
-                        const auto sticky = [service](const QString& windowId) {
-                            return service->isWindowSticky(windowId);
-                        };
-                        if (m_autotileEngine) {
-                            m_autotileEngine->updateStickyScreenPins(sticky);
-                        }
-                        if (m_scrollEngine) {
-                            m_scrollEngine->updateStickyScreenPins(sticky);
-                        }
-                    }
-                }
+                // The RELEASE half runs in [SEQ C½], after the context moves.
+                applyStickyScreenPins(m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
+                                      PhosphorEngine::StickyPinPhase::Acquire);
                 // [SEQ C] Set THIS screen's engine desktop context (pure per-screen
                 // swap, no state migration) BEFORE updateEngineScreens() so the
                 // engine resolves TilingStates under the new (screen, desktop) key.
@@ -402,6 +392,15 @@ void Daemon::connectDesktopActivity()
                 if (m_scrollEngine) {
                     m_scrollEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
+                // [SEQ C½] Release the pins of screens that no longer hold an
+                // all-sticky window set, now that the context above has moved:
+                // a pinned key does not follow the switch, so the pinned state
+                // is still reachable, but the migration now lands on the
+                // desktop entered (the point of running it after [SEQ C]).
+                // Ahead of updateEngineScreens() so displaced-window releases
+                // are done before the managed set is recomputed and announced.
+                applyStickyScreenPins(m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
+                                      PhosphorEngine::StickyPinPhase::Release);
                 // [SEQ D] Per-screen layout/overlay resolution context needs no
                 // push anymore: the layout registry (and the overlay service
                 // through it) resolves per-output desktops via the injected
@@ -411,6 +410,9 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
+                // [SEQ E¼] The desktop just entered gets its share of every window
+                // spanning it (after the pins and [SEQ E]; see the helper), per EFFECTIVE id.
+                reconcileMembershipsForScreens(m_tilingAdaptor, m_screenManager->virtualScreenIdsFor(screenId));
                 // [SEQ E½] Re-announce the managed set UNCONDITIONALLY for this
                 // report. The effect's staleness gate rejects any announce whose
                 // per-screen desktop stamps disagree with what it last reported,
@@ -725,22 +727,13 @@ void Daemon::connectDesktopActivity()
                     if (m_windowDragAdaptor) {
                         m_windowDragAdaptor->cancelDragInsertPreviews();
                     }
-                    // Pin sticky screens before changing activity context
-                    // (null-guarded service, matching every other daemon
-                    // ->service() consumer).
-                    if (m_windowTrackingAdaptor) {
-                        if (auto* service = m_windowTrackingAdaptor->service()) {
-                            const auto sticky = [service](const QString& windowId) {
-                                return service->isWindowSticky(windowId);
-                            };
-                            if (m_autotileEngine) {
-                                m_autotileEngine->updateStickyScreenPins(sticky);
-                            }
-                            if (m_scrollEngine) {
-                                m_scrollEngine->updateStickyScreenPins(sticky);
-                            }
-                        }
-                    }
+                    // Pin sticky screens before changing activity context. The
+                    // release half runs after the switch below: activity is
+                    // the other half of the same context key, so an early
+                    // release migrates onto the activity being left exactly
+                    // as it would onto the desktop being left.
+                    applyStickyScreenPins(m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
+                                          PhosphorEngine::StickyPinPhase::Acquire);
                     // Set engine's activity context BEFORE updateEngineScreens()
                     if (m_autotileEngine) {
                         m_autotileEngine->setCurrentActivity(activityId);
@@ -751,8 +744,15 @@ void Daemon::connectDesktopActivity()
                     if (m_scrollEngine) {
                         m_scrollEngine->setCurrentActivity(activityId);
                     }
+                    // Release half, now that the activity context has moved,
+                    // so a migration targets the activity being entered. Same
+                    // placement as the desktop path's [SEQ C½].
+                    applyStickyScreenPins(m_windowTrackingAdaptor, m_autotileEngine.get(), m_scrollEngine.get(),
+                                          PhosphorEngine::StickyPinPhase::Release);
                     // Per-activity assignments may differ — recompute autotile screens
                     updateEngineScreens();
+                    // Activity moves every screen's context at once; same ordering as [SEQ E¼].
+                    reconcileMembershipsForScreens(m_tilingAdaptor, m_screenManager->effectiveScreenIds());
                     // Same reason as the per-screen desktop switch above: this
                     // path has no consumer for the preserved snap-ZONE half, so
                     // windows released by an activity's snapping assignment need

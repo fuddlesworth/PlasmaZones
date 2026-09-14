@@ -135,6 +135,11 @@ pse_add_test(test_scrollstrip_height test_scrollstrip_height.cpp)
 pse_add_test(test_scrollstrip_maximize test_scrollstrip_maximize.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_stripcontext test_scrollengine_stripcontext.cpp)
+# The per-desktop membership arm beyond the bookkeeping the stripcontext
+# suite pins: the batch an adoption owes the compositor, the close of a
+# window present on several desktops, the per-screen scoping and the float
+# carry.
+pse_add_test(test_scrollengine_membership test_scrollengine_membership.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)

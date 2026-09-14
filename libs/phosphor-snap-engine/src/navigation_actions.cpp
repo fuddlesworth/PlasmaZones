@@ -469,8 +469,12 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (targetZoneId.isEmpty()) {
         // No resolvable equivalent zone on the target desktop (no layout / no
         // matching slot / invalid geometry): fall back to a bare desktop
-        // re-stamp + move. The window relocates but keeps its slot memory for
-        // when its own layout is restored — graceful degradation.
+        // re-stamp + move. The re-stamp lives in the SOURCE desktop's store;
+        // once the compositor reports the move, the membership pass releases
+        // that store, so the window arrives on the target desktop as an
+        // unmanaged window (there is no zone there to hold it). The record
+        // captured below keeps its zone under the target desktop until the
+        // window is next captured or closed. Graceful degradation.
         // stateForWindow never returns null (untracked windows resolve to
         // the global holder); reassignDesktop fails there, which is the
         // intended no-op for an untracked window.
@@ -502,7 +506,10 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // the compositor to relocate the real window, then apply the target zone's
     // geometry. The effect's geometry apply has no current-desktop guard, so it
     // lands correctly even though the target desktop isn't visible yet.
-    stateForWindowOnScreen(windowId, screenId)->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
+    // Pinned to the TARGET desktop's store: the assignment belongs to the
+    // desktop the window is moving to, not the one in view.
+    stateForWindowOnScreen(windowId, screenId, targetDesktop)
+        ->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
     if (m_windowTracker) {
         if (auto placement = capturePlacement(windowId)) {
             placement->virtualDesktop = targetDesktop;

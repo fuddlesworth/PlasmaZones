@@ -174,4 +174,18 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule);
 // priority-wins model); an UPDATE preserves its own stored priority instead.
 int nextAssignmentPriority(const QList<PWR::Rule>& rules);
 
+// Whether @p narrow pins a strictly smaller slice of @p broad's context: the
+// same screen, every dimension @p broad pins (desktop, activity) pinned to the
+// same value, and at least one more dimension pinned.
+bool contextIsNarrowerThan(const ContextDims& narrow, const ContextDims& broad);
+
+// Lift, in place, every context-assignment rule in @p rules whose context is
+// narrower than @p written's and whose priority does not exceed
+// written.priority, to consecutive values above it (their relative order
+// kept). Returns the lifted rules' ids. Priority-wins gives a freshly created
+// assignment the top value so the newest write wins among its peers; without
+// this a SCREEN-level write made after per-desktop ones silently shadowed
+// every one of them, which is never what a broader write means.
+QList<QUuid> liftNarrowerAssignmentsAbove(QList<PWR::Rule>& rules, const PWR::Rule& written);
+
 } // namespace PhosphorZones::RuleHelpers
