@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A reopened window no longer lands in a layout its desktop does not run**: PlasmaZones remembers the zone a window was snapped into and puts it back there when the window reopens. It put it back by zone alone, without asking which layout the desktop in front of you actually runs, so a window snapped into Focus on one desktop and reopened on a desktop set to Master + Stack came back at the Focus zone's size and place, as if a second layout were haunting that desktop. The same happened on a desktop whose layout you had switched while the window was closed, and when a window came back after a screen returned from tiling to snapping. A remembered zone is now applied only when it belongs to the layout in force for that screen and desktop. Otherwise the window opens like any new window and follows that desktop's layout. ([#1104](https://github.com/fuddlesworth/PlasmaZones/discussions/1104))
+
 ## [3.4.18] - 2026-09-12
 
 ### Added
@@ -2466,7 +2470,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.17...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.18...HEAD
+[3.4.18]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.17...v3.4.18
 [3.4.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.16...v3.4.17
 [3.4.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.15...v3.4.16
 [3.4.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.14...v3.4.15
