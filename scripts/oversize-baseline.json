@@ -48,7 +48,7 @@
     "src/daemon/overlayservice.cpp": 1239,
     "src/daemon/overlayservice.h": 1678,
     "src/dbus/layoutadaptor/assignment.cpp": 1156,
-    "src/dbus/windowtrackingadaptor/lifecycle.cpp": 1266,
+    "src/dbus/windowtrackingadaptor/lifecycle.cpp": 1274,
     "src/dbus/windowtrackingadaptor/windowtrackingadaptor.h": 1907,
     "src/editor/controller/layout.cpp": 1181,
     "src/settings/controller/settingscontroller.h": 1370,

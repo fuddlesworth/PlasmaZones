@@ -6,7 +6,8 @@
 // metadata, frame tracking, prune) whose steps read each other's state;
 // splitting it by step would scatter the ordering the comments here pin.
 // Grew with the per-desktop membership change: the capture's still-on-snap-
-// rect guard now walks the record's per-desktop zones.
+// rect guard walks the record's per-desktop zones, and an output move
+// releases the old output's other-desktop memberships.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — window lifecycle
@@ -578,6 +579,13 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
                          << resolvedNewScreen << "- unsnapping";
+    // A window is on one screen: the migration re-homes the primary to the
+    // new screen and releases the old screen's OTHER desktop memberships
+    // (their zones dragged the window back on the next switch, seen live on
+    // two outputs); the unassign then clears the zone that came along.
+    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
+        snap->migrateWindowToScreen(windowId, resolvedNewScreen);
+    }
     m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 

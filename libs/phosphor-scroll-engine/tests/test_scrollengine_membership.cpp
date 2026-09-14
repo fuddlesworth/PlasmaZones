@@ -241,8 +241,10 @@ private Q_SLOTS:
 
     // The mirror of the adoption case: a release from the strip IN VIEW
     // closes up the neighbours, and the batch that says so has to reach the
-    // compositor whatever the change gate thinks.
-    void releaseFromTheStripInViewForcesABatch()
+    // compositor. (A mutation run without the release's force-emit still
+    // passed this: the relayout after a removal emits on its own, so the
+    // force is belt and braces here, not the thing this slot isolates.)
+    void releaseFromTheStripInViewEmitsABatch()
     {
         QObject owner;
         const GeometryFn geometry = [](const QString&) {

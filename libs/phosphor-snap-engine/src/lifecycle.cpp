@@ -186,20 +186,25 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // exactly the regression that broke same-screen snap restores when the
     // cross-screen term was added. (No layout manager → permissive, matching the
     // unit-test path.)
+    // Both mode checks ask about the LIVE activity, the one the restore keys
+    // its grant and seeds under (restoreActivity below): the window is being
+    // restored into the activity the session is in, whatever activity the
+    // record was captured under, so a record captured under A while B is
+    // live is admitted on B's mode for the context, not A's.
     const auto recordedSnapScreenIsSnapping = [&](const WindowPlacement& p) {
         if (p.slotFor(WindowPlacement::snapEngineId()).state != WindowPlacement::stateSnapped()) {
             return false;
         }
         const QString rec = p.screenId.isEmpty() ? screenId : p.screenId;
         return !m_layoutManager
-            || m_layoutManager->modeForScreen(rec, p.virtualDesktop, p.activity)
+            || m_layoutManager->modeForScreen(rec, p.virtualDesktop, currentActivity())
             == PhosphorZones::AssignmentEntry::Mode::Snapping;
     };
     const auto pendingCrossScreenRestore = [&](const WindowPlacement& p) {
         return PhosphorEngine::pendingCrossScreenSnapRestore(
-            p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
+            p, screenId, [&](const QString& rec, int desktop, const QString&) {
                 return !m_layoutManager
-                    || m_layoutManager->modeForScreen(rec, desktop, activity)
+                    || m_layoutManager->modeForScreen(rec, desktop, currentActivity())
                     == PhosphorZones::AssignmentEntry::Mode::Snapping;
             });
     };

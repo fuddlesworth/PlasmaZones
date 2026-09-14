@@ -277,6 +277,57 @@ private Q_SLOTS:
         QCOMPARE(syncSpy.at(0).at(2).toString(), kScreen);
     }
 
+    // The arm refuses through the same policy gate the membership pass adopts
+    // through: a sticky window under RestoreOnly gets no tile on the desktop
+    // in view. Its suspension float is still lifted where it was set, and the
+    // refusal is announced as not floating.
+    void unfloatOnAnUnheldDesktopRefusesAStickyWindowUnderRestoreOnly()
+    {
+        Fixture f;
+        TestHelpers::FakeAutotileSettings settings;
+        f.engine.setEngineSettings(&settings);
+        f.tracker.stickyWindows.insert(kWindow);
+        f.open(1, {kOther, kWindow}); // TreatAsNormal: tiled like any other
+        QVERIFY(f.stateOn(1)->containsWindow(kWindow));
+        f.engine.setWindowFloat(kWindow, true, kScreen);
+        QVERIFY(f.stateOn(1)->isFloating(kWindow));
+
+        settings.stickyHandling = PhosphorEngine::StickyWindowHandling::RestoreOnly;
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        f.engine.setAutotileScreens({kScreen});
+        QSignalSpy syncSpy(&f.engine, &AutotileEngine::windowFloatingStateSynced);
+        f.engine.setWindowFloat(kWindow, false, kScreen);
+        QCoreApplication::processEvents();
+        QVERIFY2(!f.stateOn(2)->containsWindow(kWindow), "RestoreOnly grants no tile");
+        QVERIFY2(!f.stateOn(1)->isFloating(kWindow), "the suspension float is still lifted");
+        QCOMPARE(syncSpy.count(), 1);
+        QCOMPARE(syncSpy.at(0).at(1).toBool(), false);
+    }
+
+    // A window held only by phantom keys (keyed, never inserted) is swept on
+    // the unfloat instead of taking the adoption arm, and the refusal is
+    // announced so the effect's cache does not latch a float that never was.
+    void unfloatOfAPhantomOnlyWindowIsRefusedAndSwept()
+    {
+        Fixture f;
+        TestHelpers::FakeAutotileSettings settings;
+        settings.stickyHandling = PhosphorEngine::StickyWindowHandling::IgnoreAll;
+        f.engine.setEngineSettings(&settings);
+        f.tracker.stickyWindows.insert(kWindow);
+        f.open(1, {kOther, kWindow}); // the sticky window is keyed, then refused
+        QVERIFY(f.stateOn(1)->containsWindow(kOther));
+        QVERIFY(!f.stateOn(1)->containsWindow(kWindow));
+
+        QSignalSpy syncSpy(&f.engine, &AutotileEngine::windowFloatingStateSynced);
+        f.engine.setWindowFloat(kWindow, false, kScreen);
+        QCoreApplication::processEvents();
+        QVERIFY(!f.engine.isWindowTracked(kWindow));
+        QVERIFY(!f.engine.heldKeyForWindow(kWindow).has_value());
+        QVERIFY(!f.stateOn(1)->containsWindow(kWindow));
+        QCOMPARE(syncSpy.count(), 1);
+        QCOMPARE(syncSpy.at(0).at(1).toBool(), false);
+    }
+
     // The same arm for a window whose only membership is on ANOTHER output:
     // stale tracking, released before the adoption, so the window is tiled on
     // one monitor and the monitor it left closes up.

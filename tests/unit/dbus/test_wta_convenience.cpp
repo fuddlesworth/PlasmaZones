@@ -204,6 +204,63 @@ private Q_SLOTS:
         QCOMPARE(w2State->preFloatZones(w2), QStringList{m_zoneIds[0]});
     }
 
+    // An output move of a window snapped on TWO desktops releases every
+    // membership it held on the old output, not only the desktop in view:
+    // the other desktop's zone would otherwise re-apply on the next switch
+    // and drag the window back across monitors (seen live on two outputs).
+    void testScreenChanged_releasesEveryMembershipOnTheOldOutput()
+    {
+        // Per-screen stores need the full resolver; the fixture wires the
+        // single-store convenience.
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
+        resolver.forWindow = [e = m_snapEngine](const QString& id) {
+            return e->stateForWindow(id);
+        };
+        resolver.forWindowOnScreen = [e = m_snapEngine](const QString& id, const QString& s, int desktop) {
+            return e->stateForWindowOnScreen(id, s, desktop);
+        };
+        resolver.forScreen = [e = m_snapEngine](const QString& s) {
+            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
+        };
+        resolver.globals = [e = m_snapEngine]() {
+            return e->globalState();
+        };
+        resolver.allStates = [e = m_snapEngine]() {
+            return e->allSnapStates();
+        };
+        resolver.forgetWindow = [e = m_snapEngine](const QString& id) {
+            e->forgetWindow(id);
+        };
+        resolver.holdsWindow = [e = m_snapEngine](const QString& id, const PhosphorSnapEngine::SnapState* state) {
+            return e->holdsWindowInState(id, state);
+        };
+        m_wta->service()->setSnapStateResolver(resolver);
+
+        const QString w = QStringLiteral("app|two-desktops");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 2);
+        m_snapEngine->stateForWindowOnScreen(w, m_screenId, 2)->assignWindowToZone(w, m_zoneIds[1], m_screenId, 2);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+
+        m_wta->windowScreenChanged(w, other);
+
+        auto* onOne = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY(onOne->zonesForWindow(w).isEmpty());
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 2);
+        auto* onTwo = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY2(onTwo->zonesForWindow(w).isEmpty(), "the other desktop's zone on the old output must go");
+        // A member of the new output's context with no zone there: adopted,
+        // not snapped, exactly what a switch onto that desktop would grant.
+        auto* onOther = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(other));
+        QVERIFY(m_snapEngine->holdsWindowInState(w, onOther));
+        QVERIFY(onOther->zonesForWindow(w).isEmpty());
+        QVERIFY(!m_snapEngine->holdsWindowInState(w, onTwo));
+        m_wta->service()->setSnapState(m_snapEngine->snapState());
+    }
+
     void testFloatRestore_loadedAssignmentDoesNotMaskFloatedRecord()
     {
         // Daemon-only restart regression: the old WindowZoneAssignmentsFull is
