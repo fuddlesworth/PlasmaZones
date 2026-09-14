@@ -578,7 +578,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     }
                 }
                 // Disabled context, managed-restore opt-out
-                // (restoreWindowsToZonesOnLogin off), or zone gone (layout edit)
+                // (restoreWindowsToZonesOnLogin off), zone not in the layout
+                // the context runs (#1104), or zone gone (layout edit)
                 // → fall through to the legacy chain below.
             } else {
                 // FLOATED restore. Snapping has only two states — snapped (above) or

@@ -100,8 +100,11 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
         // A desktop whose layout was switched while the window was away no
         // longer holds the remembered zone; seeding it anyway would put the
         // window back into a layout the desktop does not run (discussion
-        // #1104). The entry stays on disk: the user may switch that layout
-        // back, and the next capture rewrites the map either way.
+        // #1104). The entry stays on disk on purpose: the store merges the
+        // per-desktop map rather than replacing it, so a capture's silence
+        // never drops it, and the user may switch that layout back. It goes
+        // when a fresh snap on that desktop overwrites its key or a forget
+        // (span shrank, unsnap, close) removes it.
         if (!PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, screenId, desktop, activity,
                                                                  it.value())) {
             qCInfo(lcSnapEngine) << "seedPersistedDesktopZones: not seeding" << windowId << "into zone(s)" << it.value()
