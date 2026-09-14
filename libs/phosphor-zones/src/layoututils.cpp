@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/LayoutUtils.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QColor>
 #include <QJsonArray>
+#include <QUuid>
 #include <algorithm>
 
 namespace PhosphorZones {
@@ -231,6 +233,29 @@ QHash<QString, int> buildGlobalZonePositionMap(const QList<Layout*>& layouts)
         }
     }
     return map;
+}
+
+bool layoutHoldsZones(const Layout* layout, const QStringList& zoneIds)
+{
+    if (!layout || zoneIds.isEmpty()) {
+        return false;
+    }
+    return std::all_of(zoneIds.cbegin(), zoneIds.cend(), [layout](const QString& zoneId) {
+        const QUuid id(zoneId);
+        return !id.isNull() && layout->zoneById(id) != nullptr;
+    });
+}
+
+bool contextLayoutHoldsZones(const IZoneLayoutRegistry* registry, const QString& screenId, int virtualDesktop,
+                             const QString& activity, const QStringList& zoneIds)
+{
+    if (!registry) {
+        return true;
+    }
+    // The layout in force for the context the zone is going back into, not
+    // the one the zone came from: geometry resolution answers for whichever
+    // layout holds the id, so it cannot tell the two apart.
+    return layoutHoldsZones(registry->layoutForScreen(screenId, virtualDesktop, activity), zoneIds);
 }
 
 } // namespace LayoutUtils

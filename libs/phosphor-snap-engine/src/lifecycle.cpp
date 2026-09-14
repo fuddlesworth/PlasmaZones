@@ -9,6 +9,7 @@
 #include <QJsonValue>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
@@ -508,7 +509,24 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         << "resolveWindowRestore:" << windowId
                         << "— managed-restore gate skipped snapped record (restoreWindowsToZonesOnLogin off)";
                 }
-                if (contextAllows && managedAllows) {
+                // The remembered zones have to belong to the layout the
+                // restore context runs NOW. A window snapped into layout A's
+                // zone on one desktop and reopened on a desktop running
+                // layout B still resolves A's zone geometry (the id is
+                // unique across layouts, so the lookup finds it), and the
+                // window came back sitting in a layout the desktop no longer
+                // has (discussion #1104). Same for a desktop whose layout was
+                // switched while the window was closed. Not restorable to a
+                // zone here: the chain below places it like a fresh window.
+                const bool layoutHoldsZones = PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
+                    m_layoutManager, restoreScreen, restoreDesktop, restoreActivity, restoreZones);
+                if (contextAllows && managedAllows && !layoutHoldsZones) {
+                    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                        << "resolveWindowRestore:" << windowId << "remembered zone(s)" << restoreZones
+                        << "are not in the layout for desktop" << restoreDesktop << "of" << restoreScreen
+                        << "— not restoring into a layout the context no longer runs";
+                }
+                if (contextAllows && managedAllows && layoutHoldsZones) {
                     // The restore desktop's own zones; the other desktops' go
                     // back into their own stores below.
                     const QStringList zoneIds = restoreZones;

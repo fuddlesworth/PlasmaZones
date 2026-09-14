@@ -25,6 +25,8 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 
 #include "snapenginelogging.h"
 
@@ -93,6 +95,18 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
             if (m_windowTracker) {
                 m_windowTracker->forgetDesktopZones(windowId, engineId(), desktop);
             }
+            continue;
+        }
+        // A desktop whose layout was switched while the window was away no
+        // longer holds the remembered zone; seeding it anyway would put the
+        // window back into a layout the desktop does not run (discussion
+        // #1104). The entry stays on disk: the user may switch that layout
+        // back, and the next capture rewrites the map either way.
+        if (!PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, screenId, desktop, activity,
+                                                                 it.value())) {
+            qCInfo(lcSnapEngine) << "seedPersistedDesktopZones: not seeding" << windowId << "into zone(s)" << it.value()
+                                 << "on desktop" << desktop << "of" << screenId
+                                 << "— not in the layout that desktop runs";
             continue;
         }
         const PlacementStateKey key{screenId, desktop, activity};
@@ -179,10 +193,21 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             if (state && m_windowTracker && state->zonesForWindow(entry.windowId).isEmpty()) {
                 if (const auto rec = m_windowTracker->placementStore().peekExact(entry.windowId)) {
                     const QStringList remembered = rec->slotFor(engineId()).zonesByDesktop.value(currentKey.desktop);
-                    if (!remembered.isEmpty()) {
+                    // Only into the layout this desktop runs NOW: the zone
+                    // was assigned under whatever layout the desktop had
+                    // when the window snapped there, and the layout may have
+                    // been switched since (discussion #1104).
+                    if (!remembered.isEmpty()
+                        && PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, currentKey.screenId,
+                                                                               currentKey.desktop, currentKey.activity,
+                                                                               remembered)) {
                         state->assignWindowToZones(entry.windowId, remembered, currentKey.screenId, currentKey.desktop);
                         qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: restored" << entry.windowId
                                              << "to its remembered zone(s) on desktop" << currentKey.desktop;
+                    } else if (!remembered.isEmpty()) {
+                        qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: not restoring" << entry.windowId
+                                             << "to remembered zone(s)" << remembered << "on desktop"
+                                             << currentKey.desktop << "— not in the layout that desktop runs";
                     }
                 }
             }
