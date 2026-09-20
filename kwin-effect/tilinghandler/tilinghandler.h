@@ -19,6 +19,7 @@
 
 #include "compositor/deferredwindowcommits.h"
 #include "compositor/scrolltabindicatorpainter.h"
+#include "minimizefloatmarks.h"
 // ClaimScope is part of releaseAllClaims' signature; the header is pure and
 // header-only, so this costs nothing beyond the enum.
 #include "scrolldecisions.h"
@@ -172,8 +173,8 @@ public:
     void cleanupAutotileTracking(const QString& windowId);
     /// Drop @p windowId from the minimize-float set and cancel EITHER
     /// deferred edge — the minimize debounce and the unminimize commit —
-    /// mirroring SnapHandler::removeMinimizeFloated, plus the untiled-marker
-    /// drop (snap has no untiled-marker counterpart). Returns true if
+    /// mirroring SnapHandler::removeMinimizeFloated, plus the qualifier-marks
+    /// drop (snap has no MinimizeFloatMarks counterpart). Returns true if
     /// the window was tracked. Callers: close cleanup, the effect's
     /// authoritative visible unfloat (slotWindowFloatingChanged, including
     /// its dual-hold repair), and the cross-mode adoption hops (snap's
@@ -182,7 +183,7 @@ public:
     {
         cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
-        m_untiledMinimizeFloats.remove(windowId);
+        m_minimizeFloatMarks.remove(windowId);
         m_unfloatRetryAttempts.remove(windowId);
         const bool owned = m_minimizeFloatedWindows.remove(windowId);
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
@@ -208,7 +209,7 @@ public:
     {
         m_minimizeFloatedWindows.insert(windowId);
         if (untiled) {
-            m_untiledMinimizeFloats.insert(windowId);
+            m_minimizeFloatMarks.markUntiled(windowId);
         }
     }
 
@@ -1932,11 +1933,9 @@ private:
     bool maximizeToggleInFlight(const QString& windowId);
     quint64 m_unfloatRequestGeneration = 0;
     QHash<QString, int> m_unfloatRetryAttempts;
-    /// Subset of m_minimizeFloatedWindows claimed at batch-announce time
-    /// (already minimized when the screen entered autotile). These windows
-    /// still carry geometry from the prior mode, so their unminimize commits
+    /// Qualifiers on m_minimizeFloatedWindows entries whose unminimize commits
     /// immediately instead of through the deferred animation grace.
-    QSet<QString> m_untiledMinimizeFloats;
+    MinimizeFloatMarks m_minimizeFloatMarks;
     // NOTE: title-bar (borderless) state is owned by the effect's
     // DecorationManager; this handler only tracks tiled membership for
     // border RENDERING via m_border.tiledWindowsByScreen.
