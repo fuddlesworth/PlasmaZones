@@ -143,6 +143,9 @@ add_test(NAME test_snap_state_focus_memory COMMAND test_snap_state_focus_memory)
 add_executable(test_snap_engine_restore core/snap/test_snap_engine_restore.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_engine_restore PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
+add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
 
 # Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
 # entry-zone crossing).

@@ -17,6 +17,7 @@
 
 namespace PhosphorZones {
 
+class IZoneLayoutRegistry;
 class Layout;
 class Zone;
 
@@ -102,6 +103,32 @@ PHOSPHORZONES_EXPORT QHash<QString, int> buildZonePositionMap(Layout* layout);
  * screen-level slot.
  */
 PHOSPHORZONES_EXPORT QHash<QString, int> buildGlobalZonePositionMap(const QList<Layout*>& layouts);
+
+/**
+ * @brief Does @p layout hold EVERY zone in @p zoneIds?
+ *
+ * Zone UUIDs are unique across all layouts, so a remembered zone id names
+ * one layout for good: a zone remembered under the layout a context USED to
+ * run resolves geometry just fine against the layout it belongs to, which is
+ * how a window came back into a "ghost" layout on a desktop that had since
+ * been given another one (discussion #1104). Every path that re-applies a
+ * remembered zone into a (screen, desktop, activity) context asks this of the
+ * layout the registry resolves for THAT context before trusting the id.
+ *
+ * A null layout or an empty list answers false: there is nothing to snap into.
+ */
+PHOSPHORZONES_EXPORT bool layoutHoldsZones(const Layout* layout, const QStringList& zoneIds);
+
+/**
+ * @brief layoutHoldsZones() against the layout @p registry resolves for the
+ *        (@p screenId, @p virtualDesktop, @p activity) context.
+ *
+ * Permissive (true) with a null registry, matching the unit-test path where
+ * an engine runs without one; a context that resolves no layout answers false.
+ */
+PHOSPHORZONES_EXPORT bool contextLayoutHoldsZones(const IZoneLayoutRegistry* registry, const QString& screenId,
+                                                  int virtualDesktop, const QString& activity,
+                                                  const QStringList& zoneIds);
 
 } // namespace LayoutUtils
 

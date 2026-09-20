@@ -525,6 +525,32 @@ private Q_SLOTS:
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
     }
 
+    // The remembered zone goes back only into the layout the desktop runs
+    // now (discussion #1104): desktop 2 was given another snapping layout
+    // while the window was away, so the zone remembered under the old one
+    // stays out. Membership is still granted; the window is simply unsnapped
+    // there until the user snaps it.
+    void adoptionSkipsARememberedZoneFromALayoutTheDesktopNoLongerRuns()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        m_engine->forgetWindow(kWindow);
+
+        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(other);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), other);
+
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        const auto result = m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        QCOMPARE(result.adopted.size(), 1);
+        QVERIFY2(zonesOn(2, kWindow).isEmpty(), "a zone from the layout desktop 2 no longer runs must not come back");
+        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+    }
+
     // Removing a desktop renumbers every bare desktop number the service
     // keeps, not only the persisted map: a pending restore queued across the
     // removal must land on the desktop it was queued for.
