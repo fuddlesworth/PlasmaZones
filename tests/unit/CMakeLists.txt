@@ -1193,6 +1193,14 @@ target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
 
+# Pure-logic test for the minimize-float qualifiers
+# (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
+# can still be the tile it is about to get. Same header-only reach.
+add_executable(test_minimize_float_marks ui/effect/test_minimize_float_marks.cpp)
+target_link_libraries(test_minimize_float_marks PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_minimize_float_marks PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_minimize_float_marks COMMAND test_minimize_float_marks)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.

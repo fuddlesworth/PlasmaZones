@@ -439,6 +439,11 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             if (wasUntiledMinimizeFloat) {
                 m_minimizeFloatMarks.markUntiled(windowId);
             }
+            // The cleanup above dropped the peers record, and whatever the
+            // frame holds it is not a tile on the NEW screen: without this
+            // the unminimize edge reads "no record, unchanged" and takes the
+            // grace.
+            m_minimizeFloatMarks.markDisplaced(windowId);
             seedUnfloatRetryBudget(windowId, savedUnfloatBudget);
             if (wasUnfloatInFlight) {
                 // The in-flight request named the OLD screen, and its watcher

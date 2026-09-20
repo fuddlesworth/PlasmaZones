@@ -467,16 +467,19 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // A window we tiled ourselves lands here too when the layout changed
     // while it was minimized: its frame is the tile of a layout that no
     // longer exists, so the grace would show it at that stale rect (full
-    // area, for a sole window joined by others since) and then hop it.
-    const bool layoutChanged =
-        m_minimizeFloatMarks.peersChanged(windowId, TilingStateHelpers::tiledOnScreen(m_border, screenId));
+    // area, for a sole window joined by others since) and then hop it. The
+    // same goes for one carried across screens while minimized, whose frame
+    // is a tile on the screen it left.
+    const bool layoutChanged = m_minimizeFloatMarks.isDisplaced(windowId)
+        || m_minimizeFloatMarks.peersChanged(windowId, TilingStateHelpers::tiledOnScreen(m_border, screenId));
     if (layoutChanged || m_minimizeFloatMarks.isUntiled(windowId)) {
         qCInfo(lcEffect) << "Autotile: window unminimized"
                          << (layoutChanged ? "(layout changed while minimized)," : "(claimed at announce),")
                          << "unfloating immediately:" << windowId << "on" << screenId;
         if (dispatchUnminimizeUnfloat(windowId, screenId)) {
             // Same stale-frame rationale as the adoption branch above: the
-            // rect belongs to the prior mode, so withhold paints until the
+            // rect is not the tile the window is about to get (prior mode,
+            // prior layout or prior screen), so withhold paints until the
             // tile geometry lands.
             m_effect->beginRestoreSuppression(w);
             notifyWindowAdded(w, /*knownFreeFloating=*/false);

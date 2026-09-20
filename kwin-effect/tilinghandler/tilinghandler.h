@@ -173,8 +173,8 @@ public:
     void cleanupAutotileTracking(const QString& windowId);
     /// Drop @p windowId from the minimize-float set and cancel EITHER
     /// deferred edge — the minimize debounce and the unminimize commit —
-    /// mirroring SnapHandler::removeMinimizeFloated, plus the untiled-marker
-    /// drop (snap has no untiled-marker counterpart). Returns true if
+    /// mirroring SnapHandler::removeMinimizeFloated, plus the qualifier-marks
+    /// drop (snap has no MinimizeFloatMarks counterpart). Returns true if
     /// the window was tracked. Callers: close cleanup, the effect's
     /// authoritative visible unfloat (slotWindowFloatingChanged, including
     /// its dual-hold repair), and the cross-mode adoption hops (snap's

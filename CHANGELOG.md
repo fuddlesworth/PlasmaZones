@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A restored window flashed at its old size before tiling**: minimize the only window on a tiling screen, open a few more, then bring the first one back. It appeared at the full work area it used to have, covering the others for the length of the restore animation, and then jumped into its tile. PlasmaZones waits for that animation before retiling, which is invisible when the layout has not moved and wrong when it has. It now notices that the screen's tiled windows changed while the window was away, or that the window was moved to another screen, and places it straight into its tile. ([#1110](https://github.com/fuddlesworth/PlasmaZones/pull/1110))
+
 ## [3.4.18] - 2026-09-12
 
 ### Added
