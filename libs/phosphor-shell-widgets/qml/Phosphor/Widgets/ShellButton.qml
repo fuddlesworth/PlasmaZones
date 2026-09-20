@@ -44,7 +44,7 @@ Button {
                 anchors.verticalCenter: parent.verticalCenter
                 color: root.foreground
                 font.family: Tokens.font_family_ui
-                font.pixelSize: root.labelSize
+                font.pixelSize: Math.round(root.labelSize * Appearance.textScale)
             }
         }
     }

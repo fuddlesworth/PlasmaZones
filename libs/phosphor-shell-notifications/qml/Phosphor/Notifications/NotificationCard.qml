@@ -128,12 +128,12 @@ FocusScope {
                     Layout.fillWidth: true
                     text: root.notification.appName || qsTr("Notification")
                     color: Appearance.text
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round((11) * Appearance.textScale)
                     font.weight: Font.Medium
                 }
                 NotificationLabel {
                     text: qsTr("New notification")
-                    font.pixelSize: 8
+                    font.pixelSize: Math.round((8) * Appearance.textScale)
                 }
             }
             Rectangle {
@@ -155,11 +155,11 @@ FocusScope {
                 visible: !root.arrival
                 Layout.fillWidth: true
                 text: root.showApp || root.notification.urgency === 2 ? root.notification.appName : root.unread ? qsTr("Unread") : root.notification.live ? qsTr("Received") : qsTr("Saved history")
-                font.pixelSize: 8
+                font.pixelSize: Math.round((8) * Appearance.textScale)
             }
             NotificationLabel {
                 text: root.receivedTime
-                font.pixelSize: 8
+                font.pixelSize: Math.round((8) * Appearance.textScale)
             }
             ShellButton {
                 objectName: "dismissNotification"
@@ -180,7 +180,7 @@ FocusScope {
             visible: root.previews && text.length > 0
             text: root.previews ? root.notification.summary || "" : ""
             color: Appearance.text
-            font.pixelSize: root.arrival ? 14 : 12
+            font.pixelSize: Math.round((root.arrival ? 14 : 12) * Appearance.textScale)
             font.weight: Font.Medium
             wrapMode: Text.Wrap
             maximumLineCount: root.expanded ? 10000 : 2
@@ -191,7 +191,7 @@ FocusScope {
             Layout.fillWidth: true
             visible: root.previews && text.length > 0
             text: root.previews ? root.notification.body || "" : ""
-            font.pixelSize: root.arrival ? 11 : 10
+            font.pixelSize: Math.round((root.arrival ? 11 : 10) * Appearance.textScale)
             lineHeightMode: Text.FixedHeight
             lineHeight: font.pixelSize * 1.7
             wrapMode: Text.Wrap
@@ -316,7 +316,7 @@ FocusScope {
                 color: Appearance.text
                 placeholderTextColor: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 11
+                font.pixelSize: Math.round((11) * Appearance.textScale)
                 background: Rectangle {
                     radius: 7
                     color: Appearance.recess

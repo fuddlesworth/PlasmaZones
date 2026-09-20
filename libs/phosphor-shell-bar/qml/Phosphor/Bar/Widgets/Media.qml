@@ -110,7 +110,7 @@ BarWidget {
             Accessible.ignored: true
             text: root.trackTitle
             color: Appearance.muted
-            font.pixelSize: 10
+            font.pixelSize: Math.round((10) * Appearance.textScale)
             font.family: Tokens.font_family_ui
             elide: Text.ElideRight
             // Setting width below the natural implicitWidth triggers the

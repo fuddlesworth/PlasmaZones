@@ -43,6 +43,7 @@ function(phosphorshellpicker_add_test name)
     endif()
 endfunction()
 
+phosphorshellpicker_add_test(test_appearancelibrary)
 phosphorshellpicker_add_test(test_wallpapercandidates)
 phosphorshellpicker_add_test(test_retintcontroller)
 phosphorshellpicker_add_test(test_themepresets)

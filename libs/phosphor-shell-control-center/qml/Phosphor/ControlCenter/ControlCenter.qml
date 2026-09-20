@@ -262,7 +262,7 @@ Item {
                     text: qsTr("Quick settings")
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: root.shelf ? 21 : 19
+                    font.pixelSize: Math.round((root.shelf ? 21 : 19) * Appearance.textScale)
                     font.weight: Font.Medium
                 }
                 Item {
@@ -272,7 +272,7 @@ Item {
                     text: root.batterySummary
                     color: Appearance.muted
                     font.family: Tokens.font_family_mono
-                    font.pixelSize: 10
+                    font.pixelSize: Math.round((10) * Appearance.textScale)
                 }
                 Item {
                     Layout.fillWidth: true
@@ -304,7 +304,7 @@ Item {
                         text: qsTr("CONNECTIONS & FOCUS")
                         color: Appearance.muted
                         font.family: Tokens.font_family_ui
-                        font.pixelSize: 10
+                        font.pixelSize: Math.round((10) * Appearance.textScale)
                         font.letterSpacing: 1
                     }
                     GridLayout {
@@ -379,7 +379,7 @@ Item {
                         text: qsTr("SOUND & DISPLAY")
                         color: Appearance.muted
                         font.family: Tokens.font_family_ui
-                        font.pixelSize: 10
+                        font.pixelSize: Math.round((10) * Appearance.textScale)
                         font.letterSpacing: 1
                     }
                     GridLayout {
@@ -416,7 +416,7 @@ Item {
                         text: qsTr("NOW PLAYING")
                         color: Appearance.muted
                         font.family: Tokens.font_family_ui
-                        font.pixelSize: 10
+                        font.pixelSize: Math.round((10) * Appearance.textScale)
                         font.letterSpacing: 1
                     }
                     MediaCard {
@@ -435,7 +435,7 @@ Item {
                     text: root.powerSummary + (root.shelf && root.notificationSummary ? "  ·  " + root.notificationSummary : "")
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 10
+                    font.pixelSize: Math.round((10) * Appearance.textScale)
                     elide: Text.ElideRight
                 }
                 ShellButton {

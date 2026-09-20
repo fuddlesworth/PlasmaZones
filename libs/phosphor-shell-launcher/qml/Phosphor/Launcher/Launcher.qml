@@ -118,7 +118,7 @@ FocusScope {
                     verticalAlignment: TextInput.AlignVCenter
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: root.wide ? 22 : 17
+                    font.pixelSize: Math.round((root.wide ? 22 : 17) * Appearance.textScale)
                     focus: true
                     selectByMouse: true
                     clip: true
@@ -286,7 +286,7 @@ FocusScope {
                                         text: appTile.modelData.name
                                         color: Appearance.text
                                         font.family: Tokens.font_family_ui
-                                        font.pixelSize: 11
+                                        font.pixelSize: Math.round((11) * Appearance.textScale)
                                         elide: Text.ElideRight
                                     }
                                     Item {
@@ -317,7 +317,7 @@ FocusScope {
                         text: qsTr("Right-click an application in search to pin it here.")
                         wrapMode: Text.WordWrap
                         color: Appearance.muted
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round((11) * Appearance.textScale)
                     }
                 }
             }
@@ -369,7 +369,7 @@ FocusScope {
                         width: parent.width
                         text: qsTr("No open windows")
                         color: Appearance.muted
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round((11) * Appearance.textScale)
                     }
                 }
             }
@@ -411,7 +411,7 @@ FocusScope {
                 text: root.results.query.length ? qsTr("No results for %1").arg(root.results.query) : qsTr("Type to search")
                 textFormat: Text.PlainText
                 color: Appearance.muted
-                font.pixelSize: 12
+                font.pixelSize: Math.round((12) * Appearance.textScale)
                 elide: Text.ElideRight
             }
         }
@@ -428,7 +428,7 @@ FocusScope {
             Text {
                 text: qsTr("Select")
                 color: Appearance.muted
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
             }
             Keycap {
                 Layout.leftMargin: 5
@@ -437,7 +437,7 @@ FocusScope {
             Text {
                 text: qsTr("Open")
                 color: Appearance.muted
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
             }
             Item {
                 Layout.fillWidth: true
@@ -445,7 +445,7 @@ FocusScope {
             Text {
                 text: qsTr("Search by title or application")
                 color: Appearance.muted
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
                 elide: Text.ElideRight
             }
         }
@@ -475,7 +475,7 @@ FocusScope {
             text: parent.text
             color: parent.highlighted ? Appearance.text : Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 10
+            font.pixelSize: Math.round((10) * Appearance.textScale)
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
@@ -483,7 +483,7 @@ FocusScope {
     component Eyebrow: Text {
         color: Appearance.muted
         font.family: Tokens.font_family_ui
-        font.pixelSize: 10
+        font.pixelSize: Math.round((10) * Appearance.textScale)
         font.letterSpacing: 1
     }
 }

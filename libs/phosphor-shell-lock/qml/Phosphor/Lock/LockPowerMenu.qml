@@ -92,7 +92,7 @@ Item {
                 Layout.fillWidth: true
                 text: root.pending ? (root.pending === "reboot" ? qsTr("Restart your computer?") : qsTr("Shut down your computer?")) : qsTr("POWER")
                 font.family: Tokens.font_family_ui
-                font.pixelSize: root.pending ? 14 : 8
+                font.pixelSize: Math.round((root.pending ? 14 : 8) * Appearance.textScale)
                 font.letterSpacing: root.pending ? 0 : 1.6
                 color: root.pending ? Appearance.text : Appearance.muted
                 wrapMode: Text.WordWrap
@@ -115,7 +115,7 @@ Item {
                             text: actionButton.text
                             color: Appearance.text
                             font.family: Tokens.font_family_ui
-                            font.pixelSize: 12
+                            font.pixelSize: Math.round((12) * Appearance.textScale)
                         }
                     }
                     leftPadding: 7
@@ -138,7 +138,7 @@ Item {
                 wrapMode: Text.WordWrap
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 11
+                font.pixelSize: Math.round((11) * Appearance.textScale)
             }
             Text {
                 visible: root.pending !== ""
@@ -147,7 +147,7 @@ Item {
                 wrapMode: Text.WordWrap
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 11
+                font.pixelSize: Math.round((11) * Appearance.textScale)
             }
             RowLayout {
                 visible: root.pending !== ""

@@ -228,7 +228,7 @@ BarWidget {
             text: Shell.Workspaces.activeName || qsTr("Workspace %1").arg(root.map ? root.map.currentDesktop + 1 : 1)
             color: Appearance.text
             font.family: Tokens.font_family_ui
-            font.pixelSize: Appearance.compact ? 9 : 10
+            font.pixelSize: Math.round((Appearance.compact ? 9 : 10) * Appearance.textScale)
         }
         Text {
             id: modeLabel
@@ -236,7 +236,7 @@ BarWidget {
             text: root.map && root.map.mode === 2 ? qsTr("Scrolling") + (offscreen > 0 ? "  +" + offscreen : "") : root.map && root.map.mode === 1 ? qsTr("Tiling") : root.map && root.map.mode === 0 ? qsTr("Snapping") : qsTr("Placement off")
             color: Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: Appearance.compact ? 9 : 10
+            font.pixelSize: Math.round((Appearance.compact ? 9 : 10) * Appearance.textScale)
         }
         TapHandler {}
     }

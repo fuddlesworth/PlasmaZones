@@ -22,7 +22,7 @@ Row {
                 text: String(parent.index + 1).padStart(2, "0")
                 color: parent.isActive ? Appearance.text : Appearance.muted
                 font.family: Tokens.font_family_mono
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }

@@ -51,6 +51,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(_phosphor_picker_sources
+    include/PhosphorShellPicker/AppearanceLibrary.h
+    src/appearancelibrary.cpp
+    src/appearancepresets.cpp
     include/PhosphorShellPicker/WallpaperCandidates.h
     include/PhosphorShellPicker/RetintController.h
     include/PhosphorShellPicker/ThemePresets.h
@@ -61,6 +64,20 @@ set(_phosphor_picker_sources
 )
 
 set(_phosphor_picker_qml_files
+    qml/Phosphor/Picker/AppearanceWorkspace.qml
+    qml/Phosphor/Picker/AppearanceWallpaper.qml
+    qml/Phosphor/Picker/AppearanceStyle.qml
+    qml/Phosphor/Picker/AppearanceBar.qml
+    qml/Phosphor/Picker/AppearancePresets.qml
+    qml/Phosphor/Picker/AppearanceDialogs.qml
+    qml/Phosphor/Picker/LookText.qml
+    qml/Phosphor/Picker/LookCard.qml
+    qml/Phosphor/Picker/LookField.qml
+    qml/Phosphor/Picker/LookRange.qml
+    qml/Phosphor/Picker/LookToggle.qml
+    qml/Phosphor/Picker/LookImage.qml
+    qml/Phosphor/Picker/LookScene.qml
+
     qml/Phosphor/Picker/Picker.qml
     qml/Phosphor/Picker/CandidateThumb.qml
     qml/Phosphor/Picker/PaletteTile.qml
@@ -96,6 +113,18 @@ qt_add_qml_module(PhosphorShellPickerQml
     SOURCES ${_phosphor_picker_sources}
     QML_FILES ${_phosphor_picker_qml_files}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Picker
+)
+
+# The collection is materialized once into the user's durable image library.
+set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/../../examples/phosphor-shell/wallpapers/wallpaper.png" PROPERTIES QT_RESOURCE_ALIAS "alpine.png")
+qt_add_resources(PhosphorShellPickerQml appearance_wallpapers
+    PREFIX "/phosphor/appearance/wallpapers"
+    BASE "wallpapers"
+    FILES wallpapers/spectrum.svg wallpapers/iris.svg wallpapers/dunes.svg wallpapers/tide.svg wallpapers/moss.svg wallpapers/graphite.svg wallpapers/linen.svg
+)
+qt_add_resources(PhosphorShellPickerQml appearance_violet
+    PREFIX "/phosphor/appearance/wallpapers"
+    FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/phosphor-shell/wallpapers/wallpaper.png"
 )
 
 add_library(PhosphorShellPicker::PhosphorShellPickerQml ALIAS PhosphorShellPickerQml)

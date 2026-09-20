@@ -29,6 +29,7 @@ QtObject {
     readonly property color text: AppearanceStore.palette.text
     readonly property color muted: AppearanceStore.palette.muted
     readonly property int barInset: settings.barInset
+    readonly property real textScale: settings.textScale / 100
     readonly property int barOffset: 12
     readonly property real surfaceOpacity: AppearanceStore.palette.opacity
     readonly property color surface: AppearanceStore.palette.surface

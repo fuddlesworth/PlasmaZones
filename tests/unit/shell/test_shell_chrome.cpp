@@ -8,6 +8,7 @@
 #include "shell/ShellChrome.h"
 
 #include <PhosphorSurface/DecorationSupportedPaths.h>
+#include <PhosphorTheme/AppearanceStore.h>
 
 #include <QDir>
 #include <QJsonDocument>
@@ -38,6 +39,37 @@ class TestShellChrome : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void appearanceSelectsRealPacksAndTintsTheirParameters()
+    {
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        auto settings = PhosphorTheme::AppearanceStore::defaults();
+        chrome.setAppearance(settings);
+        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).isEmpty());
+        settings[QStringLiteral("surfacePacks")] = true;
+        settings[QStringLiteral("surfaceEffect")] = QStringLiteral("glass");
+        chrome.setAppearance(settings);
+        const auto glass = chrome.chainFor(decorationShellPhosphorBarPath());
+        QCOMPARE(glass.size(), 1);
+        QVERIFY(
+            glass.first().toMap().value(QStringLiteral("source")).toString().contains(QLatin1String("phosphor-glass")));
+        settings[QStringLiteral("palette")] = QStringLiteral("ember");
+        chrome.setAppearance(settings);
+        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).first().toMap().value(QStringLiteral("params"))
+                != glass.first().toMap().value(QStringLiteral("params")));
+        settings[QStringLiteral("surfaceEffect")] = QStringLiteral("motes");
+        chrome.setAppearance(settings);
+        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath())
+                    .first()
+                    .toMap()
+                    .value(QStringLiteral("source"))
+                    .toString()
+                    .contains(QLatin1String("phosphor-motes")));
+        QVERIFY(chrome.outerPaddingFor(decorationShellPhosphorBarPath()) > 0);
+        settings[QStringLiteral("surfacePacks")] = false;
+        chrome.setAppearance(settings);
+        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).isEmpty());
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorBarPath()), 0);
+    }
     void initTestCase()
     {
         QVERIFY2(QDir(QStringLiteral(PZ_BUNDLED_SURFACE_DIR)).exists(), "bundled surface packs not found");

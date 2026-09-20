@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QLockFile>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
@@ -79,7 +80,9 @@ AppearanceStore::AppearanceStore(const QString& path, QObject* parent)
     : QObject(parent)
     , m_path(path)
     , m_values(defaults())
+    , m_previewLock(std::make_unique<QLockFile>(path + QStringLiteral(".preview.lock")))
 {
+    m_previewLock->setStaleLockTime(0);
     QFile file(path);
     if (!file.exists())
         return;
@@ -95,6 +98,38 @@ AppearanceStore::AppearanceStore(const QString& path, QObject* parent)
         return;
     }
     m_values = loaded;
+}
+AppearanceStore::~AppearanceStore()
+{
+    if (m_previewLock->isLocked())
+        QFile::remove(m_path + QStringLiteral(".preview"));
+}
+QVariantMap AppearanceStore::effectiveValues(const QString& path, bool* previewActive)
+{
+    if (previewActive)
+        *previewActive = false;
+    const QString lockPath = path + QStringLiteral(".preview.lock");
+    if (QFileInfo::exists(lockPath)) {
+        QLockFile lock(lockPath);
+        lock.setStaleLockTime(0);
+        if (!lock.tryLock() && lock.error() == QLockFile::LockFailedError) {
+            AppearanceStore preview(path + QStringLiteral(".preview"));
+            if (preview.error().isEmpty() && QFileInfo::exists(path + QStringLiteral(".preview"))) {
+                if (previewActive)
+                    *previewActive = true;
+                return preview.values();
+            }
+        }
+    }
+    return AppearanceStore(path).values();
+}
+QVariantMap AppearanceStore::paletteFor(const QVariantMap& settings) const
+{
+    auto merged = m_values;
+    for (auto it = settings.cbegin(); it != settings.cend(); ++it)
+        merged[it.key()] = it.value();
+    QVariantMap validated;
+    return ShellPalette::fromSettings(validate(merged, validated) ? validated : m_values).toVariant();
 }
 bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
 {
@@ -189,7 +224,12 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         }
         result[it.key()] = it.value();
     }
-    return true;
+    // Keep every accepted setting document within the reader's size limit.
+    return QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
+                                     {QStringLiteral("settings"), QJsonObject::fromVariantMap(result)}})
+               .toJson()
+               .size()
+        <= 65536;
 }
 bool AppearanceStore::fail(const QString& error)
 {
@@ -201,9 +241,13 @@ bool AppearanceStore::fail(const QString& error)
 }
 bool AppearanceStore::write(const QVariantMap& values)
 {
-    if (!QDir().mkpath(QFileInfo(m_path).absolutePath()))
+    return writeDocument(m_path, values);
+}
+bool AppearanceStore::writeDocument(const QString& path, const QVariantMap& values)
+{
+    if (!QDir().mkpath(QFileInfo(path).absolutePath()))
         return fail(tr("Cannot create the appearance settings directory."));
-    QSaveFile file(m_path);
+    QSaveFile file(path);
     const auto bytes = QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
                                                  {QStringLiteral("settings"), QJsonObject::fromVariantMap(values)}})
                            .toJson();
@@ -232,17 +276,26 @@ bool AppearanceStore::commit(const QVariantMap& values)
         return fail(tr("Invalid appearance settings."));
     if (!m_editing && !write(validated))
         return false;
+    if (m_editing && !writeDocument(m_path + QStringLiteral(".preview"), validated))
+        return false;
     fail(QString());
     publish(validated);
     return true;
 }
-void AppearanceStore::beginPreview()
+bool AppearanceStore::beginPreview()
 {
     if (m_editing)
-        return;
+        return true;
+    if (!QDir().mkpath(QFileInfo(m_path).absolutePath()) || !m_previewLock->tryLock())
+        return fail(tr("Cannot start a preview. Another Appearance window may be using these settings."));
+    if (!writeDocument(m_path + QStringLiteral(".preview"), m_values)) {
+        m_previewLock->unlock();
+        return false;
+    }
     m_saved = m_values;
     m_editing = true;
     Q_EMIT changed();
+    return true;
 }
 bool AppearanceStore::applyPreview()
 {
@@ -256,12 +309,15 @@ void AppearanceStore::revertPreview()
 {
     if (!m_editing)
         return;
-    fail(QString());
-    publish(m_saved);
+    commit(m_saved);
 }
 void AppearanceStore::endPreview()
 {
-    revertPreview();
+    if (!m_editing)
+        return;
+    QFile::remove(m_path + QStringLiteral(".preview"));
+    m_previewLock->unlock();
+    publish(m_saved);
     m_editing = false;
     m_saved.clear();
     Q_EMIT changed();

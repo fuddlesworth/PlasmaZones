@@ -53,7 +53,7 @@ Item {
         x: 20
         anchors.verticalCenter: footer.verticalCenter
         text: root.notification.transient ? qsTr("Temporary notification") : qsTr("Saved in your notification center")
-        font.pixelSize: 8
+        font.pixelSize: Math.round((8) * Appearance.textScale)
         width: Math.max(0, root.width - 150)
     }
     ShellButton {

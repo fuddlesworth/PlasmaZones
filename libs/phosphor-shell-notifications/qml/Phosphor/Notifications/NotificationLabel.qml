@@ -6,7 +6,7 @@ import Phosphor.Theme
 Text {
     color: Appearance.muted
     font.family: Tokens.font_family_ui
-    font.pixelSize: 10
+    font.pixelSize: Math.round((10) * Appearance.textScale)
     textFormat: Text.PlainText
     elide: Text.ElideRight
 }

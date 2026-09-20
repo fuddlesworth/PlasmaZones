@@ -41,14 +41,14 @@ AbstractButton {
             text: Qt.formatDate(clock.date, "ddd d")
             color: Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 11
+            font.pixelSize: Math.round((11) * Appearance.textScale)
             anchors.verticalCenter: parent.verticalCenter
         }
         Text {
             text: root.timeText
             color: Appearance.text
             font.family: Tokens.font_family_ui
-            font.pixelSize: 11
+            font.pixelSize: Math.round((11) * Appearance.textScale)
             anchors.verticalCenter: parent.verticalCenter
         }
     }

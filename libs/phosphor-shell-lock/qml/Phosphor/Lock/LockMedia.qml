@@ -57,7 +57,7 @@ ShellSurface {
                 text: qsTr("NOW PLAYING")
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 7
+                font.pixelSize: Math.round((7) * Appearance.textScale)
                 font.letterSpacing: 1.3
             }
             Text {
@@ -66,7 +66,7 @@ ShellSurface {
                 textFormat: Text.PlainText
                 color: Appearance.text
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 12
+                font.pixelSize: Math.round((12) * Appearance.textScale)
                 font.weight: Font.Medium
                 elide: Text.ElideRight
             }
@@ -76,7 +76,7 @@ ShellSurface {
                 textFormat: Text.PlainText
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 9
+                font.pixelSize: Math.round((9) * Appearance.textScale)
                 elide: Text.ElideRight
             }
         }

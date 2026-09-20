@@ -93,14 +93,14 @@ FocusScope {
                 text: "φ"
                 color: Appearance.stops[0]
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 31
+                font.pixelSize: Math.round((31) * Appearance.textScale)
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "PHOSPHOR"
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
                 font.letterSpacing: 3.5
             }
         }
@@ -122,7 +122,7 @@ FocusScope {
                     text: qsTr("Session locked")
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round((11) * Appearance.textScale)
                 }
             }
             Row {
@@ -139,7 +139,7 @@ FocusScope {
                     text: parent.device ? Math.round(parent.device.percentage) + "%" : ""
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round((11) * Appearance.textScale)
                 }
             }
         }
@@ -216,13 +216,13 @@ FocusScope {
                             text: root.notificationCount === 1 ? qsTr("1 notification") : qsTr("%1 notifications").arg(root.notificationCount)
                             color: Appearance.text
                             font.family: Tokens.font_family_ui
-                            font.pixelSize: 11
+                            font.pixelSize: Math.round((11) * Appearance.textScale)
                         }
                         Text {
                             text: qsTr("Content hidden while locked")
                             color: Appearance.muted
                             font.family: Tokens.font_family_ui
-                            font.pixelSize: 9
+                            font.pixelSize: Math.round((9) * Appearance.textScale)
                         }
                     }
                 }
@@ -243,7 +243,7 @@ FocusScope {
                 text: viewport.contentHeight > viewport.height ? qsTr("Scroll for more") : qsTr("Your session stays here.")
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
             }
         }
         MouseArea {

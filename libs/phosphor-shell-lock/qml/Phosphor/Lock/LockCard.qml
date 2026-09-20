@@ -61,7 +61,7 @@ FocusScope {
                     text: root.userName ? Array.from(root.userName)[0] : "φ"
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 26
+                    font.pixelSize: Math.round((26) * Appearance.textScale)
                 }
                 Rectangle {
                     anchors.right: parent.right
@@ -83,7 +83,7 @@ FocusScope {
                     text: qsTr("WELCOME BACK")
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 8
+                    font.pixelSize: Math.round((8) * Appearance.textScale)
                     font.letterSpacing: 1.6
                 }
                 Text {
@@ -92,7 +92,7 @@ FocusScope {
                     textFormat: Text.PlainText
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 21
+                    font.pixelSize: Math.round((21) * Appearance.textScale)
                     font.weight: Font.Medium
                     font.letterSpacing: -.4
                     elide: Text.ElideRight
@@ -110,7 +110,7 @@ FocusScope {
             text: qsTr("Password")
             color: Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 11
+            font.pixelSize: Math.round((11) * Appearance.textScale)
         }
         LockAuthField {
             id: field
@@ -127,7 +127,7 @@ FocusScope {
             text: root.phase === "authenticating" ? qsTr("Unlocking your session…") : root.phase === "dismissing" ? qsTr("You’re back.") : root.phase === "error" ? root.controller.errorText : qsTr("Enter to unlock")
             color: root.phase === "error" ? field.edgeColor : Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 10
+            font.pixelSize: Math.round((10) * Appearance.textScale)
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.WordWrap
         }
@@ -168,7 +168,7 @@ FocusScope {
                 text: caps ? qsTr("⇪ Caps Lock") : qsTr("Esc to clear")
                 color: caps ? Appearance.stops[3] : Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
             }
         }
     }

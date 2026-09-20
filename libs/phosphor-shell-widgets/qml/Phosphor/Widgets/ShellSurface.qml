@@ -21,7 +21,7 @@ Rectangle {
         radius: root.radius
         blur: root.barSurface ? 25 : 55
         offset: Qt.vector2d(0, root.barSurface ? 8 : 22)
-        color: root.barSurface ? "#33000000" : Qt.alpha("#030b1a", Appearance.light ? 0.25 : 0.5)
+        color: Qt.alpha(Qt.darker(Appearance.recess, 1.5), root.barSurface ? 0.2 : Appearance.light ? 0.25 : 0.5)
     }
     Rectangle {
         anchors.fill: parent

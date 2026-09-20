@@ -12,7 +12,20 @@ Item {
     property string fallback: "application-x-executable"
     implicitWidth: 19
     implicitHeight: 19
+    // QColor can stringify HSL-derived values as an SVG-incompatible extended
+    // hex color. Encode ordinary sRGB channels explicitly for the SVG renderer.
+    readonly property string strokeColor: "#" + [color.r, color.g, color.b].map(channel => ("0" + Math.round(channel * 255).toString(16)).slice(-2)).join("")
     readonly property string drawing: {
+        if (source === "preferences-system")
+            return '<path d="M3 7 H21 M3 17 H21"/><circle cx="8" cy="7" r="3" fill="none"/><circle cx="16" cy="17" r="3" fill="none"/>';
+        if (source === "utilities-system-monitor")
+            return '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21 H16 M12 17 V21 M5 12 L8 9 L11 13 L15 7 L19 10"/>';
+        if (source === "preferences-desktop-wallpaper" || source === "image-x-generic")
+            return '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="M3 17 L8 12 L12 16 L16 10 L21 17"/>';
+        if (source === "view-split-left-right")
+            return '<rect x="3" y="3" width="8" height="18" rx="2"/><rect x="15" y="3" width="6" height="7" rx="1.5"/><rect x="15" y="14" width="6" height="7" rx="1.5"/>';
+        if (source === "view-grid")
+            return '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>';
         if (source === "object-locked" || source === "object-unlocked")
             return '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10 V6 A3 3 0 0 1 15 6' + (source === "object-locked" ? ' V10' : '') + ' M12 14 V17"/>';
         if (source === "input-keyboard")
@@ -31,7 +44,7 @@ Item {
             return '<path d="M3 8 Q12 1 21 8 M6 12 Q12 7 18 12 M9 16 Q12 13 15 16"/><circle cx="12" cy="20" r="0.7"/>';
         if (source.indexOf("bluetooth") === 0)
             return '<path d="M7 7 L17 17 L12 21 L12 3 L17 7 L7 17"/>';
-        if (source.indexOf("brightness") === 0)
+        if (source.indexOf("brightness") === 0 || source === "preferences-desktop-theme")
             return '<circle cx="12" cy="12" r="4"/><path d="M12 2 V4 M12 20 V22 M2 12 H4 M20 12 H22 M5 5 L6.5 6.5 M17.5 17.5 L19 19 M5 19 L6.5 17.5 M17.5 6.5 L19 5"/>';
         if (source.indexOf("audio-volume") === 0)
             return '<path d="M4 9 H8 L13 5 V19 L8 15 H4 Z"/>' + (source.indexOf("muted") >= 0 ? '<path d="M17 9 L22 15 M22 9 L17 15"/>' : '<path d="M17 8 Q21 12 17 16 M20 5 Q27 12 20 19"/>');
@@ -66,7 +79,7 @@ Item {
         visible: root.drawing !== ""
         sourceSize.width: width * Screen.devicePixelRatio
         sourceSize.height: height * Screen.devicePixelRatio
-        source: root.drawing ? "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="' + root.color + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + root.drawing + '</g></svg>') : ""
+        source: root.drawing ? "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="' + root.strokeColor + '" stroke-opacity="' + root.color.a + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + root.drawing + '</g></svg>') : ""
     }
     Kirigami.Icon {
         anchors.fill: parent

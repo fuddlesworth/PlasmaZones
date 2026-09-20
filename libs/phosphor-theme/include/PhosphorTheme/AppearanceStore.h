@@ -7,9 +7,11 @@
 #include <QVariantMap>
 #include <QUrl>
 #include <QtQmlIntegration/qqmlintegration.h>
+#include <memory>
 
 class QQmlEngine;
 class QJSEngine;
+class QLockFile;
 
 namespace PhosphorTheme {
 class PHOSPHORTHEME_EXPORT AppearanceStore : public QObject
@@ -24,8 +26,8 @@ class PHOSPHORTHEME_EXPORT AppearanceStore : public QObject
     Q_PROPERTY(bool editing READ editing NOTIFY changed)
     Q_PROPERTY(bool dirty READ dirty NOTIFY changed)
 public:
-    explicit AppearanceStore(QObject* parent = nullptr);
     explicit AppearanceStore(const QString& path, QObject* parent = nullptr);
+    ~AppearanceStore() override;
     QVariantMap values() const
     {
         return m_values;
@@ -38,6 +40,9 @@ public:
     static AppearanceStore* create(QQmlEngine* engine, QJSEngine* scriptEngine);
     static QVariantMap defaults();
     static bool validate(const QVariantMap& values, QVariantMap& result);
+    // Cross-process decoration readers use a draft only while its producer
+    // holds the preview lock. A crashed editor cannot leave a saved-looking draft.
+    static QVariantMap effectiveValues(const QString& path, bool* previewActive = nullptr);
     bool editing() const
     {
         return m_editing;
@@ -46,7 +51,7 @@ public:
     {
         return m_editing && m_values != m_saved;
     }
-    Q_INVOKABLE void beginPreview();
+    Q_INVOKABLE bool beginPreview();
     Q_INVOKABLE bool applyPreview();
     Q_INVOKABLE void revertPreview();
     Q_INVOKABLE void endPreview();
@@ -55,6 +60,7 @@ public:
 
     QString currentPreset() const;
     QVariantMap palette() const;
+    Q_INVOKABLE QVariantMap paletteFor(const QVariantMap& settings) const;
     Q_INVOKABLE bool setValue(const QString& key, const QVariant& value);
     Q_INVOKABLE bool moveWidget(const QString& id, const QString& region, int index = -1);
     Q_INVOKABLE bool resetBarLayout();
@@ -67,8 +73,10 @@ Q_SIGNALS:
     void errorChanged();
 
 private:
+    explicit AppearanceStore(QObject* parent = nullptr);
     static QVariantMap presetValues(const QString& preset);
     bool write(const QVariantMap& values);
+    bool writeDocument(const QString& path, const QVariantMap& values);
     void publish(const QVariantMap& values);
     bool commit(const QVariantMap& values);
     bool fail(const QString& error);
@@ -77,5 +85,6 @@ private:
     QVariantMap m_values;
     QVariantMap m_saved;
     bool m_editing = false;
+    std::unique_ptr<QLockFile> m_previewLock;
 };
 }

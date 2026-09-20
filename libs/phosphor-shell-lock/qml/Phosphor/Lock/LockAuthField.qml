@@ -46,7 +46,7 @@ FocusScope {
             horizontalAlignment: implicitWidth > width ? Text.AlignRight : Text.AlignLeft
             color: root.dotCount ? Appearance.text : Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: root.dotCount ? 14 : 11
+            font.pixelSize: Math.round((root.dotCount ? 14 : 11) * Appearance.textScale)
             font.letterSpacing: root.dotCount ? 2 : 0
             opacity: root.phase === "authenticating" ? .55 : 1
             Accessible.ignored: true

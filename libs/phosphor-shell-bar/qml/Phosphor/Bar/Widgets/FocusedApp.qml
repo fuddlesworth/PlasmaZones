@@ -21,6 +21,6 @@ BarWidget {
         color: Appearance.muted
         elide: Text.ElideRight
         font.family: Tokens.font_family_ui
-        font.pixelSize: 11
+        font.pixelSize: Math.round((11) * Appearance.textScale)
     }
 }

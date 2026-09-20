@@ -12,7 +12,7 @@ Basic.ComboBox {
     leftPadding: 10
     rightPadding: 26
     font.family: Tokens.font_family_ui
-    font.pixelSize: labelSize
+    font.pixelSize: Math.round(labelSize * Appearance.textScale)
     background: Rectangle {
         radius: 7
         color: Appearance.card

@@ -119,7 +119,7 @@ Item {
                 text: root.label
                 color: Appearance.text
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 11
+                font.pixelSize: Math.round((11) * Appearance.textScale)
                 elide: Text.ElideRight
             }
             Text {
@@ -129,7 +129,7 @@ Item {
                 text: root.sublabel
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 9
+                font.pixelSize: Math.round((9) * Appearance.textScale)
                 elide: Text.ElideRight
             }
         }

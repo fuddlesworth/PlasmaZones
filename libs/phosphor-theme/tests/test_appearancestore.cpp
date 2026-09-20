@@ -13,6 +13,37 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void decorationPreviewIsOwnedAndNeverReplacesSavedSettings()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QVERIFY(store.applyPreset(QStringLiteral("phosphor")));
+        const auto saved = store.values();
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.applyPreset(QStringLiteral("ember")));
+        bool active = false;
+        QCOMPARE(AppearanceStore::effectiveValues(path, &active), store.values());
+        QVERIFY(active);
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        AppearanceStore competing(path);
+        QVERIFY(!competing.beginPreview());
+        store.revertPreview();
+        QCOMPARE(AppearanceStore::effectiveValues(path), saved);
+        QVERIFY(store.applyPreset(QStringLiteral("paper")));
+        QVERIFY(store.applyPreview());
+        const auto applied = store.values();
+        QVERIFY(store.applyPreset(QStringLiteral("ember")));
+        store.endPreview();
+        QCOMPARE(AppearanceStore::effectiveValues(path, &active), applied);
+        QVERIFY(!active);
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral(".preview")));
+        // An orphan draft, left by a crashed producer, must never win on startup.
+        QVERIFY(QFile::copy(path, path + QStringLiteral(".preview")));
+        QVERIFY(store.applyPreset(QStringLiteral("phosphor")));
+        QCOMPARE(AppearanceStore::effectiveValues(path, &active), store.values());
+        QVERIFY(!active);
+    }
     void previewIsOneAtomicLook()
     {
         QTemporaryDir dir;
@@ -99,6 +130,11 @@ private Q_SLOTS:
                                 QVariantMap{{QStringLiteral("DP-1"),
                                              QVariantMap{{QStringLiteral("path"), QStringLiteral("relative.png")},
                                                          {QStringLiteral("fit"), QStringLiteral("fill")}}}}));
+        QVariantMap oversized;
+        for (int i = 0; i < 32; ++i)
+            oversized[QString::number(i)] = QVariantMap{{QStringLiteral("path"), QString(u'/' + QString(4000, u'a'))},
+                                                        {QStringLiteral("fit"), QStringLiteral("fill")}};
+        QVERIFY(!store.setValue(QStringLiteral("wallpapers"), oversized));
     }
 
     void notificationPreferencesSurvivePresetAndReload()

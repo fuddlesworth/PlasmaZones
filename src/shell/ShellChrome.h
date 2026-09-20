@@ -63,6 +63,7 @@ public:
     /// PaletteStore singleton), so the host sets it from its engine hook;
     /// null falls back to the spectrum's built-in navy tokens.
     void setPalette(PhosphorTheme::PaletteStore* palette);
+    void setAppearance(const QVariantMap& settings);
 
     [[nodiscard]] int revision() const;
     [[nodiscard]] QObject* decorationComponent() const;
@@ -93,9 +94,11 @@ private Q_SLOTS:
 
 private:
     void subscribeToDaemon();
+    PhosphorSurfaceShaders::DecorationProfile profileFor(const QString& surfacePath) const;
 
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_registry;
     PhosphorSurfaceShaders::DecorationProfileTree m_tree;
+    QVariantMap m_appearance;
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;
     int m_revision = 0;

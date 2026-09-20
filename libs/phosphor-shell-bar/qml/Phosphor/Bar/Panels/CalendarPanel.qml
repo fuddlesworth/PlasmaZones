@@ -108,7 +108,7 @@ FocusScope {
                     text: Qt.formatDate(root.today, "dddd, MMMM d").toUpperCase()
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 9
+                    font.pixelSize: Math.round((9) * Appearance.textScale)
                     font.letterSpacing: 1.8
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
@@ -120,7 +120,7 @@ FocusScope {
                     textFormat: Text.RichText
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 62
+                    font.pixelSize: Math.round((62) * Appearance.textScale)
                     font.letterSpacing: -3
                     font.weight: Font.Medium
                     verticalAlignment: Text.AlignVCenter
@@ -145,14 +145,14 @@ FocusScope {
                     text: root.clock.timeZoneName + " · " + root.clock.timeZoneAbbreviation
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 10
+                    font.pixelSize: Math.round((10) * Appearance.textScale)
                     elide: Text.ElideRight
                 }
                 Text {
                     text: root.utcOffset
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 10
+                    font.pixelSize: Math.round((10) * Appearance.textScale)
                 }
             }
             Rectangle {
@@ -171,7 +171,7 @@ FocusScope {
                     text: Qt.formatDate(root.displayedMonth, "MMMM yyyy")
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 15
+                    font.pixelSize: Math.round((15) * Appearance.textScale)
                     font.weight: Font.Medium
                 }
                 ShellButton {
@@ -215,7 +215,7 @@ FocusScope {
                         horizontalAlignment: Text.AlignHCenter
                         color: Appearance.muted
                         font.family: Tokens.font_family_ui
-                        font.pixelSize: 9
+                        font.pixelSize: Math.round((9) * Appearance.textScale)
                     }
                 }
             }
@@ -250,7 +250,7 @@ FocusScope {
                         contentItem: Text {
                             text: day.dateValue.getDate()
                             font.family: Tokens.font_family_mono
-                            font.pixelSize: 12
+                            font.pixelSize: Math.round((12) * Appearance.textScale)
                             color: day.dateValue.getMonth() === root.displayedMonth.getMonth() ? Appearance.text : Appearance.muted
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -283,7 +283,7 @@ FocusScope {
                     text: Qt.formatDate(root.selectedDate, "dddd, MMM d")
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round((11) * Appearance.textScale)
                     font.weight: Font.Medium
                     elide: Text.ElideRight
                 }
@@ -291,7 +291,7 @@ FocusScope {
                     text: root.agenda ? root.agenda.name || qsTr("Agenda") : ""
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 9
+                    font.pixelSize: Math.round((9) * Appearance.textScale)
                 }
             }
             Column {
@@ -312,7 +312,7 @@ FocusScope {
                             text: modelData.time
                             color: Appearance.muted
                             font.family: Tokens.font_family_mono
-                            font.pixelSize: 10
+                            font.pixelSize: Math.round((10) * Appearance.textScale)
                         }
                         Rectangle {
                             Layout.fillHeight: true
@@ -326,7 +326,7 @@ FocusScope {
                                 width: parent.width
                                 text: modelData.title
                                 font.family: Tokens.font_family_ui
-                                font.pixelSize: 11
+                                font.pixelSize: Math.round((11) * Appearance.textScale)
                                 font.weight: Font.Medium
                                 color: Appearance.text
                                 elide: Text.ElideRight
@@ -335,7 +335,7 @@ FocusScope {
                                 width: parent.width
                                 text: modelData.detail || ""
                                 font.family: Tokens.font_family_ui
-                                font.pixelSize: 9
+                                font.pixelSize: Math.round((9) * Appearance.textScale)
                                 color: Appearance.muted
                                 elide: Text.ElideRight
                             }
@@ -354,7 +354,7 @@ FocusScope {
                         text: root.agenda ? qsTr("Nothing scheduled for this day.") : qsTr("No calendar connected.")
                         color: Appearance.muted
                         font.family: Tokens.font_family_ui
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round((11) * Appearance.textScale)
                         verticalAlignment: Text.AlignVCenter
                     }
                 }
@@ -368,14 +368,14 @@ FocusScope {
                     text: qsTr("Arrow keys to browse · Esc to close")
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 9
+                    font.pixelSize: Math.round((9) * Appearance.textScale)
                     elide: Text.ElideRight
                 }
                 Text {
                     text: qsTr("Local time")
                     color: Appearance.muted
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: 9
+                    font.pixelSize: Math.round((9) * Appearance.textScale)
                 }
             }
         }

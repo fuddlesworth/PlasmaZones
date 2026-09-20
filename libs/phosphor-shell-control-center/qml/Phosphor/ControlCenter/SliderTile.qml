@@ -114,13 +114,13 @@ Item {
             text: root.label
             color: Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: 10
+            font.pixelSize: Math.round((10) * Appearance.textScale)
         }
         Text {
             text: root.available ? root._readout : qsTr("Unavailable")
             color: Appearance.text
             font.family: Tokens.font_family_mono
-            font.pixelSize: 10
+            font.pixelSize: Math.round((10) * Appearance.textScale)
         }
     }
     Slider {
@@ -191,14 +191,14 @@ Item {
                 Layout.fillWidth: true
                 text: root.deviceName
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 9
+                font.pixelSize: Math.round((9) * Appearance.textScale)
                 color: Appearance.muted
                 elide: Text.ElideRight
             }
             Text {
                 text: qsTr("Change output ›")
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 9
+                font.pixelSize: Math.round((9) * Appearance.textScale)
                 color: Appearance.muted
             }
         }

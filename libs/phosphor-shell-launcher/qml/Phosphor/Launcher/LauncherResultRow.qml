@@ -90,7 +90,7 @@ Item {
                 textFormat: Text.PlainText
                 color: Appearance.text
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 12
+                font.pixelSize: Math.round((12) * Appearance.textScale)
                 font.weight: Font.Medium
                 elide: Text.ElideRight
             }
@@ -101,7 +101,7 @@ Item {
                 textFormat: Text.PlainText
                 color: Appearance.muted
                 font.family: Tokens.font_family_ui
-                font.pixelSize: 10
+                font.pixelSize: Math.round((10) * Appearance.textScale)
                 elide: Text.ElideRight
             }
         }

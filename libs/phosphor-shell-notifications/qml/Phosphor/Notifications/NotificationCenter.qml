@@ -85,7 +85,7 @@ FocusScope {
                 spacing: 7
                 NotificationLabel {
                     text: qsTr("YOUR INBOX")
-                    font.pixelSize: 8
+                    font.pixelSize: Math.round((8) * Appearance.textScale)
                     font.letterSpacing: 2
                 }
                 RowLayout {
@@ -93,7 +93,7 @@ FocusScope {
                     NotificationLabel {
                         text: qsTr("Notifications")
                         color: Appearance.text
-                        font.pixelSize: 23
+                        font.pixelSize: Math.round((23) * Appearance.textScale)
                         font.weight: Font.Medium
                         font.letterSpacing: -0.7
                     }
@@ -101,7 +101,7 @@ FocusScope {
                         text: String(root.total).padStart(2, "0")
                         color: Appearance.stops[2]
                         font.family: Tokens.font_family
-                        font.pixelSize: 12
+                        font.pixelSize: Math.round((12) * Appearance.textScale)
                         Layout.alignment: Qt.AlignBaseline
                     }
                 }
@@ -144,12 +144,12 @@ FocusScope {
                     NotificationLabel {
                         text: qsTr("Do not disturb")
                         color: Appearance.text
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round((11) * Appearance.textScale)
                         font.weight: Font.Medium
                     }
                     NotificationLabel {
                         text: quiet.checked ? qsTr("On · quietly saving incoming notifications") : qsTr("Off · showing incoming notifications")
-                        font.pixelSize: 9
+                        font.pixelSize: Math.round((9) * Appearance.textScale)
                         Layout.fillWidth: true
                     }
                 }
@@ -267,7 +267,7 @@ FocusScope {
                             spacing: 12
                             NotificationLabel {
                                 text: row.payload.label
-                                font.pixelSize: 9
+                                font.pixelSize: Math.round((9) * Appearance.textScale)
                             }
                             Rectangle {
                                 Layout.fillWidth: true
@@ -300,11 +300,11 @@ FocusScope {
                             NotificationLabel {
                                 text: row.payload.appName
                                 color: Appearance.text
-                                font.pixelSize: 11
+                                font.pixelSize: Math.round((11) * Appearance.textScale)
                             }
                             NotificationLabel {
                                 text: row.payload.count
-                                font.pixelSize: 9
+                                font.pixelSize: Math.round((9) * Appearance.textScale)
                             }
                             Item {
                                 Layout.fillWidth: true
@@ -382,7 +382,7 @@ FocusScope {
                     Layout.maximumWidth: root.width - 70
                     text: !root.available ? qsTr("Notifications are handled elsewhere") : root.unreadOnly && root.total ? qsTr("You’re all caught up.") : qsTr("A little room to focus.")
                     color: Appearance.text
-                    font.pixelSize: 16
+                    font.pixelSize: Math.round((16) * Appearance.textScale)
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
@@ -390,7 +390,7 @@ FocusScope {
                     Layout.fillWidth: true
                     Layout.maximumWidth: root.width - 70
                     text: !root.available ? qsTr("Another notification daemon is running in this session.") : root.unreadOnly && root.total ? qsTr("Your read notifications are still in All.") : qsTr("New notifications will find a home here. For now, enjoy the quiet.")
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round((11) * Appearance.textScale)
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                     lineHeight: 1.7
@@ -418,7 +418,7 @@ FocusScope {
             NotificationLabel {
                 Layout.fillWidth: true
                 text: qsTr("%1 unread · %2 total").arg(root.unread).arg(root.total)
-                font.pixelSize: 9
+                font.pixelSize: Math.round((9) * Appearance.textScale)
             }
             ShellButton {
                 objectName: "notificationUndo"

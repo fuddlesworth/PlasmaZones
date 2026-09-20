@@ -69,25 +69,12 @@
 #include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
-#include <QQmlPropertyMap>
-#include <QTimer>
 #include <QUrl>
 
 #include <memory>
 #include <utility>
 
 Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
-
-namespace {
-class AppearanceSessionState final : public QQmlPropertyMap
-{
-public:
-    explicit AppearanceSessionState(QObject* parent)
-        : QQmlPropertyMap(this, parent)
-    {
-    }
-};
-}
 
 int main(int argc, char* argv[])
 {
@@ -428,12 +415,6 @@ int main(int argc, char* argv[])
         PhosphorShellApp::PaneRules::controlCenterRule(
             PhosphorShellApp::PanePopoutTransport::appIdFor(QStringLiteral("control-center"))));
 
-    auto* appearanceSession = new AppearanceSessionState(&app);
-    appearanceSession->insert(QStringLiteral("scrollOffset"), 0);
-    appearanceSession->insert(QStringLiteral("editingLayout"), false);
-    appearanceSession->insert(QStringLiteral("advanced"), false);
-    QString appearanceScreenToRestore;
-
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{
             .surfaceFactory = &factory,
@@ -673,9 +654,7 @@ int main(int argc, char* argv[])
         qCCritical(lcShell) << "shell engine failed:" << reason << "— the shell is now headless until the next reload";
     });
 
-    engine.addEngineHook([&engine, &popouts, &barController, &desktopStyle, appearanceSession,
-                          &appearanceScreenToRestore](QQmlEngine* qmlEngine) {
-        qmlEngine->rootContext()->setContextProperty(QStringLiteral("AppearanceSession"), appearanceSession);
+    engine.addEngineHook([&engine, &desktopStyle, &shellChrome](QQmlEngine* qmlEngine) {
         auto* appearance = qmlEngine->singletonInstance<PhosphorTheme::AppearanceStore*>(
             QStringLiteral("Phosphor.Theme"), QStringLiteral("AppearanceStore"));
         if (appearance) {
@@ -693,29 +672,17 @@ int main(int argc, char* argv[])
                     });
             }
             desktopStyle.apply(appearance->values());
+            shellChrome.setAppearance(appearance->values());
             QObject::connect(appearance, &PhosphorTheme::AppearanceStore::changed, qmlEngine,
-                             [appearance, &desktopStyle] {
+                             [appearance, &desktopStyle, &shellChrome] {
                                  desktopStyle.apply(appearance->values());
+                                 shellChrome.setAppearance(appearance->values());
                              });
-            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, qmlEngine,
-                             [&engine, &popouts, &barController, &appearanceScreenToRestore] {
-                                 appearanceScreenToRestore = popouts.isOpen(QStringLiteral("bar.panel.appearance"))
-                                     ? barController.openPanelScreen()
-                                     : QString();
-                                 engine.requestReload();
-                             });
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, qmlEngine, [&engine] {
+                engine.requestReload();
+            });
         }
     });
-
-    QObject::connect(&engine, &PhosphorShell::ShellEngine::reloaded, &barController,
-                     [&engine, &barController, &appearanceScreenToRestore] {
-                         const QString screen = std::exchange(appearanceScreenToRestore, QString());
-                         if (!screen.isEmpty()) {
-                             QTimer::singleShot(0, &engine, [&barController, screen] {
-                                 barController.activateWidgetForScreen(QStringLiteral("appearance"), screen);
-                             });
-                         }
-                     });
 
     if (!engine.load(shellUrl)) {
         return 1;

@@ -23,14 +23,12 @@ namespace PhosphorShellPicker {
 
 namespace {
 
-// The raster formats Qt's image plugins decode on every Plasma install.
-// SVG is left out: a vector wallpaper has no thumbnail-friendly size and
-// Plasma renders it through its own path.
+// Formats handled by Qt image readers; SVG artwork is decoded at the requested thumbnail size.
 const QStringList& imageSuffixes()
 {
     static const QStringList suffixes{
         QStringLiteral("png"),  QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("webp"),
-        QStringLiteral("avif"), QStringLiteral("jxl"), QStringLiteral("bmp"),
+        QStringLiteral("avif"), QStringLiteral("jxl"), QStringLiteral("bmp"),  QStringLiteral("svg"),
     };
     return suffixes;
 }

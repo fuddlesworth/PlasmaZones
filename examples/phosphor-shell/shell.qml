@@ -60,6 +60,7 @@ Item {
             decorationChain: Appearance.surfacePacks && ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
             decorationOuterPadding: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.outerPaddingFor(surfacePath) : 0
             surfaceFocused: focused
+            animationsPaused: !Appearance.motion
             // The chrome sits in transformed and clipped hosts (a settling
             // toast, a scaling dashboard), which an unlayered stage ignores.
             layeredStages: true
@@ -276,54 +277,8 @@ Item {
         onOpenCenterRequested: root.toggleWidgetPanel("notification", null)
     }
 
-    // The wallpaper and theme picker, one strip per output (A3 §8): a
-    // 96 px Bottom panel on the Overlay layer with no exclusive zone, so
-    // it lies over the windows it covers and reserves nothing. Closed, its
-    // input region is empty and it is click-through; open, the region is
-    // the whole strip. Keyboard is OnDemand, the only interactivity a
-    // panel can change nothing about after creation: the compositor gives
-    // the strip focus on the first click into it, from which point Escape
-    // returns and Enter applies. Which output's strip is open lives on
-    // PickerRegistry (a context property, for the delegate-context reason
-    // the bar gives); the strip restores the palette and the wallpaper
-    // preview (on the `wallpapers` surfaces above) when it closes.
-    PerScreenPanels {
-        id: pickerStrips
-
-        model: PhosphorShell.screens
-
-        delegate: PanelWindow {
-            id: pickerSurface
-
-            edge: PanelWindow.Bottom
-            alignment: PanelWindow.Fill
-            thickness: 96
-            panelLayer: PanelWindow.LayerOverlay
-            exclusiveZoneEnabled: false
-            keyboardFocus: PanelWindow.OnDemand
-            inputRegion: pickerStrip.open ? [Qt.rect(0, 0, pickerSurface.width, pickerSurface.height)] : []
-
-            Picker {
-                id: pickerStrip
-
-                anchors.fill: parent
-                decoration: ShellChrome.decorationComponent
-                screenName: pickerSurface.screen ? pickerSurface.screen.name : ""
-                wallpaper: PhosphorShell.wallpaper
-                targetCount: PickerRegistry.targetCount
-                open: screenName !== "" && PickerRegistry.openScreen === screenName
-                opacity: open ? 1 : 0
-                visible: opacity > 0
-                onClosed: PickerRegistry.hide()
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: pickerStrip.open ? Motion.duration_enter_content : Motion.duration_release_long
-                        easing: pickerStrip.open ? Motion.reveal : Motion.release
-                    }
-                }
-            }
-        }
+    AppearanceSurfaces {
+        locked: sessionCoordinator.lock.state !== 0
     }
 
     // The polkit dim, one per output (A3 §9c): while a request is open the
@@ -558,10 +513,6 @@ Item {
     // granted keyboard focus cannot receive a keystroke at all — the field
     // would look editable and silently swallow everything typed into it.
     readonly property var widgetPanels: ({
-            "appearance": {
-                "component": appearancePanelComponent,
-                "keyboard": true
-            },
             "network": {
                 "component": networkPanelComponent,
                 "keyboard": true
@@ -627,15 +578,6 @@ Item {
 
         NotificationPanel {
             onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.notification"))
-        }
-    }
-
-    Component {
-        id: appearancePanelComponent
-        AppearancePanel {
-            sessionState: AppearanceSession
-            availableWidgets: BarRegistry.factoryIds
-            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.appearance"))
         }
     }
 
@@ -747,6 +689,8 @@ Item {
                 source.expandRequested(false);
             else if (id === "power")
                 root.togglePowerMenu(source);
+            else if (id === "appearance")
+                PickerRegistry.toggle(ControlCenterRegistry.screenOf(source)?.name || "");
             else if (id === "launcher")
                 root.toggleLauncher();
             else if (id === "controlcenter" || id === "media")
@@ -763,7 +707,7 @@ Item {
     IpcTarget {
         target: "appearance"
         function show(): void {
-            root.toggleWidgetPanel("appearance", null);
+            PickerRegistry.show();
         }
         function presentation(name: string): bool {
             return AppearanceStore.setValue("presentation", name);

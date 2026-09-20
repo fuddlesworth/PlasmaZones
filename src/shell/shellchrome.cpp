@@ -8,6 +8,7 @@
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 #include <PhosphorTheme/PaletteStore.h>
+#include <PhosphorTheme/ShellPalette.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -84,6 +85,40 @@ void ShellChrome::setPalette(PhosphorTheme::PaletteStore* palette)
 
 ShellChrome::~ShellChrome() = default;
 
+void ShellChrome::setAppearance(const QVariantMap& settings)
+{
+    if (m_appearance == settings)
+        return;
+    m_appearance = settings;
+    bump();
+}
+
+PhosphorSurfaceShaders::DecorationProfile ShellChrome::profileFor(const QString& surfacePath) const
+{
+    if (m_appearance.isEmpty() || !surfacePath.startsWith(QLatin1String("shell.phosphor.")))
+        return m_tree.resolve(surfacePath);
+    PhosphorSurfaceShaders::DecorationProfile profile;
+    const auto effect = m_appearance.value(QStringLiteral("surfaceEffect")).toString();
+    if (!m_appearance.value(QStringLiteral("surfacePacks")).toBool()
+        || (effect != QLatin1String("glass") && effect != QLatin1String("motes")))
+        return profile;
+    const QString pack = QStringLiteral("phosphor-") + effect;
+    profile.chain = QStringList{pack};
+    const auto palette = PhosphorTheme::ShellPalette::fromSettings(m_appearance);
+    // The bundled effects expose their gradient and tint as real shader
+    // parameters, so previews follow the same palette as the surrounding UI.
+    profile.parameters =
+        QVariantMap{{pack,
+                     QVariantMap{{QStringLiteral("colorCyan"), palette.stops[0].name()},
+                                 {QStringLiteral("colorBlue"), palette.stops[1].name()},
+                                 {QStringLiteral("colorPurple"), palette.stops[2].name()},
+                                 {QStringLiteral("colorRose"), palette.stops[3].name()},
+                                 {QStringLiteral("colorTint"), palette.surface.name()},
+                                 {QStringLiteral("cornerRadius"), m_appearance.value(QStringLiteral("radius"))},
+                                 {QStringLiteral("contentOpacity"), 1.0}}}};
+    return profile;
+}
+
 int ShellChrome::revision() const
 {
     return m_revision;
@@ -144,7 +179,7 @@ bool ShellChrome::setTreeJson(const QString& json)
 QVariantList ShellChrome::chainFor(const QString& surfacePath) const
 {
     QVariantList stages;
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_tree.resolve(surfacePath);
+    const PhosphorSurfaceShaders::DecorationProfile profile = profileFor(surfacePath);
     const QStringList chain = profile.enabledChain();
     if (chain.isEmpty()) {
         return stages;
@@ -152,12 +187,17 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
     const QVariantMap allParams = profile.effectiveParameters();
     // The pack flag resolver's theme: the spectrum's own tokens, so a pack
     // that asks for the accent gets the focus colour of the chrome around it.
-    const PhosphorSurfaceShaders::SurfaceThemeColors theme{
+    PhosphorSurfaceShaders::SurfaceThemeColors theme{
         tokenOr(m_palette, QStringLiteral("primary"), QColor(0x3b, 0x82, 0xf6)),
         tokenOr(m_palette, QStringLiteral("outline"), QColor(0x33, 0x41, 0x55)),
         tokenOr(m_palette, QStringLiteral("surface"), QColor(0x0b, 0x10, 0x20)),
         tokenOr(m_palette, QStringLiteral("on_surface"), QColor(0xe6, 0xed, 0xff)),
     };
+    if (!m_appearance.isEmpty()) {
+        const auto palette = PhosphorTheme::ShellPalette::fromSettings(m_appearance);
+        theme = {palette.stops.value(m_appearance.value(QStringLiteral("accentIndex")).toInt(), palette.stops[1]),
+                 palette.outline, palette.surface, palette.text};
+    }
     for (const QString& packId : chain) {
         if (!m_registry->hasEffect(packId)) {
             qCDebug(lcShellChrome) << surfacePath << ": pack" << packId << "is not installed; stage skipped";
@@ -177,7 +217,7 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
 
 double ShellChrome::outerPaddingFor(const QString& surfacePath) const
 {
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_tree.resolve(surfacePath);
+    const PhosphorSurfaceShaders::DecorationProfile profile = profileFor(surfacePath);
     const QVariantMap allParams = profile.effectiveParameters();
     double padding = 0.0;
     const QStringList chain = profile.enabledChain();

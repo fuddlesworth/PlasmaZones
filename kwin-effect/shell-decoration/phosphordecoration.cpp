@@ -47,6 +47,8 @@ public:
         connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] {
             m_reload.start();
         });
+        m_previewPoll.setInterval(500);
+        connect(&m_previewPoll, &QTimer::timeout, this, &Style::reload);
         reload();
     }
     static Style* instance()
@@ -75,7 +77,7 @@ public:
         const QRectF inner(padding, padding, 2 * corner + 1, 2 * corner + 1);
         for (int spread = padding; spread > 0; --spread) {
             const qreal strength = std::pow(1 - qreal(spread) / padding, 2) * (active ? 0.035 : 0.024);
-            painter.setPen(QPen(alpha(QColor(QStringLiteral("#030b1a")), strength), spread * 2));
+            painter.setPen(QPen(alpha(palette.recess.darker(150), strength), spread * 2));
             painter.drawRoundedRect(inner, radius, radius);
             if (active && glow) {
                 painter.setPen(QPen(alpha(hue, strength * 0.24), spread * 2));
@@ -105,8 +107,12 @@ private:
             m_watcher.addPath(m_path);
         if (QFileInfo::exists(file.path()) && !m_watcher.directories().contains(file.path()))
             m_watcher.addPath(file.path());
-        PhosphorTheme::AppearanceStore store(m_path);
-        const auto next = store.values();
+        bool preview = false;
+        const auto next = PhosphorTheme::AppearanceStore::effectiveValues(m_path, &preview);
+        if (preview && !m_previewPoll.isActive())
+            m_previewPoll.start();
+        else if (!preview)
+            m_previewPoll.stop();
         if (next == values)
             return;
         values = next;
@@ -119,13 +125,14 @@ private:
             family = PhosphorTheme::FontFaces::resolve(PhosphorTheme::FontFaces::uiCandidates(),
                                                        QFontDatabase::systemFont(QFontDatabase::GeneralFont).family());
         font = QFont(family);
-        font.setPixelSize(11);
+        font.setPixelSize(qRound(11 * values.value(QStringLiteral("textScale"), 100).toReal() / 100));
         Q_EMIT changed();
     }
     QHash<quint64, std::shared_ptr<KDecoration3::DecorationShadow>> m_shadows;
     QString m_path;
     QFileSystemWatcher m_watcher;
     QTimer m_reload;
+    QTimer m_previewPoll;
 };
 
 class Button final : public KDecoration3::DecorationButton
