@@ -58,7 +58,7 @@ Item {
             spacer: "view-split-left-right"
         })
     readonly property var hiddenWidgets: availableWidgets.filter(id => !used.includes(id))
-    implicitHeight: Math.max(editor.implicitHeight, inspector.implicitHeight)
+    implicitHeight: pageLayout.implicitHeight
     function flattened(region) {
         const result = [];
         const groups = layout[region] || [];
@@ -70,10 +70,13 @@ Item {
     function move(region, index) {
         AppearanceStore.moveWidget(chosen, region, index);
     }
-    RowLayout {
+    GridLayout {
+        id: pageLayout
+        columns: root.width < 740 ? 1 : 2
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 24
+        columnSpacing: 24
+        rowSpacing: 24
         ColumnLayout {
             id: editor
             Layout.fillWidth: true
@@ -304,7 +307,8 @@ Item {
         }
         LookCard {
             id: inspector
-            Layout.preferredWidth: 236
+            Layout.preferredWidth: pageLayout.columns === 1 ? -1 : 236
+            Layout.fillWidth: pageLayout.columns === 1
             Layout.alignment: Qt.AlignTop
             LookText {
                 text: qsTr("Bar placement")

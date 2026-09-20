@@ -21,14 +21,17 @@ Item {
     }
     readonly property var colors: wallpaper.colors || Appearance.settings.wallpaperColors
     readonly property var filtered: library.filter(w => (filter === "All" || w.collection === filter) && w.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-    implicitHeight: Math.max(browser.implicitHeight, inspector.implicitHeight)
+    implicitHeight: pageLayout.implicitHeight
     function choose(path, fit) {
         AppearanceLibrary.chooseWallpaper(path, controller.linked ? "" : controller.selectedScreen, fit || assignment.fit || "fill");
     }
-    RowLayout {
+    GridLayout {
+        id: pageLayout
+        columns: root.width < 740 ? 1 : 2
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 24
+        columnSpacing: 24
+        rowSpacing: 24
         ColumnLayout {
             id: browser
             Layout.fillWidth: true
@@ -75,7 +78,8 @@ Item {
                     Layout.fillWidth: true
                 }
                 Basic.TextField {
-                    Layout.preferredWidth: Math.min(140, browser.width * 0.26)
+                    Layout.preferredWidth: 140
+                    Layout.minimumWidth: 90
                     implicitHeight: 30
                     padding: 10
                     placeholderText: qsTr("Search")
@@ -158,7 +162,8 @@ Item {
         LookCard {
             id: inspector
             body.spacing: 10
-            Layout.preferredWidth: 236
+            Layout.preferredWidth: pageLayout.columns === 1 ? -1 : 236
+            Layout.fillWidth: pageLayout.columns === 1
             Layout.alignment: Qt.AlignTop
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter

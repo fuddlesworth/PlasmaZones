@@ -13,6 +13,7 @@
 #include <QImageReader>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QThreadPool>
@@ -149,6 +150,12 @@ void AppearanceLibrary::rescan()
         if (!file.isFile() || seen.contains(file.canonicalFilePath()))
             continue;
         seen.insert(file.canonicalFilePath());
+        // Managed filenames carry a content hash for collision-free imports;
+        // keep the original filename as the visible library label.
+        if (file.absolutePath() == QDir(m_directory).absoluteFilePath(QStringLiteral("images"))) {
+            static const QRegularExpression prefix(QStringLiteral("^[0-9a-f]{12}-"));
+            candidate[Name] = file.completeBaseName().remove(prefix);
+        }
         candidate[QStringLiteral("collection")] = QStringLiteral("Added");
         candidate[QStringLiteral("description")] = tr("Your own view.");
         candidate[QStringLiteral("size")] = tr("Local image");
@@ -220,12 +227,30 @@ QVariantMap AppearanceLibrary::inspectImage(const QString& path)
         }
     }
     auto ranked = buckets.values();
-    std::sort(ranked.begin(), ranked.end(), [](const Bucket& a, const Bucket& b) {
-        return a.count > b.count;
+    // Large shadows and black clothing should not displace the wallpaper's
+    // characteristic colors. Keep neutrals as a fallback for monochrome art.
+    const auto bucketColor = [](const Bucket& bucket) {
+        return QColor(bucket.r / bucket.count, bucket.g / bucket.count, bucket.b / bucket.count);
+    };
+    const auto chromatic = [bucketColor](const Bucket& bucket) {
+        const auto color = bucketColor(bucket);
+        return color.hslSaturationF() >= .18 && color.lightnessF() >= .18 && color.lightnessF() <= .85;
+    };
+    if (std::any_of(ranked.cbegin(), ranked.cend(), chromatic)) {
+        ranked.removeIf([chromatic](const Bucket& bucket) {
+            return !chromatic(bucket);
+        });
+    }
+    std::sort(ranked.begin(), ranked.end(), [bucketColor](const Bucket& a, const Bucket& b) {
+        const auto score = [bucketColor](const Bucket& bucket) {
+            const auto color = bucketColor(bucket);
+            return bucket.count * (.05 + color.hslSaturationF()) * std::max(.05f, color.lightnessF());
+        };
+        return score(a) > score(b);
     });
     QList<QColor> chosen;
     for (const auto& bucket : ranked) {
-        const QColor color(bucket.r / bucket.count, bucket.g / bucket.count, bucket.b / bucket.count);
+        const QColor color = bucketColor(bucket);
         const bool distinct = std::none_of(chosen.cbegin(), chosen.cend(), [color](const QColor& other) {
             return std::abs(color.red() - other.red()) + std::abs(color.green() - other.green())
                 + std::abs(color.blue() - other.blue())
@@ -242,8 +267,7 @@ QVariantMap AppearanceLibrary::inspectImage(const QString& path)
         chosen.append(chosen.first());
     QVariantList colors;
     for (const auto& color : chosen)
-        colors.append(
-            QColor(int(color.red() * .65 + 80), int(color.green() * .65 + 80), int(color.blue() * .65 + 80)).name());
+        colors.append(color.name());
     return {{Colors, colors}, {QStringLiteral("size"), QStringLiteral("%1 × %2").arg(size.width()).arg(size.height())}};
 }
 void AppearanceLibrary::chooseWallpaper(const QString& path, const QString& screen, const QString& fit)

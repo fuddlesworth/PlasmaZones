@@ -74,10 +74,19 @@ Item {
     /// Where this surface sits along the screen, 0..1, for the stroke and
     /// the top band. Set by the host from the chip that opened it.
     property real railT: 0.5
+    property Component decoration: null
 
     ShellSurface {
+        id: ground
+        property bool shaderAnchor: true
         anchors.fill: parent
         railT: root.railT
+    }
+    DecorationSlot {
+        anchors.fill: parent
+        component: root.decoration
+        contentItem: ground
+        surfacePath: "shell.phosphor.popout"
     }
     property var mediaPlayer: null
     property var spectrum: AudioSpectrum

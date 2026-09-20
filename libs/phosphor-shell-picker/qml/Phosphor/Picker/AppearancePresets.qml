@@ -45,7 +45,7 @@ ColumnLayout {
     }
     GridLayout {
         Layout.fillWidth: true
-        columns: 3
+        columns: root.width < 780 ? 2 : 3
         columnSpacing: 16
         rowSpacing: 16
         Repeater {
@@ -57,8 +57,11 @@ ColumnLayout {
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
                 readonly property var style: modelData.settings
-                readonly property var palette: AppearanceStore.paletteFor(style)
-                readonly property color base: palette.surface
+                readonly property var lookPalette: {
+                    Appearance.settings;
+                    return AppearanceStore.paletteFor(style);
+                }
+                readonly property color base: lookPalette.surface
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 136
@@ -72,7 +75,7 @@ ColumnLayout {
                         y: 80
                         rotation: -18
                         radius: 65
-                        color: card.palette.card
+                        color: card.lookPalette.card
                     }
                     Rectangle {
                         x: 10
@@ -81,12 +84,12 @@ ColumnLayout {
                         height: 18
                         color: card.base
                         radius: Math.min(6, card.style.radius)
-                        border.color: card.palette.outline
+                        border.color: card.lookPalette.outline
                         Text {
                             x: 7
                             y: 1
                             text: "φ"
-                            color: card.palette.stops[0]
+                            color: card.lookPalette.stops[0]
                             font.pixelSize: 13
                         }
                         Rectangle {
@@ -95,7 +98,7 @@ ColumnLayout {
                             width: 24
                             height: 8
                             color: "transparent"
-                            border.color: card.palette.stops[1]
+                            border.color: card.lookPalette.stops[1]
                         }
                     }
                     Rectangle {
@@ -105,7 +108,7 @@ ColumnLayout {
                         height: 61
                         radius: card.style.radius * .4
                         color: card.base
-                        border.color: card.palette.stops[0]
+                        border.color: card.lookPalette.stops[0]
                     }
                     Rectangle {
                         x: parent.width * .59
@@ -114,7 +117,7 @@ ColumnLayout {
                         height: 28
                         radius: card.style.radius * .25
                         color: card.base
-                        border.color: card.palette.stops[2]
+                        border.color: card.lookPalette.stops[2]
                     }
                     Rectangle {
                         x: parent.width * .59
@@ -123,7 +126,7 @@ ColumnLayout {
                         height: 28
                         radius: card.style.radius * .25
                         color: card.base
-                        border.color: card.palette.stops[3]
+                        border.color: card.lookPalette.stops[3]
                     }
                 }
                 RowLayout {

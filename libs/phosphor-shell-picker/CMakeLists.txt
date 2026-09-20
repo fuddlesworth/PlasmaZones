@@ -29,7 +29,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # ThemePresets reads PaletteStore::defaultPalette() for the Dark tile, and
 # the strip drives MatugenRunner + PaletteStore from Phosphor.Theme.

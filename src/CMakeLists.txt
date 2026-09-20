@@ -782,6 +782,7 @@ if(BUILD_PHOSPHOR_SHELL)
 
     target_link_libraries(phosphor-shell
         PRIVATE
+            Qt6::QuickControls2
             PhosphorShell::PhosphorShell
             plasmazones_core
             KF6::CoreAddons

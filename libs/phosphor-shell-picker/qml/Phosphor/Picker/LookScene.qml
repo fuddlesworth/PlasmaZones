@@ -13,6 +13,23 @@ LookImage {
     path: wallpaper.path || ""
     implicitHeight: miniature ? 125 : 240
     Rectangle {
+        visible: !root.miniature && root.caption && root.wallpaper.collection === "Added"
+        width: root.width * .6
+        height: root.height
+        radius: root.radius
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0
+                color: "#bf0a0e16"
+            }
+            GradientStop {
+                position: 1
+                color: "transparent"
+            }
+        }
+    }
+    Rectangle {
         x: root.miniature ? 9 : 14
         y: root.miniature ? 8 : 13
         width: parent.width - x * 2
@@ -107,6 +124,7 @@ LookImage {
     Column {
         visible: !root.miniature && root.caption
         x: 24
+        width: root.width * .43 - 24
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 44
         spacing: 10
@@ -117,11 +135,15 @@ LookImage {
             font.pixelSize: 7
         }
         LookText {
+            width: parent.width
             text: root.wallpaper.name || qsTr("Your desktop")
+            wrapMode: Text.NoWrap
+            elide: Text.ElideRight
             size: 25
             color: "#e8eef9"
         }
         LookText {
+            width: parent.width
             text: root.wallpaper.description || qsTr("Your own view.")
             size: 10
             color: "#cfdae8"

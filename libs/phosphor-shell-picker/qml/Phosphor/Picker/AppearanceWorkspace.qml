@@ -13,6 +13,8 @@ FocusScope {
     required property var controller
     property var availableWidgets: []
     property Component decoration: null
+    readonly property bool compact: width < 980
+    readonly property int sidebarWidth: compact ? 72 : 178
     readonly property var pages: [
         {
             id: "wallpaper",
@@ -81,6 +83,22 @@ FocusScope {
             root.restoreScroll();
         }
     }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            const item = root.Window.window.activeFocusItem;
+            let ancestor = item;
+            while (ancestor && ancestor !== viewport.contentItem)
+                ancestor = ancestor.parent;
+            if (!ancestor || !item)
+                return;
+            const point = item.mapToItem(viewport.contentItem, 0, 0);
+            if (point.y < viewport.contentY)
+                viewport.contentY = Math.max(0, point.y - 8);
+            else if (point.y + item.height > viewport.contentY + viewport.height)
+                viewport.contentY = Math.min(viewport.contentHeight - viewport.height, point.y + item.height - viewport.height + 8);
+        }
+    }
     ShellSurface {
         id: ground
         property bool shaderAnchor: true
@@ -99,7 +117,7 @@ FocusScope {
     Rectangle {
         x: 1
         y: 1
-        width: 177
+        width: root.sidebarWidth - 1
         height: parent.height - 2
         radius: Appearance.radius
         color: Qt.alpha(Appearance.recess, .45)
@@ -111,15 +129,15 @@ FocusScope {
         }
     }
     Rectangle {
-        x: 178
+        x: root.sidebarWidth
         width: 1
         height: parent.height
         color: Appearance.outline
     }
     Rectangle {
-        x: 179
+        x: root.sidebarWidth + 1
         y: 1
-        width: parent.width - 191
+        width: parent.width - root.sidebarWidth - 13
         height: 2
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -152,6 +170,7 @@ FocusScope {
             font.weight: Font.Light
         }
         Column {
+            visible: !root.compact
             y: 3
             spacing: 5
             LookText {
@@ -171,7 +190,7 @@ FocusScope {
     Column {
         x: 12
         y: 103
-        width: 151
+        width: root.sidebarWidth - 27
         spacing: 7
         Repeater {
             model: root.pages
@@ -207,6 +226,7 @@ FocusScope {
                         color: root.controller.page === nav.modelData.id ? Appearance.accent : Appearance.muted
                     }
                     LookText {
+                        visible: !root.compact
                         text: nav.modelData.title
                         size: 11
                         muted: root.controller.page !== nav.modelData.id
@@ -218,6 +238,7 @@ FocusScope {
     }
     Column {
         x: 26
+        visible: !root.compact
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 26
         spacing: 17
@@ -269,9 +290,9 @@ FocusScope {
         }
     }
     RowLayout {
-        x: 206
+        x: root.sidebarWidth + 28
         y: 21
-        width: parent.width - 234
+        width: parent.width - root.sidebarWidth - 56
         height: 57
         spacing: 16
         ColumnLayout {
@@ -309,9 +330,9 @@ FocusScope {
     }
     Flickable {
         id: viewport
-        x: 206
+        x: root.sidebarWidth + 28
         y: 93
-        width: parent.width - 234
+        width: parent.width - root.sidebarWidth - 56
         height: parent.height - 161
         contentWidth: width
         contentHeight: pageLoader.height + 24
@@ -364,16 +385,16 @@ FocusScope {
         }
     }
     Rectangle {
-        x: 179
+        x: root.sidebarWidth + 1
         y: parent.height - 68
-        width: parent.width - 179
+        width: parent.width - root.sidebarWidth - 1
         height: 1
         color: Appearance.outline
     }
     RowLayout {
-        x: 206
+        x: root.sidebarWidth + 28
         y: parent.height - 56
-        width: parent.width - 234
+        width: parent.width - root.sidebarWidth - 56
         height: 44
         spacing: 10
         Rectangle {
@@ -399,7 +420,8 @@ FocusScope {
             }
         }
         ShellButton {
-            text: qsTr("View desktop")
+            text: root.compact ? "" : qsTr("View desktop")
+            label: qsTr("View desktop")
             iconName: "view-split-left-right"
             flat: true
             labelSize: 10
@@ -430,6 +452,9 @@ FocusScope {
     }
     FileDialog {
         id: imagesDialog
+        // Keep dialogs inside the overlay layer; regular windows sit below it.
+        options: FileDialog.DontUseNativeDialog
+        popupType: Basic.Popup.Item
         title: qsTr("Add wallpapers")
         fileMode: FileDialog.OpenFiles
         nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.avif *.jxl *.bmp *.svg)")]
@@ -437,6 +462,8 @@ FocusScope {
     }
     FileDialog {
         id: importDialog
+        options: FileDialog.DontUseNativeDialog
+        popupType: Basic.Popup.Item
         title: qsTr("Import a Phosphor preset")
         nameFilters: [qsTr("Phosphor presets (*.json)")]
         onAccepted: if (AppearanceLibrary.inspectImport(selectedFile))
@@ -444,6 +471,8 @@ FocusScope {
     }
     FileDialog {
         id: exportDialog
+        options: FileDialog.DontUseNativeDialog
+        popupType: Basic.Popup.Item
         title: qsTr("Export a Phosphor preset")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "json"

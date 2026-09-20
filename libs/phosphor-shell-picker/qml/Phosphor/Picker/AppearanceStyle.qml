@@ -10,7 +10,7 @@ import Phosphor.Widgets
 GridLayout {
     id: root
     required property var controller
-    columns: 2
+    columns: width < 640 ? 1 : 2
     columnSpacing: 18
     rowSpacing: 18
     component Heading: ColumnLayout {
@@ -30,7 +30,7 @@ GridLayout {
         }
     }
     Rectangle {
-        Layout.columnSpan: 2
+        Layout.columnSpan: root.columns
         Layout.fillWidth: true
         implicitHeight: 200
         radius: Math.max(8, Appearance.radius * .7)
@@ -65,6 +65,7 @@ GridLayout {
             }
         }
         Rectangle {
+            visible: root.width >= 640
             x: parent.width - width - 36
             y: 27
             width: Math.min(335, parent.width * .43)
@@ -462,7 +463,7 @@ GridLayout {
         }
     }
     LookCard {
-        Layout.columnSpan: 2
+        Layout.columnSpan: root.columns
         Layout.fillWidth: true
         Heading {
             title: qsTr("Other surfaces")
@@ -555,7 +556,7 @@ GridLayout {
         }
     }
     LookCard {
-        Layout.columnSpan: 2
+        Layout.columnSpan: root.columns
         Layout.fillWidth: true
         Heading {
             title: qsTr("Surface effects")

@@ -107,15 +107,19 @@ PhosphorSurfaceShaders::DecorationProfile ShellChrome::profileFor(const QString&
     const auto palette = PhosphorTheme::ShellPalette::fromSettings(m_appearance);
     // The bundled effects expose their gradient and tint as real shader
     // parameters, so previews follow the same palette as the surrounding UI.
-    profile.parameters =
-        QVariantMap{{pack,
-                     QVariantMap{{QStringLiteral("colorCyan"), palette.stops[0].name()},
-                                 {QStringLiteral("colorBlue"), palette.stops[1].name()},
-                                 {QStringLiteral("colorPurple"), palette.stops[2].name()},
-                                 {QStringLiteral("colorRose"), palette.stops[3].name()},
-                                 {QStringLiteral("colorTint"), palette.surface.name()},
-                                 {QStringLiteral("cornerRadius"), m_appearance.value(QStringLiteral("radius"))},
-                                 {QStringLiteral("contentOpacity"), 1.0}}}};
+    profile.parameters = QVariantMap{
+        {pack,
+         QVariantMap{{QStringLiteral("colorCyan"), palette.stops[0].name()},
+                     {QStringLiteral("colorBlue"), palette.stops[1].name()},
+                     {QStringLiteral("colorPurple"), palette.stops[2].name()},
+                     {QStringLiteral("colorRose"), palette.stops[3].name()},
+                     {QStringLiteral("colorTint"), palette.surface.name()},
+                     {QStringLiteral("cornerRadius"), m_appearance.value(QStringLiteral("radius"))},
+                     {QStringLiteral("contentOpacity"),
+                      surfacePath.endsWith(QLatin1String(".bar")) || surfacePath.endsWith(QLatin1String(".picker"))
+                              || surfacePath.endsWith(QLatin1String(".popout"))
+                          ? .94
+                          : 1.0}}}};
     return profile;
 }
 

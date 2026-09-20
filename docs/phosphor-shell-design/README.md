@@ -29,9 +29,19 @@ Imported images stay in the current tab and are excluded from portable presets.
 The external **Preview controls** drawer remains available for reviewing other
 surfaces. The bar's Appearance button opens the new window.
 
-This is a prototype for review before native migration. The two displays, effect
-samples and pane previews are fixtures. Artwork is drawn in CSS except for the
-existing bundled picture; no downloaded assets or fonts are required.
+The native shell now opens the same four-page Appearance workspace. Its display
+list comes from the compositor, imported images are copied into a durable local
+library, bar controls use the real widget registry, and saved looks can be
+imported, inspected, exported and deleted. One appearance transaction owns
+wallpapers, placement, colors and layout, including through QML reloads. Apply
+writes the complete look atomically; Revert and Discard restore the applied look.
+Window frames read an owned preview while it is active and return to persisted
+settings if its producer exits. Glass and Motes use the existing shader packs
+with the selected palette, and text scaling reaches the shell controls.
+
+The browser study retains simulated displays and effect samples. Its artwork is
+drawn in CSS except for the existing bundled picture; the native gallery ships
+SVG counterparts. Neither needs downloaded assets or fonts.
 Captures: [Wallpaper](mockups-v3/appearance.png),
 [Style](mockups-v3/appearance-style.png), [Bar](mockups-v3/appearance-bar.png),
 [Presets](mockups-v3/appearance-presets.png),

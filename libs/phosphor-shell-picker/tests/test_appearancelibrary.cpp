@@ -85,7 +85,16 @@ private Q_SLOTS:
         library.importImages({QUrl::fromLocalFile(path)});
         QTRY_VERIFY(!library.busy());
         QVERIFY2(library.error().isEmpty(), qPrintable(library.error()));
-        const auto copied = library.wallpapers().last().toMap().value(QStringLiteral("path")).toString();
+        QString copied;
+        for (const auto& wallpaper : library.wallpapers()) {
+            const auto candidate = wallpaper.toMap().value(QStringLiteral("path")).toString();
+            if (candidate.startsWith(dir.filePath(QStringLiteral("library/images/")))) {
+                copied = candidate;
+                break;
+            }
+        }
+        QVERIFY(!copied.isEmpty());
+        QCOMPARE(library.wallpaper(copied).value(QStringLiteral("name")).toString(), QStringLiteral("My # green?"));
         QVERIFY(copied != path);
         QVERIFY(QFile::remove(path));
         QVERIFY(!AppearanceLibrary::inspectImage(copied).isEmpty());
@@ -100,6 +109,30 @@ private Q_SLOTS:
         QTRY_VERIFY(!library.busy());
         QVERIFY(!library.error().isEmpty());
         QCOMPARE(store.values(), before);
+    }
+    void imageColorsPreferDistinctChromaticAreasOverShadows()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("colors.png"));
+        QImage sample(64, 64, QImage::Format_RGB32);
+        sample.fill(QColor(QStringLiteral("#161218")));
+        const QColor gold(QStringLiteral("#db953c")), violet(QStringLiteral("#864bca"));
+        for (int y = 0; y < 16; ++y) {
+            for (int x = 0; x < 64; ++x)
+                sample.setPixelColor(x, y, x < 40 ? gold : violet);
+        }
+        QVERIFY(sample.save(path));
+        const auto colors = AppearanceLibrary::inspectImage(path).value(QStringLiteral("colors")).toList();
+        QCOMPARE(colors.size(), 4);
+        QCOMPARE(QColor(colors[0].toString()), gold);
+        QCOMPARE(QColor(colors[1].toString()), violet);
+
+        sample.fill(QColor(QStringLiteral("#777777")));
+        QVERIFY(sample.save(path));
+        const auto neutral = AppearanceLibrary::inspectImage(path).value(QStringLiteral("colors")).toList();
+        QCOMPARE(neutral.size(), 4);
+        for (const auto& color : neutral)
+            QCOMPARE(QColor(color.toString()).hslSaturationF(), 0.0);
     }
     void presetsPreservePrivacyAndCanBeInspectedBeforePreview()
     {

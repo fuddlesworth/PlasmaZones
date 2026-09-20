@@ -21,6 +21,8 @@ Basic.Popup {
     x: (parent.width - width) / 2
     y: Math.max(20, (parent.height - height) / 2)
     closePolicy: Basic.Popup.NoAutoClose
+    Component.onCompleted: if (controller.closePending)
+        show("close", {})
     function show(kind, value) {
         mode = kind;
         preset = value || {};

@@ -23,6 +23,23 @@ Item {
             exclusiveZoneEnabled: false
             keyboardFocus: PanelWindow.OnDemand
             inputRegion: opened ? [Qt.rect(0, 0, width, height)] : []
+            Keys.onEscapePressed: event => {
+                if (opened)
+                    PickerRegistry.hide();
+                else
+                    event.accepted = false;
+            }
+            Connections {
+                target: PickerRegistry
+                function onDesktopPreviewChanged() {
+                    if (!surface.opened)
+                        return;
+                    if (PickerRegistry.desktopPreview)
+                        backToAppearance.forceActiveFocus();
+                    else
+                        surface.focusAppearance();
+                }
+            }
             onOpenedChanged: if (opened)
                 focusAppearance()
             function focusAppearance() {
@@ -45,21 +62,29 @@ Item {
                 enabled: surface.opened
                 onClicked: PickerRegistry.hide()
             }
-            LookImage {
+            Item {
                 visible: surface.opened && PickerRegistry.desktopPreview
                 x: 0
                 y: Appearance.bottom ? 0 : Appearance.barHeight + 24
                 width: parent.width
                 height: parent.height - Appearance.barHeight - 24
-                radius: 0
-                decodeWidth: surface.width * 2
-                path: {
-                    const walls = Appearance.settings.wallpapers;
-                    return (walls[PickerRegistry.openScreen] || walls[""] || {}).path || "";
-                }
-                fit: {
-                    const walls = Appearance.settings.wallpapers;
-                    return (walls[PickerRegistry.openScreen] || walls[""] || {}).fit || "fill";
+                clip: true
+                // Preserve the desktop's full-output crop while leaving the
+                // real bar visible above this overlay.
+                LookImage {
+                    y: -parent.y
+                    width: surface.width
+                    height: surface.height
+                    radius: 0
+                    decodeWidth: surface.width * 2
+                    path: {
+                        const walls = Appearance.settings.wallpapers;
+                        return (walls[PickerRegistry.openScreen] || walls[""] || {}).path || "";
+                    }
+                    fit: {
+                        const walls = Appearance.settings.wallpapers;
+                        return (walls[PickerRegistry.openScreen] || walls[""] || {}).fit || "fill";
+                    }
                 }
             }
             Loader {
@@ -93,6 +118,7 @@ Item {
                         size: 11
                     }
                     ShellButton {
+                        id: backToAppearance
                         text: qsTr("Back to Appearance")
                         onClicked: {
                             PickerRegistry.desktopPreview = false;

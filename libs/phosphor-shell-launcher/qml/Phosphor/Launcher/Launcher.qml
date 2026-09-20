@@ -83,6 +83,7 @@ FocusScope {
     }
     ShellSurface {
         id: ground
+        property bool shaderAnchor: true
         anchors.fill: parent
     }
     DecorationSlot {

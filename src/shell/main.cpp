@@ -69,6 +69,7 @@
 #include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickStyle>
 #include <QUrl>
 
 #include <memory>
@@ -92,6 +93,13 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("phosphor-shell"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setQuitOnLastWindowClosed(false);
+
+    // Phosphor paints its own controls. Use a consistent base for Qt's
+    // built-in dialogs too, instead of mixing their Basic layout with an
+    // unrelated desktop style. An explicit user style remains supported.
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+        QQuickStyle::setStyle(QStringLiteral("Basic"));
+    }
 
     // Guarantee named freedesktop icons resolve (bar widgets use
     // Kirigami.Icon → QIcon::fromTheme). On a desktop session the platform

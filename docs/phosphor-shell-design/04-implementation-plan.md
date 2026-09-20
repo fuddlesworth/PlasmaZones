@@ -192,6 +192,34 @@ existing surface-decoration orientation test was skipped. Real nested
 keyboard events confirmed Caps Lock, typing, submit, retry focus, and the
 power confirmation flow without invoking host session actions.
 
+### v3 wallpaper and Appearance (September 2026)
+
+- `aeb511915`: transactional appearance previews, per-display wallpapers and
+  placement, complete wallpaper-derived palettes, shared fonts and sizing.
+- `5ac16341d`: port the approved Wallpaper, Style, Bar and Presets workspace.
+  Retain the real wallpaper provider, widget registry, privacy preferences,
+  motion settings and existing surface shader engine. Add durable image import,
+  validated saved looks and scoped preset previews. The native and QML settings
+  accessors share one process-owned store through engine reloads.
+- Live checks use isolated nested sessions. Wallpaper selection updates only the
+  chosen output; colors update both bars and the native frame before Apply.
+  Dragging Date & time between bar regions and changing the bar edge retain the
+  draft. Save, the unsaved-close dialog, Discard, and Glass/Motes rendering were
+  exercised with native input and captures.
+- Smaller outputs use an icon sidebar and stacked inspectors. An 800×600 native
+  capture and Tab navigation verified the responsive layout and focus scrolling.
+  Shader slots in quick settings and the launcher keep effects on their surface
+  backgrounds without fading the controls.
+- File choosers stay inside the overlay; image import and preset export/import
+  were exercised through their real dialogs. Imported images keep their original
+  names in the gallery. Checks with detailed, dark 4K wallpapers led to chromatic
+  color selection, stronger Glass opacity and a readable preview caption.
+  Neutral artwork retains a neutral palette.
+- The integrated build passed. The suite ran 542 tests: 541 passed and the
+  existing surface-decoration orientation test was skipped. Coverage includes
+  locked decoration previews, atomic persistence, invalid images and presets,
+  scoped settings, shader selection and QML engine reloads.
+
 ## What each phase proved live
 
 | Verified in the nested harness | Not verifiable there |

@@ -200,6 +200,7 @@ Item {
             // surface reservation cannot grow after materialization.
             paneContent: Component {
                 ControlCenter {
+                    decoration: ShellChrome.decorationComponent
                     MprisHost {
                         id: controlsMpris
                     }
@@ -322,6 +323,7 @@ Item {
         id: paneComponent
 
         ControlCenter {
+            decoration: ShellChrome.decorationComponent
             MprisHost {
                 id: controlsMpris
             }
