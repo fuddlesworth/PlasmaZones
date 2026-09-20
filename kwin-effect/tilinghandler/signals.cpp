@@ -103,7 +103,7 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // qualifier for a record we no longer drive (the re-entry path
         // re-inserts on its own), which is the one entry an otherwise
         // exhaustive drain missed.
-        m_untiledMinimizeFloats.clear();
+        m_minimizeFloatMarks.clear();
         m_effect->updateAllDecorations();
     }
 }

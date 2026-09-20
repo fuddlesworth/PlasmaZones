@@ -763,7 +763,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_tileTargetZones,
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preTileGeometries};
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
-    m_untiledMinimizeFloats.remove(windowId);
+    m_minimizeFloatMarks.remove(windowId);
     m_unfloatInFlight.remove(windowId);
     // Same reasoning as the retry budget below: ids are appId-derived and
     // reusable, so a reused id must not inherit an armed toggle. Without this
@@ -1280,7 +1280,7 @@ void TilingHandler::clearPerSessionDaemonState()
     m_minimizeFloatedWindows.clear();
     m_unfloatInFlight.clear();
     m_unfloatRetryAttempts.clear();
-    m_untiledMinimizeFloats.clear();
+    m_minimizeFloatMarks.clear();
     // Routes deferred against the dead daemon session and their provenance
     // markers must not survive into the new one: a stale m_pendingFreshWindows
     // entry silently upgrades a later re-add to knownFreeFloating=true, which
