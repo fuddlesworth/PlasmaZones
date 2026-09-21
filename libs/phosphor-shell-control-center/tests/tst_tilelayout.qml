@@ -105,7 +105,7 @@ TestCase {
         tile.available = false;
         mouseClick(tile, 300, 29);
         mouseClick(tile, 100, 29);
-        compare(details, 1);
+        compare(details, 2, "unavailable services still open troubleshooting details");
         compare(toggles, 1);
     }
 

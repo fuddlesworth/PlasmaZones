@@ -143,18 +143,17 @@ Item {
         height: parent.height
         width: 44
         visible: root.hasDetail
-        activeFocusOnTab: root.available
+        activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: qsTr("%1 details").arg(root.label)
-        Accessible.onPressAction: if (root.available)
-            root.detailRequested()
+        Accessible.onPressAction: root.detailRequested()
         Keys.onSpacePressed: event => {
-            if (!event.isAutoRepeat && root.available)
+            if (!event.isAutoRepeat)
                 root.detailRequested();
             event.accepted = true;
         }
         Keys.onReturnPressed: event => {
-            if (!event.isAutoRepeat && root.available)
+            if (!event.isAutoRepeat)
                 root.detailRequested();
             event.accepted = true;
         }
@@ -183,11 +182,9 @@ Item {
         }
         HoverHandler {
             id: detailsHover
-            enabled: root.available
             cursorShape: Qt.PointingHandCursor
         }
         TapHandler {
-            enabled: root.available
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onTapped: root.detailRequested()
         }

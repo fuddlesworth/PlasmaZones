@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Device fixtures: every write remains inside this preview process.
+// Wi-Fi / Bluetooth writes remain in this process. Audio requires a private
+// PipeWire fixture, supplied with PIPEWIRE_RUNTIME_DIR by the caller.
 import QtQuick
 import Phosphor.Shell
 import Phosphor.Bar
@@ -10,8 +11,10 @@ import Phosphor.Ipc
 Item {
     id: root
     property string view: "wifi"
+    property bool audioEnabled: false
     property var networkPanel: null
     property var bluetoothPanel: null
+    property var audioPanel: null
     QtObject {
         id: wifi
         property bool available: true
@@ -113,7 +116,7 @@ Item {
                 y: 96
                 width: 410
                 height: Math.min(item ? item.implicitHeight : 0, parent.height - 112)
-                sourceComponent: root.view === "bluetooth" ? bluetoothComponent : networkComponent
+                sourceComponent: root.view === "audio" ? audioComponent : root.view === "bluetooth" ? bluetoothComponent : networkComponent
             }
         }
     }
@@ -127,6 +130,15 @@ Item {
             onBackRequested: root.view = "back"
             onCloseRequested: root.view = "closed"
             Component.onCompleted: root.networkPanel = panel
+        }
+    }
+    Component {
+        id: audioComponent
+        AudioPanel {
+            id: panel
+            onBackRequested: root.view = "back"
+            onCloseRequested: root.view = "closed"
+            Component.onCompleted: root.audioPanel = panel
         }
     }
     Component {
@@ -270,10 +282,16 @@ Item {
                 connected: root.networkPanel?.connected ?? false,
                 bluetoothFlow: root.bluetoothPanel?.flow ?? "",
                 pairingResponse: pairingAgent.response,
-                keyboardConnected: keyboard.connected
+                keyboardConnected: keyboard.connected,
+                audioTab: root.audioPanel?.tab ?? "",
+                audioError: root.audioPanel?.errorText ?? "",
+                inputTesting: root.audioPanel?.audioProbe.listening ?? false,
+                inputLevel: root.audioPanel?.audioProbe.level ?? 0
             });
         }
         function show(name: string): bool {
+            if (name === "audio" && !root.audioEnabled)
+                return false;
             root.view = name;
             return true;
         }
@@ -319,6 +337,12 @@ Item {
             if (name === "details")
                 root.networkPanel.detailsOpen = true;
             wifi.connectivity = name === "portal" ? 2 : 4;
+            return true;
+        }
+        function audioTab(name: string): bool {
+            if (!root.audioPanel)
+                return false;
+            root.audioPanel.tab = name;
             return true;
         }
         function preset(name: string): bool {

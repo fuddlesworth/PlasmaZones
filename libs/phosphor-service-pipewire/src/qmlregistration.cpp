@@ -6,6 +6,7 @@
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
 #include <PhosphorServicePipeWire/PipeWireHost.h>
 #include <PhosphorServicePipeWire/PwNode.h>
+#include <PhosphorServicePipeWire/PwAudioProbe.h>
 #include <PhosphorServicePipeWire/PwNodeModel.h>
 
 #include <QCoreApplication>
@@ -83,6 +84,7 @@ void registerQmlTypes()
             kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwNodeModel",
             QStringLiteral("PwNodeModel is registered for role-enum access; instantiate PwSinkModel, "
                            "PwSourceModel, or PwStreamModel from QML"));
+        qmlRegisterType<PwAudioProbe>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwAudioProbe");
         qmlRegisterType<PwSinkModel>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwSinkModel");
         qmlRegisterType<PwSourceModel>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwSourceModel");
         qmlRegisterType<PwStreamModel>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwStreamModel");

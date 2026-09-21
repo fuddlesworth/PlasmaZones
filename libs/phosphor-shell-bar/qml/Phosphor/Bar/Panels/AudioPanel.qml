@@ -1,175 +1,449 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.AudioPanel, the audio chip's panel.
-//
-// The default sink and the default source get a slider each, then every
-// playback stream gets its own, so a browser tab can be turned down
-// without touching the master. Volumes are linear amplitude, the same
-// range the bar widget's scroll steps through.
-//
-// No output-device picker. Switching the default sink is a write to
-// PipeWire's metadata module, which PipeWireHost does not expose:
-// `defaultSinkName` is read-only. A picker whose rows did nothing would be
-// worse than not offering one, so this panel controls the devices that
-// ARE default and says which they are.
-//
-// Every write is asynchronous. The readouts move when PipeWire echoes the
-// new value back through propsChanged, not when the slider is released, so
-// what is on screen is the daemon's state rather than the request.
-
 import QtQuick
+import QtQuick.Layouts
 import Phosphor.Theme
 import Phosphor.Widgets
 import Phosphor.Service.PipeWire
 
-PanelFrame {
+QuickDetailFrame {
     id: root
-
     title: qsTr("Audio")
-    iconName: root._sinkMuted || root._sinkPercent === 0 ? "audio-volume-muted" : "audio-volume-high"
-    subtitle: {
-        if (!PipeWireHost.connected)
-            return qsTr("PipeWire is not running");
-        if (!root._sink)
-            return qsTr("No output device");
-        return root._deviceLabel(root._sink);
-    }
-
-    readonly property PwNode _sink: PipeWireHost.defaultSink ?? sinks.firstNode
-    readonly property PwNode _source: PipeWireHost.defaultSource ?? sources.firstNode
-
-    readonly property int _sinkPercent: root._sink ? Math.round(root._volumeOf(root._sink) * 100) : 0
-    readonly property bool _sinkMuted: root._sink ? root._sink.muted : false
-
-    // `firstNode`, never `nodeAt(0)`: the latter is a plain function call
-    // that tracks no dependency, and pairing it with `count` does not fix
-    // that — a PipeWire restart landing on the same number of nodes
-    // replaces every one of them without moving the count.
+    footerIcon: "audio-volume-high"
+    footerText: qsTr("Sound, in your hands.")
+    property var serviceHost: PipeWireHost
+    property var sinkModel: sinks
+    property var sourceModel: sources
+    property var streamModel: streams
+    property var audioProbe: probe
+    property string tab: "output"
+    property int modelRevision: 0
+    property string errorText: ""
+    property string notice: ""
+    property string requestedDevice: ""
+    property string requestedKind: ""
+    readonly property var sink: serviceHost.defaultSink
+    readonly property var source: serviceHost.defaultSource
+    readonly property var device: tab === "input" ? source : sink
+    readonly property var outputs: root.nodes(root.sinkModel)
+    readonly property var inputs: root.nodes(root.sourceModel)
+    readonly property var applications: root.nodes(root.streamModel).filter(node => node.mediaClass === "Stream/Output/Audio" && node.applicationName !== "Phosphor audio test")
+    readonly property var deviceChoices: tab === "input" ? inputs : outputs
+    readonly property var outputLabels: [qsTr("Default output")].concat(root.outputs.map(node => root.deviceName(node)))
     PwSinkModel {
         id: sinks
-
-        connection: PipeWireHost.connection
+        connection: root.serviceHost === PipeWireHost ? PipeWireHost.connection : null
     }
-
     PwSourceModel {
         id: sources
-
-        connection: PipeWireHost.connection
+        connection: root.serviceHost === PipeWireHost ? PipeWireHost.connection : null
     }
-
-    // The per-application playback streams. PwStreamModel is pinned to
-    // "Stream/Output/Audio", which is what PipeWire calls a client PLAYING
-    // audio: output from the app's point of view, into a sink. Recording
-    // streams are not in it, which suits a panel about what you hear.
-    //
-    // The pinned subclasses rather than PwNodeModel with a mediaClasses
-    // filter: the base type is registered uncreatable from QML precisely so
-    // callers take these.
     PwStreamModel {
         id: streams
-
-        connection: PipeWireHost.connection
+        connection: root.serviceHost === PipeWireHost ? PipeWireHost.connection : null
     }
-
-    /// A node's volume as a single number. PipeWire carries one amplitude
-    /// per channel; the panel drives them together, so the first channel is
-    /// the one shown and a node reporting none reads as silent.
-    function _volumeOf(node) {
-        if (!node || node.volumes.length === 0)
-            return 0;
-        return node.volumes[0];
+    PwAudioProbe {
+        id: probe
     }
-
-    /// Clamped here, since PwNode forwards the value to PipeWire verbatim
-    /// and the linear-amplitude contract does not include negatives.
-    function _setVolume(node, v) {
-        if (node)
-            node.setVolume(Math.max(0, Math.min(1, v)));
+    function nodes(model): var {
+        void root.modelRevision;
+        const result = [];
+        for (let i = 0; i < model.count; ++i) {
+            const node = model.nodeAt(i);
+            if (node)
+                result.push(node);
+        }
+        return result;
     }
-
-    function _toggleMute(node) {
-        if (node)
-            node.setMuted(!node.muted);
+    function deviceName(node): string {
+        return node ? node.description || node.nick || node.name : "";
     }
-
-    /// The friendliest name a node has. `description` is the human string
-    /// ("Built-in Audio Analogue Stereo"); `nick` is shorter and often
-    /// absent; `name` is the machine id and the last resort.
-    function _deviceLabel(node) {
+    function deviceMeta(node): string {
         if (!node)
             return "";
-        if (node.description.length > 0)
-            return node.description;
-        return node.nick.length > 0 ? node.nick : node.name;
+        const connection = node.name.startsWith("bluez") ? qsTr("Bluetooth") : node.name.includes("usb") ? qsTr("USB audio") : qsTr("Audio device");
+        return connection + (node.channelCount ? " · " + (node.channelCount === 1 ? qsTr("Mono") : node.channelCount === 2 ? qsTr("Stereo") : qsTr("%1 channels").arg(node.channelCount)) : "");
     }
-
-    ValueRow {
-        width: parent.width
-        iconName: root._sinkMuted || root._sinkPercent === 0 ? "audio-volume-muted" : "audio-volume-high"
-        label: qsTr("Output")
-        sublabel: root._deviceLabel(root._sink)
-        value: root._volumeOf(root._sink)
-        adjustable: root._sink !== null
-        togglable: root._sink !== null
-        toggled: root._sinkMuted
-        railT: 0.45
-        onMoved: v => root._setVolume(root._sink, v)
-        onToggledRequested: root._toggleMute(root._sink)
+    function setTab(index): void {
+        root.tab = ["output", "input", "apps"][index];
+        tabs.itemAt(index).forceActiveFocus();
     }
-
-    ValueRow {
-        width: parent.width
-        visible: root._source !== null
-        iconName: root._source && root._source.muted ? "microphone-sensitivity-muted" : "audio-input-microphone"
-        label: qsTr("Input")
-        sublabel: root._deviceLabel(root._source)
-        value: root._volumeOf(root._source)
-        adjustable: root._source !== null
-        togglable: root._source !== null
-        toggled: root._source ? root._source.muted : false
-        railT: 0.3
-        onMoved: v => root._setVolume(root._source, v)
-        onToggledRequested: root._toggleMute(root._source)
+    function selectDevice(node): void {
+        if (!node)
+            return;
+        root.audioProbe.stop();
+        root.errorText = "";
+        root.requestedDevice = node.name;
+        root.requestedKind = root.tab;
+        switchDeadline.restart();
+        if (root.tab === "input")
+            root.serviceHost.connection.setDefaultSource(node.name);
+        else
+            root.serviceHost.connection.setDefaultSink(node.name);
     }
-
-    Text {
-        width: parent.width
-        visible: streams.count > 0
-        text: qsTr("Applications")
-        color: Appearance.muted
-        font.pixelSize: Tokens.font_size_label_s
-        font.family: Tokens.font_family_ui
-        topPadding: Tokens.spacing_s
+    function checkSelection(): void {
+        if (!root.requestedDevice)
+            return;
+        const selected = root.requestedKind === "input" ? root.source : root.sink;
+        if (selected && selected.name === root.requestedDevice) {
+            root.notice = qsTr("Using %1.").arg(root.deviceName(selected));
+            root.requestedDevice = "";
+            switchDeadline.stop();
+        }
     }
-
-    Repeater {
-        model: streams
-
-        // The delegate is a wrapper rather than a VolumeRow directly: the
-        // model's role is called `node` and so is VolumeRow's property, and
-        // a required property of that name on the row itself would collide
-        // with the one it is meant to feed.
-        delegate: Item {
-            id: streamRow
-
-            required property var node
-
-            width: parent ? parent.width : 0
-            implicitHeight: streamVolume.implicitHeight
-
-            ValueRow {
-                id: streamVolume
-
-                width: streamRow.width
-                iconName: "audio-volume-high"
-                label: root._deviceLabel(streamRow.node)
-                value: root._volumeOf(streamRow.node)
-                togglable: true
-                toggled: streamRow.node ? streamRow.node.muted : false
-                railT: 0.6
-                onMoved: v => root._setVolume(streamRow.node, v)
-                onToggledRequested: root._toggleMute(streamRow.node)
+    function routeIndex(node): int {
+        if (!node.targetName || node.targetName === "-1")
+            return 0;
+        return root.outputs.findIndex(output => output.name === node.targetName || output.serial === node.targetName) + 1 || -1;
+    }
+    onTabChanged: root.audioProbe.stop()
+    onSourceChanged: {
+        root.audioProbe.stop();
+        root.checkSelection();
+    }
+    onSinkChanged: {
+        if (root.audioProbe.playing)
+            root.audioProbe.stop();
+        root.checkSelection();
+    }
+    Component.onDestruction: root.audioProbe.stop()
+    Timer {
+        id: switchDeadline
+        interval: 5000
+        onTriggered: {
+            root.requestedDevice = "";
+            root.errorText = qsTr("The audio device didn’t change. Check the audio service and try again.");
+        }
+    }
+    Connections {
+        target: root.serviceHost
+        function onConnectedChanged(): void {
+            if (!root.serviceHost.connected) {
+                root.audioProbe.stop();
+                root.requestedDevice = "";
+                switchDeadline.stop();
             }
         }
+    }
+    Connections {
+        target: root.serviceHost.connection
+        function onOperationFailed(message: string): void {
+            root.errorText = message;
+            root.requestedDevice = "";
+            switchDeadline.stop();
+        }
+        function onNodeRemoved(node: var): void {
+            if (node.mediaClass === "Audio/Sink" || node.mediaClass === "Audio/Source")
+                root.notice = qsTr("%1 disconnected.").arg(root.deviceName(node));
+        }
+    }
+    Connections {
+        target: root.audioProbe
+        function onError(message: string): void {
+            root.errorText = message;
+        }
+    }
+    Connections {
+        target: root.source
+        function onPropsChanged(): void {
+            if (root.source && root.source.muted && root.audioProbe.listening)
+                root.audioProbe.stop();
+        }
+    }
+    Connections {
+        target: root.sinkModel
+        ignoreUnknownSignals: true
+        function onModelReset(): void {
+            root.modelRevision++;
+        }
+        function onRowsInserted(): void {
+            root.modelRevision++;
+        }
+        function onRowsRemoved(): void {
+            root.modelRevision++;
+        }
+    }
+    Connections {
+        target: root.sourceModel
+        ignoreUnknownSignals: true
+        function onModelReset(): void {
+            root.modelRevision++;
+        }
+        function onRowsInserted(): void {
+            root.modelRevision++;
+        }
+        function onRowsRemoved(): void {
+            root.modelRevision++;
+        }
+    }
+    Connections {
+        target: root.streamModel
+        ignoreUnknownSignals: true
+        function onModelReset(): void {
+            root.modelRevision++;
+        }
+        function onRowsInserted(): void {
+            root.modelRevision++;
+        }
+        function onRowsRemoved(): void {
+            root.modelRevision++;
+        }
+    }
+    DetailNotice {
+        text: root.errorText
+        error: true
+    }
+    DetailNotice {
+        text: root.notice
+    }
+    DetailEmptyState {
+        visible: !root.serviceHost.connected
+        iconName: "audio-volume-muted"
+        title: qsTr("Sound service unavailable")
+        description: qsTr("Your volume settings are kept. Try reconnecting to the audio service.")
+        actionText: qsTr("Try again")
+        onActivated: root.serviceHost.reconnect()
+    }
+    Rectangle {
+        visible: root.serviceHost.connected
+        width: parent.width
+        height: tabLayout.implicitHeight + 8
+        radius: 10
+        color: Qt.alpha(Appearance.recess, 0.55)
+        border.width: 1
+        border.color: Appearance.outline
+        Accessible.role: Accessible.PageTabList
+        Accessible.name: qsTr("Audio controls")
+        RowLayout {
+            id: tabLayout
+            x: 4
+            y: 4
+            width: parent.width - 8
+            spacing: 3
+            Repeater {
+                id: tabs
+                model: [qsTr("Output"), qsTr("Input"), qsTr("Apps")]
+                delegate: ShellButton {
+                    required property int index
+                    required property string modelData
+                    Layout.fillWidth: true
+                    text: modelData
+                    implicitHeight: 36
+                    labelSize: 12
+                    iconName: ["audio-headphones", "audio-input-microphone", "view-grid"][index]
+                    flat: root.tab !== ["output", "input", "apps"][index]
+                    highlighted: !flat
+                    activeFocusOnTab: !flat
+                    Accessible.role: Accessible.PageTab
+                    Accessible.selected: !flat
+                    onClicked: root.setTab(index)
+                    Keys.onRightPressed: event => {
+                        root.setTab((index + 1) % 3);
+                        event.accepted = true;
+                    }
+                    Keys.onLeftPressed: event => {
+                        root.setTab((index + 2) % 3);
+                        event.accepted = true;
+                    }
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
+                            root.setTab(event.key === Qt.Key_Home ? 0 : 2);
+                            event.accepted = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    DetailEmptyState {
+        visible: root.serviceHost.connected && root.tab !== "apps" && root.deviceChoices.length === 0
+        iconName: root.tab === "input" ? "audio-input-microphone" : "audio-headphones"
+        title: root.tab === "input" ? qsTr("No input devices") : qsTr("No output devices")
+        description: qsTr("Connect a speaker, headset, or microphone to get started.")
+    }
+    DetailCard {
+        visible: root.serviceHost.connected && root.tab !== "apps" && root.deviceChoices.length > 0
+        title: root.device ? root.deviceName(root.device) : root.tab === "input" ? qsTr("Choose an input") : qsTr("Choose an output")
+        description: root.tab === "input" ? (root.device?.muted ? qsTr("Your microphone is muted.") : qsTr("Make yourself heard.")) : qsTr("Sound, right where you want it.")
+        iconName: root.tab === "input" ? "audio-input-microphone" : root.device?.iconName || "audio-headphones"
+        status: !root.device ? "" : root.device.muted ? qsTr("Muted") : root.tab === "input" ? qsTr("Default input") : qsTr("Default output")
+        DetailVolume {
+            node: root.device
+            label: root.tab === "input" ? qsTr("Input volume") : qsTr("Output volume")
+            microphone: root.tab === "input"
+        }
+        Row {
+            visible: root.tab === "input"
+            width: parent.width
+            height: 17
+            spacing: 3
+            Accessible.name: root.audioProbe.listening ? qsTr("Microphone signal %1 percent").arg(Math.round(root.audioProbe.level * 100)) : qsTr("Microphone test idle")
+            Repeater {
+                model: 28
+                delegate: Rectangle {
+                    required property int index
+                    width: (parent.width - 27 * 3) / 28
+                    height: 17
+                    radius: 2
+                    // A decibel scale makes quiet speech readable; idle stays dark.
+                    readonly property real meter: root.audioProbe.level > 0 ? Math.max(0, (20 * Math.log(root.audioProbe.level) / Math.LN10 + 60) / 60) : 0
+                    color: root.audioProbe.listening && index < meter * 28 ? Appearance.stops[0] : Qt.alpha(Appearance.muted, 0.18)
+                }
+            }
+        }
+        RowLayout {
+            visible: root.tab === "input"
+            width: parent.width
+            DetailText {
+                Layout.fillWidth: true
+                text: root.audioProbe.listening ? qsTr("Listening…") : qsTr("Check your microphone")
+                size: 10
+                muted: true
+            }
+            ShellButton {
+                text: root.audioProbe.listening ? qsTr("Stop test") : qsTr("Test microphone")
+                flat: true
+                enabled: root.source !== null && !root.source.muted
+                onClicked: {
+                    root.errorText = "";
+                    if (root.audioProbe.listening)
+                        root.audioProbe.stop();
+                    else
+                        root.audioProbe.startInputTest(root.source.name);
+                }
+            }
+        }
+    }
+    DetailSectionHeading {
+        visible: root.serviceHost.connected && root.tab !== "apps" && root.deviceChoices.length > 0
+        title: root.tab === "input" ? qsTr("Record sound from") : qsTr("Play sound through")
+    }
+    DetailList {
+        visible: root.serviceHost.connected && root.tab !== "apps" && root.deviceChoices.length > 0
+        Accessible.role: Accessible.Grouping
+        Accessible.name: root.tab === "input" ? qsTr("Input device") : qsTr("Output device")
+        Repeater {
+            id: deviceRows
+            model: root.deviceChoices
+            delegate: DetailDeviceRow {
+                required property int index
+                required property var modelData
+                grouped: true
+                radio: true
+                title: root.deviceName(modelData)
+                subtitle: root.deviceMeta(modelData)
+                iconName: root.tab === "input" ? "audio-input-microphone" : modelData.iconName || "audio-headphones"
+                selected: root.device === modelData
+                activeFocusOnTab: selected || !root.device && index === 0
+                onClicked: root.selectDevice(modelData)
+                function moveSelection(step): void {
+                    const next = (index + step + root.deviceChoices.length) % root.deviceChoices.length;
+                    root.selectDevice(root.deviceChoices[next]);
+                    deviceRows.itemAt(next).forceActiveFocus();
+                }
+                Keys.onDownPressed: event => {
+                    moveSelection(1);
+                    event.accepted = true;
+                }
+                Keys.onUpPressed: event => {
+                    moveSelection(-1);
+                    event.accepted = true;
+                }
+            }
+        }
+    }
+    ShellButton {
+        visible: root.serviceHost.connected && root.tab === "output" && root.sink !== null
+        text: root.audioProbe.playing ? qsTr("Playing…") : qsTr("Play test sound")
+        iconName: "audio-volume-high"
+        flat: true
+        foreground: Appearance.muted
+        enabled: root.sink !== null && !root.sink.muted && !root.audioProbe.playing
+        onClicked: {
+            root.errorText = "";
+            root.audioProbe.playTestSound(root.sink.name);
+        }
+    }
+    Column {
+        visible: root.serviceHost.connected && root.tab === "apps"
+        width: parent.width
+        spacing: 8
+        DetailText {
+            text: qsTr("YOUR MIX")
+            size: 9
+            muted: true
+            font.letterSpacing: 1.6
+        }
+        DetailText {
+            text: qsTr("A place for every sound.")
+            size: 22
+            font.weight: Font.Medium
+        }
+        DetailText {
+            width: parent.width
+            text: qsTr("Balance active apps and choose where each one plays.")
+            muted: true
+        }
+    }
+    Column {
+        visible: root.serviceHost.connected && root.tab === "apps"
+        width: parent.width
+        spacing: 12
+        Repeater {
+            model: root.applications
+            delegate: DetailCard {
+                id: appCard
+                horizontal: true
+                padding: 16
+                required property var modelData
+                titleSize: 14
+                title: appCard.modelData.applicationName || root.deviceName(appCard.modelData)
+                description: appCard.modelData.mediaName || root.deviceName(appCard.modelData)
+                iconName: appCard.modelData.iconName || "audio-x-generic"
+                iconFallback: "audio-x-generic"
+                status: appCard.modelData.muted ? qsTr("Muted") : appCard.modelData.running ? qsTr("Playing") : qsTr("Paused")
+                tone: 2
+                DetailVolume {
+                    node: appCard.modelData
+                    label: qsTr("%1 volume").arg(appCard.title)
+                }
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: Appearance.outline
+                }
+                RowLayout {
+                    width: parent.width
+                    DetailText {
+                        Layout.fillWidth: true
+                        text: qsTr("Play through")
+                        size: 10
+                        muted: true
+                    }
+                    ShellComboBox {
+                        Layout.preferredWidth: Math.min(210, parent.width * 0.68)
+                        model: root.outputLabels
+                        currentIndex: root.routeIndex(appCard.modelData)
+                        displayText: currentIndex < 0 ? qsTr("Disconnected output") : currentText
+                        Accessible.name: qsTr("%1 output").arg(appCard.modelData.applicationName || root.deviceName(appCard.modelData))
+                        enabled: appCard.modelData.canMove
+                        onActivated: root.serviceHost.connection.setStreamTarget(appCard.modelData.id, currentIndex === 0 ? "" : root.outputs[currentIndex - 1].name)
+                    }
+                }
+            }
+        }
+    }
+    DetailEmptyState {
+        visible: root.serviceHost.connected && root.tab === "apps" && root.applications.length === 0
+        iconName: "applications-multimedia"
+        title: qsTr("Nothing is playing yet")
+        description: qsTr("Start some music or a video. Its volume controls will appear here.")
+    }
+    DetailText {
+        visible: root.serviceHost.connected
+        width: parent.width
+        text: root.tab === "apps" ? qsTr("Apps appear here when they play sound.") : root.tab === "input" ? qsTr("Testing stops when you leave this view.") : qsTr("Apps using the default output follow this device.")
+        size: 10
+        muted: true
     }
 }

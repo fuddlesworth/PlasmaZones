@@ -3,6 +3,36 @@
 
 # 04: Implementation Record
 
+## Quick settings details (mockups-v3)
+
+The approved Wi-Fi, Bluetooth and Output/Input/Apps studies now run as native
+410 px detail pages inside quick settings. Back returns to the compact controls;
+close dismisses the popup. The shared header/footer stay in place while long
+content scrolls, including when keyboard focus moves below the visible area.
+All surfaces follow the shell palette, density and typography settings.
+
+Wi-Fi (`6e73b1f2d`) adds connected details, scanning, saved networks, inline
+passwords, auto-connect, cancellation, captive portal links and service errors.
+Bluetooth (`dfeefbcd6`) adds paired/nearby devices, battery reports, confirmation
+codes, PIN/passkey entry, cancellation and forget confirmation. The pairing
+agent is shared across shell hosts and handles service restarts.
+
+Audio adds device selection, volume/mute, per-app output routing, test playback
+and an on-demand live microphone meter. Captured samples are reduced to a level
+in memory; the test stops on leaving Input, changing devices, muting, dismissal
+or its 30-second deadline. Following the default output clears an app's specific
+route. Device metadata survives playback-state updates, and unplugged devices
+produce visible feedback. Unavailable services still open their detail pages.
+
+Validation: the full build and 544 CTest targets pass (543 executed, the existing
+decoration-orientation test skipped). Isolated D-Bus tests cover Wi-Fi and
+Bluetooth operations. A private PipeWire server with policy-only WirePlumber
+checks real stream links, default-device changes, volume/mute echoes, synthetic
+microphone samples, playback completion and unplugging without host hardware.
+Native KWin checks cover all three palettes, app routing/volume/mute, microphone
+start/stop, keyboard tab navigation and a 960×600 logical desktop. Physical
+Wi-Fi association and Bluetooth hardware pairing remain hardware-dependent.
+
 ## Notification migration (mockups-v3)
 
 The approved notification study now drives the native surfaces. The retained

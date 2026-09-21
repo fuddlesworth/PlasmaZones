@@ -118,6 +118,7 @@ void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, c
     entry->owner = this;
     entry->id = id;
     entry->mediaClass = mediaClass;
+    entry->serial = props.value(QStringLiteral("object.serial"));
     entry->proxy = proxy;
     // Move the entry into the map BEFORE wiring the C-side listener.
     // If the emplace throws (allocator failure), the unique_ptr cleans
@@ -188,6 +189,9 @@ void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id
         QMetaObject::invokeMethod(
             d->q,
             [d]() {
+                d->guiTargets.clear();
+                for (auto* node : std::as_const(d->guiNodes))
+                    node->applyTarget({}, false);
                 d->setDefaultSinkName(QString());
                 d->setDefaultSourceName(QString());
             },

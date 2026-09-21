@@ -27,6 +27,17 @@ FocusScope {
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
 
+    component HeaderButton: ShellButton {
+        implicitWidth: 34
+        implicitHeight: 34
+        foreground: Appearance.muted
+        background: Rectangle {
+            radius: 9
+            color: Qt.alpha(Appearance.text, parent.hovered ? 0.1 : 0.04)
+            border.width: parent.visualFocus ? 1 : 0
+            border.color: Appearance.text
+        }
+    }
     function goBack(): void {
         if (root.cancelTask)
             root.cancelTask();
@@ -66,14 +77,11 @@ FocusScope {
             Layout.fillWidth: true
             Layout.margins: Appearance.compact ? 16 : 18
             spacing: 10
-            ShellButton {
+            HeaderButton {
                 id: back
                 objectName: "detailBack"
                 iconName: "go-previous-symbolic"
                 label: qsTr("Back to quick settings")
-                implicitWidth: 34
-                implicitHeight: 34
-                flat: true
                 onClicked: root.goBack()
             }
             ColumnLayout {
@@ -97,12 +105,9 @@ FocusScope {
                 active: root.headerAction !== null
                 sourceComponent: root.headerAction
             }
-            ShellButton {
+            HeaderButton {
                 iconName: "window-close-symbolic"
                 label: qsTr("Close quick settings")
-                implicitWidth: 34
-                implicitHeight: 34
-                flat: true
                 onClicked: {
                     if (root.cancelTask)
                         root.cancelTask();

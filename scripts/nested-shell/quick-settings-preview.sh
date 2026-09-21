@@ -24,4 +24,10 @@ fi
 export XDG_CONFIG_HOME="$NEST/quick-settings-preview/config"
 mkdir -p "$XDG_CONFIG_HOME/phosphor-shell"
 cp "$REPO/scripts/nested-shell/quick-settings-preview.qml" "$XDG_CONFIG_HOME/phosphor-shell/shell.qml"
+# Enable audio writes only against an explicitly supplied nested fixture.
+case "${PIPEWIRE_RUNTIME_DIR:-}" in
+    "$NEST"/*)
+        sed -i 's/property bool audioEnabled: false/property bool audioEnabled: true/' "$XDG_CONFIG_HOME/phosphor-shell/shell.qml"
+        ;;
+esac
 exec "$REPO/$BUILD/bin/phosphor-shell"

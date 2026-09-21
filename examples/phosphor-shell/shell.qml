@@ -487,7 +487,7 @@ Item {
             },
             "audio": {
                 "component": audioPanelComponent,
-                "keyboard": false
+                "keyboard": true
             },
             "battery": {
                 "component": batteryPanelComponent,
@@ -534,7 +534,13 @@ Item {
     Component {
         id: audioPanelComponent
 
-        AudioPanel {}
+        AudioPanel {
+            onBackRequested: {
+                Popouts.close(Popouts.handleFor("bar.panel.audio"));
+                root.toggleControlCenter(root._lastPanelSource);
+            }
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.audio"))
+        }
     }
 
     Component {

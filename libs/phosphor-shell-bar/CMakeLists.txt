@@ -117,6 +117,7 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Panels/QuickDetailFrame.qml
     qml/Phosphor/Bar/Panels/DetailText.qml
     qml/Phosphor/Bar/Panels/DetailList.qml
+    qml/Phosphor/Bar/Panels/DetailVolume.qml
     qml/Phosphor/Bar/Panels/DetailCard.qml
     qml/Phosphor/Bar/Panels/DetailDeviceRow.qml
     qml/Phosphor/Bar/Panels/DetailEmptyState.qml

@@ -183,7 +183,6 @@ Item {
         width: parent.width
         height: 28
         visible: root.hasDetail
-        enabled: root.available
         Accessible.name: qsTr("Change output")
         onClicked: root.detailRequested()
         contentItem: RowLayout {
