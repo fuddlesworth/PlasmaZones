@@ -5,8 +5,37 @@
 
 The shell redesign centers on visual identity, good UX and riceability.
 The current reference is [`mockups-v3/`](mockups-v3/), including Navigator,
-Stage, the quick-settings shelf, calendar, visualizers and scrolling with
+Stage, compact quick settings, calendar, visualizers and scrolling with
 four and ten windows.
+
+The new **quick-settings detail studies** are ready for design review:
+[Wi-Fi](mockups-v3/index.html#navigator/controls/wifi),
+[Bluetooth](mockups-v3/index.html#navigator/controls/bluetooth), and
+[Audio](mockups-v3/index.html#navigator/controls/audio).
+Both presentations use a compact popup next to the status area. A detail view
+replaces its contents, with a fixed header and footer and a bounded scrolling
+body. Back restores the main panel and its trigger focus; Escape first cancels
+an inline task, then goes back, then closes the popup.
+
+Wi-Fi includes network selection, password visibility, automatic connection,
+retry, captive sign-in, and connection details. Bluetooth separates paired and
+nearby devices, with code confirmation, PIN entry, disconnect, and confirmed
+Forget. Audio separates outputs, microphones, and per-app volumes and routing;
+mute preserves the chosen volume. The external **Example** selector exposes
+23 states, including disabled radios, empty discovery, unavailable adapters,
+pairing failures, and a disconnected audio device. The Wi-Fi demo password is
+`phosphor`; these fixtures do not access hardware, transmit or save passwords,
+or play or record audio. The new detail designs have not been ported to QML yet.
+
+Captures: [Wi-Fi](mockups-v3/quick-wifi.png),
+[password entry](mockups-v3/quick-wifi-password.png),
+[Bluetooth](mockups-v3/quick-bluetooth.png),
+[pairing](mockups-v3/quick-bluetooth-pairing.png),
+[Audio output](mockups-v3/quick-audio.png),
+[microphone](mockups-v3/quick-audio-input.png),
+[app volumes](mockups-v3/quick-audio-apps.png),
+[Paper](mockups-v3/quick-details-paper.png), and
+[Ember](mockups-v3/quick-details-ember.png).
 
 The [wallpaper and Appearance study](mockups-v3/index.html#navigator/appearance)
 brings wallpaper browsing, style controls, bar composition and presets into one

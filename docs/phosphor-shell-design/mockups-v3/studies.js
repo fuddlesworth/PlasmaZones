@@ -57,6 +57,8 @@ const lockscreen = PhosphorLock.create({root:$('#lockscreen'),icon,getSettings:(
 const appearance = PhosphorAppearance.create({root:$('#appearance'),desktop,icon,getSettings:()=>settings,
   setSettings:(value,persist=false,redraw=true)=>{settings={...value};applySettings(persist,redraw);},presets,
   onClose:()=>setView('desktop'),notify});
+const quickSettings = PhosphorQuickSettings.create({root:$('#controls'),review:$('#quick-preview-controls'),icon,shared:state,
+  onRedraw:renderControls,onSummary:renderBar});
 const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
 const selectedWindow = () => windows.find(w => w.id === state.focused);
 const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
@@ -206,11 +208,11 @@ function renderOverview() {
 }
 
 function connectionRow(key,title,subtitle,symbol) {
-  return `<div class="connection"><button class="connection-toggle" data-toggle="${key}" aria-pressed="${state[key]}" aria-label="Toggle ${title}">${icon(symbol)}<span><b>${title}</b><span class="sub">${state[key]?escapeHTML(subtitle):'Off'}</span></span></button><button class="connection-details" data-detail="${key}" aria-label="Choose ${title} device or network">›</button></div>`;
+  return `<div class="connection"><button class="connection-toggle" data-toggle="${key}" aria-pressed="${state[key]}" aria-label="Toggle ${title}">${icon(symbol)}<span><b>${title}</b><span class="sub">${state[key]?escapeHTML(subtitle):'Off'}</span></span></button><button class="connection-details" data-detail="${key}" aria-label="${key==='wifi'?'Choose Wi-Fi network':'Manage Bluetooth devices'}">›</button></div>`;
 }
 
 function slider(key,label,symbol) {
-  return `<div class="slider-block"><label><span class="slider-label"><span>${icon(symbol)} ${label}</span><output id="${key}-output">${state[key]}%</output></span><input type="range" data-level="${key}" aria-label="${label}" min="0" max="100" value="${state[key]}" style="--value:${state[key]}%"></label></div>`;
+  return `<div class="slider-block"><label><span class="slider-label"><span>${icon(symbol)} ${label}</span><output id="${key}-output">${key==='volume'&&state.volumeMuted?'Muted · ':''}${state[key]}%</output></span><input type="range" data-level="${key}" aria-label="${label}" min="0" max="100" value="${state[key]}" style="--value:${state[key]}%"></label></div>`;
 }
 
 function syncVisualizer() {
@@ -227,18 +229,12 @@ function mediaCard() {
 function renderControls() {
   const el = $('#controls');
   el.className = state.view==='controls'?'material':'hidden';
-  const heading = `<div class="controls-heading"><h2>${state.detail?'Connections':'Quick settings'}</h2><span class="battery-summary">${icon('battery')} 82% <span style="opacity:.6">· 6h left</span></span><button class="close" data-dismiss aria-label="Close quick settings">×</button></div>`;
-  if (state.detail) {
-    const wifi = state.detail==='wifi';
-    const choices = wifi?['Home network','Studio 5G','Guest']:['Headphones','Speakers','USB DAC'];
-    el.innerHTML = `${heading}<div class="detail-content"><button class="text-button" data-detail="back">← Quick settings</button><h3>${wifi?'Wi-Fi networks':'Audio devices'}</h3>${choices.map(name=>`<button class="device-row" data-device="${name}" aria-pressed="${name===(wifi?state.network:state.device)}"><span>${escapeHTML(name)}<span class="sub">${wifi?'Secured network':'Audio output'}</span></span><span>${name===(wifi?state.network:state.device)?'Connected ✓':'Connect'}</span></button>`).join('')}</div>`;
-    syncVisualizer();
-    return;
-  }
-  const connections = connectionRow('wifi','Wi-Fi',state.network,'wifi')+connectionRow('bluetooth','Bluetooth',state.device,'bluetooth');
+  if (quickSettings.render(state.view==='controls',state.detail)) {syncVisualizer();return;}
+  const heading = `<div class="controls-heading"><h2>Quick settings</h2><span class="battery-summary">${icon('battery')} 82% <span style="opacity:.6">· 6h left</span></span><button class="close" data-dismiss aria-label="Close quick settings">×</button></div>`;
+  const connections = connectionRow('wifi','Wi-Fi',state.network,'wifi')+connectionRow('bluetooth','Bluetooth',quickSettings.bluetoothSummary(),'bluetooth');
   const pair = `<div class="quick-pair"><button data-toggle="dnd" aria-pressed="${state.dnd}">${icon('moon')} Focus ${state.dnd?'on':'off'}</button><button data-toggle="night" aria-pressed="${state.night}">${icon('sun')} Night light ${state.night?'on':'off'}</button></div>`;
-  const levels = slider('volume','Volume','volume')+`<button class="device-button" data-detail="bluetooth">${escapeHTML(state.device)} <span>Change output ›</span></button>`+slider('brightness','Brightness','sun');
-  el.innerHTML = state.study==='navigator' ? `${heading}${connections}${pair}${levels}${mediaCard()}<div class="pane-footer"><span>Balanced power</span><button class="text-button" data-customize>Appearance ↗</button></div>` : `${heading}<div class="shelf-grid"><div class="shelf-column"><h3>CONNECTIONS & FOCUS</h3>${connections}${pair}</div><div class="shelf-column"><h3>SOUND & DISPLAY</h3>${levels}</div><div class="shelf-column"><h3>NOW PLAYING</h3>${mediaCard()}</div></div><div class="pane-footer"><span>Balanced power &nbsp; · &nbsp; No pending notifications</span><button class="text-button" data-customize>Appearance ↗</button></div>`;
+  const levels = slider('volume','Volume','volume')+`<button class="device-button" data-detail="audio">${escapeHTML(state.device)} <span>Sound controls ›</span></button>`+slider('brightness','Brightness','sun');
+  el.innerHTML = `${heading}${connections}${pair}${levels}${mediaCard()}<div class="pane-footer"><span>Balanced power</span><button class="text-button" data-customize>Appearance ↗</button></div>`;
   syncVisualizer();
 }
 
@@ -302,10 +298,17 @@ function renderNotes() {
     $('#ux-description').textContent='Type immediately, Enter to unlock, Escape to clear. Review Caps Lock, an incorrect password, and the waiting state above. Media is optional; notifications show a count with their content hidden.';
     return;
   }
+  if(state.view==='controls') {
+    $('#study-kicker').textContent='F / QUICK SETTINGS DETAILS';
+    $('#study-title').textContent='Connected, on your terms.';
+    $('#study-description').textContent='Wi-Fi, Bluetooth, and audio share one compact popup beside the status area. Connection status leads; passwords, pairing, and device controls appear where you need them.';
+    $('#ux-description').textContent='Try the 23 examples above, including failures and empty states. Back returns to quick settings; Escape cancels an inline task first. Audio separates outputs, microphones, and per-app routing.';
+    return;
+  }
   const stage = state.study==='stage';
   $('#study-kicker').textContent = stage?'B / SPATIAL OVERVIEW':'A / ANCHORED NAVIGATOR';
   $('#study-title').textContent = stage?'Work with the space.':'Stay in context.';
-  $('#study-description').textContent = stage?'The actual desktop contracts into an overview. Workspaces sit beside it; placement and moving windows live in an inspector. Quick settings form a wide shelf.':'The branch’s map becomes a readable, anchored navigator. It exposes window titles, workspace switching, and placement mode without covering the entire desktop.';
+  $('#study-description').textContent = stage?'The actual desktop contracts into an overview. Workspaces sit beside it; placement and moving windows live in an inspector. Quick settings stay compact beside the status area.':'The branch’s map becomes a readable, anchored navigator. It exposes window titles, workspace switching, and placement mode without covering the entire desktop.';
   $('#ux-description').textContent = stage?'Click to select, Enter to return, or move the selection to another workspace. The large overview favors spatial editing; it deliberately takes you out of the working view.':'One click on a mapped window focuses it and dismisses the navigator. Settings stay beside their trigger. Separate toggles and chevrons distinguish changing a state from choosing a device.';
 }
 
@@ -396,7 +399,7 @@ function render() {
   syncVisualizer();
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
   $$('.view-switch [data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===state.view));
-  history.replaceState(null,'',`#${state.study}/${state.view}`);
+  history.replaceState(null,'',`#${state.study}/${state.view}${state.view==='controls'&&state.detail?'/'+state.detail:''}`);
 }
 
 function applySettings(persist=true,redraw=true) {
@@ -420,6 +423,7 @@ function applySettings(persist=true,redraw=true) {
 function setView(view) {
   if(state.view==='appearance' && view!=='appearance' && appearance.guardExit(()=>setView(view)))return;
   const previousView=state.view;
+  if(previousView==='controls')quickSettings.deactivate();
   clearTimeout(powerTimer);state.powerArmed='';state.powerIndex=0;
   if (view!=='desktop') returnFocus=document.activeElement;
   state.view=view;state.detail=null;
@@ -431,11 +435,13 @@ function setView(view) {
   if (view==='power') $('#session .selected')?.focus({preventScroll:true});
   if (view==='notifications') notificationCenter.focus();
   if (view==='appearance') appearance.focus();
+  if (view==='controls') $('#controls [data-toggle="wifi"]')?.focus({preventScroll:true});
   if (view==='desktop') {
     if (previousView==='notifications') $('.bar-notifications').focus();
     else if (previousView==='datetime') $('.clock').focus();
     else if (previousView==='power') $('.bar-power').focus();
     else if (previousView==='appearance') $('.settings-trigger')?.focus();
+    else if (previousView==='controls') $('.status-cluster')?.focus();
     else if (returnFocus?.isConnected) returnFocus.focus();
     else $('.map-trigger')?.focus();
   }
@@ -522,9 +528,8 @@ document.addEventListener('click',e=>{
     if(b.dataset.move!==undefined){
       const w=selectedWindow();if(w){const target=Number(b.dataset.move);w.workspace=target;state.snapSlots={};render();notify(`${w.app} moved to ${workspaces[target]}`);}
     }
-    if(b.dataset.toggle){state[b.dataset.toggle]=!state[b.dataset.toggle];renderControls();}
-    if(b.dataset.detail){state.detail=b.dataset.detail==='back'?null:b.dataset.detail;renderControls();}
-    if(b.dataset.device){if(state.detail==='wifi'){state.network=b.dataset.device;state.wifi=true;}else{state.device=b.dataset.device;state.bluetooth=true;}renderControls();}
+    if(b.dataset.toggle){if(['wifi','bluetooth'].includes(b.dataset.toggle))quickSettings.toggleRadio(b.dataset.toggle);else{state[b.dataset.toggle]=!state[b.dataset.toggle];renderControls();}}
+    if(b.dataset.detail)quickSettings.open(b.dataset.detail==='back'?null:b.dataset.detail);
     if(b.hasAttribute('data-play')){state.playing=!state.playing;renderControls();renderBar();}
     if(b.dataset.filter){state.filter=b.dataset.filter;state.resultIndex=0;renderLauncher();$('#launcher-search').focus();}
     if(b.dataset.result!==undefined)runResult(Number(b.dataset.result));
@@ -567,7 +572,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='launcher-search'){state.query=e.target.value;state.resultIndex=0;renderResults();}
   if(e.target.matches('[data-level]')){
     const key=e.target.dataset.level;state[key]=Number(e.target.value);
-    e.target.style.setProperty('--value',`${state[key]}%`);$(`#${key}-output`).textContent=`${state[key]}%`;
+    e.target.style.setProperty('--value',`${state[key]}%`);$(`#${key}-output`).textContent=`${key==='volume'&&state.volumeMuted?'Muted · ':''}${state[key]}%`;
     if(key==='volume'){
       clearTimeout(osdTimer);const osd=$('#osd'),win=$('.app-window.focused');
       const container=$('#windows');
@@ -584,6 +589,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('keydown',e=>{
   if(appearance.handleKey(e))return;
   if(lockscreen.handleKey(e))return;
+  if(quickSettings.handleKey(e))return;
   if(e.key==='Escape'){setView('desktop');return;}
   if(state.view==='power'&&!e.target.closest('.review-toolbar,.review-header,#customizer')&&!e.ctrlKey&&!e.metaKey&&!e.altKey) {
     if(['ArrowUp','ArrowDown','Tab'].includes(e.key)) {
@@ -630,11 +636,12 @@ new ResizeObserver(([entry])=>{
   previewWidth=entry.contentRect.width;
   requestAnimationFrame(()=>{const scale=previewWidth/1440;desktop.style.transform=`scale(${scale})`;$('.frame').style.height=`${900*scale+2}px`;});
 }).observe($('.frame'));
-const [study,view]=location.hash.slice(1).split('/');
+const [study,view,detail]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
 if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
+if(state.view==='controls'&&['wifi','bluetooth','audio'].includes(detail))quickSettings.open(detail);
 if(state.view==='power')$('#session .selected')?.focus({preventScroll:true});
 
 if(state.view==='appearance')appearance.focus();

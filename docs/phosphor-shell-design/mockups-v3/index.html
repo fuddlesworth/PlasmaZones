@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="lockscreen.css">
 <link rel="stylesheet" href="notifications.css">
 <link rel="stylesheet" href="appearance.css">
+<link rel="stylesheet" href="quick-settings.css">
 </head>
 <body>
 <header class="review-header">
@@ -42,6 +43,7 @@
   <button data-notification-arrive>＋ New arrival</button>
   <p>Simulated notifications. Arrival previews stay open until dismissed.</p>
 </div>
+<div id="quick-preview-controls" class="quick-preview-controls hidden" aria-label="Quick settings prototype controls"></div>
 <div class="review-layout">
 <main class="frame" aria-label="Interactive desktop mock">
 <div id="desktop" class="desktop navigator">
@@ -73,6 +75,13 @@
 <symbol id="chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
 <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
 <symbol id="check-all" viewBox="0 0 24 24"><path d="m2 12 4 4L16 6m-5 9 2 2L23 7"/></symbol>
+<symbol id="arrow-left" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-1 8M20 3v7h-7"/></symbol>
+<symbol id="headphones" viewBox="0 0 24 24"><path d="M4 14v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="12" width="5" height="9" rx="2"/><rect x="16" y="12" width="5" height="9" rx="2"/></symbol>
+<symbol id="speaker" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"/><circle cx="12" cy="15" r="4"/><circle cx="12" cy="7" r="1"/></symbol>
+<symbol id="microphone" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11v2a7 7 0 0 0 14 0v-2M12 20v3m-4 0h8"/></symbol>
+<symbol id="mouse" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6"/><path d="M12 3v6"/></symbol>
+<symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
 <symbol id="picture" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
 </defs></svg>
   <div class="wallpaper" aria-hidden="true"><div class="orb"></div><div class="landscape"></div><div class="contour"></div></div>
@@ -131,6 +140,7 @@
 <script src="lockscreen.js"></script>
 <script src="notifications.js"></script>
 <script src="appearance.js"></script>
+<script src="quick-settings.js"></script>
 <script src="studies.js"></script>
 </body>
 </html>
