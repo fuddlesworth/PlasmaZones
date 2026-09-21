@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.4.19] - 2026-09-21
+
+### Added
+
+- **A window on all desktops keeps its own place on each one**: a window set to show on every virtual desktop used to have a single placement that followed it around. It now holds a separate one per desktop, in all three modes. In scrolling it can sit in one column of one desktop's strip and a different column of another's. In tiling it takes a tile on each desktop. In snapping it can be snapped into a different zone on each desktop. Those placements survive desktop switches and a restart. This also fixes a bug where switching desktops with such a window on screen could swap two desktops' scrolling strips and drop several windows out of them. ([#1103](https://github.com/fuddlesworth/PlasmaZones/pull/1103))
+
 ### Fixed
 
 - **Moving a free window to another desktop snapped it into a zone**: on a layout with auto-assign turned on, sending a window to another virtual desktop with a KWin shortcut, the pager or Overview put it in the first empty zone there, even when you had floated it or placed it by hand. A desktop move now only fills a zone for a window that was snapped where it came from. A window that was free stays free and keeps its size and position. ([#1108](https://github.com/fuddlesworth/PlasmaZones/discussions/1108))
@@ -2472,7 +2478,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.18...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.19...HEAD
+[3.4.19]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.18...v3.4.19
 [3.4.18]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.17...v3.4.18
 [3.4.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.16...v3.4.17
 [3.4.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.15...v3.4.16
