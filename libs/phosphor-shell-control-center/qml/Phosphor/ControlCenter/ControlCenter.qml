@@ -25,6 +25,12 @@ FocusScope {
     // Detail view currently open, or "" for the grid. Read-only for
     // consumers; drive it through openDetail() / closeDetail().
     readonly property alias detailTileId: priv.detailTileId
+    // The bar fallback caches this surface after closing the pane. Release
+    // detail tasks even when the host hides us instead of destroying us.
+    onVisibleChanged: {
+        if (!visible && priv.completed)
+            root.closeDetail();
+    }
 
     // Anchors, positioners and layouts mirror under a right-to-left locale,
     // but only when this is set; QML does not infer it from the application
@@ -503,6 +509,7 @@ FocusScope {
             root.closeDetail();
         }
         function onCloseRequested(): void {
+            root.closeDetail();
             root.closeRequested();
         }
     }

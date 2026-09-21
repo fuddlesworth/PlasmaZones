@@ -16,6 +16,14 @@ QuickDetailFrame {
     property var sourceModel: sources
     property var streamModel: streams
     property var audioProbe: probe
+    cancelTask: () => {
+        root.audioProbe.stop();
+        return false;
+    }
+    onVisibleChanged: {
+        if (!visible)
+            root.audioProbe.stop();
+    }
     property string tab: "output"
     property int modelRevision: 0
     property string errorText: ""
