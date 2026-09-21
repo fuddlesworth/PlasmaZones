@@ -1,0 +1,50 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Frame and palette adapted from Phosphor Works: https://github.com/phosphor-works/branding . New Lambent motif. -->
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="96 96 832 832" width="1024" height="1024" aria-labelledby="title desc" role="img">
+  <title id="title">Lambent icon for light surfaces</title>
+  <desc id="desc">A curved L cradles a small flame inside the Phosphor gradient frame.</desc>
+  <defs>
+    <linearGradient id="a" x1="120" x2="904" y1="120" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0ea5e9" />
+      <stop offset=".45" stop-color="#3b82f6" />
+      <stop offset=".75" stop-color="#7c3aed" />
+      <stop offset="1" stop-color="#e11d48" />
+    </linearGradient>
+    <linearGradient id="b" x1="120" x2="904" y1="120" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bce4f9" />
+      <stop offset=".45" stop-color="#c7dbfc" />
+      <stop offset=".75" stop-color="#d7c9fa" />
+      <stop offset="1" stop-color="#f0c2d1" />
+    </linearGradient>
+    <linearGradient id="e" x1="340" x2="700" y1="246" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#075985" />
+      <stop offset=".40" stop-color="#1d4ed8" />
+      <stop offset=".72" stop-color="#5b21b6" />
+      <stop offset="1" stop-color="#881337" />
+    </linearGradient>
+    <clipPath id="d">
+      <rect width="760" height="760" x="132" y="132" rx="170" />
+    </clipPath>
+    <filter id="c" width="140%" height="140%" x="-20%" y="-20%">
+      <feOffset dy="10" in="SourceAlpha" result="off" />
+      <feGaussianBlur in="off" result="blur" stdDeviation="12" />
+      <feColorMatrix in="blur" result="shadow" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.18 0" />
+      <feMerge>
+        <feMergeNode in="shadow" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="832" height="832" x="96" y="96" fill="url(#a)" rx="190" />
+  <rect width="760" height="760" x="132" y="132" fill="url(#b)" filter="url(#c)" rx="170" />
+  <g clip-path="url(#d)">
+    <circle cx="320" cy="310" r="440" fill="#0ea5e9" opacity=".1" />
+    <circle cx="790" cy="580" r="460" fill="#7c3aed" opacity=".1" />
+    <circle cx="740" cy="360" r="390" fill="#e11d48" opacity=".08" />
+  </g>
+  <g fill="url(#e)">
+    <path d="M428 246 C419 347 408 447 401 548 C397 605 414 639 461 648 C524 660 605 649 718 607 C658 682 565 741 479 745 C377 750 313 690 313 588 C313 482 359 338 428 246Z" />
+    <path d="M650 316 C634 356 635 401 657 438 C684 485 660 542 617 550 C572 558 542 521 551 479 C560 437 593 411 615 374 C630 351 641 331 650 316Z" />
+  </g>
+</svg>
