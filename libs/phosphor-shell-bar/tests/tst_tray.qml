@@ -307,9 +307,11 @@ Item {
             compare(panel.closeCount, 0);
             panel.closeMenu();
             tryCompare(panel, "hasMenu", false);
+            verify(waitForRendering(phone));
             tryCompare(phone, "activeFocus", true);
             const discord = control(panel, "trayApp-" + entry("discord").preferenceKey);
             discord.forceActiveFocus();
+            tryCompare(discord, "activeFocus", true);
             keyClick(Qt.Key_F10, Qt.ShiftModifier);
             tryCompare(panel, "hasMenu", true);
             tryVerify(() => panel.selectedEntry.itemId === "discord");
@@ -382,7 +384,10 @@ Item {
             const panel = panelFor();
             panel.openMenu(entry("steam"), panel);
             tryVerify(() => !!findChild(panel, "trayMenuItem-20"));
-            mouseClick(control(panel, "trayMenuItem-20"));
+            const submenu = control(panel, "trayMenuItem-20");
+            verify(waitForRendering(submenu));
+            compare(panel.selectedEntry.itemId, "steam");
+            mouseClick(submenu);
             tryCompare(control(panel, "trayMenuModel"), "rootId", 20);
             panel.openMenu(entry("nextcloud"), panel);
             tryVerify(() => panel.selectedEntry.itemId === "nextcloud");
