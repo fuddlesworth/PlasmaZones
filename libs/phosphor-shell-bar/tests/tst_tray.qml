@@ -377,7 +377,8 @@ Item {
             tryVerify(() => !TrayModel.lookup(key).instanceKey);
             tryCompare(panel, "hasMenu", false);
             tryCompare(panel, "closeCount", 1);
-            compare(findChild(panel, "trayMenuModel"), null);
+            // Loader releases its menu through deferred QObject destruction.
+            tryVerify(() => findChild(panel, "trayMenuModel") === null);
         }
 
         function test_switchingAppsResetsNestedMenuState() {
