@@ -183,6 +183,22 @@ bool PlasmaZonesEffect::keepFloatingAboveDefault(const QString& windowId, KWin::
     if (!w || !def.anyKeepFloatingAbove() || !isWindowFloating(windowId)) {
         return false;
     }
+    // Never for a fullscreen window. KWin already raises a fullscreen window
+    // above its siblings while it is ACTIVE and drops it back to the normal
+    // layer when it is not, which is what lets Alt+Tab bring another window
+    // over a game. Keep-above pins it in the above layer regardless of
+    // activation, so the switch target activates underneath it and the user
+    // never sees it. Seen live with a game the open-time oversized policy had
+    // floated (its min size outgrew the work area). Requested OR committed,
+    // same as isEligibleForTilingNotify: a window that maps fullscreen carries
+    // the requested bit before the committed state catches up. The exit arms
+    // of slotWindowFullScreenChanged run updateAllDecorations, which re-grants
+    // the bit, and its enter arm reconciles this window to drain it. An
+    // explicit SetWindowLayer rule is the user's own call and is not gated.
+    const KWin::Window* const kwFs = w->window();
+    if (w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen())) {
+        return false;
+    }
     // Only for a window on the CURRENT desktop. The per-screen mode sets
     // below are resolved against the current desktop (the daemon re-announces
     // them on every desktop switch), so they say nothing about the desktop an
