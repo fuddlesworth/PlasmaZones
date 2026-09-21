@@ -202,22 +202,31 @@ private Q_SLOTS:
                  "a dangling symlink out of the directory was accepted");
     }
 
-    /// A symlink CYCLE is accepted, and that is correct — it is not an escape.
+    /// A symlink CYCLE is refused, on every Qt.
     ///
-    /// Worth pinning because it looks like the dangling case above and is not: a
-    /// self-referential link canonicalises to ITSELF, which is inside the
-    /// directory, so containment genuinely holds. Opening through it fails with
-    /// ELOOP, and existence/readability is explicitly not this guard's job (see the
-    /// header). Refusing it here would mean refusing a contained path for a reason
-    /// the guard does not own.
-    void acceptsASymlinkCycleBecauseItStaysContained()
+    /// This used to pin the opposite, on the grounds that a self-referential
+    /// link canonicalises to ITSELF and so stays contained. That was a Qt
+    /// behaviour, not a property of the guard: up to 6.11
+    /// `canonicalFilePath()` answers a cycle with its own spelling, and from
+    /// 6.12 it answers empty, which lands in the guard's unresolvable-symlink
+    /// refusal. The same pack was accepted or refused depending on the Qt the
+    /// library was built against. The guard now refuses a "canonical" result
+    /// that is still a symlink, so both agree. Nothing usable is lost: a path
+    /// through a cycle can never be opened (ELOOP).
+    ///
+    /// Both spellings, because they take different arms. The bare link is
+    /// canonicalised directly. The path THROUGH it fails to canonicalise as a
+    /// whole and reaches the link by the ancestor climb.
+    void refusesASymlinkCycleOnEveryQt()
     {
         const QString link = m_pack->filePath(QStringLiteral("loop"));
         QVERIFY(QFile::link(QStringLiteral("loop"), link));
-        const auto resolved =
-            resolveWithinDirectory(QStringLiteral("loop/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject);
-        QVERIFY2(resolved.has_value(), "a cycle resolves inside the directory, so containment holds");
-        QVERIFY(resolved->startsWith(QDir::cleanPath(m_pack->path())));
+        QVERIFY2(
+            !resolveWithinDirectory(QStringLiteral("loop"), m_pack->path(), AbsolutePathPolicy::Reject).has_value(),
+            "a self-referential symlink was accepted");
+        QVERIFY2(!resolveWithinDirectory(QStringLiteral("loop/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject)
+                      .has_value(),
+                 "a path through a self-referential symlink was accepted");
     }
 
     /// THE ONE THAT FAILED OPEN. A symlinked directory out of the pack, with a
