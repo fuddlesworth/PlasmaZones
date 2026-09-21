@@ -133,7 +133,7 @@ function renderBar() {
     <div class="bar-right">${systemTray.barMarkup()}${systemStats.barMarkup()}
     <button class="bar-notifications" data-view="notifications" data-unread="${notificationCenter.unread()>0}" aria-label="Notifications, ${notificationCenter.unread()} unread" aria-expanded="${state.view==='notifications'&&notificationCenter.inboxOpen()}" aria-controls="notifications">${icon('bell')}</button>
     <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}</button>
-    <button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime"><span class="clock-date">Sat 12 &nbsp; </span><span style="color:var(--text)">10:24</span></button>
+    <button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime"><span class="clock-date">Sat 12</span><span class="clock-time">10:24</span></button>
     <button class="settings-trigger" data-view="appearance" aria-label="Open Appearance">◈</button>
     <button class="bar-power" data-view="power" aria-label="Open session menu" aria-expanded="${state.view==='power'}">${icon('power')}</button></div>`;
   syncVisualizer();

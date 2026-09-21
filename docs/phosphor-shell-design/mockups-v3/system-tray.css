@@ -13,7 +13,7 @@
 .desktop[data-edge=bottom] .tray-overflow-trigger>.icon{transform:rotate(180deg)}.desktop[data-edge=bottom] .tray-overflow-trigger[aria-expanded=true]>.icon{transform:none}
 .tray-status-dot{position:absolute;right:4px;top:4px;width:5px;height:5px;border-radius:50%;background:var(--c4);box-shadow:0 0 0 2px var(--bg)}.tray-recording .tray-status-dot{border-radius:1px}
 /* Give the right region room while keeping all controls available. */
-.bar:has(.bar-tray) .ap-live-right{gap:8px}.bar:has(.bar-tray) .clock{margin:0;padding-inline:8px}
+.bar:has(.bar-tray) .ap-live-right{gap:8px}
 .bar-tray:has(+.bar-stats){border-right:1px solid var(--outline);padding-right:9px;margin-right:2px}
 .bar:has(.bar-tray) .stat-bar-reading{width:37px}.bar:has(.bar-tray) .bar-stats{gap:5px;padding-inline:5px}
 .tray-root{position:absolute;inset:0;z-index:14;pointer-events:none;--tray-warning:var(--c4)}

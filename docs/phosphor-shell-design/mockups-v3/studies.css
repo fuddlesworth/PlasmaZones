@@ -86,8 +86,8 @@ h1{font-size:25px;letter-spacing:-.8px;font-weight:500;margin:7px 0}
 .session-menu kbd{font-size:10px;color:var(--muted);border-color:var(--outline);opacity:0}
 .session-menu button.selected kbd{opacity:1}
 @keyframes session-confirm{to{height:0}}
-.clock{font-variant-numeric:tabular-nums;color:var(--muted);margin-right:9px}
-.clock{padding:9px 10px;border-radius:8px}
+.clock{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:7px 8px;border-radius:8px;font-size:11px;line-height:1.2;letter-spacing:normal;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
+.clock-date{font-family:var(--ap-font,'Noto Sans'),sans-serif}.clock-time{color:var(--text)}
 .clock[aria-expanded=true]{background:var(--card);color:var(--text);box-shadow:inset 0 -2px var(--c3)}
 #datetime{position:absolute;z-index:10;left:var(--calendar-left,850px);top:calc(var(--bar-size) + 26px);width:410px;padding:var(--pad);animation:enter .2s ease;overflow:hidden}
 #datetime:before{content:'';position:absolute;top:0;left:22px;right:22px;height:2px;background:var(--spectrum)}
